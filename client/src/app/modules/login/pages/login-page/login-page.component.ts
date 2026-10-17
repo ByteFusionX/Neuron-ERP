@@ -1,46 +1,33 @@
-import { Component, OnDestroy } from '@angular/core';
-import { FormBuilder, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { NgIf } from '@angular/common';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
+import {
+  AccountInfo,
+  AuthenticationResult,
+  BrowserAuthError,
+  InteractionRequiredAuthError,
+  InteractionStatus,
+} from '@azure/msal-browser';
 import { Router } from '@angular/router';
+import { ToastrService } from 'ngx-toastr';
+import { filter, Subject, takeUntil } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { login } from 'src/app/shared/interfaces/login';
-import { NgIf } from '@angular/common';
-import { NgIcon } from '@ng-icons/core';
-import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
-import { AuthenticationResult, InteractionStatus, InteractionRequiredAuthError, BrowserAuthError } from '@azure/msal-browser';
-import { filter, Subject } from 'rxjs';
-import { takeUntil } from 'rxjs';
-import { ToastrService } from 'ngx-toastr';
-import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
 import { environment } from 'src/environments/environment';
 
-// Active login is employeeId/password. The Microsoft handlers below are kept but not shown in the template.
 @Component({
-    selector: 'app-login-page',
-    templateUrl: './login-page.component.html',
-    styleUrls: ['./login-page.component.css'],
-    imports: [NgIf, FormsModule, ReactiveFormsModule, NgIcon, appNoLeadingSpace]
+  selector: 'app-login-page',
+  templateUrl: './login-page.component.html',
+  styleUrls: ['./login-page.component.css'],
+  imports: [NgIf],
 })
-export class LoginPageComponent implements OnDestroy {
-  loginDisplay = false;
-  activeAccount: any | null = null;
-  isMicrosoftLoginLoading: boolean = false;
+export class LoginPageComponent implements OnInit, OnDestroy {
+  activeAccount: AccountInfo | null = null;
+  isMicrosoftLoginLoading = false;
 
-  // employeeId/password login state
-  submit: boolean = false;
-  employeeNotFoundError: boolean = false;
-  passwordNotMatchError: boolean = false;
-  isSaving: boolean = false;
-  showPassword: boolean = false;
-  passwordType: string = this.showPassword ? 'text' : 'password';
-  showIcon: string = this.showPassword ? 'heroEye' : 'heroEyeSlash';
-
-  loginForm = this._fb.group({
-    employeeId: ['', Validators.required],
-    password: ['', Validators.required]
-  })
-
-  private readonly _destroying$ = new Subject<void>();
+  private readonly loginScopes = [environment.microsoftApiUrl];
+  private readonly destroying$ = new Subject<void>();
 
   constructor(
     private router: Router,
@@ -49,162 +36,128 @@ export class LoginPageComponent implements OnDestroy {
     private msalBroadcastService: MsalBroadcastService,
     private notificationService: NotificationService,
     private toastr: ToastrService,
-    private _fb: FormBuilder,
-  ) { }
+  ) {}
 
   ngOnInit(): void {
+    this.msalService.handleRedirectObservable()
+      .pipe(takeUntil(this.destroying$))
+      .subscribe({
+        next: (result) => {
+          if (!result?.account) return;
+          this.setActiveAccount(result.account);
+          this.isMicrosoftLoginLoading = true;
+          result.accessToken ? this.finishLogin(result.accessToken) : this.loginEmployee();
+        },
+        error: (error) => this.handleMicrosoftLoginError(error),
+      });
+
     this.msalBroadcastService.inProgress$
       .pipe(
         filter((status: InteractionStatus) => status === InteractionStatus.None),
-        takeUntil(this._destroying$)
+        takeUntil(this.destroying$),
       )
-      .subscribe((response: InteractionStatus) => {
-        this.setLoginDisplay();
-        this.setActiveAccount();
-      });
+      .subscribe(() => this.restoreActiveAccount());
   }
 
-  passwordShow() {
-    this.showPassword = !this.showPassword
-    this.passwordType = this.showPassword ? 'text' : 'password';
-    this.showIcon = this.showPassword ? 'heroEye' : 'heroEyeSlash';
-  }
-
-  // employeeId/password login.
-  onSubmit() {
-    this.submit = true
-    this.employeeNotFoundError = false
-    this.passwordNotMatchError = false
-    if (this.loginForm.valid) {
-      this.isSaving = true;
-      this.employeeService.employeeLogin(this.loginForm.value).subscribe({
-        next: (res: login) => {
-          if (res.employeeData && res.token) {
-            localStorage.setItem('employeeToken', res.token)
-            this.notificationService.authSocketIo(res.token)
-            this.notificationService.initializeNotifications()
-            this.router.navigateByUrl(res.employeeData.preferences?.defaultLandingPage || '/home');
-          } else if (res.employeeNotFoundError) {
-            this.isSaving = false;
-            this.employeeNotFoundError = true;
-          } else if (res.passwordNotMatchError) {
-            this.isSaving = false;
-            this.passwordNotMatchError = true
-          }
-        },
-        error: () => {
-          this.isSaving = false;
-        }
-      })
-    }
-  }
-
-  setLoginDisplay() {
-    this.loginDisplay = this.msalService.instance.getAllAccounts().length > 0;
-  }
-
-  setActiveAccount() {
-    const active = this.msalService.instance.getActiveAccount();
-    if (active) {
-      this.activeAccount = active;
+  loginWithMicrosoft(): void {
+    this.restoreActiveAccount();
+    if (this.activeAccount) {
+      this.isMicrosoftLoginLoading = true;
+      this.loginEmployee();
       return;
     }
-    // With more than one cached account we can't safely guess which one the
-    // user wants, so leave activeAccount unset rather than picking [0] and
-    // silently signing in as the wrong person on a shared machine.
+
+    this.isMicrosoftLoginLoading = true;
+    this.msalService.loginPopup({
+      prompt: 'select_account',
+      scopes: this.loginScopes,
+    }).subscribe({
+      next: (response: AuthenticationResult) => {
+        this.setActiveAccount(response.account);
+        response.accessToken ? this.finishLogin(response.accessToken) : this.loginEmployee();
+      },
+      error: (error) => {
+        if (error instanceof BrowserAuthError && error.errorCode === 'popup_window_error') {
+          this.msalService.loginRedirect({
+            prompt: 'select_account',
+            scopes: this.loginScopes,
+          });
+          return;
+        }
+        this.handleMicrosoftLoginError(error);
+      },
+    });
+  }
+
+  private restoreActiveAccount(): void {
+    const activeAccount = this.msalService.instance.getActiveAccount();
+    if (activeAccount) {
+      this.activeAccount = activeAccount;
+      return;
+    }
+
     const accounts = this.msalService.instance.getAllAccounts();
     this.activeAccount = accounts.length === 1 ? accounts[0] : null;
   }
 
-  private finishLogin(accessToken: string) {
-    this.employeeService.employeeLoginWithMicrosoft(accessToken).subscribe({
-      next: (res: login) => {
-        this.isMicrosoftLoginLoading = false;
-        if (res.employeeData && res.token) {
-          localStorage.setItem('employeeToken', res.token)
-          this.notificationService.authSocketIo(res.token)
-          this.notificationService.initializeNotifications()
-          this.router.navigateByUrl(res.employeeData.preferences?.defaultLandingPage || '/home');
-        } else {
-          this.toastr.error('No matching employee account was found for this Microsoft login.');
-        }
-      },
-      error: () => {
-        this.isMicrosoftLoginLoading = false;
-        this.toastr.error('Microsoft login failed. Please try again.');
-      }
-    })
+  private setActiveAccount(account: AccountInfo): void {
+    this.msalService.instance.setActiveAccount(account);
+    this.activeAccount = account;
   }
 
-  loginEmployee(){
+  private loginEmployee(): void {
+    if (!this.activeAccount) {
+      this.isMicrosoftLoginLoading = false;
+      return;
+    }
+
     this.msalService.acquireTokenSilent({
-      scopes: [environment.microsoftApiUrl],
+      scopes: this.loginScopes,
+      account: this.activeAccount,
     }).subscribe({
-      next: (data: AuthenticationResult) => this.finishLogin(data.accessToken),
-      error: (error: any) => {
-        // A cached account with an expired/stale token (or one that now needs
-        // fresh consent/MFA) can't be resolved silently — fall back to an
-        // interactive popup instead of just failing.
+      next: (result: AuthenticationResult) => this.finishLogin(result.accessToken),
+      error: (error) => {
         if (error instanceof InteractionRequiredAuthError) {
           this.msalService.acquireTokenPopup({
-            scopes: [environment.microsoftApiUrl],
+            scopes: this.loginScopes,
+            account: this.activeAccount!,
           }).subscribe({
-            next: (data: AuthenticationResult) => this.finishLogin(data.accessToken),
-            error: (popupError: any) => {
-              this.isMicrosoftLoginLoading = false;
-              console.error('Microsoft login failed:', popupError);
-              this.toastr.error('Microsoft login failed. Please try again.');
-            }
+            next: (result: AuthenticationResult) => this.finishLogin(result.accessToken),
+            error: (popupError) => this.handleMicrosoftLoginError(popupError),
           });
           return;
         }
-        this.isMicrosoftLoginLoading = false;
-        console.error('Microsoft login failed:', error);
-        this.toastr.error('Microsoft login failed. Please try again.');
-      }
-    })
+        this.handleMicrosoftLoginError(error);
+      },
+    });
   }
 
-  loginWithMicrosoft(){
-    this.setActiveAccount();
-    if (!this.activeAccount) {
-      localStorage.clear();
-      sessionStorage.clear();
-      this.isMicrosoftLoginLoading = true;
-      this.msalService.loginPopup({
-        prompt : 'select_account',
-        scopes : ['user.read']
-      }).subscribe({
-        next: (response: AuthenticationResult) => {
-          this.setLoginDisplay();
-          this.msalService.instance.setActiveAccount(response.account);
-          this.activeAccount = response.account;
-          this.loginEmployee();
-        },
-        error: (error: any) => {
-          this.isMicrosoftLoginLoading = false;
-          console.error('Microsoft login failed:', error);
-          // Popups can be blocked by corporate proxies/browser settings —
-          // fall back to a full-page redirect rather than dead-ending.
-          if (error instanceof BrowserAuthError && error.errorCode === 'popup_window_error') {
-            this.msalService.loginRedirect({
-              prompt: 'select_account',
-              scopes: ['user.read']
-            });
-            return;
-          }
-          this.toastr.error('Microsoft login failed. Please try again.');
+  private finishLogin(accessToken: string): void {
+    this.employeeService.employeeLoginWithMicrosoft(accessToken).subscribe({
+      next: (response: login) => {
+        this.isMicrosoftLoginLoading = false;
+        if (!response.employeeData || !response.token) {
+          this.toastr.error('No matching employee account was found for this Microsoft login.');
+          return;
         }
-      });
-    } else {
-      this.msalService.instance.setActiveAccount(this.activeAccount);
-      this.isMicrosoftLoginLoading = true;
-      this.loginEmployee();
-    }
+
+        localStorage.setItem('employeeToken', response.token);
+        this.notificationService.authSocketIo(response.token);
+        this.notificationService.initializeNotifications();
+        this.router.navigateByUrl(response.employeeData.preferences?.defaultLandingPage || '/home');
+      },
+      error: (error) => this.handleMicrosoftLoginError(error),
+    });
+  }
+
+  private handleMicrosoftLoginError(error: unknown): void {
+    this.isMicrosoftLoginLoading = false;
+    console.error('Microsoft login failed:', error);
+    this.toastr.error('Microsoft login failed. Please try again.');
   }
 
   ngOnDestroy(): void {
-    this._destroying$.next(undefined);
-    this._destroying$.complete();
+    this.destroying$.next();
+    this.destroying$.complete();
   }
 }

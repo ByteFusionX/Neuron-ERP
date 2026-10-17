@@ -948,7 +948,11 @@ export const loginWithMicrosoft = async (
     // employee.router.ts gates this route on passport's Azure AD bearer
     // strategy, so req.user is the verified Microsoft access token claims.
     const azureToken = req.user as any;
-    const oid = azureToken.oid;
+    const oid = typeof azureToken.oid === "string" ? azureToken.oid.trim() : "";
+
+    if (!oid) {
+      return res.status(401).json({ message: "Microsoft token does not contain a user object ID" });
+    }
 
     let employee = await Employee.findOne({
       microsoftId: oid,
@@ -957,14 +961,25 @@ export const loginWithMicrosoft = async (
     }).select("+password");
 
     if (!employee) {
-      const email = azureToken.email || azureToken.upn || azureToken.preferred_username;
+      const tokenEmail = azureToken.email || azureToken.upn || azureToken.preferred_username;
+      const email = typeof tokenEmail === "string" ? tokenEmail.trim() : "";
+
+      if (!email) {
+        return res.status(401).json({ message: "Microsoft token does not contain an email address" });
+      }
+
+      const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       // Only link on first sign-in — an employee record that's already linked
       // to a different Azure identity must not be silently re-linked just
       // because an email happened to match.
       employee = await Employee.findOneAndUpdate(
         {
-          email,
-          microsoftId: { $exists: false },
+          email: { $regex: `^\\s*${escapedEmail}\\s*$`, $options: "i" },
+          $or: [
+            { microsoftId: { $exists: false } },
+            { microsoftId: null },
+            { microsoftId: "" },
+          ],
           isDeleted: { $ne: true },
           isBlocked: { $ne: true },
         },
