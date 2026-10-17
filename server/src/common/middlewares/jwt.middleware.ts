@@ -10,7 +10,7 @@ import jwt from "jsonwebtoken";
 //     return passport.authenticate('oauth-bearer', { session: false })(req, res, next);
 // }
 
-const EXEMPT_PATHS = ['/uploads', '/employee/login', '/employee/check'];
+const EXEMPT_PATHS = ['/uploads', '/employee/login', '/employee/login-microsoft', '/employee/check'];
 
 // Phone scanning a QR code is never logged in; the scan session id itself (unguessable,
 // only ever shared via the QR) is the security boundary for this one read-only lookup.

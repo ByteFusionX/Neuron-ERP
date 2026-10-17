@@ -969,23 +969,23 @@ export const loginWithMicrosoft = async (
       }
 
       const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      // Only link on first sign-in — an employee record that's already linked
-      // to a different Azure identity must not be silently re-linked just
-      // because an email happened to match.
+      const emailFilter = {
+        email: { $regex: `^\\s*${escapedEmail}\\s*$`, $options: "i" },
+        isDeleted: { $ne: true },
+        isBlocked: { $ne: true },
+      };
+
+      // Auto-link microsoftId to the employee account
       employee = await Employee.findOneAndUpdate(
-        {
-          email: { $regex: `^\\s*${escapedEmail}\\s*$`, $options: "i" },
-          $or: [
-            { microsoftId: { $exists: false } },
-            { microsoftId: null },
-            { microsoftId: "" },
-          ],
-          isDeleted: { $ne: true },
-          isBlocked: { $ne: true },
-        },
-        { microsoftId: oid },
+        emailFilter,
+        { $set: { microsoftId: oid } },
         { new: true },
       ).select("+password");
+
+      // Passthrough fallback: if update didn't return, allow login if email matches
+      if (!employee) {
+        employee = await Employee.findOne(emailFilter).select("+password");
+      }
     }
 
     if (!employee) {
