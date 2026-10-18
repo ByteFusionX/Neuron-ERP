@@ -425,7 +425,7 @@ export class SalesDashboardComponent implements OnInit, OnDestroy {
     const v = this.currency === 'USD' ? qar / (this.data.usdToQar || 3.64) : qar;
     return new Intl.NumberFormat('en-US', compact
       ? { notation: 'compact', maximumFractionDigits: Math.abs(v) >= 1000 ? 1 : 0 }
-      : { maximumFractionDigits: 0 }).format(v);
+      : { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
   }
 
   pct(v: number | null | undefined): string {
@@ -600,7 +600,7 @@ export class SalesDashboardComponent implements OnInit, OnDestroy {
     const p = d.kpis.previous;
 
     this.hero = {
-      value: this.money(c.wonValue),
+      value: this.money(c.wonValue, false),
       count: c.won,
       delta: this.delta(c.wonValue, p.wonValue),
       prev: p.wonValue ? `${this.money(p.wonValue)} ${this.currency}` : 'nothing won',
@@ -609,7 +609,7 @@ export class SalesDashboardComponent implements OnInit, OnDestroy {
     this.kpis = [
       { key: 'enq', label: 'New enquiries', value: String(c.enquiries), icon: 'heroInboxArrowDown', delta: this.delta(c.enquiries, p.enquiries), sub: `${p.enquiries} last period`, hint: 'Enquiries created in the period. Shows whether demand is rising or falling.' },
       { key: 'sent', label: 'Quotes sent', value: String(c.quotesSent), sub: `${this.money(c.quotesSentValue)} ${this.currency}`, icon: 'heroPaperAirplane', delta: this.delta(c.quotesSent, p.quotesSent), hint: 'Quotes that went to the customer in the period, and what they were worth.' },
-      { key: 'rate', label: 'Win rate', value: this.pct(c.winRate), sub: `${c.won} won · ${c.lost} lost`, icon: 'heroCheckBadge', delta: this.pointDelta(c.winRate, p.winRate), hint: 'Won ÷ (won + lost) for quotes decided in the period.' },
+      { key: 'rate', label: 'Win rate', value: this.pct(c.winRate), sub: `${c.won} won · ${c.lost} lost`, icon: 'heroCheckBadge', delta: this.pointDelta(c.winRate, p.winRate), hint: 'Approved deal sheets ÷ (approved deal sheets + lost quotes) decided in the period.' },
       { key: 'pipe', label: 'Open pipeline', value: this.money(d.kpis.pipeline.value), unit: this.currency, sub: `${this.plural(d.kpis.pipeline.count, 'quote')} with customers`, icon: 'heroCircleStack', delta: null, hint: 'Sent quotes still waiting for a customer decision, right now.' },
       { key: 'avg', label: 'Average deal', value: this.money(c.avgDeal), unit: c.avgDeal == null ? '' : this.currency, sub: `Last period ${this.money(p.avgDeal)}`, icon: 'heroScale', delta: this.delta(c.avgDeal, p.avgDeal), hint: 'Won value ÷ number of wins in the period.' },
       { key: 'tat', label: 'Quote turnaround', value: this.daysText(c.turnaround), unit: this.daysUnit(c.turnaround), sub: 'Enquiry → quote sent', icon: 'heroClock', delta: this.delta(c.turnaround, p.turnaround, true), hint: 'Average days from enquiry to sending the quote. Lower is better.' },

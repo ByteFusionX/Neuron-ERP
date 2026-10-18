@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { Types } from "mongoose";
+import Job from "../models/job.model";
 import Quotation, { quoteStatus } from "../models/quotation.model";
 import Enquiry from "../models/enquiry.model";
 import Rfq, { RfqType, RfqSupplierStatus } from "../models/rfq.model";
 import Employee from "../models/employee.model";
 import Customer from "../models/customer.model";
 import { getUSDRated } from "../common/utils/util";
+import { isQuoteExpired } from "./quotation.controller";
 
 /**
  * Sales dashboard: one call returns everything the page shows, already scoped to the viewer.
@@ -111,6 +113,41 @@ const quoteMoney = (quote: any, usdToQar: number) => {
     return { gross: gross * fx, discount: discount * fx, value: (gross - discount) * fx, cost: cost * fx, lines };
 };
 
+/**
+ * What a job's deal sheet is worth in QAR, calculated exactly as the main dashboard's Revenue Achieved:
+ * selling price of the deal-selected lines (the deal's totalDiscount is ignored), less "Customer Discount" costs;
+ * on USD quotes only the line total is converted, the discount is subtracted as is.
+ * Cost is the selected lines (each rounded) plus additional costs, less supplier discounts, converted whole.
+ */
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const dealMoney = (quote: any, usdToQar: number) => {
+    const usd = String(quote.currency).toUpperCase() === 'USD';
+    const fx = usd ? usdToQar : 1;
+    const deal = quote.dealData ?? {};
+    const lines: { name: string; sell: number; cost: number }[] = [];
+    let gross = 0; let cost = 0;
+    for (const item of deal.updatedItems ?? []) {
+        let sell = 0; let buy = 0;
+        for (const d of item?.itemDetails ?? []) {
+            if (!d?.dealSelected) continue;
+            const qty = Number(d?.quantity) || 0;
+            sell += (Number(d?.unitSellingPrice) || 0) * qty;
+            buy += r2(qty * (Number(d?.unitCost) || 0));
+        }
+        gross += sell; cost += buy;
+        if (sell || buy) lines.push({ name: String(item?.itemName ?? '').trim() || 'Unnamed item', sell: sell * fx, cost: buy * fx });
+    }
+    let discount = 0;
+    for (const c of deal.additionalCosts ?? []) {
+        const v = Number(c?.value) || 0;
+        if (c?.type === 'Customer Discount') discount += v;
+        else if (c?.type === 'Supplier Discount') cost = r2(cost - v);
+        else cost = r2(cost + v);
+    }
+    const grossQar = usd ? r2(gross * fx) : gross;
+    return { gross: grossQar, discount, value: r2(grossQar - discount), cost: r2(usd ? r2(r2(cost) * fx) : r2(cost)), lines };
+};
+
 /** Below this margin a won or sent quote is flagged. */
 const LOW_MARGIN_PCT = 10;
 const marginPct = (value: number, cost: number) => (value > 0 ? round(((value - cost) / value) * 100, 1) : null);
@@ -200,7 +237,7 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
                 ...ownerMatch('createdBy', quoteScope),
                 ...extra('department'),
             })
-                .select('quoteId subject client date status currency optionalItems sendHistory currentSentRevision approval followUp.nextFollowUpDate validityDate closingDate customerDecision customerAcceptance lostReason lostAt editHistory.toStatus editHistory.editedAt editHistory.action dealData.dealId dealData.status dealData.savedDate enqId createdBy department')
+                .select('quoteId subject client date status currency optionalItems sendHistory currentSentRevision approval followUp.nextFollowUpDate validityDate closingDate customerDecision customerAcceptance lostReason lostAt editHistory.toStatus editHistory.editedAt editHistory.action dealData.dealId dealData.status dealData.savedDate dealData.updatedItems dealData.totalDiscount dealData.additionalCosts enqId createdBy department')
                 .lean(),
             Enquiry.find({
                 isDeleted: { $ne: true },
@@ -215,6 +252,9 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
                 .select('enquiryId title client salesPerson date createdDate status source enquiryCategory lastFollowUpDate lostReason preSale.presalePerson preSale.status preSale.createdDate')
                 .lean(),
         ]);
+
+        // Expired is derived from the dates, not stored.
+        quotes.forEach((q: any) => { if (isQuoteExpired(q)) q.status = quoteStatus.Expired; });
 
         // Names for people and customers referenced anywhere on the page.
         const personIds = new Set<string>();
@@ -241,10 +281,16 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
                 .forEach((e: any) => enquiryDate.set(String(e._id), new Date(e.date ?? e.createdDate)));
         }
 
+        // Won = a live job on the quote (main's rule), dated by the job's creation date.
+        const jobAt = new Map<string, Date>();
+        (await Job.find({ quoteId: { $in: quotes.map((q: any) => q._id) }, isDeleted: { $ne: true } }, 'quoteId createdDate').lean())
+            .forEach((j: any) => { const k = String(j.quoteId); const d = new Date(j.createdDate); if (!jobAt.has(k) || d > jobAt.get(k)!) jobAt.set(k, d); });
+
         const Q = quotes.map((q: any) => {
             const sent = sentAt(q);
             const enqDate = enquiryDate.get(idStr(q.enqId));
             const money = quoteMoney(q, usdToQar);
+            const won = jobAt.get(String(q._id)) ?? null;
             return {
                 raw: q,
                 id: String(q._id),
@@ -261,7 +307,9 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
                 cost: money.cost,
                 lines: money.lines,
                 sent,
-                won: q.status === quoteStatus.Won ? wonAt(q) : null,
+                // Won = approved deal sheet; its own figures, not the quote's.
+                won,
+                w: won ? dealMoney(q, usdToQar) : { gross: 0, discount: 0, value: 0, cost: 0, lines: [] as { name: string; sell: number; cost: number }[] },
                 lost: q.status === quoteStatus.Lost ? lostAt(q) : null,
                 turnaround: sent && enqDate && sent >= enqDate ? days(enqDate, sent) : null,
             };
@@ -282,7 +330,7 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
             const sentQ = Q.filter((q) => inRange(q.sent, f, t));
             const won = Q.filter((q) => inRange(q.won, f, t));
             const lost = Q.filter((q) => inRange(q.lost, f, t));
-            const wonValue = won.reduce((s, q) => s + q.value, 0);
+            const wonValue = won.reduce((s, q) => s + q.w.value, 0);
             const decided = won.length + lost.length;
             return {
                 enquiries: enq,
@@ -321,8 +369,8 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
             { key: 'presale', label: 'Presale / RFQ', ...reached((e, qs) => !!e.raw.preSale?.presalePerson || qs.length > 0) },
             { key: 'quoted', label: 'Quoted', ...reached((_e, qs) => qs.length > 0) },
             { key: 'sent', label: 'Sent to customer', ...reached((_e, qs) => qs.some((q) => !!q.sent)) },
-            { key: 'won', label: 'Won', ...reached((_e, qs) => qs.some((q) => q.status === quoteStatus.Won)) },
             { key: 'deal', label: 'Deal sheet', ...reached((_e, qs) => qs.some((q) => !!q.raw.dealData?.dealId && q.raw.dealData.status !== 'rejected')) },
+            { key: 'won', label: 'Won (deal approved)', ...reached((_e, qs) => qs.some((q) => q.raw.dealData?.status === 'approved')) },
         ];
 
         // ---- Needs attention (a live snapshot, not limited by the period) ---------------------
@@ -366,10 +414,10 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
         const followUpDue = take(Q.filter((q) => AWAITING_CUSTOMER.includes(q.status) && q.raw.followUp?.nextFollowUpDate && new Date(q.raw.followUp.nextFollowUpDate) < now),
             (q) => +new Date(q.raw.followUp.nextFollowUpDate));
         const silent = take(Q.filter((q) => AWAITING_CUSTOMER.includes(q.status) && !q.raw.followUp?.nextFollowUpDate && q.sent && days(q.sent, now) >= 14), (q) => +q.sent!);
-        const validity = (q: any) => q.validityDate ?? q.closingDate;
+        const validity = (q: any) => q.closingDate ?? q.validityDate;
         const expiring = take(Q.filter((q) => !CLOSED.includes(q.status) && validity(q.raw) && new Date(validity(q.raw)) >= now && days(now, new Date(validity(q.raw))) <= 7),
             (q) => +new Date(validity(q.raw)));
-        const wonNoDeal = take(Q.filter((q) => q.status === quoteStatus.Won && (!q.raw.dealData?.dealId || q.raw.dealData.status === 'rejected')), (q) => +(q.won ?? 0));
+        const wonNoDeal = take(Q.filter((q) => q.status === quoteStatus.Won && (!q.raw.dealData?.dealId || q.raw.dealData.status === 'rejected')), (q) => +(wonAt(q.raw) ?? 0));
         const dealPending = take(Q.filter((q) => q.raw.dealData?.dealId && q.raw.dealData.status === 'pending'), (q) => +new Date(q.raw.dealData.savedDate ?? 0));
 
         const group = (key: string, label: string, hint: string, tone: 'red' | 'amber' | 'sky' | 'violet', icon: string, rows: any[], viewAll: { link: string[]; query?: any }) => ({
@@ -388,8 +436,8 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
                 silent.map((q) => item(q, q.sent)), { link: ['/quotations'] }),
             group('expiring', 'Expiring in 7 days', 'Extend, revise or close before they lapse', 'amber', 'heroClock',
                 expiring.map((q) => item(q, new Date(validity(q.raw)))), { link: ['/quotations'] }),
-            group('wonNoDeal', 'Won without a deal sheet', 'Hand these over so the job can start', 'sky', 'heroDocumentPlus',
-                wonNoDeal.map((q) => item(q, q.won)), { link: ['/quotations'] }),
+            group('wonNoDeal', 'Won without a deal sheet', 'Not counted as won revenue until a deal sheet is approved', 'sky', 'heroDocumentPlus',
+                wonNoDeal.map((q) => item(q, wonAt(q.raw))), { link: ['/quotations'] }),
             group('dealPending', 'Deal sheets waiting for approval', 'Approved deals become jobs', 'violet', 'heroClipboardDocumentCheck',
                 dealPending.map((q) => ({ ...item(q, q.raw.dealData.savedDate ? new Date(q.raw.dealData.savedDate) : null, q.raw.dealData.dealId), link: ['/deal-sheet/view', q.id] })),
                 { link: ['/deal-sheet/pendings'] }),
@@ -413,7 +461,7 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
             months: months.map((m) => m.label),
             enquiries: months.map((m) => E.filter((e) => inRange(e.created, m.start, m.end)).length),
             quoted: months.map((m) => round(Q.filter((q) => inRange(q.created, m.start, m.end)).reduce((s, q) => s + q.value, 0))),
-            won: months.map((m) => round(Q.filter((q) => inRange(q.won, m.start, m.end)).reduce((s, q) => s + q.value, 0))),
+            won: months.map((m) => round(Q.filter((q) => inRange(q.won, m.start, m.end)).reduce((s, q) => s + q.w.value, 0))),
             winRate: months.map((m) => {
                 const w = Q.filter((q) => inRange(q.won, m.start, m.end)).length;
                 const l = Q.filter((q) => inRange(q.lost, m.start, m.end)).length;
@@ -437,7 +485,7 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
                 if (q.discount > 0) p.discounted++;
             }
             if (inRange(q.sent, from, to)) { p.sent++; if (q.turnaround != null) p.tat.push(q.turnaround); }
-            if (inRange(q.won, from, to)) { p.won++; p.wonValue += q.value; }
+            if (inRange(q.won, from, to)) { p.won++; p.wonValue += q.w.value; }
             if (inRange(q.lost, from, to)) p.lost++;
             if (AWAITING_CUSTOMER.includes(q.status)) { p.pipeline += q.value; p.pipelineCount++; }
         });
@@ -460,7 +508,7 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
             if (!byCustomer.has(q.client)) byCustomer.set(q.client, { id: q.client, name: clientName(q.client), quotes: 0, quotesValue: 0, won: 0, wonValue: 0, lost: 0, pipeline: 0 });
             const c = byCustomer.get(q.client);
             if (inRange(q.created, from, to)) { c.quotes++; c.quotesValue += q.value; }
-            if (inRange(q.won, from, to)) { c.won++; c.wonValue += q.value; }
+            if (inRange(q.won, from, to)) { c.won++; c.wonValue += q.w.value; }
             if (inRange(q.lost, from, to)) c.lost++;
             if (AWAITING_CUSTOMER.includes(q.status)) c.pipeline += q.value;
         });
@@ -484,13 +532,13 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
 
         // ---- Margin on won quotes ----------------------------------------------------------
         const wonInPeriod = Q.filter((q) => inRange(q.won, from, to));
-        const mValue = wonInPeriod.reduce((s, q) => s + q.value, 0);
-        const mCost = wonInPeriod.reduce((s, q) => s + q.cost, 0);
+        const mValue = wonInPeriod.reduce((s, q) => s + q.w.value, 0);
+        const mCost = wonInPeriod.reduce((s, q) => s + q.w.cost, 0);
         const byProduct = new Map<string, { name: string; sell: number; cost: number; quotes: Set<string> }>();
         wonInPeriod.forEach((q) => {
             // Spread the quote-level discount over its lines so product margins add up to the order margin.
-            const factor = q.gross > 0 ? q.value / q.gross : 1;
-            q.lines.forEach((l) => {
+            const factor = q.w.gross > 0 ? q.w.value / q.w.gross : 1;
+            q.w.lines.forEach((l) => {
                 const key = l.name.toLowerCase();
                 if (!byProduct.has(key)) byProduct.set(key, { name: l.name, sell: 0, cost: 0, quotes: new Set() });
                 const r = byProduct.get(key)!;
@@ -499,22 +547,23 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
         });
         const marginRow = (sell: number, cost: number) => ({ value: sell, cost, margin: sell - cost, marginPct: marginPct(sell, cost) });
         // Open and won quotes both count as "low margin" so they can be fixed before or flagged after the deal.
-        const lowMarginQuotes = Q.filter((q) => (inRange(q.won, from, to) || AWAITING_CUSTOMER.includes(q.status)) && q.value > 0 && q.cost > 0)
-            .map((q) => ({ q, pct: marginPct(q.value, q.cost)! }))
+        // Won ones use the approved deal's figures, open ones the quote's.
+        const lowMarginQuotes = Q.filter((q) => inRange(q.won, from, to) || AWAITING_CUSTOMER.includes(q.status))
+            .map((q) => { const m = q.won ? q.w : q; return { q, value: m.value, cost: m.cost, pct: marginPct(m.value, m.cost)! }; })
+            .filter((x) => x.value > 0 && x.cost > 0)
             .filter((x) => x.pct < LOW_MARGIN_PCT)
-            .sort((a, b) => a.pct - b.pct);
-        const margin = {
+            .sort((a, b) => a.pct - b.pct);        const margin = {
             threshold: LOW_MARGIN_PCT,
             ...marginRow(mValue, mCost),
-            missingCost: wonInPeriod.filter((q) => q.value > 0 && q.cost === 0).length,
+            missingCost: wonInPeriod.filter((q) => q.w.value > 0 && q.w.cost === 0).length,
             products: [...byProduct.values()]
                 .map((p) => ({ name: p.name, quotes: p.quotes.size, ...marginRow(p.sell, p.cost) }))
                 .sort((a, b) => b.value - a.value)
                 .slice(0, 10),
             lowCount: lowMarginQuotes.length,
-            low: lowMarginQuotes.slice(0, 8).map(({ q, pct }) => ({
+            low: lowMarginQuotes.slice(0, 8).map(({ q, value, cost, pct }) => ({
                 id: q.id, ref: q.ref, customer: clientName(q.client), owner: personName(q.owner),
-                status: q.status, value: q.value, margin: q.value - q.cost, marginPct: pct,
+                status: q.status, value, margin: value - cost, marginPct: pct,
                 link: ['/quotations/view', q.id],
             })),
         };
@@ -554,8 +603,9 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
             const isWon = inRange(q.won, from, to);
             const isLost = inRange(q.lost, from, to);
             if (!isWon && !isLost) return;
-            const band = sizeBands.find((b) => q.value < b.max)!;
-            if (isWon) { band.won++; band.wonValue += q.value; } else band.lost++;
+            const size = isWon ? q.w.value : q.value;
+            const band = sizeBands.find((b) => size < b.max)!;
+            if (isWon) { band.won++; band.wonValue += q.w.value; } else band.lost++;
         });
         const dealSizes = sizeBands.map(({ label, won, lost, wonValue }) => ({ label, won, lost, wonValue, winRate: won + lost ? round((won / (won + lost)) * 100, 1) : null }));
 
@@ -568,7 +618,7 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
             const qs = quotesByEnq.get(e.id) ?? [];
             s.enquiries++;
             if (qs.length) s.quoted++;
-            if (qs.some((q) => q.status === quoteStatus.Won)) s.won++;
+            if (qs.some((q) => !!q.won)) s.won++;
         });
         const sources = [...sourceMap.values()].sort((a, b) => b.enquiries - a.enquiries);
 
