@@ -31,6 +31,8 @@ import { departmentPrivileges } from 'src/app/shared/utils/privilege-fallback';
  * Create and edit a customer in a slide-over.
  * The host binds `open`, `mode` and (for edit) `customer`, and reacts to `saved` / `closed`.
  */
+let nextFormId = 0;
+
 @Component({
   selector: 'app-customer-form-drawer',
   standalone: true,
@@ -39,6 +41,8 @@ import { departmentPrivileges } from 'src/app/shared/utils/privilege-fallback';
     CustomerAddressFieldsComponent, CustomerContactRepeaterComponent, CustomerFormStepperComponent],
 })
 export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
+  /** Several drawers can sit in the DOM at once (list page, enquiry), so a shared id would send Create to the wrong form. */
+  readonly formId = `customer-form-${nextFormId++}`;
   @Input() open = false;
   @Input() mode: 'create' | 'edit' = 'create';
   /** The customer being edited, as the by-client-ref API returns it (populated department and type). */
@@ -576,7 +580,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
 
   private focusFirstInvalidControl(): void {
     setTimeout(() => {
-      const form = document.getElementById('customer-form');
+      const form = document.getElementById(this.formId);
       const invalid = form?.querySelector<HTMLElement>('.ng-invalid:not(form), [aria-invalid="true"]');
       invalid?.focus();
       invalid?.scrollIntoView({ behavior: 'smooth', block: 'center' });

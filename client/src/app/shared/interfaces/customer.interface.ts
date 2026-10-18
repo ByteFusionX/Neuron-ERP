@@ -74,6 +74,7 @@ export interface getCustomer {
     sharedWith:string[];
     updatedBy?: string;
     updatedDate?: string;
+    createdDate?: string;
 }
 
 

@@ -26,6 +26,8 @@ const normalizeDomain = (email?: string): string | undefined => {
 const cleanText = (value?: string): string | undefined =>
     typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value;
 
+const digitsOnly = (value: any) => { const d = String(value ?? '').replace(/\D/g, ''); return d ? d : value; };
+
 const normalizeContactDetails = (contactDetails?: any[]): any[] => {
     if (!Array.isArray(contactDetails) || contactDetails.length === 0) return contactDetails ?? [];
     const primaryIndex = contactDetails.findIndex((c) => c.isPrimary);
@@ -35,6 +37,8 @@ const normalizeContactDetails = (contactDetails?: any[]): any[] => {
         lastName: cleanText(c.lastName),
         email: normalizeEmail(c.email),
         contactNo: cleanText(String(c.contactNo ?? '')),
+        // The model stores phone numbers as Number, so spaces, dashes and a leading + must go before the cast.
+        phoneNo: digitsOnly(c.phoneNo),
         designation: cleanText(c.designation),
         isPrimary: i === (primaryIndex === -1 ? 0 : primaryIndex),
     }));
@@ -758,7 +762,7 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
 
         customerData.companyName = cleanText(customerData.companyName);
         customerData.customerEmailId = normalizeEmail(customerData.customerEmailId);
-        customerData.contactNo = cleanText(String(customerData.contactNo ?? ''));
+        customerData.contactNo = digitsOnly(cleanText(String(customerData.contactNo ?? '')));
         const normalizedEmail = normalizeEmail(customerData.customerEmailId);
         const normalizedPhone = normalizePhone(customerData.contactNo);
         const normalizedTrn = normalizeTrn(customerData.trn);
@@ -839,7 +843,7 @@ export const editCustomer = async (req: Request, res: Response, next: NextFuncti
                 shippingAddress: sameAsBilling ? undefined : (formatAddress(shippingAddressStructured) || shippingAddress),
                 shippingAddressStructured: sameAsBilling ? undefined : shippingAddressStructured,
                 sameAsBilling: sameAsBilling,
-                contactNo: cleanText(String(contactNo ?? '')),
+                contactNo: digitsOnly(cleanText(String(contactNo ?? ''))),
                 customerType: customerType,
                 trn: trn,
                 normalizedEmail: normalizedEmail,

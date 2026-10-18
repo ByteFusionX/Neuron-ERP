@@ -5,7 +5,7 @@
     <app-customer-form-stepper [steps]="steps" [current]="step" [isStepValid]="isStepValid.bind(this)"
         (stepClick)="goToStep($any($event))"></app-customer-form-stepper>
 
-    <form id="customer-form" [formGroup]="customerForm" (ngSubmit)="submit()" novalidate>
+    <form [id]="formId" [formGroup]="customerForm" (ngSubmit)="submit()" novalidate>
 
         <!-- Step 1 — company ---------------------------------------------------------- -->
         <app-sf-section *ngIf="step === 1" title="Company" columns="2">
@@ -119,7 +119,7 @@
         <app-action-button *ngIf="step === 1 || step === 2" variant="primary" (click)="nextStep()">
             Next: {{ steps[step].label }}
         </app-action-button>
-        <app-action-button *ngIf="step === 3" variant="primary" type="submit" form="customer-form" [disabled]="saving">
+        <app-action-button *ngIf="step === 3" variant="primary" type="submit" [form]="formId" [disabled]="saving">
             {{ saving ? 'Saving…' : (isEdit ? 'Save Changes' : 'Create Customer') }}
         </app-action-button>
     </ng-container>

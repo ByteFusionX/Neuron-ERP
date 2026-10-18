@@ -168,6 +168,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       { key: 'customerType', label: 'Type', valueGetter: (r) => this.formatString.transform(r.customerType?.customerTypeName) },
       { key: 'createdBy', label: 'Created by / Owner', valueGetter: (r) => this.ownerName(r) },
       { key: 'department', label: 'Department', valueGetter: (r) => r.department?.departmentName },
+      { key: 'createdDate', label: 'Created Date', type: 'date', width: '130px', valueGetter: (r) => r.createdDate ?? null },
       { key: 'customerEmailId', label: 'Email' },
       {
         key: 'status', label: 'Status', type: 'badge', width: '110px',
@@ -351,6 +352,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
           { type: 'field', label: 'Company Name', value: c.companyName, noHover: true },
           { type: 'field', label: 'Department', value: c.department?.departmentName, noHover: true },
           { type: 'field', label: 'Created by / Owner', value: this.ownerName(c), noHover: true },
+          { type: 'field', label: 'Created Date', value: c.createdDate ? new Date(c.createdDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—', noHover: true },
           { type: 'field', label: 'Status', value: c.status, noHover: true },
           ...(c.statusReason ? [{ type: 'field' as const, label: 'Status Reason', value: c.statusReason, noHover: true }] : []),
         ],
