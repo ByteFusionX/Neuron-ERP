@@ -618,6 +618,11 @@ export const updateEnquiryDetails = async (req: any, res: Response, next: NextFu
         if (body.source !== undefined) set('source', body.source || '', 'source');
         if (body.enquiryCategory !== undefined) set('enquiryCategory', body.enquiryCategory || '', 'category');
         if (body.requirement !== undefined) set('requirement', body.requirement, 'requirement');
+        if (body.estimatedCost !== undefined) {
+            const cost = body.estimatedCost === null || body.estimatedCost === '' ? null : Number(body.estimatedCost);
+            if (cost !== null && (!Number.isFinite(cost) || cost < 0)) return res.status(400).json({ success: false, message: 'Estimated cost must be zero or more.' });
+            set('estimatedCost', cost, 'estimated cost');
+        }
 
         if (!changes.length) return res.status(200).json({ success: true, message: 'Nothing changed', data: enquiry });
         await enquiry.save();

@@ -15,6 +15,7 @@ export interface Enquiry {
     title: string;
     source?: string | null;
     enquiryCategory?: string | null;
+    estimatedCost?: number | null;
     priority?: string | null;
     requirement?: string | null;
     followUpOutcome?: string | null;
@@ -60,6 +61,7 @@ export interface getEnquiry {
     title: string;
     source?: string | null;
     enquiryCategory?: string | null;
+    estimatedCost?: number | null;
     priority?: string | null;
     requirement?: string | null;
     followUpOutcome?: string | null;

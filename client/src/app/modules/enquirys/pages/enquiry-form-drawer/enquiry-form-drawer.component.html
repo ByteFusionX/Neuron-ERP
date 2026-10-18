@@ -4,7 +4,7 @@
     <span sfDrawerHeader *ngIf="draftRef.savedAt && !isEdit" class="text-xs text-gray-400 dark:text-gray-500">Draft saved {{ draftRef.savedAt | date: 'HH:mm' }}</span>
 
     <!-- Stepper -->
-    <ol *ngIf="!isEdit" class="mb-5 flex items-center gap-2">
+    <ol class="mb-5 flex items-center gap-2">
         <li *ngFor="let s of steps" class="flex flex-1 items-center gap-2">
             <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
                 [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
@@ -60,21 +60,18 @@
                 <app-sf-field label="Source" hint="Optional" [control]="enquiryForm.controls.source">
                     <app-sf-select formControlName="source" [options]="sourceOptions" placeholder="Select source"></app-sf-select>
                 </app-sf-field>
-                <app-sf-field *ngIf="!isEdit" label="Assign Enquiry Owner" hint="Optional — leave blank to assign it to yourself" [control]="enquiryForm.controls.accountingManager">
+                <app-sf-field label="Estimated Cost" hint="Optional" [control]="enquiryForm.controls.estimatedCost">
+                    <app-sf-currency formControlName="estimatedCost" placeholder="0.00"></app-sf-currency>
+                </app-sf-field>
+                <app-sf-field label="Assign Enquiry Owner" [hint]="isEdit ? '' : 'Optional — leave blank to assign it to yourself'" [control]="enquiryForm.controls.accountingManager">
                     <app-sf-combobox formControlName="accountingManager" clearable [options]="accountingManagerOptions"
                         placeholder="Myself"></app-sf-combobox>
                 </app-sf-field>
-                <app-sf-field *ngIf="!isEdit" label="Enquiry Date" [control]="enquiryForm.controls.date">
+                <app-sf-field label="Enquiry Date" [control]="enquiryForm.controls.date">
                     <app-sf-date formControlName="date" [min]="earliestEnquiryDate" [max]="today" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
                 </app-sf-field>
-                <app-sf-field *ngIf="!isEdit" label="Next Follow-up Date" [control]="enquiryForm.controls.nextFollowUpDate">
+                <app-sf-field label="Next Follow-up Date" [control]="enquiryForm.controls.nextFollowUpDate">
                     <app-sf-date formControlName="nextFollowUpDate" [min]="today" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
-                </app-sf-field>
-            </app-sf-section>
-
-            <app-sf-section *ngIf="isEdit" title="Notes">
-                <app-sf-field full label="Requirement" [control]="enquiryForm.controls.requirement">
-                    <app-sf-textarea formControlName="requirement" [rows]="6" placeholder="Requirement, scope or important notes"></app-sf-textarea>
                 </app-sf-field>
             </app-sf-section>
         </ng-container>
@@ -102,12 +99,9 @@
         <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
         <app-action-button *ngIf="step === 2" variant="secondary" (click)="previousStep()">Back</app-action-button>
 
-        <app-action-button *ngIf="step === 1 && !isEdit" variant="primary" (click)="nextStep()">Next: {{ steps[1].label }}</app-action-button>
-        <app-action-button *ngIf="isEdit" variant="primary" type="submit" form="enquiry-form" [disabled]="saving">
-            {{ saving ? 'Saving…' : 'Save changes' }}
-        </app-action-button>
-        <app-action-button *ngIf="step === 2 && !isEdit" variant="primary" type="submit" form="enquiry-form" [disabled]="saving">
-            {{ saving ? 'Creating…' : 'Create Enquiry' }}
+        <app-action-button *ngIf="step === 1" variant="primary" (click)="nextStep()">Next: {{ steps[1].label }}</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="enquiry-form" [disabled]="saving">
+            {{ isEdit ? (saving ? 'Saving…' : 'Save changes') : (saving ? 'Creating…' : 'Create Enquiry') }}
         </app-action-button>
     </ng-container>
 </app-sf-drawer>

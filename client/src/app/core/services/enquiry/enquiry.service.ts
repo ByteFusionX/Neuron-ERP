@@ -69,7 +69,7 @@ export class EnquiryService {
     return this.http.get<EnquiryTable>(url)
   }
 
-  updateEnquiryDetails(enquiryId: string, details: { title?: string; contact?: string | null; priority?: string | null; source?: string; enquiryCategory?: string; requirement?: string }): Observable<{ success: boolean; data: getEnquiry }> {
+  updateEnquiryDetails(enquiryId: string, details: { title?: string; contact?: string | null; priority?: string | null; source?: string; enquiryCategory?: string; requirement?: string; estimatedCost?: number | null }): Observable<{ success: boolean; data: getEnquiry }> {
     return this.http.patch<{ success: boolean; data: getEnquiry }>(`${this.api}/enquiry/${enquiryId}/details`, details)
   }
 

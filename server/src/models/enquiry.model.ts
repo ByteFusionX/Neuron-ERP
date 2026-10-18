@@ -14,6 +14,7 @@ interface Enquiry extends Document {
     title: String;
     source?: string;
     enquiryCategory?: string;
+    estimatedCost?: number;
     priority?: string;
     requirement?: string;
     followUpOutcome?: string;
@@ -359,6 +360,10 @@ const enquirySchema = new Schema<Enquiry>({
     enquiryCategory: {
         type: String,
         trim: true
+    },
+    estimatedCost: {
+        type: Number,
+        min: 0
     },
     priority: {
         type: String,

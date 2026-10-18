@@ -3,7 +3,7 @@ import { DatePipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { Observable, Subscription, filter, firstValueFrom, shareReplay, switchMap, take } from 'rxjs';
+import { Observable, Subscription, filter, of, firstValueFrom, shareReplay, switchMap, take } from 'rxjs';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { CustomerFormDrawerComponent } from 'src/app/modules/customers/pages/customer-form-drawer/customer-form-drawer.component';
@@ -49,7 +49,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     { n: 2 as const, label: 'Requirement & Files' },
   ];
   private readonly stepControls: Record<1 | 2, string[]> = {
-    1: ['client', 'contact', 'department', 'title', 'priority', 'source', 'date', 'nextFollowUpDate'],
+    1: ['client', 'contact', 'department', 'title', 'priority', 'source', 'estimatedCost', 'date', 'nextFollowUpDate'],
     2: ['requirement', 'attachments'],
   };
   readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
@@ -93,6 +93,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     source: [null as string | null],
     enquiryCategory: [null as string | null],
     accountingManager: [null as string | null],
+    estimatedCost: [null as number | null, [Validators.min(0)]],
     priority: ['Normal' as string | null],
     requirement: ['', [Validators.required, notBlankValidator]],
     followUpOutcome: [''],
@@ -130,7 +131,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   }
 
   /** Fields that fix the enquiry's identity (number, customer, department, dates) are shown but locked. */
-  private readonly lockedOnEdit = ['client', 'department', 'date', 'nextFollowUpDate'] as const;
+  private readonly lockedOnEdit = ['client', 'department', 'accountingManager', 'date', 'nextFollowUpDate'] as const;
 
   private loadForEdit(e: getEnquiry): void {
     const id = (x: any): string | null => (x && typeof x === 'object' ? x._id : x) ?? null;
@@ -146,6 +147,8 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
       title: e.title,
       source: e.source ?? null,
       enquiryCategory: e.enquiryCategory ?? null,
+      estimatedCost: e.estimatedCost ?? null,
+      accountingManager: id(e.salesPerson),
       priority: e.priority || 'Normal',
       requirement: e.requirement || '',
       date: String(e.date || '').slice(0, 10),
@@ -245,20 +248,9 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     if (clientId && this.optionsLoaded) this.loadContacts(clientId);
   }
 
-  /** A customer is served by specific departments; offer only those (all of them if none is recorded). */
-  private narrowDepartments(clientId: string | null, customer?: getCustomer): void {
-    if (this.isEdit) { this.departmentOptions = this.allDepartmentOptions; return; }
-    const ids = new Set(
-      [...(customer?.departments ?? []), customer?.department]
-        .map((d: any) => (d && typeof d === 'object' ? d._id : d))
-        .filter(Boolean),
-    );
-    this.departmentOptions = ids.size && clientId
-      ? this.allDepartmentOptions.filter((o) => ids.has(o.value as string))
-      : this.allDepartmentOptions;
-    const current = this.enquiryForm.controls.department.value;
-    if (current && !this.departmentOptions.some((o) => o.value === current)) this.enquiryForm.controls.department.reset(null);
-    else if (!current && this.departmentOptions.length === 1 && clientId) this.enquiryForm.controls.department.setValue(this.departmentOptions[0].value as string);
+  /** Departments do not depend on the customer; every active department is offered. */
+  private narrowDepartments(_clientId: string | null, _customer?: getCustomer): void {
+    this.departmentOptions = this.allDepartmentOptions;
   }
 
   private loadContacts(clientId: string): void {
@@ -323,6 +315,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
       title: '',
       source: null,
       enquiryCategory: null,
+      estimatedCost: null,
       accountingManager: null,
       priority: 'Normal',
       requirement: '',
@@ -368,6 +361,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
       title: v.title,
       source: v.source,
       enquiryCategory: v.enquiryCategory,
+      estimatedCost: v.estimatedCost ?? undefined,
       priority: v.priority,
       requirement: v.requirement,
       followUpOutcome: v.followUpOutcome,
@@ -440,7 +434,16 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
         source: v.source ?? '',
         enquiryCategory: v.enquiryCategory ?? '',
         requirement: v.requirement ?? '',
-      }).subscribe({
+        estimatedCost: v.estimatedCost ?? null,
+      }).pipe(
+        switchMap(() => {
+          const files = (v.attachments ?? []) as File[];
+          if (!files.length) return of(null);
+          const formData = new FormData();
+          files.forEach((file) => formData.append('files', file as Blob));
+          return this.enquiryService.updateEnquiryAttachments(this.enquiry!._id, formData);
+        }),
+      ).subscribe({
         next: () => {
           this.saving = false;
           this.reset();
