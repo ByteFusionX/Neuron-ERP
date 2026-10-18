@@ -51,7 +51,6 @@ export class PrFormComponent {
   @Output() jobSelected = new EventEmitter<string>();
   @Output() materialRequestsClicked = new EventEmitter<void>();
   /** Ticked lines to ask a supplier about, with the supplier picked in the selection bar if any. */
-  @Output() rfqRequested = new EventEmitter<{ positions: { i: number; j: number; k: number }[]; supplierId: string | null }>();
   @Output() createProductRequested = new EventEmitter<void>();
 
   get f() {

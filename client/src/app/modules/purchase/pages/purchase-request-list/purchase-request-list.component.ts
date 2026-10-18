@@ -3,7 +3,8 @@ import { Component, ViewChild, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { forkJoin, Subscription } from 'rxjs';
+import { forkJoin, Observable, of, Subscription } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
@@ -31,7 +32,7 @@ import { WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
 
 type SourceType = 'job' | 'manual';
 
-const ALL_STATUSES = ['Pending', 'Drafted', 'Rejected', 'Approved'];
+const ALL_STATUSES = ['In Progress', 'Pending', 'Drafted', 'Rejected', 'Approved'];
 const PENDING_STATUSES = ['Pending'];
 const APPROVED_STATUSES = ['Approved'];
 // A job allocated to a buyer starts as New; once the buyer saves the PR it is In Progress, then Pending, then Approved.
@@ -102,7 +103,7 @@ export class PurchaseRequestListComponent {
     { id: 'completed', label: 'Completed' },
     { id: 'rejected', label: 'Rejected' },
   ];
-  views: DataGridView<any>[] = this.baseViews;
+  views: DataGridView<any>[] = [this.newView, ...this.baseViews];
   isSuperAdmin = false;
   canApprovePR = false;
   myId = '';
@@ -184,7 +185,7 @@ export class PurchaseRequestListComponent {
       { key: 'createdBy', label: 'Created By', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '-' },
       { key: 'supplier', label: 'Supplier', valueGetter: (r) => r.supplierId?.supplierName || '-' },
       {
-        key: 'procurementPerson', label: 'Procurement Person',
+        key: 'procurementPerson', label: 'Allocated To',
         valueGetter: (r) => r.procurementPerson?.firstName ? `${r.procurementPerson.firstName} ${r.procurementPerson.lastName}` : '-',
       },
       { key: 'allocatedBy', label: 'Allocated By', valueGetter: (r) => r.allocatedBy?.firstName ? `${r.allocatedBy.firstName} ${r.allocatedBy.lastName}` : '-' },
@@ -342,18 +343,18 @@ export class PurchaseRequestListComponent {
         sourceType: this.sourceTypeForView(view.id),
         poProgress: this.poProgressForView(view.id),
         allocation: this.allocationForView(view.id),
-      });
+      }).pipe(catchError(() => of(null)));
       return acc;
-    }, {} as Record<string, ReturnType<PurchaseService['getPurchases']>>);
+    }, {} as Record<string, Observable<any>>);
 
     this.subscriptions.add(
       forkJoin(requests).subscribe({
         next: (results) => {
           this.baseViews = this.baseViews.map((view) => ({
             ...view,
-            count: results[view.id]?.purchase?.total ?? 0,
+            count: results[view.id]?.purchase?.total ?? view.count ?? 0,
           }));
-          this.newCount = results['new']?.purchase?.total ?? 0;
+          this.newCount = results['new']?.purchase?.total ?? this.newCount;
           this.refreshViews();
         },
         error: (error) => console.error('Error loading view counts:', error),

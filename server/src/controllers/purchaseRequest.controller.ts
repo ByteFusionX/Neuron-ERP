@@ -108,13 +108,7 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
         }
 
         const privileges = employee.category?.privileges;
-        if (!privileges?.purchase?.create) {
-            return res.status(403).json({
-                success: false,
-                message: "You do not have permission to convert jobs to purchase",
-                status: 403
-            });
-        }
+        const canCreate = !!privileges?.purchase?.create || /^superadmin$/i.test(employee.category?.role ?? '');
 
         const {
             jobId,
@@ -158,6 +152,16 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
                     status: 404
                 });
             }
+        }
+
+        // The person a job is allocated to may convert it even without the create privilege.
+        const isAllocatedToMe = !!job?.procurementPerson && String(job.procurementPerson) === String(employee._id);
+        if (!canCreate && !isAllocatedToMe) {
+            return res.status(403).json({
+                success: false,
+                message: "You do not have permission to convert jobs to purchase",
+                status: 403
+            });
         }
 
         let currency;

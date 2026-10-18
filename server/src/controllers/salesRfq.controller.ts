@@ -2128,6 +2128,11 @@ const purchaseLines = (purchase: any) => {
             partNo: detail.partNo,
             uom: detail.uom,
             awardedSupplier: winner?.supplierName,
+            // Suppliers already tied to the line (offers on file), so the RFQ editor can open one tab per supplier.
+            suppliers: (detail.comparisons || [])
+                .filter((c: any) => c.supplierId)
+                .map((c: any) => ({ supplierId: String(c.supplierId), supplierName: c.supplierName })),
+            supplierName: detail.supplierName || undefined,
         });
     }));
     return lines;

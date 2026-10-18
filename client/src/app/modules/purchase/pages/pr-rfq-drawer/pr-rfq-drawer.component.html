@@ -15,53 +15,40 @@
         </p>
       }
 
-      <!-- Products -->
+      <!-- Coverage: every product must sit on some supplier's RFQ and end up awarded -->
       <section class="rounded-xl border border-gray-200 dark:border-erp-border-dark">
-        <header class="flex items-center justify-between border-b border-gray-100 px-4 py-2.5 dark:border-erp-border-dark">
-          <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Products</h3>
-          <span class="flex items-center gap-3">
-            <span class="text-xs text-gray-500">{{ awardedCount }} of {{ d.lines.length }} awarded</span>
-            @if (d.purchase.editable && d.purchase.hasJob) {
-              <app-action-button variant="tool" [disabled]="busy()" (click)="importFromEnquiry()">Bring in enquiry prices</app-action-button>
-            }
-          </span>
-        </header>
-        <ul class="divide-y divide-gray-100 dark:divide-erp-border-dark">
-          @for (line of d.lines; track line.itemDetailKey) {
-            <li class="flex items-start gap-3 px-4 py-2">
-              @if (d.purchase.editable) {
-                <input type="checkbox" class="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 accent-violet-600"
-                  [checked]="pickedLines.has(line.itemDetailKey)" (change)="toggleLine(line.itemDetailKey)" [attr.aria-label]="'Ask suppliers about ' + line.detail" />
-              }
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-[13px] text-gray-900 dark:text-gray-100" [title]="line.detail">{{ lineLabel(line) }}</p>
-                <p class="text-xs text-gray-500">{{ line.itemName }} · Qty {{ line.quantity }}{{ line.uom ? ' ' + line.uom : '' }}</p>
-              </div>
-              @if (line.awardedSupplier) {
-                <span class="shrink-0 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Awarded · {{ line.awardedSupplier }}</span>
-              } @else {
-                <span class="shrink-0 rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">Not awarded</span>
-              }
-            </li>
-          }
-        </ul>
-
-        @if (d.purchase.editable) {
-          <div class="flex flex-wrap items-center gap-3 border-t border-gray-100 px-4 py-3 dark:border-erp-border-dark">
-            <p class="min-w-0 flex-1 text-xs text-gray-500">Tick the products to ask about, then create the RFQ. You pick the supplier there, and can add more suppliers for the same products.</p>
-            <app-action-button variant="primary" [disabled]="!canCreate()" (click)="startCreate()">
-              Create RFQ{{ pickedLines.size ? ' for ' + pickedLines.size + (pickedLines.size === 1 ? ' product' : ' products') : '' }}
-            </app-action-button>
+        <header class="flex flex-wrap items-center gap-3 px-4 py-2.5">
+          <div class="min-w-0 flex-1">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ d.rfqs.length }} supplier RFQ{{ d.rfqs.length === 1 ? '' : 's' }}</h3>
+            <p class="text-xs text-gray-500">
+              {{ awardedCount }} of {{ d.lines.length }} products awarded
+              @if (notAsked.length) { · <span class="text-amber-700 dark:text-amber-300">{{ notAsked.length }} not sent to any supplier</span> }
+            </p>
           </div>
+          @if (d.purchase.editable && d.purchase.hasJob) {
+            <app-action-button variant="tool" [disabled]="busy()" (click)="importFromEnquiry()">Bring in enquiry prices</app-action-button>
+          }
+          @if (d.purchase.editable) {
+            <app-action-button variant="primary" [disabled]="busy() || !d.lines.length" (click)="startCreate()">+ New RFQ</app-action-button>
+          }
+        </header>
+        @if (notAsked.length) {
+          <ul class="divide-y divide-amber-100 border-t border-amber-100 bg-amber-50/50 dark:divide-amber-900/40 dark:border-amber-900/40 dark:bg-amber-950/20">
+            @for (line of notAsked; track line.itemDetailKey) {
+              <li class="flex items-center gap-3 px-4 py-1.5 text-[13px]">
+                <span class="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100" [title]="line.detail">{{ lineLabel(line) }}</span>
+                <span class="text-xs text-gray-500">{{ line.itemName }} · Qty {{ line.quantity }}{{ line.uom ? ' ' + line.uom : '' }}</span>
+              </li>
+            }
+          </ul>
         }
       </section>
 
       <!-- RFQs -->
       <section class="space-y-3">
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">RFQs ({{ d.rfqs.length }})</h3>
         @if (!d.rfqs.length) {
           <p class="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-erp-border-dark">
-            No supplier has been asked yet. Tick the products and create the RFQ.
+            No supplier has been asked yet. Click New RFQ, then add a tab for each supplier.
           </p>
         }
         @for (rfq of d.rfqs; track rfq._id) {
@@ -79,6 +66,7 @@
 
               @if (d.purchase.editable && invite) {
                 <div class="ml-auto flex flex-wrap items-center gap-1.5">
+                  <app-action-button variant="secondary" [disabled]="busy()" (click)="edit.emit(rfq._id)">Open RFQ</app-action-button>
                   @if (invite.status === 'Not Sent') {
                     <app-action-button variant="secondary" [disabled]="busy()" (click)="markSent(rfq)">Mark sent</app-action-button>
                   }

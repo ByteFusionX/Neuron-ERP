@@ -60,6 +60,8 @@ export class PrRfqDrawerComponent implements OnChanges {
   @Output() compare = new EventEmitter<void>();
   /** Raise RFQs for these line ids: the host opens the same supplier RFQ form used on enquiries. */
   @Output() create = new EventEmitter<string[]>();
+  /** Open one supplier's RFQ in the shared form to edit its lines and prices. */
+  @Output() edit = new EventEmitter<string>();
   @Output() closed = new EventEmitter<void>();
 
   private service = inject(SalesRfqService);
@@ -73,14 +75,12 @@ export class PrRfqDrawerComponent implements OnChanges {
 
   readonly currencyOptions: SfOption[] = ['QAR', 'USD', 'EUR', 'AED', 'SAR', 'GBP'].map((c) => ({ label: c, value: c }));
 
-  /** Products ticked for the next RFQ. */
-  pickedLines = new Set<string>();
   /** The RFQ whose reply form is open, and its draft. */
   replyFor: string | null = null;
   draft: ReplyDraft | null = null;
 
   ngOnChanges(changes: SimpleChanges): void {
-    if ((changes['open'] || changes['purchaseId']) && this.open && this.purchaseId) this.load(true);
+    if ((changes['open'] || changes['purchaseId']) && this.open && this.purchaseId) this.load();
     if (changes['open'] && !this.open) {
       this.data.set(null);
       this.replyFor = null;
@@ -100,7 +100,7 @@ export class PrRfqDrawerComponent implements OnChanges {
     return SUPPLIER_STATUS_CLASSES[status] || SUPPLIER_STATUS_CLASSES['Not Sent'];
   }
 
-  load(initial = false): void {
+  load(): void {
     if (!this.purchaseId) return;
     this.loading.set(!this.data());
     this.loadError.set(null);
@@ -108,7 +108,6 @@ export class PrRfqDrawerComponent implements OnChanges {
       next: (res) => {
         this.data.set(res.data);
         this.loading.set(false);
-        if (initial) this.resetNewForm(res.data);
       },
       error: (err) => {
         this.loadError.set(err?.error?.message || 'Could not load the RFQs.');
@@ -117,16 +116,12 @@ export class PrRfqDrawerComponent implements OnChanges {
     });
   }
 
-  /** Every product still waiting for a price starts ticked. */
-  private resetNewForm(data: PurchaseRfqData): void {
-    this.pickedLines = new Set(data.lines.filter((l) => !l.awardedSupplier).map((l) => l.itemDetailKey));
-  }
-
-  toggleLine(key: string): void {
-    const next = new Set(this.pickedLines);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    this.pickedLines = next;
+  /** Products no live RFQ carries yet: nobody has been asked for a price on them. */
+  get notAsked(): PurchaseRfqLine[] {
+    const d = this.data();
+    if (!d) return [];
+    const asked = new Set(d.rfqs.flatMap((r) => r.suppliers?.[0]?.lineKeys || []));
+    return d.lines.filter((l) => !asked.has(l.itemDetailKey));
   }
 
   lineLabel(line: PurchaseRfqLine): string {
@@ -148,14 +143,11 @@ export class PrRfqDrawerComponent implements OnChanges {
 
   // --- new RFQ -----------------------------------------------------------------
 
-  canCreate(): boolean {
-    return this.editable && this.pickedLines.size > 0 && !this.busy();
-  }
-
-  /** Opens the shared supplier RFQ form for the ticked products, in the request's own order. */
+  /** Opens the shared supplier RFQ form with every product that still needs a price; the buyer adds a tab per supplier. */
   startCreate(): void {
-    if (!this.canCreate()) return;
-    this.create.emit((this.data()?.lines || []).filter((l) => this.pickedLines.has(l.itemDetailKey)).map((l) => l.itemDetailKey));
+    const lines = this.data()?.lines || [];
+    const open = lines.filter((l) => !l.awardedSupplier);
+    this.create.emit((open.length ? open : lines).map((l) => l.itemDetailKey));
   }
 
   /** Copies the supplier prices from the enquiry's sales RFQs onto this request's lines. */

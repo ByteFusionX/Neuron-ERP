@@ -95,19 +95,12 @@
       [supplierOptions]="supplierOptions()"
       [allowCreateProduct]="true"
       [bulkSelect]="true"
-      [bulkExtraTemplate]="bulkRfq"
       [lineLocked]="lineLocked"
       [lineAwarded]="lineAwarded"
       [lineBadge]="lineBadge"
       (createProductRequested)="createProductRequested.emit()"
     ></app-item-entry>
   </ng-container>
-
-  <!-- In the selection bar: ask a supplier for a price on the ticked lines (the supplier box in the bar picks who). -->
-  <ng-template #bulkRfq let-positions="positions" let-entry="entry">
-    <app-action-button variant="tool" title="Create an RFQ for the ticked lines. Pick the supplier in the box first, or choose it in the form"
-      (click)="rfqRequested.emit({ positions, supplierId: entry.takeBulkSupplier() }); entry.clearSelection()">Create RFQ</app-action-button>
-  </ng-template>
 
   <ng-template #noJob>
     <div class="pr-empty-state">Select a job to load its items.</div>

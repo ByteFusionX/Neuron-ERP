@@ -153,12 +153,6 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   supplierOptions: SalesRfqSupplierOption[] = [];
   /** Suppliers that already hold a live RFQ for this enquiry (id → RFQ no.); they cannot be asked again here. */
   asked: Record<string, string> = {};
-  /** Item-group picker: raises a new supplier tab holding only the groups ticked. */
-  splitOpen = false;
-  splitGroups = new Set<number>();
-  splitSupplierId: string | null = null;
-  /** The supplier form was opened from the split picker, so the new supplier lands there instead of on a tab. */
-  private splitNewSupplier = false;
   private supplierSearch$ = new Subject<string>();
   /** Master details of the suppliers seen so far, keyed by supplier id; the banner shows the current tab's. */
   supplierInfo: Record<string, SalesRfqSupplierOption> = {};
@@ -274,18 +268,14 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
         const wanted = new Set(this.purchaseLineKeys);
         const lines = data.lines.filter((l) => !wanted.size || wanted.has(l.itemDetailKey));
         this.purchaseKeys = new Set(data.lines.map((l) => l.itemDetailKey));
-        this.mountLines(this.toSeed(lines.map((l) => ({
-          itemDetailKey: l.itemDetailKey,
-          itemName: l.itemName,
-          detail: l.detail,
-          quantity: l.quantity,
-          partNo: l.partNo as any,
-          uom: l.uom,
-          productItemCode: l.itemCode,
-        }))));
-        this.applyPresetSupplier();
-        this.loading = false;
-        this.fetchSupplierOptions('').subscribe({ next: (r) => (this.supplierOptions = r.data || []), error: () => {} });
+        this.fetchSupplierOptions('').pipe(catchError(() => of({ success: false, data: [] as SalesRfqSupplierOption[] }))).subscribe((r) => {
+          this.supplierOptions = r.data || [];
+          const seed = this.supplierSeed(lines);
+          this.mountLines(seed);
+          // One tab per supplier already tied to the lines; otherwise the palette's supplier goes on the first tab.
+          if (!seed.some((o) => o.meta)) this.applyPresetSupplier();
+          this.loading = false;
+        });
       },
       error: (err) => {
         this.loading = false;
@@ -364,6 +354,47 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
     });
   }
 
+  /**
+   * Purchase lines arranged by supplier: one tab per supplier already tied to the lines (offers on file, or the
+   * supplier name typed on the line), each holding its lines under their item groups. Lines with no supplier go on
+   * a tab of their own, left for the buyer to assign. Without any supplier the lines stay on one tab.
+   */
+  private supplierSeed(lines: PurchaseRfqData['lines']): ItemEntryOptionValue[] {
+    const toLine = (l: PurchaseRfqData['lines'][number]) => ({
+      itemDetailKey: l.itemDetailKey, itemName: l.itemName, detail: l.detail, quantity: l.quantity,
+      partNo: l.partNo as any, uom: l.uom, productItemCode: l.itemCode,
+    });
+    const tabs = new Map<string, { meta: any; lines: PurchaseRfqData['lines'] }>();
+    const loose: PurchaseRfqData['lines'] = [];
+    lines.forEach((l) => {
+      const found = new Map<string, { supplierId: string; supplierName: string }>();
+      (l.suppliers || []).forEach((s) => found.set(s.supplierId, { supplierId: s.supplierId, supplierName: s.supplierName || '' }));
+      const typed = l.supplierName?.trim().toLowerCase();
+      const byName = typed ? this.supplierOptions.find((o) => o.supplierName.trim().toLowerCase() === typed) : null;
+      if (byName) found.set(byName.supplierId, { supplierId: byName.supplierId, supplierName: byName.supplierName });
+      if (!found.size) return void loose.push(l);
+      found.forEach((s) => {
+        const option = this.supplierOptions.find((o) => o.supplierId === s.supplierId);
+        if (!tabs.has(s.supplierId)) {
+          tabs.set(s.supplierId, {
+            meta: {
+              supplierId: s.supplierId,
+              supplierName: option?.supplierName || s.supplierName,
+              contactEmail: option?.contactEmail,
+              isSupplierApproved: option?.isSupplierApproved,
+            },
+            lines: [],
+          });
+        }
+        tabs.get(s.supplierId)!.lines.push(l);
+      });
+    });
+    if (!tabs.size) return this.toSeed(lines.map(toLine));
+    const seed = Array.from(tabs.values()).map((t) => ({ ...this.toSeed(t.lines.map(toLine))[0], meta: t.meta }));
+    if (loose.length) seed.push({ ...this.toSeed(loose.map(toLine))[0], meta: null });
+    return seed;
+  }
+
   /** Groups flat RFQ lines under their item names, the shape the item editor works in. */
   private toSeed(lines: (SalesRfqLineInput & { unitCost?: number | null; availability?: string; productItemCode?: string; productPartNo?: string })[]): ItemEntryOptionValue[] {
     const items = new Map<string, ItemEntryItemValue>();
@@ -436,10 +467,6 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
     this.supplierOptions = [];
     this.supplierInfo = {};
     this.asked = {};
-    this.splitOpen = false;
-    this.splitGroups = new Set<number>();
-    this.splitSupplierId = null;
-    this.splitNewSupplier = false;
   }
 
   // --- lines -------------------------------------------------------------------
@@ -699,14 +726,13 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   }
 
   /** A new supplier tab starts with the same products and quantities as the tab it was added from; prices stay blank. */
-  private copyLinesFrom(from: number, groups?: Set<number>): void {
+  private copyLinesFrom(from: number, picks?: { j: number; k: number }[]): void {
     const items = (this.optionalItems.at(from)?.get('items') as FormArray | null)?.getRawValue() ?? [];
     const copied = items
-      .filter((_: any, i: number) => !groups || groups.has(i))
-      .map((item: any) => ({
+      .map((item: any, j: number) => ({
         itemName: item.itemName,
         itemDetails: (item.itemDetails || [])
-          .filter((d: any) => d.detail || d.productId)
+          .filter((d: any, k: number) => (!picks || picks.some((p) => p.j === j && p.k === k)) && (d.detail || d.productId))
           .map((d: any) => ({
             productId: d.productId, itemCode: d.itemCode, partNo: d.partNo, detail: d.detail,
             quantity: d.quantity, uom: d.uom,
@@ -717,100 +743,31 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
       .filter((item: any) => item.itemDetails.length);
     if (!copied.length) return;
     this.itemEntry?.addItems(copied);
-    if (!groups) this.toaster.info('Lines copied from the previous supplier. Remove any this supplier should not quote.');
+    if (!picks) this.toaster.info('Lines copied from the previous supplier. Remove any this supplier should not quote.');
   }
 
-  // --- split: a new supplier tab for chosen item groups --------------------------
-
-  /** Item groups of the tab being worked on that have at least one filled line. */
-  get splitChoices(): { index: number; name: string; lines: number }[] {
-    const items = (this.optionalItems.at(this.activeOption)?.get('items') as FormArray | null)?.getRawValue() ?? [];
-    return items
-      .map((item: any, index: number) => ({
-        index,
-        name: String(item.itemName || '').trim() || `Group ${index + 1}`,
-        lines: (item.itemDetails || []).filter((d: any) => d.detail || d.productId).length,
-      }))
-      .filter((g: { lines: number }) => g.lines > 0);
-  }
-
-  /** `splitChoices` is rebuilt on every change detection; tracking by group keeps the checkboxes from being re-created under the click. */
-  readonly trackSplit = (_: number, g: { index: number }): number => g.index;
-
-  toggleSplit(): void {
-    this.splitOpen = !this.splitOpen;
-    this.splitGroups = new Set<number>();
-    this.splitSupplierId = null;
-  }
-
-  toggleSplitGroup(index: number): void {
-    const next = new Set(this.splitGroups);
-    if (next.has(index)) next.delete(index);
-    else next.add(index);
-    this.splitGroups = next;
-  }
-
-  /** Every group ticked, or all cleared when they already are. */
-  toggleSplitAll(): void {
-    const all = this.splitChoices.map((g) => g.index);
-    this.splitGroups = this.splitGroups.size === all.length ? new Set<number>() : new Set(all);
+  /** "Add RFQ": a new supplier tab. Lines ticked on this tab are copied onto it and stay where they are. */
+  onAddSupplierTab(): void {
+    const entry = this.itemEntry;
+    if (!entry) return;
+    const from = this.activeOption;
+    const picks = entry.selectedPositions().filter((p) => p.i === from).map(({ j, k }) => ({ j, k }));
+    entry.addOption();
+    this.activeOption = this.optionalItems.length - 1;
+    if (picks.length) {
+      this.copyLinesFrom(from, picks);
+      this.toaster.info(`${picks.length} line${picks.length === 1 ? '' : 's'} copied to the new supplier tab.`);
+    }
+    this.dirty = true;
   }
 
   openSupplierForm(): void {
-    this.splitNewSupplier = false;
     this.supplierFormOpen = true;
-  }
-
-  openSplitSupplierForm(): void {
-    this.splitNewSupplier = true;
-    this.supplierFormOpen = true;
-  }
-
-  /** Raises a new tab with copies of the ticked groups, and gives it the chosen supplier if one is set. */
-  createSplitTab(): void {
-    if (!this.splitGroups.size || !this.itemEntry) return;
-    const chosen = this.supplierOptions.find((o) => o.supplierId === this.splitSupplierId);
-    if (chosen && this.asked[chosen.supplierId]) {
-      this.toaster.warning(`${chosen.supplierName} already has ${this.asked[chosen.supplierId]} for this enquiry.`, 'Supplier already asked');
-      return;
-    }
-    const existing = chosen && this.suppliers.find((s) => s.supplierId === chosen.supplierId);
-    if (existing) {
-      this.toaster.warning(`${chosen!.supplierName} already has a tab. Pick another supplier, or copy the groups there by hand.`, 'Supplier already on a tab');
-      return;
-    }
-    const from = this.activeOption;
-    const groups = this.splitGroups;
-    this.itemEntry.addOption();
-    const target = this.optionalItems.length - 1;
-    this.activeOption = target;
-    this.copyLinesFrom(from, groups);
-    if (chosen) {
-      this.setMeta(target, { supplierId: chosen.supplierId, supplierName: chosen.supplierName, contactEmail: chosen.contactEmail, isSupplierApproved: chosen.isSupplierApproved });
-    }
-    this.dirty = true;
-    this.splitOpen = false;
-    this.splitGroups = new Set<number>();
-    this.splitSupplierId = null;
-    this.toaster.info(`${groups.size} item group${groups.size === 1 ? '' : 's'} copied to a new supplier tab.`);
   }
 
   /** A supplier registered from here is picked straight away; new suppliers are saved as approved. */
   onSupplierCreated(supplier: any): void {
     if (!supplier?._id) return;
-    if (this.splitNewSupplier) {
-      // Opened from the split picker: the supplier waits there for the new tab instead of taking over the current one.
-      this.splitNewSupplier = false;
-      const option = {
-        supplierId: supplier._id,
-        supplierName: supplier.supplierName,
-        contactEmail: supplier.contactDetails?.email,
-        isSupplierApproved: true,
-      } as unknown as SalesRfqSupplierOption;
-      this.supplierOptions = [option, ...this.supplierOptions.filter((o) => o.supplierId !== option.supplierId)];
-      this.splitSupplierId = option.supplierId;
-      return;
-    }
     this.pickSupplier({
       supplierId: supplier._id,
       supplierName: supplier.supplierName,

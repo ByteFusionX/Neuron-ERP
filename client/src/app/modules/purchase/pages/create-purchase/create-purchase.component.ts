@@ -12,7 +12,6 @@ import { Subscription } from 'rxjs';
 import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber } from 'src/app/shared/interfaces/purchase.interface';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
 import { PrCompareDrawerComponent } from '../pr-compare-drawer/pr-compare-drawer.component';
-import { PrRfqDrawerComponent } from '../pr-rfq-drawer/pr-rfq-drawer.component';
 import { SalesRfqCreateDrawerComponent } from 'src/app/modules/sales-rfq/pages/sales-rfq-create-drawer/sales-rfq-create-drawer.component';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -49,7 +48,6 @@ interface PartNumberDropdownOption {
     DetailBadgeComponent,
     PrFormComponent,
     PrCompareDrawerComponent,
-    PrRfqDrawerComponent,
     SalesRfqCreateDrawerComponent,
   ],
   templateUrl: './create-purchase.component.html',
@@ -168,9 +166,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     return key ? this.originalsByKey().get(key) : undefined;
   }
 
-  /** A line awarded to a supplier is read-only: its cost is the awarded price. Re-awarding goes through the RFQ button. */
-  lineLocked = (i: number, j: number, k: number): boolean =>
-    this.isAwardedLine(this.originalAt(i, j, k));
+  /** Awarded lines stay editable; nothing is locked in the PR item entry. */
+  lineLocked = (_i: number, _j: number, _k: number): boolean => false;
 
   /** For the item form's "Not awarded" filter: the line's saved copy says whether a supplier won it. */
   lineAwarded = (line: any): boolean => {
@@ -933,11 +930,6 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   compareOpen = false;
-  rfqOpen = false;
-  /** The supplier RFQ form (shared with enquiries), the saved line ids it was opened for, and the supplier picked in the selection bar. */
-  rfqCreateOpen = false;
-  rfqLineKeys: string[] = [];
-  rfqSupplier: { supplierId: string; supplierName: string; isSupplierApproved: boolean } | null = null;
 
   /** Every product line has an awarded supplier offer; only then can the request go for approval. */
   get allAwarded(): boolean {
@@ -964,57 +956,19 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     this.saveItemsToBackend(items, (ok) => { if (ok) proceed(); });
   }
 
-  private detailTextAt(p: { i: number; j: number; k: number }): string {
-    const items = this.entryItems.at(p.i)?.get('items') as FormArray | null;
-    const details = items?.at(p.j)?.get('itemDetails') as FormArray | null;
-    return (details?.at(p.k)?.get('detail')?.value || '').toString().trim();
-  }
-
-  /** Ticked lines in the item form: save them, then raise an RFQ for them through the shared supplier RFQ form. */
-  onRfqForSelection(event: { positions: { i: number; j: number; k: number }[]; supplierId: string | null }): void {
-    // Read before saving: a save reloads the lines and moves the form's positions.
-    const wanted = event.positions.map((p) => ({ j: p.j, text: this.detailTextAt(p) })).filter((w) => w.text);
-    if (!wanted.length) {
-      this.warningMessage('Tick lines that have a product description first.');
-      return;
-    }
-    this.whenSaved(() => {
-      const used = new Set<string>();
-      const keys: string[] = [];
-      wanted.forEach((w) => {
-        const hit = (this.itemsList()[w.j]?.itemDetails || []).find((d: any) => d._id && !used.has(d._id) && (d.detail || '').toString().trim() === w.text);
-        if (hit) { used.add(hit._id); keys.push(hit._id); }
-      });
-      if (!keys.length) {
-        this.warningMessage('The ticked lines could not be found after saving. Try again.');
-        return;
-      }
-      const supplier = event.supplierId ? this.supplierOptions().find((o) => o.value === event.supplierId) : null;
-      this.openRfqForm(keys, supplier ? { supplierId: String(supplier.value), supplierName: supplier.label, isSupplierApproved: true } : null);
-    });
-  }
-
-  /** From the RFQ list or the comparison: raise an RFQ for these saved line ids. */
-  onRfqForKeys(keys: string[]): void {
-    this.openRfqForm(keys, null);
-  }
-
-  private openRfqForm(keys: string[], supplier: { supplierId: string; supplierName: string; isSupplierApproved: boolean } | null): void {
-    this.rfqLineKeys = keys;
-    this.rfqSupplier = supplier;
-    this.rfqCreateOpen = true;
-  }
-
-  onRfqClicks(): void {
-    this.whenSaved(() => { this.rfqOpen = true; });
-  }
-
   onCompareClicks() {
     this.whenSaved(() => { this.compareOpen = true; });
   }
 
-  onCompareFromRfq(): void {
-    this.compareOpen = true;
+  /** Supplier RFQ: the request's lines are arranged under supplier tabs and saved as one RFQ per supplier. */
+  rfqOpen = false;
+
+  onSupplierRfqClicks() {
+    this.whenSaved(() => { this.rfqOpen = true; });
+  }
+
+  onRfqSaved() {
+    this.loadPurchaseData();
   }
 
   onAwardsChanged() {

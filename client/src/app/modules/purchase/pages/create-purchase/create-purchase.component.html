@@ -42,7 +42,6 @@
         (jobLessChange)="toggleJobLess($event)"
         (jobSelected)="onJobSelected($event)"
         (materialRequestsClicked)="onGetMaterialRequestsClicks()"
-        (rfqRequested)="onRfqForSelection($event)"
         (createProductRequested)="onCreatePartNumber()"
       ></app-pr-form>
     </div>
@@ -78,7 +77,6 @@
     (jobLessChange)="toggleJobLess($event)"
     (jobSelected)="onJobSelected($event)"
     (materialRequestsClicked)="onGetMaterialRequestsClicks()"
-    (rfqRequested)="onRfqForSelection($event)"
     (createProductRequested)="onCreatePartNumber()"
   ></app-pr-form>
 
@@ -87,7 +85,7 @@
       <span *ngIf="purchaseId && !isEditing" class="text-xs text-gray-400 dark:text-gray-500">Draft {{ f['purchaseNo'].value }} saved</span>
       <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onMrRequestClicks()">MR request</app-action-button>
       <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onSupplierClicks()">Supplier discount</app-action-button>
-      <app-action-button variant="secondary" (click)="onRfqClicks()">Supplier RFQs</app-action-button>
+      <app-action-button variant="secondary" (click)="onSupplierRfqClicks()">Supplier RFQ</app-action-button>
       <app-action-button variant="secondary" (click)="onCompareClicks()">Compare &amp; award</app-action-button>
       <app-action-button *ngIf="purchaseId" variant="secondary" (click)="onFinalDasdboardClicks()">Final dashboard</app-action-button>
     </div>
@@ -97,14 +95,10 @@
   </ng-container>
 </app-sf-drawer>
 
-<app-pr-rfq-drawer #rfqList [open]="rfqOpen" [purchaseId]="purchaseId"
-  (changed)="onAwardsChanged()" (compare)="onCompareFromRfq()" (create)="onRfqForKeys($event)" (closed)="rfqOpen = false"></app-pr-rfq-drawer>
+<!-- Supplier tabs instead of Option 1 / Option 2: each tab is one supplier and the lines it is asked to price. -->
+<app-sales-rfq-create-drawer [open]="rfqOpen" [purchaseId]="purchaseId" (saved)="onRfqSaved()" (closed)="rfqOpen = false"></app-sales-rfq-create-drawer>
 
-<app-pr-compare-drawer #compareList [open]="compareOpen" [purchaseId]="purchaseId" (changed)="onAwardsChanged()" (createRfq)="onRfqForKeys($event)" (closed)="compareOpen = false"></app-pr-compare-drawer>
-
-<!-- The same supplier RFQ form used on enquiries, filled with the picked lines of this request. -->
-<app-sales-rfq-create-drawer [open]="rfqCreateOpen" [purchaseId]="purchaseId" [purchaseLineKeys]="rfqLineKeys" [purchaseSupplier]="rfqSupplier"
-  (saved)="onAwardsChanged(); rfqOpen && rfqList.load(); compareOpen && compareList.load()" (closed)="rfqCreateOpen = false"></app-sales-rfq-create-drawer>
+<app-pr-compare-drawer #compareList [open]="compareOpen" [purchaseId]="purchaseId" (changed)="onAwardsChanged()" (closed)="compareOpen = false"></app-pr-compare-drawer>
 
 <app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>
 

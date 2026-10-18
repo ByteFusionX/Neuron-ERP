@@ -340,6 +340,9 @@ export interface PurchaseRfqLine {
   estimatedUnitCost?: number;
   /** Supplier the line is awarded to, when it is. */
   awardedSupplier?: string;
+  /** Suppliers with an offer on file for the line, and the supplier name typed on it. */
+  suppliers?: { supplierId: string; supplierName?: string }[];
+  supplierName?: string;
 }
 
 /** A supplier RFQ raised from a purchase request (same shape as a sales RFQ, tied to the request instead of an enquiry). */

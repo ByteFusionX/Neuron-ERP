@@ -111,7 +111,7 @@
         <app-item-entry mode="rfq" [paletteTargetLabel]="open && !locked ? 'Supplier RFQ' : null" [optionalItems]="optionalItems" [seedOptionalItems]="seed" [rfqPriced]="isEdit" [rfqAskPrice]="!isEdit"
           [suggestionSource]="catalogue" [suggestionScopeIds]="[]" [showTotalsBar]="false" [currency]="terms.currency || 'QAR'"
           [extraAvailabilityOptions]="unavailableOption" [lineExtraTemplate]="lineExtra" [allowOptions]="!isEdit" [optionLabel]="optionLabel"
-          addOptionLabel="Add RFQ" optionRemoveLabel="Remove RFQ" optionNoun="Supplier" [optionExtraTemplate]="isEdit ? null : optionExtra" (optionChanged)="onOptionChanged($event)"
+          addOptionLabel="Add RFQ" [customAddOption]="!isEdit" (addOptionClicked)="onAddSupplierTab()" optionRemoveLabel="Remove RFQ" optionNoun="Supplier" [optionExtraTemplate]="isEdit ? null : optionExtra" (optionChanged)="onOptionChanged($event)"
           [allowExcelImport]="!locked" [allowExcelExport]="true" [excelToolbar]="false" [excelMeta]="excelMeta" (excelMetaImported)="onExcelMeta($event)" excelFileName="supplier-rfq-items"
           (createProductRequested)="openCreateProduct($event)"></app-item-entry>
       </section>
@@ -158,41 +158,11 @@
 <!-- on the tab row, after "Add supplier": this tab's supplier, its sheet, and the stock recheck -->
 <ng-template #optionExtra let-index>
   <div class="relative ml-auto flex items-center gap-2">
-    <button type="button" (click)="toggleSplit()" [disabled]="!splitChoices.length" title="Pick item groups and raise a new supplier tab holding just those"
-      class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-40 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100">
-      <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/></svg>
-      New tab from groups
-    </button>
     <div class="w-60">
       <app-sf-combobox [options]="supplierChoices" [ngModel]="activeSupplier?.supplierId || null" (ngModelChange)="pickSupplierById($event)" [ngModelOptions]="{ standalone: true }"
         (focusin)="onSupplierFocus()" placeholder="Select supplier…" aria-label="Select supplier"></app-sf-combobox>
     </div>
 
-    <div *ngIf="splitOpen" class="absolute right-0 top-full z-30 mt-1 w-80 rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-lg dark:border-gray-700 dark:bg-gray-900">
-      <div class="mb-2 flex items-center justify-between">
-        <span class="font-semibold text-gray-700 dark:text-gray-200">Item groups for a new supplier tab</span>
-        <button type="button" class="text-sky-700 hover:underline dark:text-sky-300" (click)="toggleSplitAll()">{{ splitGroups.size === splitChoices.length ? 'Clear' : 'Select all' }}</button>
-      </div>
-      <div class="max-h-48 space-y-1 overflow-y-auto">
-        <label *ngFor="let g of splitChoices; trackBy: trackSplit" class="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-gray-50 dark:hover:bg-gray-800">
-          <input type="checkbox" [checked]="splitGroups.has(g.index)" (change)="toggleSplitGroup(g.index)">
-          <span class="min-w-0 flex-1 truncate">{{ g.name }}</span>
-          <span class="text-gray-400">{{ g.lines }} line{{ g.lines === 1 ? '' : 's' }}</span>
-        </label>
-      </div>
-      <div class="mt-3 flex items-center gap-2">
-        <div class="min-w-0 flex-1">
-          <app-sf-combobox [options]="supplierChoices" [ngModel]="splitSupplierId" (ngModelChange)="splitSupplierId = $event" [ngModelOptions]="{ standalone: true }"
-            (focusin)="onSupplierFocus()" placeholder="Supplier (optional)…" aria-label="Supplier for the new tab"></app-sf-combobox>
-        </div>
-        <button type="button" (click)="openSplitSupplierForm()" class="shrink-0 rounded-md px-2 py-1 font-medium text-sky-700 hover:bg-sky-50 dark:text-sky-300 dark:hover:bg-sky-950/40">+ New</button>
-      </div>
-      <div class="mt-3 flex justify-end gap-2">
-        <button type="button" (click)="toggleSplit()" class="rounded-md px-2 py-1 font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800">Cancel</button>
-        <button type="button" [disabled]="!splitGroups.size" (click)="createSplitTab()"
-          class="rounded-md bg-sky-600 px-3 py-1 font-medium text-white hover:bg-sky-700 disabled:opacity-40">Create tab</button>
-      </div>
-    </div>
   </div>
 </ng-template>
 
