@@ -48,7 +48,7 @@ export interface MasterListItem {
 const masterListItemSchema = new Schema<MasterListItem>({
     module: { type: String, enum: MASTER_MODULES, required: true, index: true },
     list: { type: String, enum: MASTER_LISTS, required: true, index: true },
-    label: { type: String, required: true, trim: true, maxlength: 1000 },
+    label: { type: String, required: true, trim: true, maxlength: 10000 },
     code: { type: String, trim: true, default: null },
     description: { type: String, trim: true, maxlength: 200, default: null },
     value: { type: Number, default: null, min: 0 },

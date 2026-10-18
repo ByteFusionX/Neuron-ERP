@@ -1,11 +1,12 @@
 import { Component, Input, OnInit, inject } from '@angular/core';
-import { DatePipe, NgIf } from '@angular/common';
 import { ModalService } from 'src/app/shared/components/modal/modal.service';
 import { Observable, firstValueFrom } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
-import { DataGridBreadcrumb, DataGridColumn, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
+import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
+import { DetailOverviewSection } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DataGridDetailTab, DataGridBreadcrumb, DataGridColumn, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 import { MasterListItem, MasterListName, MasterListService } from 'src/app/core/services/master-list.service';
 import { settingsEditAccess } from '../../settings-edit-access';
 import { MasterListItemDialog, MasterListItemDialogData, MasterListItemResult } from './master-list-item-dialog.component';
@@ -52,11 +53,11 @@ export interface MasterTab {
 @Component({
   selector: 'app-master-data-grid',
   standalone: true,
-  imports: [NgIf, DatePipe, DataGridComponent],
+  imports: [DataGridComponent, DetailOverviewComponent],
   template: `
     <div class="h-full">
       <div class="h-full min-h-0">
-        <app-data-grid
+        <app-data-grid #grid
           class="flex-1 min-h-0"
           [fillHeight]="true"
           [data]="rows"
@@ -75,39 +76,35 @@ export interface MasterTab {
           [storageKey]="'settings-master-' + storageKey"
           emptyMessage="Nothing here yet"
           searchPlaceholder="Search…"
+          [detailTabs]="detailTabs"
           [detailTitle]="detailTitle"
           [detailSubtitle]="detailSubtitle"
           [detailBreadcrumb]="label"
           (viewChange)="onViewChange($event)"
           (create)="onCreate()"
           (rowAction)="onRowAction($event)">
+          <ng-template #detailMetaTemplate let-row>
+            <div class="master-meta"><p class="master-meta-label">Type</p><p class="master-meta-value">{{ typeOf(row) }}</p></div>
+            <div class="master-meta"><p class="master-meta-label">Status</p><p class="master-meta-value">{{ row.status }}</p></div>
+            <div class="master-meta"><p class="master-meta-label">Created by</p><p class="master-meta-value">{{ row.createdBy || '—' }}</p></div>
+            <div class="master-meta"><p class="master-meta-label">Created at</p><p class="master-meta-value">{{ displayDate(row.createdAt) }}</p></div>
+          </ng-template>
           <ng-template #detailTemplate let-row>
-            <section class="rounded-xl border border-gray-100 bg-white p-4 dark:border-erp-border-dark dark:bg-erp-surface-dark">
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Summary</h3>
-              <dl class="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                <div>
-                  <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Name</dt>
-                  <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ row.name }}</dd>
-                </div>
-                <div>
-                  <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Status</dt>
-                  <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ row.status }}</dd>
-                </div>
-                <div>
-                  <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Created by</dt>
-                  <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ row.createdBy || '—' }}</dd>
-                </div>
-                <div>
-                  <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Created at</dt>
-                  <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ row.createdAt ? (row.createdAt | date: 'dd MMM yyyy, HH:mm') : '—' }}</dd>
-                </div>
-              </dl>
-            </section>
+            <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
           </ng-template>
         </app-data-grid>
       </div>
     </div>
   `,
+  styles: [`
+    .master-meta { padding: 0.625rem 0.75rem; min-width: 0; }
+    .master-meta + .master-meta { border-left: 1px solid #e5e7eb; }
+    .master-meta-label { font-size: 0.6875rem; color: #6b7280; }
+    .master-meta-value { margin-top: 0.125rem; overflow: hidden; font-size: 0.8125rem; font-weight: 500; color: #111827; text-overflow: ellipsis; white-space: nowrap; }
+    :host-context(html.dark) .master-meta + .master-meta { border-left-color: #262626; }
+    :host-context(html.dark) .master-meta-label { color: #a1a1a1; }
+    :host-context(html.dark) .master-meta-value { color: #ededed; }
+  `],
 })
 export class MasterDataGridComponent implements OnInit {
   @Input({ required: true }) tabs!: MasterTab[];
@@ -161,7 +158,35 @@ export class MasterDataGridComponent implements OnInit {
     return t ? `Add ${t.title}` : '';
   }
 
-  detailTitle = (row: MasterRow): string => row.name;
+  detailTabs: DataGridDetailTab[] = [{ id: 'overview', label: 'Details', icon: 'info' }];
+  detailTitle = (row: MasterRow): string => row.type || this.tabs?.find((t) => t.id === row.tab)?.label || '';
+
+  typeOf(row: MasterRow): string {
+    return row.type || this.tabs?.find((t) => t.id === row.tab)?.label || '—';
+  }
+
+  displayDate(value: string): string {
+    return value ? new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  }
+
+  overviewSections(row: MasterRow): DetailOverviewSection[] {
+    return [
+      {
+        title: 'General', columns: '2', fields: [
+          { type: 'field', label: 'Type', value: this.typeOf(row) },
+          { type: 'field', label: 'Status', value: row.status },
+          { type: 'field', label: 'Created By', value: row.createdBy || '—' },
+          { type: 'field', label: 'Created At', value: this.displayDate(row.createdAt) },
+        ],
+      },
+      { title: 'Note', fields: [{ type: 'field', label: '', stacked: true, value: this.formatName(row.name), noHover: true }] },
+    ];
+  }
+
+  /** Long notes are pasted as one run of "* point" items; put each point on its own line. */
+  formatName(name: string): string {
+    return (name ?? '').replace(/\s+\*\s*(?=\S)/g, '\n* ').trim();
+  }
   detailSubtitle = (row: MasterRow): string => this.tabs?.find((t) => t.id === row.tab)?.title ?? '';
 
   ngOnInit(): void {

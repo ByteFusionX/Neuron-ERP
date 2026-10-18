@@ -54,7 +54,7 @@ export const createMasterListItem = async (req: Request, res: Response) => {
         const label = String(req.body.label ?? '').trim();
         if (!label) return res.status(400).json({ success: false, message: "Name is required" });
         // Units and availability can be added from any form, so keep junk and pasted text out of the shared list.
-        const maxLabel = TEXT_LISTS.includes(list) ? 1000 : 40;
+        const maxLabel = TEXT_LISTS.includes(list) ? 10000 : 40;
         if (label.length > maxLabel) return res.status(400).json({ success: false, message: `Name must be ${maxLabel} characters or fewer` });
         const value = parseValue(req.body.value);
         if (value === undefined) return res.status(400).json({ success: false, message: "Value must be a non-negative number" });
