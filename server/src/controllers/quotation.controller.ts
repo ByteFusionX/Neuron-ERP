@@ -103,10 +103,12 @@ const CUSTOMER_SENT_STATUSES = [quoteStatus.QuoteSubmitted, quoteStatus.UnderNeg
 
 const normalizeQuoteValidity = (quoteData: any) => {
     if (!quoteData) return;
-    if (!quoteData.validityDate && quoteData.closingDate) quoteData.validityDate = quoteData.closingDate;
-    if (!quoteData.closingDate && quoteData.validityDate) quoteData.closingDate = quoteData.validityDate;
-    if (!quoteData.expiryReminderDate && quoteData.validityDate) {
-        const reminderDate = new Date(quoteData.validityDate);
+    // The closing date is the only date a quote is judged by. validityDate is kept as a mirror of it so older readers
+    // (PDF, revision snapshots, RFQ copies) stay correct; a separately entered Valid Until is ignored.
+    if (quoteData.closingDate) quoteData.validityDate = quoteData.closingDate;
+    else if (quoteData.validityDate) quoteData.closingDate = quoteData.validityDate;
+    if (!quoteData.expiryReminderDate && quoteData.closingDate) {
+        const reminderDate = new Date(quoteData.closingDate);
         if (!Number.isNaN(reminderDate.getTime())) {
             reminderDate.setDate(reminderDate.getDate() - 3);
             quoteData.expiryReminderDate = reminderDate;
@@ -154,30 +156,31 @@ const applyRequestedQuoteOwner = async (quoteData: any, actor: any) => {
     }
 };
 
-const expireOverdueQuotes = async () => {
-    const now = new Date();
-    await Quotation.updateMany(
-        {
-            isDeleted: { $ne: true },
-            status: { $in: ACTIVE_EXPIRABLE_QUOTE_STATUSES },
-            $or: [
-                { validityDate: { $lt: now } },
-                { validityDate: { $exists: false }, closingDate: { $lt: now } },
-            ],
-        },
-        {
-            $set: { status: quoteStatus.Expired },
-            $push: {
-                editHistory: {
-                    editedAt: now,
-                    action: 'StatusChanged',
-                    toStatus: quoteStatus.Expired,
-                    reason: 'Automatically expired after the quote validity date passed',
-                }
-            }
-        }
-    );
+/**
+ * Expiry is derived, not stored: a quote that is still open and past its closing date is shown as Expired, but its real status is kept. Moving the date forward brings it straight back.
+ * Quotes saved with the old stored "Expired" status still count as expired.
+ */
+const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+
+export const isQuoteExpired = (quote: any): boolean => {
+    if (quote?.status === quoteStatus.Expired) return true;
+    if (!ACTIVE_EXPIRABLE_QUOTE_STATUSES.includes(quote?.status)) return false;
+    const expiry = quote?.closingDate ?? quote?.validityDate;
+    return !!expiry && new Date(expiry) < startOfToday();
 };
+
+/** Mongo match for open quotes past their date (no stored-Expired quotes). */
+const pastDateQuoteFilter = () => {
+    const today = startOfToday();
+    return {
+        status: { $in: ACTIVE_EXPIRABLE_QUOTE_STATUSES },
+        $or: [
+            { closingDate: { $lt: today } },
+            { closingDate: null, validityDate: { $lt: today } },
+        ],
+    };
+};
+const expiredQuoteFilter = () => ({ $or: [{ status: quoteStatus.Expired }, pastDateQuoteFilter()] });
 
 /**
  * Server-side rules for a quotation payload, so the API holds the same line the form does. Returns the first problem
@@ -204,17 +207,14 @@ const quotePayloadProblem = (quoteData: any, isCreate: boolean): string | null =
     const dateOf = (value: any) => (value ? new Date(value) : null);
     const quoteDate = dateOf(quoteData?.date);
     const closing = dateOf(quoteData?.closingDate);
-    const validity = dateOf(quoteData?.validityDate);
-    for (const [label, value] of [['Date', quoteDate], ['Closing date', closing], ['Valid until', validity]] as const) {
+    for (const [label, value] of [['Date', quoteDate], ['Closing date', closing]] as const) {
         if (value && Number.isNaN(value.getTime())) return `${label} is not a valid date`;
     }
     // A new Draft may be sparse; its dates are checked when it is completed.
     const sparseDraft = isCreate && quoteData?.status === quoteStatus.Draft;
     if (!sparseDraft && quoteDate && closing && closing < quoteDate) return 'Closing date cannot be before the quotation date';
-    if (!sparseDraft && quoteDate && validity && validity < quoteDate) return 'Valid until cannot be before the quotation date';
     if (isCreate && quoteData?.status !== quoteStatus.Draft) {
         if (closing && closing < startOfToday) return 'Closing date cannot be in the past';
-        if (validity && validity < startOfToday) return 'Valid until cannot be in the past';
     }
 
     if (has('optionalItems')) {
@@ -256,6 +256,7 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
                 enqId: quoteData.enqId,
                 isDeleted: { $ne: true },
                 status: { $nin: [quoteStatus.Lost, quoteStatus.Expired] },
+                $nor: [pastDateQuoteFilter()],
             }).select('quoteId status').lean();
             if (existingQuoteForEnquiry) {
                 return res.status(409).json({
@@ -501,7 +502,8 @@ const QUOTE_FOLLOW_UP_CLOSED: string[] = [quoteStatus.Won, quoteStatus.Lost, quo
 
 export const getQuotations = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        await expireOverdueQuotes();
+        const expiredFilter = expiredQuoteFilter();
+        const pastDateFilter = pastDateQuoteFilter();
         let { page, search, row, salesPerson, customer, fromDate, toDate, department, quoteStatus, dealStatus, access, userId, sortKey, sortDir, followUpView, followUpFromDate, followUpToDate } = req.body;
 
         page = Math.max(1, parseInt(page) || 1);
@@ -535,14 +537,15 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             isDeleted: { $ne: true },
             status: { $ne: 'revised' },
             $and: [
-                ...(quoteStatus ? [{ status: quoteStatus }] : []),
+                // "Expired" is derived from the date; any other status excludes the open quotes that are past it.
+                ...(quoteStatus === 'Expired' ? [expiredFilter] : quoteStatus ? [{ status: quoteStatus }, { $nor: [pastDateFilter] }] : []),
                 // "pending" also covers Won quotes that have no deal sheet yet (waiting to be converted).
                 ...(dealStatus === 'pending'
                     ? [{ $or: [{ 'dealData.status': 'pending' }, { status: 'Won', 'dealData.status': { $exists: false } }] }]
                     : dealStatus ? [{ 'dealData.status': dealStatus }] : []),
                 searchFilter,
                 // Overdue / Today / Upcoming only list quotes that are still being chased.
-                ...(followUpView ? [{ ...followUpViewFilter('followUp.nextFollowUpDate', followUpView), status: { $nin: QUOTE_FOLLOW_UP_CLOSED } }] : []),
+                ...(followUpView ? [{ ...followUpViewFilter('followUp.nextFollowUpDate', followUpView), status: { $nin: QUOTE_FOLLOW_UP_CLOSED }, $nor: [pastDateFilter] }] : []),
                 ...(followUpFromDate || followUpToDate ? [{ 'followUp.nextFollowUpDate': {
                     ...(followUpFromDate ? { $gte: new Date(followUpFromDate) } : {}),
                     ...(followUpToDate ? { $lt: new Date(new Date(followUpToDate).getTime() + 86_400_000) } : {}),
@@ -613,6 +616,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             ...quotationLookupStages
         ]);
 
+        quoteData.forEach((q: any) => { q.isExpired = isQuoteExpired(q); });
         return res.status(200).json({ total: total, quotations: quoteData ?? [] })
 
     } catch (error) {
@@ -664,7 +668,6 @@ const withDealStageNames = async (quotations: any[]): Promise<void> => {
 
 export const getQuotationById = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        await expireOverdueQuotes();
         const { id } = req.params;
         const { access, userId } = req.body ?? {};
 
@@ -692,6 +695,8 @@ export const getQuotationById = async (req: Request, res: Response, next: NextFu
         if (!quotation) {
             return res.status(404).json({ message: 'Quotation not found' });
         }
+
+        quotation.isExpired = isQuoteExpired(quotation);
 
         // Calendar events are keyed by collectionId (moved from the enquiry to the quote when it is created).
         const events = await Event.find({ collectionId: quotation._id })
@@ -1525,7 +1530,7 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
             return res.status(400).json({ message: "Invalid quote status" });
         }
 
-        if (statusCheck?.status === 'Expired') {
+        if (isQuoteExpired(statusCheck)) {
             return res.status(400).json({ message: "Quote is expired (past its closing date) and can no longer change status" });
         }
 
@@ -1916,16 +1921,32 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         normalizeQuoteValidity(quoteData)
 
         const existingQuote = await Quotation.findById(quoteId).lean();
+        let reopened = false;
         if (existingQuote) {
             // Content is frozen once the quote expires or its deal sheet is approved (the order is in handover).
-            if (existingQuote.status === quoteStatus.Expired) {
-                return res.status(400).json({ message: "Quote is expired and can no longer be edited" });
+            if (isQuoteExpired(existingQuote)) {
+                // An expired quote is reopened by moving its closing date forward. Its real status is kept; only a quote
+                // saved with the old stored "Expired" status has none to return to, so it goes to Work In Progress.
+                const sameDay = (a: any, b: any) => !!a && !!b && new Date(a).getTime() === new Date(b).getTime();
+                const closingMoved = !!quoteData.closingDate && !sameDay(quoteData.closingDate, existingQuote.closingDate);
+                if (closingMoved) {
+                    delete quoteData.expiryReminderDate;
+                    normalizeQuoteValidity(quoteData);
+                }
+                const effective = new Date(quoteData.closingDate || 0);
+                if (closingMoved && !Number.isNaN(effective.getTime()) && effective >= startOfToday()) {
+                    quoteData.status = existingQuote.status === quoteStatus.Expired ? quoteStatus.WorkInProgress : existingQuote.status;
+                    reopened = true;
+                } else {
+                    // Still past its date: the quote can be edited but stays expired, and its real status is untouched.
+                    quoteData.status = existingQuote.status;
+                }
             }
             if (existingQuote.dealData?.status === 'approved') {
                 return res.status(400).json({ message: "The deal sheet is approved, so this quote can no longer be edited" });
             }
             // Status moves go through the same rules as the status endpoint, so an edit cannot skip them.
-            if (quoteData.status && quoteData.status !== existingQuote.status) {
+            if (!reopened && quoteData.status && quoteData.status !== existingQuote.status) {
                 if (!isKnownQuoteStatus(quoteData.status) || !canTransitionQuoteStatus(existingQuote.status, quoteData.status)) {
                     return res.status(400).json({ message: `A quote cannot move from "${existingQuote.status}" to "${quoteData.status}"` });
                 }
@@ -1951,6 +1972,10 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
             action: 'Updated',
             toStatus: quoteData.status,
         };
+        if (reopened) {
+            if (existingQuote?.status === quoteStatus.Expired) historyEntry.fromStatus = quoteStatus.Expired;
+            historyEntry.reason = 'Reopened after the closing date was extended';
+        }
         if (editReason) {
             historyEntry.reason = editReason;
         }
@@ -1977,7 +2002,7 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
                     paymentTerms: existingQuote.paymentTerms,
                     deliveryTerms: existingQuote.deliveryTerms,
                     deliveryLocation: existingQuote.deliveryLocation,
-                    validityDate: existingQuote.validityDate || existingQuote.closingDate,
+                    validityDate: existingQuote.closingDate || existingQuote.validityDate,
                 },
             };
         }
@@ -2744,7 +2769,7 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
             return res.status(409).json({ message: `Only an approved deal can be revoked (this one is ${deal.dealData.status})` });
         }
 
-        const job = await Job.findOne({ quoteId: quoteId });
+        const job = await Job.findOne({ quoteId: quoteId, isDeleted: { $ne: true } });
         const allocateStatusOrder: string[] = Object.values(allocateStatus);
         if (job && allocateStatusOrder.indexOf(job.allocateStatus) >= allocateStatusOrder.indexOf(allocateStatus.OpenToWork)) {
             return res.status(409).json({ message: 'Deal cannot be revoked once the job has started allocation (Open to Work or later)' });
@@ -2778,13 +2803,14 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
                 ...(job?.jobId ? [{ label: 'Removed job', from: job.jobId }] : []),
             ],
         });
-        const jobDelete = await Job.deleteOne({ quoteId: quoteId })
+        // Soft delete: the job record is kept for history, but every job query filters isDeleted.
+        const jobDelete = await Job.updateOne({ quoteId: quoteId, isDeleted: { $ne: true } }, { $set: { isDeleted: true, updatedDate: new Date() } });
         if (job) {
             // The job's stock reservations die with it; leaving them Active would block that stock forever.
             await releaseStock({ job: job._id }, 'Deal revoked', revokerData?._id);
         }
 
-        if (jobDelete.deletedCount) {
+        if (jobDelete.modifiedCount) {
             const socket = req.app.get('io') as Server;
             const userData = await getEmployeeData(req.user);
             await createNotificationWithPrivileges(
@@ -3002,7 +3028,6 @@ const tally = (map: Map<string, any>, id: string, name: string, value: number, w
 
 export const getReportDetails = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        await expireOverdueQuotes();
         let { salesPerson, customer, fromDate, toDate, department, access, userId } = req.body;
         let isSalesPerson = salesPerson == null ? true : false;
         let isCustomer = customer == null ? true : false;
@@ -3058,6 +3083,8 @@ export const getReportDetails = async (req: Request, res: Response, next: NextFu
             .populate('department', 'departmentName')
             .populate('departments', 'departmentName')
             .lean();
+        // The report counts a quote past its date as Expired, whatever its stored status.
+        quotations.forEach((q: any) => { if (isQuoteExpired(q)) q.status = quoteStatus.Expired; });
 
         // Everything below is reported in QAR; USD quotes are converted once, here.
         const usdRate = await getUSDRated();
@@ -3621,7 +3648,7 @@ export const getQuoteRevisions = async (req: Request, res: Response, next: NextF
                         paymentTerms: quote.paymentTerms,
                         deliveryTerms: quote.deliveryTerms,
                         deliveryLocation: quote.deliveryLocation,
-                        validityDate: quote.validityDate || quote.closingDate,
+                        validityDate: quote.closingDate || quote.validityDate,
                     },
                 },
                 ...revisions,

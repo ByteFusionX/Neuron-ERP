@@ -46,6 +46,11 @@ export class QuotationService {
     return `${this.api}/file/${encodeURIComponent(fileName)}`;
   }
 
+  /** Fetches the image through HttpClient so the auth header is sent (a plain link would get 401). */
+  itemImageBlob(fileName: string): Observable<Blob> {
+    return this.http.get(this.itemImageUrl(fileName), { responseType: 'blob' });
+  }
+
   updateQuotation(quotationDetails: Quotatation, quoteId: string | undefined): Observable<Quotatation> {
     return this.http.patch<Quotatation>(`${this.api}/quotation/update/${quoteId}`, quotationDetails)
   }
@@ -424,6 +429,9 @@ export class QuotationService {
     }));
 
 
+    const pagesCell: any = { text: 'Total Pages : 00', alignment: 'left', style: 'pageNumber' };
+    const footerImage = await this.getBase64ImageFromURL("../../assets/images/pdfFooter.png");
+    let countedPages = 0;
     const documentDefinition: any = {
       defaultStyle: {
         font: 'EBGaramond'
@@ -447,13 +455,9 @@ export class QuotationService {
         alignment: 'center',
         margin: [0, 25, 0, 0]
       },
-      footer: {
-        image: await this.getBase64ImageFromURL(
-          "../../assets/images/pdfFooter.png"
-        ),
-        width: 600,
-        alignment: 'center',
-        margin: [0, 25, 0, 0]
+      footer: (_page: number, pageCount: number) => {
+        countedPages = pageCount;
+        return { image: footerImage, width: 600, alignment: 'center', margin: [0, 25, 0, 0] };
       },
       pageMargins: [45, 115, 45, 100],
       content: [
@@ -499,13 +503,12 @@ export class QuotationService {
           table: {
             widths: [63, 109, 35, 100, 61, 72],
             body: [
-              [{ style: 'tableHead', text: 'Company:', alignment: 'left' }, { style: 'tableHead', text: wrapPdfText(quoteData.client.companyName), alignment: 'left', colSpan: 4 }, {}, {}, {}, { text: ['Total Pages : 0', { pageReference: 'lastPage' }], alignment: 'left', style: 'pageNumber' }],
+              [{ style: 'tableHead', text: 'Company:', alignment: 'left' }, { style: 'tableHead', text: wrapPdfText(quoteData.client.companyName), alignment: 'left', colSpan: 4 }, {}, {}, {}, pagesCell],
               [{ style: 'tableHead', text: 'Attention:', alignment: 'left' }, { style: 'tableHead', text: `${quoteData.attention.courtesyTitle + ' ' + quoteData.attention.firstName + ' ' + quoteData.attention.lastName}`, alignment: 'left', colSpan: 3, bold: true }, {}, {}, { style: 'tableHead', text: 'Date:', alignment: 'left' }, { style: 'tableHead', text: quoteData.date ? new Date(quoteData.date).toLocaleDateString('en-GB') : '', alignment: 'left' }],
               [{ rowSpan: 2, style: 'vCentertableHead', text: 'Address:', alignment: 'left' }, { rowSpan: 2, style: 'vCentertableHead', text: wrapPdfText(quoteData.client.companyAddress), alignment: 'left', colSpan: 3 }, {}, {}, { style: 'stableHead', text: 'Client Ref:', alignment: 'left' }, { style: 'stableHead', text: wrapPdfText(quoteData.client.clientRef || '-'), alignment: 'left' }],
-              ['', '', '', '', { style: 'stableHead', text: 'Closing Date:', alignment: 'left' }, { style: 'stableHead', text: quoteData.closingDate ? new Date(quoteData.closingDate).toLocaleDateString('en-GB') : '', alignment: 'left' }],
+              ['', '', '', '', { style: 'stableHead', text: 'Valid Until:', alignment: 'left' }, { style: 'stableHead', text: (quoteData.closingDate || quoteData.validityDate) ? new Date((quoteData.closingDate || quoteData.validityDate) as string).toLocaleDateString('en-GB') : '', alignment: 'left' }],
               [{ style: 'tableHead', text: 'Client Tel:', alignment: 'left' }, { style: 'tableHead', text: quoteData.attention.phoneNo ? `+974 ${quoteData.attention.phoneNo}` : '-', alignment: 'left' }, { style: 'tableHead', text: 'Email:', alignment: 'center' }, { style: 'stableHead', text: wrapPdfText(quoteData.attention.email || '-'), alignment: 'left' }, { style: 'tableHead', text: 'Salesperson:', alignment: 'left' }, { style: 'tableHead', text: wrapPdfText(`${quoteData.createdBy.firstName + ' ' + quoteData.createdBy.lastName}`), alignment: 'left' }],
               [{ style: 'tableHead', text: 'Subject:', alignment: 'left' }, { style: 'tableHead', text: wrapPdfText(quoteData.subject), alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Quote Ref:', alignment: 'left' }, { style: 'quoteId', text: wrapPdfText(quoteData.quoteId), alignment: 'left' }],
-              [{ style: 'tableHead', text: 'Valid Until:', alignment: 'left' }, { style: 'tableHead', text: quoteData.validityDate ? new Date(quoteData.validityDate).toLocaleDateString('en-GB') : '', alignment: 'left', colSpan: 5 }, {}, {}, {}, {}],
             ]
           }
         },
@@ -530,7 +533,7 @@ export class QuotationService {
             {
               text: [
                 { text: 'Thanking you\nFor ', style: 'footerText' },
-                { text: quoteData.quoteCompany == "Neuron Security System" ? 'Neuron Security System W.L.L' : 'Neuron Technologies W.L.L', style: 'footerBoldText', id: 'lastPage' }]
+                { text: quoteData.quoteCompany == "Neuron Security System" ? 'Neuron Security System W.L.L' : 'Neuron Technologies W.L.L', style: 'footerBoldText' }]
             },
             ...(shouldIncludeStamp ? [{
               image: await this.getBase64ImageFromURL(
@@ -658,6 +661,11 @@ export class QuotationService {
     }
 
 
+    // pdfmake can't resolve a page count inside a table cell, so lay the document out once to count pages, then render with the real number.
+    const { footer, ...rest } = documentDefinition;
+    const countDefinition = { ...structuredClone(rest), footer };
+    await new Promise<void>(resolve => pdfMake.createPdf(countDefinition).getBuffer(() => resolve()));
+    pagesCell.text = `Total Pages : ${String(countedPages).padStart(2, '0')}`;
     const pdfDoc = pdfMake.createPdf(documentDefinition);
     return pdfDoc
   }

@@ -126,6 +126,8 @@ export interface Quotatation {
     createdBy: getEmployee;
     createdByUser?: getEmployee | string;
     status: QuoteStatus;
+    /** Derived by the server from the Valid Until date; the stored status is kept. */
+    isExpired?: boolean;
     lpoFiles: File[];
     lpoValue: string;
     lpoSubmitted: boolean;

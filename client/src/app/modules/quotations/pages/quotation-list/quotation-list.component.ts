@@ -2,6 +2,7 @@ import { AfterViewInit, Component, Injector, ViewChild, inject } from '@angular/
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
@@ -54,6 +55,16 @@ import { getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { RevisionHistoryModalComponent, RevisionHistoryModalData } from 'src/app/shared/components/revision-history-modal/revision-history-modal.component';
 
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
+/** Statuses that offer Download PDF: from Ready For Submission onward, everything except Lost. */
+const PDF_STATUSES: QuoteStatus[] = [
+  QuoteStatus.ReadyForSubmission,
+  QuoteStatus.QuoteSubmitted,
+  QuoteStatus.UnderReview,
+  QuoteStatus.UnderNegotiation,
+  QuoteStatus.Won,
+  QuoteStatus.Expired,
+];
+
 @Component({
     selector: 'app-quotation-list',
     templateUrl: './quotation-list.component.html',
@@ -416,7 +427,47 @@ export class QuotationListComponent implements AfterViewInit {
         id: 'viewRevisions', label: 'Revision History', icon: 'eye',
         hidden: (r) => this.isCreatorOnlyView(r) || !r.revision,
       },
+      {
+        id: 'previewPdf', label: 'Preview PDF', icon: 'eye',
+        hidden: (r) => this.isCreatorOnlyView(r) || !PDF_STATUSES.includes(r.status as QuoteStatus),
+      },
+      {
+        id: 'downloadPdf', label: 'Download PDF', icon: 'download',
+        hidden: (r) => this.isCreatorOnlyView(r) || !PDF_STATUSES.includes(r.status as QuoteStatus),
+      },
+      {
+        id: 'downloadStampedPdf', label: 'Download PDF with Stamp', icon: 'download',
+        hidden: (r) => this.isCreatorOnlyView(r) || !PDF_STATUSES.includes(r.status as QuoteStatus),
+      },
     ];
+  }
+
+  /** The list row is not fully populated, so the quote is loaded the way the view page does before the PDF is built. */
+  private downloadPdf(row: Quotatation, includeStamp = false, preview = false): void {
+    if (!row._id) return;
+    this._employeeService.employeeData$.pipe(
+      filter((employee) => !!employee),
+      take(1),
+      switchMap((employee) => this._quoteService.getQuotationById(row._id as string, employee?.category.privileges.quotation.viewReport, employee?._id)),
+    ).subscribe({
+      next: (quote) => {
+        const data = quote as any;
+        this._quoteService.generatePDF(data, includeStamp)
+          .then((pdf) => {
+            if (!preview) {
+              pdf.download(`${String(data.quoteId || 'quotation').replace(/[^a-zA-Z0-9._-]+/g, '_')}.pdf`);
+              return;
+            }
+            pdf.getBlob((blob: Blob) => {
+              this._dialog.open(PdfPreviewComponent, {
+                data: { url: window.URL.createObjectURL(blob), formatedQuote: data },
+              });
+            });
+          })
+          .catch(() => this.toaster.error('Error generating PDF. Please try again.'));
+      },
+      error: () => this.toaster.error('Error generating PDF. Please try again.'),
+    });
   }
 
   /** Read-only browser for the quote's past commercial content. */
@@ -469,6 +520,15 @@ export class QuotationListComponent implements AfterViewInit {
         break;
       case 'viewRevisions':
         this.openRevisions(row);
+        break;
+      case 'previewPdf':
+        this.downloadPdf(row, false, true);
+        break;
+      case 'downloadPdf':
+        this.downloadPdf(row);
+        break;
+      case 'downloadStampedPdf':
+        this.downloadPdf(row, true);
         break;
       case 'convertToDealSheet':
       case 'resubmitDealSheet':
@@ -629,7 +689,8 @@ export class QuotationListComponent implements AfterViewInit {
     this.loadSub = this._quoteService.getQuotation(filterData)
       .subscribe({
         next: (data: getQuotation) => {
-          this.rows = data ? [...data.quotations] : [];
+          // Expired is derived from the date on the server; the list shows it in place of the real status.
+          this.rows = data ? data.quotations.map((q) => (q.isExpired ? { ...q, status: QuoteStatus.Expired } : q)) : [];
           this.total = data ? data.total : 0;
           this.refreshViewCounts();
           this.isLoading = false;
@@ -1039,7 +1100,7 @@ export class QuotationListComponent implements AfterViewInit {
               salesPerson: element.createdBy.firstName + ' ' + element.createdBy.lastName,
               department: element.department.departmentName,
               totalCost: this.numberFormat.transform(this.calculateDiscoutPrice(element)) + ' ' + element.currency,
-              status: element.status,
+              status: element.isExpired ? QuoteStatus.Expired : element.status,
               dealStatus: element.dealData?.status || 'N/A'
             }));
 
@@ -1268,8 +1329,7 @@ export class QuotationListComponent implements AfterViewInit {
           ...(row.createdByUser ? [{ type: 'field' as const, label: 'Created By User', value: this.fullName(row.createdByUser), noHover: true }] : []),
           { type: 'field', label: 'Department', value: this.departmentNames(row) },
           { type: 'field', label: 'Date', value: this.datePipe.transform(row.date, 'dd MMM yyyy') },
-          { type: 'field', label: 'Closing Date', value: row.closingDate ? this.datePipe.transform(row.closingDate, 'dd MMM yyyy') : '—', noHover: true },
-          { type: 'field', label: 'Valid Until', value: row.validityDate ? this.datePipe.transform(row.validityDate, 'dd MMM yyyy') : '—', noHover: true },
+          { type: 'field', label: 'Closing / Valid Until', value: (row.closingDate || row.validityDate) ? this.datePipe.transform(row.closingDate || row.validityDate, 'dd MMM yyyy') : '—', noHover: true },
           { type: 'field', label: 'Payment Terms', value: row.paymentTerms || '—', noHover: true },
           { type: 'field', label: 'Delivery Terms', value: row.deliveryTerms || '—', noHover: true },
           // Only worth a row once the quote has actually been revised.

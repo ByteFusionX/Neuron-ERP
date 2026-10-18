@@ -1,7 +1,14 @@
 <!-- Step 2 needs room for the item table, so the drawer widens for that step only. -->
 <app-sf-drawer [title]="title" [subtitle]="subtitle"
-    [width]="step === 2 ? 'min(1400px, 96vw)' : '860px'"
+    [width]="step === 2 ? (fullView ? '100vw' : 'min(1400px, 96vw)') : '860px'"
     [open]="open" [dirty]="quoteForm.dirty" (closed)="onDrawerClosed($event)">
+
+    <button sfDrawerHeader *ngIf="step === 2" type="button"
+        class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+        [attr.aria-label]="fullView ? 'Exit full view' : 'Expand to full view'" [title]="fullView ? 'Exit full view' : 'Expand to full view'"
+        (click)="fullView = !fullView">
+        <ng-icon [name]="fullView ? 'heroArrowsPointingIn' : 'heroArrowsPointingOut'" class="h-4 w-4"></ng-icon>
+    </button>
 
     <span sfDrawerHeader *ngIf="!isEdit && draftRef.savedAt" class="text-xs text-gray-400 dark:text-gray-500">Details auto-saved {{ draftRef.savedAt | date: 'HH:mm' }}</span>
 
@@ -82,11 +89,8 @@
                 <app-sf-field label="Date" [control]="quoteForm.controls.date">
                     <app-sf-date formControlName="date" [readonly]="true" displayFormat="dd/MM/yyyy"></app-sf-date>
                 </app-sf-field>
-                <app-sf-field label="Closing Date" hint="Last day to submit this quotation (the customer's deadline)" [control]="quoteForm.controls.closingDate" [messages]="{ beforeQuoteDate: 'Closing date cannot be before the quote date' }">
+                <app-sf-field label="Closing Date" hint="Last day to submit this quotation. It is also the Valid Until date shown on the PDF, and the quote shows as Expired after it" [control]="quoteForm.controls.closingDate" [messages]="{ beforeQuoteDate: 'Closing date cannot be before the quote date' }">
                     <app-sf-date formControlName="closingDate" typeable [min]="isEdit ? null : today" displayFormat="dd/MM/yyyy"></app-sf-date>
-                </app-sf-field>
-                <app-sf-field label="Valid Until" hint="How long our prices hold. Leave empty to use the closing date" [control]="quoteForm.controls.validityDate" [messages]="{ beforeQuoteDate: 'Valid-until date cannot be before the quote date' }">
-                    <app-sf-date formControlName="validityDate" typeable [min]="isEdit ? null : today" displayFormat="dd/MM/yyyy"></app-sf-date>
                 </app-sf-field>
                 <app-sf-field label="Currency" [control]="quoteForm.controls.currency">
                     <app-sf-select formControlName="currency" [options]="currencyOptions"></app-sf-select>
@@ -116,9 +120,6 @@
         <!-- Step 3 — notes & terms --------------------------------------------------------- -->
         <ng-container *ngIf="step === 3">
             <app-sf-section title="Terms" columns="2">
-                <app-sf-field label="Payment Terms" [control]="quoteForm.controls.paymentTerms">
-                    <app-sf-input formControlName="paymentTerms" placeholder="e.g. 50% advance, 50% on delivery"></app-sf-input>
-                </app-sf-field>
                 <app-sf-field label="Delivery Terms" [control]="quoteForm.controls.deliveryTerms">
                     <app-sf-input formControlName="deliveryTerms" placeholder="e.g. 4-6 weeks from LPO"></app-sf-input>
                 </app-sf-field>
@@ -129,8 +130,8 @@
 
             <app-sf-section title="Customer Note" columns="1">
                 <app-sf-field label="Insert a saved note">
-                    <app-sf-select [ngModelOptions]="{ standalone: true }" [ngModel]="null" [options]="customerNoteOptions"
-                        [placeholder]="customerNoteOptions.length ? 'Choose a template…' : 'No saved notes yet'" (ngModelChange)="applyNoteTemplate('customerNote', $event)"></app-sf-select>
+                    <app-sf-combobox [optionLines]="3" [ngModelOptions]="{ standalone: true }" [ngModel]="null" [options]="customerNoteOptions"
+                        [placeholder]="customerNoteOptions.length ? 'Choose a template…' : 'No saved notes yet'" (ngModelChange)="applyNoteTemplate('customerNote', $event)"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Customer Note" required [control]="quoteForm.controls.customerNote">
                     <app-sf-textarea formControlName="customerNote" [rows]="5" bullets placeholder="Note shown on the quotation"></app-sf-textarea>
@@ -139,8 +140,8 @@
 
             <app-sf-section title="Terms & Conditions" columns="1">
                 <app-sf-field label="Insert saved terms">
-                    <app-sf-select [ngModelOptions]="{ standalone: true }" [ngModel]="null" [options]="termsOptions"
-                        [placeholder]="termsOptions.length ? 'Choose a template…' : 'No saved terms yet'" (ngModelChange)="applyNoteTemplate('termsAndCondition', $event)"></app-sf-select>
+                    <app-sf-combobox [optionLines]="3" [ngModelOptions]="{ standalone: true }" [ngModel]="null" [options]="termsOptions"
+                        [placeholder]="termsOptions.length ? 'Choose a template…' : 'No saved terms yet'" (ngModelChange)="applyNoteTemplate('termsAndCondition', $event)"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Terms and Conditions" required [control]="quoteForm.controls.termsAndCondition">
                     <app-sf-textarea formControlName="termsAndCondition" [rows]="7" bullets placeholder="Terms shown on the quotation"></app-sf-textarea>

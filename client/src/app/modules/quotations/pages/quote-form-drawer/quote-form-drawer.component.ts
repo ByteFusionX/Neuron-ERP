@@ -58,6 +58,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
 
   saving = false;
   step: 1 | 2 | 3 = 1;
+  /** Step 2 only: stretches the drawer to the full viewport width. */
+  fullView = false;
   readonly steps = [
     { n: 1 as const, label: 'Details', hint: 'Customer and quote details' },
     { n: 2 as const, label: 'Items', hint: 'Line items and pricing' },
@@ -124,7 +126,6 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     accountingManager: [null as string | null],
     closingDate: ['', [Validators.required, QuoteFormDrawerComponent.notBeforeQuoteDate]],
     // Optional: an empty value falls back to the closing date when the payload is built.
-    validityDate: ['', [QuoteFormDrawerComponent.notBeforeQuoteDate]],
     optionalItems: this.fb.array([] as any[]),
     customerNote: ['', Validators.required],
     termsAndCondition: ['', Validators.required],
@@ -135,7 +136,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   });
   /** Step 1 and step 3 own these; step 2 owns `optionalItems`. */
   private readonly stepControls: Record<1 | 2 | 3, string[]> = {
-    1: ['client', 'attention', 'departments', 'subject', 'date', 'closingDate', 'validityDate', 'currency', 'quoteCompany'],
+    1: ['client', 'attention', 'departments', 'subject', 'date', 'closingDate', 'currency', 'quoteCompany'],
     2: ['optionalItems'],
     3: ['customerNote', 'termsAndCondition'],
   };
@@ -186,6 +187,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
 
     this.ensureOptions();
     this.step = 1;
+    this.fullView = false;
     if (this.isEdit) {
       if (this.quote) this.seedFromQuote(this.quote);
     } else if (this.enquiry && changes['enquiry']) {
@@ -284,9 +286,6 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
         // A customer with a single contact needs no choice.
         const attention = this.quoteForm.controls['attention'];
         if (this.contactOptions.length === 1 && !attention.value) attention.setValue(this.contactOptions[0].value as string);
-        const departmentId = (customer.department as unknown as getDepartment)?._id ?? (customer.department as unknown as string);
-        // Only a hand-picked customer in create mode suggests a department; the enquiry's and the quote's own win.
-        if (departmentId && !this.isEdit && !this.sourceEnquiry) this.setDepartments([departmentId]);
       })
     );
   }
@@ -342,8 +341,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       client: id(q.client),
       attention: id(q.attention),
       date: day(q.date),
-      closingDate: day(q.closingDate),
-      validityDate: day(q.validityDate || q.closingDate),
+      closingDate: day(q.closingDate || q.validityDate),
       subject: q.subject ?? '',
       currency: q.currency ?? 'QAR',
       quoteCompany: q.quoteCompany ?? null,
@@ -402,11 +400,12 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     this.itemEntry ? this.itemEntry.reset() : this.optionalItems.clear();
     this.quoteForm.reset({
       client: null, attention: null, date: this.todayIso(), department: null, departments: [], subject: '',
-      currency: 'QAR', quoteCompany: null, closingDate: '', validityDate: '', customerNote: '', termsAndCondition: '',
+      currency: 'QAR', quoteCompany: null, closingDate: '', customerNote: '', termsAndCondition: '',
       paymentTerms: '', deliveryTerms: '', deliveryLocation: '', enqId: null, accountingManager: null,
     });
     this.applyDefaultNotes();
     this.step = 1;
+    this.fullView = false;
     this.stepAttempted = false;
   }
 
@@ -551,7 +550,6 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       quoteCompany: v.quoteCompany,
       accountingManager: v.accountingManager || undefined,
       closingDate: v.closingDate,
-      validityDate: v.validityDate || v.closingDate,
       customerNote: v.customerNote,
       termsAndCondition: v.termsAndCondition,
       paymentTerms: v.paymentTerms,

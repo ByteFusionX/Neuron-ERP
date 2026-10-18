@@ -54,6 +54,7 @@ const processEmployeeEvent = async (element, eventType) => {
             publishAt: today,
             type: 'celebration',
             celeb: true,
+            employee: element._id,
             viewedBy: [],
             createdDate: new Date(),
             category:['all']
@@ -560,6 +561,7 @@ const startCronJob = () => {
             const [birthdayEmployees, anniversaryEmployees] = await Promise.all([
                 employeeModel.find({
                     isBlocked: { $ne: true },
+                    isDeleted: { $ne: true },
                     $expr: {
                         $and: [
                             { $eq: [{ $month: "$dob" }, currentMonth] },
@@ -569,6 +571,7 @@ const startCronJob = () => {
                 }),
                 employeeModel.find({
                     isBlocked: { $ne: true },
+                    isDeleted: { $ne: true },
                     $expr: {
                         $and: [
                             { $eq: [{ $month: "$dateOfJoining" }, currentMonth] },
@@ -588,15 +591,6 @@ const startCronJob = () => {
                 await Promise.all(anniversaryPromises);
             }
             checkTodayEventsAndSendNotifications()
-
-            await Quotation.updateMany(
-                {
-                    closingDate: { $lt: today },
-                    status: { $nin: ['Won', 'Lost', 'Expired'] },
-                    isDeleted: { $ne: true }
-                },
-                { $set: { status: 'Expired' } }
-            );
 
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);

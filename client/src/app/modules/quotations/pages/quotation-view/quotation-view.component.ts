@@ -274,6 +274,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
         .subscribe({
           next: (quote) => {
             this.quoteData = quote as unknown as getQuotatation;
+            // Expired is derived from the date on the server; the page shows it in place of the real status.
+            if ((quote as any)?.isExpired) this.quoteData.status = QuoteStatus.Expired;
             this.selectedOption = 0;
             this._employeeService.employeeData$.pipe(take(1)).subscribe((employee) => {
               this.isNoteOwner = !!employee && employee._id === this.quoteData?.createdBy?._id;
@@ -747,10 +749,9 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     return !!status && ![QuoteStatus.Won, QuoteStatus.Lost, QuoteStatus.Expired].includes(status as QuoteStatus);
   }
 
-  /** The stamped copy is the one that goes to the customer, so it is not offered on a quote still in progress. */
+  /** The stamped copy is offered whenever the quote can be downloaded. */
   get canStampPdf(): boolean {
-    const status = this.quoteData?.status;
-    return !!status && ![QuoteStatus.Draft, QuoteStatus.WorkInProgress].includes(status as QuoteStatus);
+    return !!this.quoteData?.status;
   }
 
   private todayIso(): string {
@@ -1384,8 +1385,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
         facts: keep([
           { label: 'Subject', value: q.subject || '' },
           { label: 'Date', value: date(q.date) },
-          { label: 'Closing date', value: date(q.closingDate) },
-          { label: 'Valid until', value: date(q.validityDate) },
+          { label: 'Closing date', value: date(q.closingDate || q.validityDate) },
           { label: 'Quoting company', value: q.quoteCompany || '' },
           { label: 'Department', value: q.department?.departmentName || '' },
           { label: 'Sales person', value: person(q.createdBy) },
