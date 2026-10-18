@@ -5,8 +5,7 @@ import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
-import { ReportBugComponent } from '../report-bug/report-bug.component';
-import { BugReportScreenshotService } from 'src/app/core/diagnostics/bug-report-screenshot.service';
+import { BugReportLauncherService } from 'src/app/core/diagnostics/bug-report-launcher.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { combineLatest, Observable, map, distinctUntilChanged } from 'rxjs';
 import { getEmployee } from '../../interfaces/employee.interface';
@@ -61,7 +60,7 @@ export class NavBarComponent {
     private msalService: MsalService,
     private dialog: MatDialog,
     private toastr: ToastrService,
-    private bugReportScreenshotService: BugReportScreenshotService,
+    private bugReportLauncher: BugReportLauncherService,
     public layout: LayoutService,
     public themeService: ThemeService,
     public palette: CommandPaletteService,
@@ -175,29 +174,7 @@ export class NavBarComponent {
     this.themeService.setTheme(theme);
   }
 
-  private reportBugBusy = false;
-
-  async onReportBug() {
-    if (this.reportBugBusy) return;
-    this.reportBugBusy = true;
-    this.bugReportScreenshotService.clear();
-    const wait = this.toastr.info(
-      'Preparing the bug report. This takes a few seconds, please wait for the form to open.',
-      'Please wait',
-      { disableTimeOut: true, tapToDismiss: false, closeButton: false },
-    );
-    try {
-      // Capture before the dialog exists so the screenshot shows the page, not the form.
-      await this.bugReportScreenshotService.captureScreenshot();
-    } catch {
-      this.toastr.warning('Automatic screenshot failed. You can add one manually in the form.');
-    }
-    const ref = this.dialog.open(ReportBugComponent, {
-      disableClose: true,
-      maxHeight: '90vh',
-      width: '600px',
-    });
-    ref.afterOpened().subscribe(() => this.toastr.clear(wait.toastId));
-    this.reportBugBusy = false;
+  onReportBug() {
+    return this.bugReportLauncher.open();
   }
 }

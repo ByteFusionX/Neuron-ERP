@@ -22,6 +22,7 @@ import { LayoutService } from './core/services/layout.service';
 import { CommandPaletteService } from './core/services/command-palette.service';
 import { ActiveItemEntryService } from './core/services/active-item-entry.service';
 import { CommandPaletteComponent } from './shared/components/command-palette/command-palette.component';
+import { BugReportLauncherService } from './core/diagnostics/bug-report-launcher.service';
 import { clearSessionStorage } from './shared/utils/clear-session.util';
 
 import { AlertHostComponent } from './shared/components/alert-host/alert-host.component';
@@ -59,7 +60,8 @@ export class AppComponent implements OnDestroy, OnInit {
     private actionTrailService: ActionTrailService,
     public layout: LayoutService,
     private palette: CommandPaletteService,
-    private activeItemEntry: ActiveItemEntryService
+    private activeItemEntry: ActiveItemEntryService,
+    private bugReportLauncher: BugReportLauncherService
   ) { }
 
 
@@ -150,6 +152,13 @@ export class AppComponent implements OnDestroy, OnInit {
 
   @HostListener('window:keydown', ['$event'])
   onKeydown(event: KeyboardEvent): void {
+    if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.code === 'KeyB') {
+      // Alt+B: the navbar button is hidden behind drawers, so the report form is reachable from the keyboard too.
+      if (this.isLoginRoute()) return;
+      event.preventDefault();
+      void this.bugReportLauncher.open();
+      return;
+    }
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase();
     if (key !== 'b' && key !== 'k') return;
