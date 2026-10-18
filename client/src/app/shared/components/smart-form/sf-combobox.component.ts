@@ -40,7 +40,8 @@ import { SF_STYLES, SfOption } from './sf.model';
           [ngClass]="{ 'bg-gray-50 dark:bg-gray-800': i === active, 'cursor-not-allowed text-gray-300 dark:text-gray-600': o.disabled }"
           (mousedown)="$event.preventDefault(); choose(o)" (mouseenter)="active = i">
           <span class="min-w-0">
-            <span class="block truncate">{{ o.label }}</span>
+            <span *ngIf="optionLines > 1; else oneLine" class="sf-clamp block" [style.--sf-lines]="optionLines">{{ o.label }}</span>
+            <ng-template #oneLine><span class="block truncate">{{ o.label }}</span></ng-template>
             <span *ngIf="o.description" class="block truncate text-xs text-gray-500 dark:text-gray-500">{{ o.description }}</span>
           </span>
           <svg *ngIf="isSelected(o)" class="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -65,12 +66,16 @@ import { SF_STYLES, SfOption } from './sf.model';
       </ul>
     </div>
   `,
-  styles: [SF_STYLES],
+  styles: [SF_STYLES, `
+    .sf-clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--sf-lines, 1); overflow: hidden; white-space: pre-line; overflow-wrap: anywhere; }
+  `],
 })
 export class SfComboboxComponent extends SfControl {
   @Input() options: SfOption[] = [];
   /** Shown instead of "No matches" while there are no options at all (e.g. "Select a client first"). */
   @Input() emptyText = '';
+  /** Lines an option label may wrap to before it is cut with an ellipsis (1 = single truncated line). */
+  @Input() optionLines = 1;
   @Input({ transform: booleanAttribute }) multiple = false;
   /** Single-select only: shows a button that resets the value to null. */
   @Input({ transform: booleanAttribute }) clearable = false;

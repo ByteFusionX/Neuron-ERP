@@ -28,7 +28,7 @@
         </button>
       </div>
 
-      <app-action-button *ngIf="!isDeal" variant="ghost" (click)="addOption()">
+      <app-action-button *ngIf="!isDeal" variant="ghost" (click)="onAddOptionClick()">
         <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> {{ addOptionLabel }}
       </app-action-button>
       <ng-container *ngIf="optionExtraTemplate" [ngTemplateOutlet]="optionExtraTemplate" [ngTemplateOutletContext]="{ $implicit: selectedOption }"></ng-container>
@@ -202,7 +202,7 @@
             <span *ngIf="compact" class="ie-labels w-[24%] shrink-0">Description</span>
             <div *ngIf="!isRfq" class="ie-strip ie-labels min-w-0 flex-1" [class.ie-strip-purchase]="dropsMargin">
               <span>Item code</span><span>Part no</span><span>Qty</span><span>UoM</span><span>Unit cost</span><span *ngIf="!dropsMargin">Margin</span>
-              <span>Unit price</span><span>Supplier</span><span>Availability</span><span>Total cost</span><span>Total price</span>
+              <span>Unit price</span><span>Total cost</span><span>Total price</span><span>Supplier</span><span>Availability</span>
             </div>
             <div *ngIf="isRfq" class="ie-strip ie-strip-rfq ie-labels min-w-0 flex-1" [class.ie-strip-rfq-priced]="rfqQuoted">
               <span>Item code</span><span>Part no</span><span>Qty</span><span>UoM</span>
@@ -317,34 +317,43 @@
                   </button>
                 </div>
                 <app-sf-number formControlName="unitSellingPrice" placeholder="Price" [stepper]="false" [min]="0"></app-sf-number>
+                <span class="ie-total" title="Total cost (qty × unit cost)">{{ lineCost(i, j, k) | number: '1.2-2' }}</span>
+                <span class="ie-total" title="Total selling price (qty × unit price)">{{ lineTotal(i, j, k) | number: '1.2-2' }}</span>
                 <div class="min-w-0">
                   <app-sf-combobox formControlName="supplierId" [options]="resolvedSupplierOptions" placeholder="Supplier"></app-sf-combobox>
                   <p *ngIf="isDeal && detail.get('supplierId')?.hasError('supplierRequired') && detail.get('supplierId')?.touched" class="mt-1 text-xs text-red-600 dark:text-red-400">Required</p>
                 </div>
                 <span *ngIf="isDeal" class="ie-cell">{{ detail.get('availability')?.value || '—' }}</span>
                 <app-sf-combobox *ngIf="!isDeal" formControlName="availability" [options]="resolvedAvailabilityOptions" placeholder="Availability" footerLabel="Add availability" (footerAction)="openAddMasterOption('availability', detail.get('availability'))"></app-sf-combobox>
-                <span class="ie-total" title="Total cost (qty × unit cost)">{{ lineCost(i, j, k) | number: '1.2-2' }}</span>
-                <span class="ie-total" title="Total selling price (qty × unit price)">{{ lineTotal(i, j, k) | number: '1.2-2' }}</span>
               </div>
 
-              <div *ngIf="isQuote" class="mt-2 flex min-h-12 items-center gap-2">
+              <div *ngIf="isQuote" class="mt-2 flex min-h-12 w-full basis-full items-center gap-2">
                 <ng-container *ngIf="detail.get('image')?.value as image; else addLineImage">
-                  <img [src]="imageUrl(image)" [alt]="image.originalname || 'Item image'" class="h-12 w-12 rounded-lg border border-gray-200 bg-white object-contain dark:border-erp-border-dark" />
-                  <div class="min-w-0">
-                    <p class="max-w-48 truncate text-[11px] text-gray-500 dark:text-gray-400">{{ image.originalname }}</p>
-                    <button type="button" class="text-[11px] font-medium text-red-600 hover:underline dark:text-red-400" (click)="removeImage(i, j, k)">Remove image</button>
-                  </div>
+                  <p class="max-w-48 truncate text-[11px] text-gray-500 dark:text-gray-400" [title]="image.originalname">{{ image.originalname }}</p>
+                  <button type="button" title="View image" aria-label="View image"
+                    [disabled]="imagePreviewLoading[imageKey(i, j, k)]" (click)="toggleImagePreview(i, j, k)"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:border-violet-400 hover:text-violet-700 disabled:opacity-50 dark:border-erp-border-dark dark:text-gray-400"
+                    >
+                    <ng-icon name="heroEye" class="h-4 w-4"></ng-icon>
+                  </button>
+                  <button type="button" title="Remove image" aria-label="Remove image" (click)="removeImage(i, j, k)"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-red-600 hover:border-red-300 hover:bg-red-50 dark:border-erp-border-dark dark:text-red-400 dark:hover:bg-red-950/30">
+                    <ng-icon name="heroTrash" class="h-4 w-4"></ng-icon>
+                  </button>
                 </ng-container>
                 <ng-template #addLineImage>
-                  <label class="inline-flex cursor-pointer items-center rounded-lg border border-dashed border-gray-300 px-2.5 py-1.5 text-[11px] font-medium text-gray-600 hover:border-violet-400 hover:text-violet-700 dark:border-erp-border-dark dark:text-gray-400"
+                  <label class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-600 hover:border-violet-400 hover:text-violet-700 dark:border-erp-border-dark dark:text-gray-400"
+                    [title]="imageUploads[imageKey(i, j, k)] ? 'Uploading image…' : 'Upload item image'" [attr.aria-label]="'Upload item image'"
                     [class.pointer-events-none]="imageUploads[imageKey(i, j, k)]" [class.opacity-50]="imageUploads[imageKey(i, j, k)]">
-                    {{ imageUploads[imageKey(i, j, k)] ? 'Uploading image…' : '+ Add item image' }}
+                    <ng-icon name="heroArrowUpTray" class="h-4 w-4"></ng-icon>
                     <input type="file" class="hidden" accept="image/png,image/jpeg,image/webp" [disabled]="imageUploads[imageKey(i, j, k)]" (change)="uploadImage($event, i, j, k)" />
                   </label>
                 </ng-template>
                 <span class="text-[10px] text-gray-400">PNG, JPG or WebP · max 5 MB</span>
                 <span *ngIf="imageErrors[imageKey(i, j, k)]" class="text-[11px] text-red-600 dark:text-red-400">{{ imageErrors[imageKey(i, j, k)] }}</span>
               </div>
+              <app-image-viewer *ngIf="isQuote && imagePreviews[imageKey(i, j, k)]" [src]="imagePreviews[imageKey(i, j, k)]" alt="Item image preview"
+                (closed)="closeImagePreview(imageKey(i, j, k))"></app-image-viewer>
 
               <ng-container *ngIf="lineExtraTemplate" [ngTemplateOutlet]="lineExtraTemplate"
                 [ngTemplateOutletContext]="{ $implicit: detail, i: i, j: j, k: k }"></ng-container>
@@ -355,6 +364,11 @@
                 [title]="compareLabelFor(i, j, k)" [attr.aria-label]="compareLabelFor(i, j, k)"
                 class="grid h-6 w-6 place-content-center rounded text-violet-600 hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-950/40">
                 <ng-icon name="heroScale" class="h-3.5 w-3.5"></ng-icon>
+              </button>
+              <button *ngIf="isLineUnlockable(i, j, k)" type="button" (click)="toggleLineLock(i, j, k)"
+                [title]="isLineUnlocked(i, j, k) ? 'Lock this awarded line again' : 'Edit this awarded line'" [attr.aria-label]="isLineUnlocked(i, j, k) ? 'Lock line' : 'Edit line'"
+                class="grid h-6 w-6 place-content-center rounded text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40">
+                <ng-icon [name]="isLineUnlocked(i, j, k) ? 'heroLockClosed' : 'heroPencilSquare'" class="h-3.5 w-3.5"></ng-icon>
               </button>
               <button *ngIf="!isLineLocked(i, j, k)" type="button" aria-label="Remove line" [disabled]="(detailsAt(i, j)?.length ?? 0) <= 1" (click)="removeDetail(i, j, k)"
                 class="grid h-6 w-6 place-content-center rounded text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-400 dark:hover:bg-red-950/40">
@@ -407,7 +421,11 @@
               <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ sellingPrice() | number: '1.2-2' }}</p>
             </div>
             <div>
-              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Margin</p>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Margin value</p>
+              <p class="text-sm font-semibold tabular-nums" [ngClass]="marginTone(profitPercent())">{{ marginValue() | number: '1.2-2' }}</p>
+            </div>
+            <div>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Margin %</p>
               <p class="text-sm font-semibold tabular-nums"
                 [ngClass]="marginTone(profitPercent())">
                 {{ profitPercent() | number: '1.1-1' }}%

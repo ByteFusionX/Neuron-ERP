@@ -32,6 +32,7 @@ import { ActiveItemEntryService } from 'src/app/core/services/active-item-entry.
 import { ModalService } from 'src/app/shared/components/modal';
 import { QuickAddDialogComponent, QuickAddDialogData } from 'src/app/modules/products/modals/quick-add-dialog/quick-add-dialog.component';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
+import { ImageViewerComponent } from 'src/app/shared/components/image-viewer/image-viewer.component';
 
 type LineFilter = 'missingPrice' | 'notInCatalogue' | 'notAwarded' | 'errors';
 
@@ -52,7 +53,7 @@ type LineFilter = 'missingPrice' | 'notInCatalogue' | 'notAwarded' | 'errors';
   selector: 'app-item-entry',
   standalone: true,
   templateUrl: './item-entry.component.html',
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgIcon, DragDropModule, SmartFormModule, ActionButtonComponent, ParseBoldTextPipe, ParseBracketsTextPipe, LoadMoreOnScrollDirective],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgIcon, DragDropModule, SmartFormModule, ActionButtonComponent, ImageViewerComponent, ParseBoldTextPipe, ParseBracketsTextPipe, LoadMoreOnScrollDirective],
   styles: [SF_STYLES + `
     :host { display: block; }
     /* The numeric strip is dense on purpose: seven fields per line have to fit without a horizontal scrollbar. */
@@ -63,9 +64,9 @@ type LineFilter = 'missingPrice' | 'notInCatalogue' | 'notAwarded' | 'errors';
       .ie-strip.ie-strip-rfq { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
     }
     @media (min-width: 1400px) {
-      .ie-strip { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 5.5fr) minmax(0, 6.5fr) minmax(0, 10fr) minmax(0, 9fr) minmax(0, 8.5fr) minmax(0, 9fr); }
+      .ie-strip { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 5.5fr) minmax(0, 6.5fr) minmax(0, 8.5fr) minmax(0, 9fr) minmax(0, 10fr) minmax(0, 9fr); }
       /* Purchase drops the margin column (no customer-facing margin for supplier lines), so it's one column short of the default strip. */
-      .ie-strip.ie-strip-purchase { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 6.5fr) minmax(0, 10fr) minmax(0, 9fr) minmax(0, 8.5fr) minmax(0, 9fr); }
+      .ie-strip.ie-strip-purchase { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 6.5fr) minmax(0, 8.5fr) minmax(0, 9fr) minmax(0, 10fr) minmax(0, 9fr); }
       /* RFQ asks suppliers for prices: identifiers, quantity and unit; the supplier's price only once it replies. */
       .ie-strip.ie-strip-rfq { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
       .ie-strip.ie-strip-rfq.ie-strip-rfq-priced { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr); }
@@ -181,6 +182,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   /** Rendered next to the tabs for the selected option (RFQ drawer: export that supplier's sheet). */
   @Input() optionExtraTemplate: TemplateRef<any> | null = null;
   @Input() addOptionLabel = 'Add option';
+  /** The host adds the option itself (e.g. to carry the selected lines along): the button emits `addOptionClicked` instead. */
+  @Input() customAddOption = false;
+  @Output() addOptionClicked = new EventEmitter<void>();
   @Input() optionRemoveLabel = 'Remove option';
   /** Capitalised name used in the "… removed" undo message. */
   @Input() optionNoun = 'Option';
@@ -227,6 +231,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   /** Guards the cost/margin/price derivation from re-entering itself. */
   private deriving = false;
   imageUploads: Record<string, boolean> = {};
+  imagePreviews: Record<string, string> = {};
+  imagePreviewLoading: Record<string, boolean> = {};
   imageErrors: Record<string, string> = {};
 
   constructor(
@@ -258,18 +264,6 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
         supplier: () => {
           const meta = this.optionalItems.at(this.selectedOption)?.get('meta')?.value;
           return meta?.supplierId ? { supplierId: String(meta.supplierId), supplierName: meta.supplierName || '' } : null;
-        },
-        itemHint: () => {
-          // The last item in the open option that has a name typed: that is the one being worked on.
-          const items = this.itemsAt(this.selectedOption);
-          for (let j = (items?.length ?? 0) - 1; j >= 0; j--) {
-            const name = (items.at(j).get('itemName')?.value || '').toString().trim();
-            if (name.length >= 2 && this.source) {
-              const source = this.source;
-              return { name, search: () => source.search({ search: '', category: name, scopeIds: this.scopeIds }) };
-            }
-          }
-          return null;
         },
         addProducts: (products) => this.addCatalogueProducts(products),
       });
@@ -424,6 +418,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.codeLookupTimers.clear();
     this.subs.unsubscribe();
     this.unregisterTarget?.();
+    Object.keys(this.imagePreviews).forEach((key) => this.closeImagePreview(key));
   }
 
   private unregisterTarget?: () => void;
@@ -442,13 +437,36 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   get optionsEnabled(): boolean { return this.allowOptions && !this.isPurchase; }
   get optionalItemsEnabled(): boolean { return this.allowOptionalItems && !this.isFlat; }
 
+  /** Awarded lines the user chose to edit anyway (purchase mode). */
+  private unlockedLines = new WeakSet<object>();
+
+  /** True when the host locks the line and the user hasn't unlocked it. */
   isLineLocked(i: number, j: number, k: number): boolean {
+    if (!this.isPurchase || !this.lineLocked?.(i, j, k)) return false;
+    const line = this.detailsAt(i, j)?.at(k);
+    return !(line && this.unlockedLines.has(line));
+  }
+
+  /** The host locks this line but the user can lift the lock. */
+  isLineUnlockable(i: number, j: number, k: number): boolean {
     return this.isPurchase && !!this.lineLocked?.(i, j, k);
+  }
+
+  isLineUnlocked(i: number, j: number, k: number): boolean {
+    return this.isLineUnlockable(i, j, k) && !this.isLineLocked(i, j, k);
+  }
+
+  toggleLineLock(i: number, j: number, k: number): void {
+    const line = this.detailsAt(i, j)?.at(k);
+    if (!line) return;
+    if (this.unlockedLines.has(line)) this.unlockedLines.delete(line);
+    else this.unlockedLines.add(line);
+    this.applyLineLocks();
   }
 
   isItemLocked(i: number, j: number): boolean {
     if (!this.isPurchase || !this.lineLocked) return false;
-    return (this.detailsAt(i, j)?.controls || []).some((_, k) => this.lineLocked!(i, j, k));
+    return (this.detailsAt(i, j)?.controls || []).some((_, k) => this.isLineLocked(i, j, k));
   }
 
   badgeFor(i: number, j: number, k: number): string | null {
@@ -683,6 +701,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     }, { validators: [this.discountWithinTotal] });
   }
 
+  onAddOptionClick(): void {
+    if (this.customAddOption) this.addOptionClicked.emit();
+    else this.addOption();
+  }
+
   addOption(): void {
     this.optionalItems.push(this.optionGroup(this._fb.array([this.createItem()]), null, null));
     this.selectedOption = this.optionalItems.length - 1;
@@ -862,7 +885,34 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     });
   }
 
+  /** Opens the shared full-screen viewer; the image is fetched with auth and shown from a blob URL. */
+  toggleImagePreview(i: number, j: number, k: number): void {
+    const key = this.imageKey(i, j, k);
+    const fileName = this.detailsAt(i, j)?.at(k).get('image')?.value?.fileName;
+    if (!fileName) return;
+    this.imageErrors[key] = '';
+    this.imagePreviewLoading[key] = true;
+    this._quotationService.itemImageBlob(fileName).subscribe({
+      next: (blob) => {
+        this.closeImagePreview(key);
+        this.imagePreviews[key] = URL.createObjectURL(blob);
+        this.imagePreviewLoading[key] = false;
+      },
+      error: () => {
+        this.imagePreviewLoading[key] = false;
+        this.imageErrors[key] = 'Could not load the image.';
+      },
+    });
+  }
+
+  closeImagePreview(key: string): void {
+    const url = this.imagePreviews[key];
+    if (url) URL.revokeObjectURL(url);
+    delete this.imagePreviews[key];
+  }
+
   removeImage(i: number, j: number, k: number): void {
+    this.closeImagePreview(this.imageKey(i, j, k));
     this.detailsAt(i, j)?.at(k).get('image')?.setValue(null);
     this.imageErrors[this.imageKey(i, j, k)] = '';
   }
@@ -1096,8 +1146,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     // picked, so the link is dropped rather than left pointing at something else.
     detail?.get('productId')?.setValue(null, { emitEvent: false });
     const term = (this.detailsAt(i, j)?.at(k)?.get('detail')?.value || '').toString().trim();
-    const category = ((this.itemsAt(i).at(j) as FormGroup).get('itemName')?.value || '').toString().trim();
-    this.queueSearch(`${i}-${j}-${k}`, term, category);
+    // Not narrowed to the group name: the description is matched against the whole catalogue.
+    this.queueSearch(`${i}-${j}-${k}`, term, '');
   }
 
   /**
@@ -1501,6 +1551,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   finalTotal(): number {
     return this.sellingPrice() - this.discount();
+  }
+
+  marginValue(): number {
+    return this.finalTotal() - this.totalCost();
   }
 
   profitPercent(): number {
