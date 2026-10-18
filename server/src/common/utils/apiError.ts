@@ -52,7 +52,8 @@ export function apiErrorHandler(err: any, _req: Request, res: Response, next: Ne
     for (const [path, e] of Object.entries<any>(err.errors)) {
       (fieldErrors[path] ||= []).push(e?.message || "Invalid value");
     }
-    return sendError(res, 422, "Please correct the highlighted fields.", "VALIDATION_FAILED", fieldErrors);
+    const names = Object.keys(fieldErrors).join(", ");
+    return sendError(res, 422, `Please correct the highlighted fields${names ? `: ${names}` : ""}.`, "VALIDATION_FAILED", fieldErrors);
   }
 
   // Mongoose stale document (optimistic concurrency, roadmap #19)

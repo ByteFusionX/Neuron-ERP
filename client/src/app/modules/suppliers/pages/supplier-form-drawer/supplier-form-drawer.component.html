@@ -5,7 +5,7 @@
     <app-supplier-form-stepper [steps]="steps" [current]="step" [isStepValid]="isStepValid.bind(this)"
         (stepClick)="goToStep($any($event))"></app-supplier-form-stepper>
 
-    <form id="supplier-form" [formGroup]="supplierForm" (ngSubmit)="submit()" novalidate>
+    <form [id]="formId" [formGroup]="supplierForm" (ngSubmit)="submit()" novalidate>
 
         <!-- Step 1 — supplier details & addresses ----------------------------------------- -->
         <app-sf-section *ngIf="step === 1" title="Supplier" columns="2">
@@ -162,7 +162,7 @@
         <app-action-button *ngIf="step < lastStep" variant="primary" (click)="nextStep()">
             Next: {{ steps[step].label }}
         </app-action-button>
-        <app-action-button *ngIf="step === lastStep" variant="primary" type="submit" form="supplier-form" [disabled]="saving">
+        <app-action-button *ngIf="step === lastStep" variant="primary" type="submit" [form]="formId" [disabled]="saving">
             {{ saving ? 'Saving…' : (isEdit ? 'Save Changes' : 'Create Supplier') }}
         </app-action-button>
     </ng-container>

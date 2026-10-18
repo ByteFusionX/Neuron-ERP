@@ -197,7 +197,7 @@ export class JobListComponent {
       },
       { key: 'customerName', label: 'Customer', sortable: true, valueGetter: (r) => r.clientDetails?.companyName },
       { key: 'description', label: 'Description', sortable: true, valueGetter: (r) => r.quotation?.subject },
-      { key: 'procurementPerson', label: 'Procurement Person', sortable: true, valueGetter: (r) => this.fullName(r.procurementPerson) },
+      { key: 'procurementPerson', label: 'Allocated To', sortable: true, valueGetter: (r) => this.fullName(r.procurementPerson) },
       { key: 'lpoValue', label: 'LPO Value (QAR)', type: 'currency', currencyCode: 'QAR', sortable: true, valueGetter: (r) => r.lpoValue ?? 0 },
       { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (r) => this.fullName(r.salesPersonDetails?.[0]) },
       { key: 'department', label: 'Department', sortable: true, valueGetter: (r) => r.departmentDetails?.[0]?.departmentName ?? '' },

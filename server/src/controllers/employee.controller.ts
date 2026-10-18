@@ -36,7 +36,8 @@ export const getEmployees = async (
       { isDeleted: { $ne: true }, isBlocked: { $ne: true } },
       fullAccess ? { password: 0 } : { employeeId: 1, firstName: 1, lastName: 1, category: 1, department: 1, email: 1 },
     )
-      .sort({ createdDate: -1 })
+      .collation({ locale: "en", strength: 2 })
+      .sort({ firstName: 1, lastName: 1 })
       .populate("department");
 
     if (employees.length) {
@@ -73,7 +74,7 @@ export const getPresaleManagers = async (
         },
       },
 
-      { $sort: { createdDate: -1 } },
+      { $sort: { firstName: 1, lastName: 1 } },
     ]);
     // An admin only counts as a presale manager when they head a department; other roles are unaffected.
     const headIds = new Set((await departmentModel.find({ departmentHead: { $ne: null } }, "departmentHead").lean()).map((d: any) => String(d.departmentHead)));
@@ -111,7 +112,7 @@ export const getPresaleEngineers = async (
         },
       },
 
-      { $sort: { createdDate: -1 } },
+      { $sort: { firstName: 1, lastName: 1 } },
     ]);
 
     if (employees.length) {
@@ -146,7 +147,7 @@ export const getProcurementEmployees = async (
           password: 0,
         },
       },
-      { $sort: { createdDate: -1 } },
+      { $sort: { firstName: 1, lastName: 1 } },
     ]);
 
     if (employees.length) {
@@ -518,7 +519,7 @@ export const getFilteredEmployees = async (
     const sortable = ["employeeId", "firstName", "email", "designation", "dateOfJoining"];
     const sortStage: Record<string, 1 | -1> = sortable.includes(sortKey)
       ? { [sortKey]: sortDir === "desc" ? -1 : 1 }
-      : { employeeId: 1 };
+      : { createdDate: -1, _id: -1 };
 
     await Employee.aggregate([
       {
@@ -1326,6 +1327,17 @@ export const blockEmployee = async (
         { isBlocked: isBlocked },
         { new: true },
       );
+      if (isBlocked) {
+        // Pull today's birthday/anniversary post; older posts carry no employee link, so also match by name in the title
+        const startOfToday = new Date();
+        startOfToday.setUTCHours(0, 0, 0, 0);
+        const fullName = `${employee.firstName} ${employee.lastName}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        await announcementModel.deleteMany({
+          celeb: true,
+          date: { $gte: startOfToday },
+          $or: [{ employee: employee._id }, { title: new RegExp(fullName, "i") }],
+        });
+      }
       return res.status(200).json({ isBlocked });
     } else {
       return res.status(404).json({ message: "Employee not found" });

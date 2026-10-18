@@ -24,6 +24,8 @@ interface announcment extends Document {
     acknowledgedBy: { user: Types.ObjectId, at: Date }[]
     updatedAt?: Date
     updatedBy?: Types.ObjectId
+    // Celebration announcements only: the employee being celebrated
+    employee?: Types.ObjectId
 }
 
 const AnnouncementSchema = new Schema<announcment>({
@@ -75,6 +77,7 @@ const AnnouncementSchema = new Schema<announcment>({
     },
     updatedAt: { type: Date },
     updatedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+    employee: { type: Schema.Types.ObjectId, ref: 'Employee' },
 });
 
 AnnouncementSchema.index({ status: 1, publishAt: -1 });

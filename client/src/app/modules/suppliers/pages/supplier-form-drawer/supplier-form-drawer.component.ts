@@ -28,6 +28,8 @@ type StepNumber = 1 | 2 | 3 | 4;
  * Products are not entered here; they are added in the product catalogue.
  * The host binds `open`, `mode` and (for edit) `supplier`, and reacts to `saved` / `closed`.
  */
+let nextFormId = 0;
+
 @Component({
   selector: 'app-supplier-form-drawer',
   standalone: true,
@@ -35,6 +37,8 @@ type StepNumber = 1 | 2 | 3 | 4;
   imports: [NgIf, NgFor, NgClass, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, CollapsibleCardComponent, SupplierFormStepperComponent],
 })
 export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
+  /** Several drawers can sit in the DOM at once (list page, quote, RFQ), so a shared id would send Create to the wrong form. */
+  readonly formId = `supplier-form-${nextFormId++}`;
   @Input() open = false;
   @Input() mode: 'create' | 'edit' = 'create';
   /** The supplier being edited, as the list API returns it. */
