@@ -82,12 +82,8 @@ export const getFileUrlFromAws = async (fileName: string, expireTime: number | n
                 Bucket: process.env.AWS_BUCKET_NAME, // Specify the AWS S3 bucket name
                 Key: fileName, // Specify the file name
             };
-            console.log(objectGetParams)
-
             const command = new GetObjectCommand(objectGetParams);
-            console.log(command)
             const url = await getSignedUrl(s3Client, command, { expiresIn: expireTime ?? undefined });
-            console.log(url)
             return url;
         } else {
             // Return an error message if the file is not available in the bucket
@@ -102,15 +98,11 @@ export const getFileUrlFromAws = async (fileName: string, expireTime: number | n
 
 export const isFileAvailableInAwsBucket = async (fileName: string): Promise<boolean> => {
     try {
-        console.log(process.env.AWS_BUCKET_NAME)
-
         // Check if the object exists
-        const s3send = await s3Client.send(new GetObjectCommand({
+        await s3Client.send(new GetObjectCommand({
             Bucket: process.env.AWS_BUCKET_NAME, // Specify the AWS S3 bucket name
             Key: fileName, // Specify the file name
         }));
-
-        console.log(s3send)
 
         // If the object exists, return true
         return true;
