@@ -12,6 +12,13 @@
         @if (d.coverage.open) { {{ d.coverage.open }} still need a supplier } @else { All settled }
       </span>
     </div>
+    @if (!locked() && cheapestAwards().awards.length) {
+      <button type="button" [disabled]="busy()" (click)="onAwardCheapest()"
+        class="order-last inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50"
+        [title]="'Award ' + cheapestAwards().awards.length + ' open product(s) to the lowest priced supplier'">
+        Award cheapest for all {{ cheapestAwards().awards.length }}
+      </button>
+    }
     <div class="ml-auto flex shrink-0 rounded-lg bg-gray-100 p-0.5 text-xs dark:bg-gray-900" role="tablist" aria-label="Show products">
       @for (f of filterTabs(); track f.key) {
         <button type="button" role="tab" [attr.aria-selected]="filter() === f.key" (click)="filter.set(f.key)"
@@ -24,6 +31,19 @@
       }
     </div>
   </div>
+  @if (exceptionTabs().length) {
+    <div class="mt-3 flex flex-wrap items-center gap-1.5 text-xs" role="tablist" aria-label="Needs a look">
+      <span class="mr-1 text-gray-500 dark:text-gray-400">Needs a look:</span>
+      @for (f of exceptionTabs(); track f.key) {
+        <button type="button" role="tab" [attr.aria-selected]="filter() === f.key" (click)="filter.set(filter() === f.key ? 'all' : f.key)"
+          class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-medium transition-colors"
+          [ngClass]="filter() === f.key ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300' : 'border-gray-200 text-gray-600 hover:border-violet-300 dark:border-gray-800 dark:text-gray-300'">
+          {{ f.label }}
+          <span class="tabular-nums text-[10px] opacity-80">{{ f.count }}</span>
+        </button>
+      }
+    </div>
+  }
 
   <div class="mt-4 grid grid-cols-2 border-t border-gray-100 dark:border-erp-border-dark sm:grid-cols-4">
     @for (seg of segments(); track seg.key) {
@@ -125,6 +145,9 @@
                     @if (row.partNo) { <span>P/N {{ row.partNo }}</span> }
                     <span class="tabular-nums">· {{ row.quantity }} {{ row.uom || '' }}</span>
                   </span>
+                  @if (row.currentSupplier) {
+                    <span class="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">Current supplier: <span class="font-medium text-gray-700 dark:text-gray-200">{{ row.currentSupplier }}</span></span>
+                  }
                   <span class="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium" [ngClass]="badge.classes" [title]="badge.label">
                     <span class="h-1.5 w-1.5 shrink-0 rounded-full" [ngClass]="badge.dot"></span>
                     <span class="truncate">{{ badge.label }}</span>
@@ -176,6 +199,18 @@
                           }
                         </div>
 
+                        @if (allowSplit() && (cell.quote.quantity ?? 0) > 0 && (cell.quote.quantity ?? 0) < row.quantity) {
+                          <span class="mt-1 block text-[10px] font-medium text-amber-700 dark:text-amber-400">Quoted {{ cell.quote.quantity }} of {{ row.quantity }}</span>
+                        }
+                        @if (cell.quote.validityDate && isExpired(cell.quote.validityDate)) {
+                          <span class="mt-1 block text-[10px] font-medium text-amber-700 dark:text-amber-400" title="The supplier's price may have changed. You can still award it.">Quote expired {{ cell.quote.validityDate | date: 'dd MMM yy' }}</span>
+                        }
+                        @if (isDearer(row, cell)) {
+                          <span class="mt-1 block text-[10px] font-medium text-rose-700 dark:text-rose-400"
+                            [title]="'Last paid QAR ' + (row.lastPaid!.priceQar | number: '1.2-2') + (row.lastPaid!.poNo ? ' on ' + row.lastPaid!.poNo : '') + (row.lastPaid!.supplierName ? ' (' + row.lastPaid!.supplierName + ')' : '')">
+                            Above last PO (QAR {{ row.lastPaid!.priceQar | number: '1.2-2' }})
+                          </span>
+                        }
                         @if (cell.quote.leadTimeDays != null || (cell.quote.availability && cell.quote.availability !== 'Available')) {
                           <div class="mt-1.5 flex flex-wrap gap-1">
                             @if (cell.quote.availability && cell.quote.availability !== 'Available') {
@@ -193,6 +228,7 @@
                               <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
                                 <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
                                 Awarded
+                                @if ((cell.awardedQty ?? 0) > 0 && (cell.awardedQty ?? 0) < row.quantity) { <span class="tabular-nums">· {{ cell.awardedQty }} of {{ row.quantity }}</span> }
                               </span>
                               @if (!locked()) {
                                 <button type="button" [disabled]="busy()" (click)="onReopen(row, cell)"
@@ -201,13 +237,38 @@
                             </div>
                             @if (cell.awardReason) { <span class="mt-1 block truncate text-[11px] italic text-gray-500 dark:text-gray-400" [title]="cell.awardReason">“{{ cell.awardReason }}”</span> }
                           } @else if (!locked() && canAward(row, cell)) {
-                            <button type="button" [disabled]="busy()" (click)="onAward(row, cell)"
-                              class="w-full rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50"
-                              [ngClass]="row.status === 'awarded'
-                                ? 'border border-gray-200 text-gray-600 hover:border-violet-300 hover:text-violet-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-violet-800 dark:hover:text-violet-300'
-                                : 'bg-violet-600 text-white shadow-sm hover:bg-violet-700'">
-                              {{ row.status === 'awarded' ? 'Switch here' : 'Award' }}
-                            </button>
+                            @if (allowSplit() && row.status === 'partial') {
+                              <button type="button" [disabled]="busy()" (click)="awardRemaining(row, cell)"
+                                class="w-full rounded-md bg-violet-600 px-2 py-1 text-[11px] font-medium text-white shadow-sm transition-colors hover:bg-violet-700 disabled:opacity-50"
+                                [title]="'Give ' + maxFor(row, cell) + ' of the remaining ' + remaining(row) + ' to this supplier'">
+                                Award {{ maxFor(row, cell) }} of {{ remaining(row) }} left
+                              </button>
+                            } @else {
+                              <button type="button" [disabled]="busy()" (click)="onAward(row, cell)"
+                                class="w-full rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50"
+                                [ngClass]="row.status === 'awarded'
+                                  ? 'border border-gray-200 text-gray-600 hover:border-violet-300 hover:text-violet-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-violet-800 dark:hover:text-violet-300'
+                                  : 'bg-violet-600 text-white shadow-sm hover:bg-violet-700'">
+                                {{ row.status === 'awarded' ? 'Switch here' : (allowSplit() ? 'Award all ' + row.quantity : 'Award') }}
+                              </button>
+                            }
+                            @if (allowSplit() && row.status !== 'awarded' && row.quantity > 1) {
+                              @if (splitKey() === cellKey(cell)) {
+                                <div class="mt-1.5 flex items-center gap-1">
+                                  <input type="number" min="1" [max]="maxFor(row, cell)" step="1" [value]="splitQty()"
+                                    (input)="splitQty.set(+$any($event.target).value)" (keydown.enter)="confirmSplit(row, cell)" (keydown.escape)="splitKey.set(null)"
+                                    class="w-16 rounded-md border border-gray-300 bg-white px-1.5 py-1 text-right text-[11px] tabular-nums dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                                    [attr.aria-label]="'Quantity for ' + supplierFor(cell.rfqId)" />
+                                  <button type="button" [disabled]="busy()" (click)="confirmSplit(row, cell)"
+                                    class="rounded-md bg-violet-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-violet-700 disabled:opacity-50">Set</button>
+                                  <button type="button" (click)="splitKey.set(null)" class="rounded px-1.5 py-1 text-[11px] text-gray-500 hover:bg-white dark:hover:bg-gray-800" aria-label="Cancel">✕</button>
+                                </div>
+                              } @else {
+                                <button type="button" [disabled]="busy()" (click)="openSplit(row, cell)"
+                                  class="mt-1 w-full rounded-md px-2 py-0.5 text-[11px] text-violet-700 hover:bg-violet-50 disabled:opacity-50 dark:text-violet-300 dark:hover:bg-violet-950/40"
+                                  title="Give this supplier only part of the quantity; buy the rest from another supplier">Part of the quantity…</button>
+                              }
+                            }
                           }
                         </div>
                       </div>

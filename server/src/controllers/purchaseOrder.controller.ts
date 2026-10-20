@@ -1633,8 +1633,9 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
       if (item.itemDetails && Array.isArray(item.itemDetails)) {
         item.itemDetails.forEach((itemDetail: any) => {
           if (itemDetail.comparisons && Array.isArray(itemDetail.comparisons)) {
-            const selectedComparison = itemDetail.comparisons.find((comp: any) => comp.selected === true);
-            if (selectedComparison && selectedComparison.supplierId) {
+            // A line split between suppliers has one selected comparison per supplier.
+            itemDetail.comparisons.filter((comp: any) => comp.selected === true).forEach((selectedComparison: any) => {
+              if (!selectedComparison.supplierId) return;
               const supplierId = selectedComparison.supplierId.toString();
 
               if (!supplierMap.has(supplierId)) {
@@ -1646,7 +1647,7 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
                 quantity: selectedComparison.quantity,
                 unitPrice: selectedComparison.unitPrice
               });
-            }
+            });
           }
         });
       }
@@ -1882,9 +1883,9 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
       if (item.itemDetails && Array.isArray(item.itemDetails)) {
         item.itemDetails.forEach((itemDetail: any) => {
           if (itemDetail.comparisons && Array.isArray(itemDetail.comparisons)) {
-            const selectedComparison = itemDetail.comparisons.find((comp: any) => comp.selected === true);
-            if (selectedComparison && selectedComparison.supplierId &&
-                selectedComparison.supplierId.toString() === supplierId) {
+            const selectedComparison = itemDetail.comparisons.find((comp: any) =>
+              comp.selected === true && comp.supplierId && comp.supplierId.toString() === supplierId);
+            if (selectedComparison) {
               const totalQuantity = selectedComparison.quantity || itemDetail.quantity || 0;
               const totalIssued = issuedItemsMap.get(itemKey(itemDetail)) || 0;
               const pendingQuantity = pendingItemsMap.get(itemKey(itemDetail)) || 0;

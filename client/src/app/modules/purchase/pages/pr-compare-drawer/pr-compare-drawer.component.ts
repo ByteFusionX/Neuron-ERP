@@ -118,9 +118,23 @@ export class PrCompareDrawerComponent implements OnChanges {
     if (confirmed) this.save(event.awards);
   }
 
+  async onAwardCheapest(event: { awards: RfqCompareAward[]; skipped: number }): Promise<void> {
+    const n = event.awards.length;
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Award cheapest for all?',
+      message: `${n} open product${n === 1 ? '' : 's'} go to the supplier with the lowest price.`
+        + (event.skipped ? ` ${event.skipped} open product${event.skipped === 1 ? '' : 's'} with no awardable lowest price stay open.` : ''),
+      consequence: 'Part-awarded products are left as they are. You can change any award until the request is sent for approval.',
+      confirmLabel: 'Award cheapest',
+      cancelLabel: 'Cancel',
+    });
+    if (confirmed) this.save(event.awards);
+  }
+
   private save(awards: RfqCompareAward[], reason?: string): void {
     if (!this.purchaseId) return;
-    const body: SalesRfqEnquiryAward[] = awards.map((a) => ({ rfqId: a.cell.rfqId, lineKey: a.cell.lineKey, quoteId: a.quoteId, reason }));
+    const body: SalesRfqEnquiryAward[] = awards.map((a) => ({ rfqId: a.cell.rfqId, lineKey: a.cell.lineKey, quoteId: a.quoteId, reason, ...(a.qty != null ? { qty: a.qty } : {}) }));
     this.busy.set(true);
     this.service.awardPurchase(this.purchaseId, body).subscribe({
       next: () => {

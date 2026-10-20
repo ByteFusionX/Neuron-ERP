@@ -91,14 +91,34 @@
       <!-- create: who quoted the picked products before -->
       <div *ngIf="!isEdit && pastSuppliers.length" class="mt-3 border-t border-gray-100 pt-3 text-xs dark:border-erp-border-dark">
         <p class="mb-1.5 font-semibold text-gray-900 dark:text-gray-100">Past suppliers <span class="font-normal text-gray-500 dark:text-gray-400">— who quoted these products before</span></p>
+        <!-- by supplier: one click asks a supplier for every product they quoted before -->
+        <div class="mb-2 flex flex-col gap-1">
+          <div *ngFor="let s of pastBySupplier" class="flex flex-wrap items-center gap-1.5">
+            <button type="button" [disabled]="isAskedPast(s.row)" (click)="askPast(s.row)"
+              title="Add an RFQ tab for this supplier; they still confirm price and quantity"
+              class="inline-flex items-center gap-1 rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 font-medium text-sky-800 hover:bg-sky-100 disabled:opacity-40 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+              <span>{{ isAskedPast(s.row) ? '✓' : '+' }}</span><span class="max-w-[12rem] truncate">{{ s.row.supplierName }}</span>
+              <span class="font-normal text-sky-600 dark:text-sky-400">{{ s.products.length }} product{{ s.products.length === 1 ? '' : 's' }}</span>
+            </button>
+            <span *ngFor="let p of s.products" class="max-w-[10rem] truncate rounded bg-gray-100 px-1.5 py-0.5 text-gray-600 dark:bg-gray-800 dark:text-gray-400" [title]="pastTitle(p.row)">{{ p.label }}</span>
+            <span *ngIf="s.expired" class="text-amber-600 dark:text-amber-400">{{ s.expired }} expired</span>
+          </div>
+          <div *ngIf="unassignedLines.length" class="flex flex-wrap items-center gap-1.5">
+            <span class="rounded-full border border-dashed border-gray-300 px-2 py-0.5 font-medium text-gray-600 dark:border-gray-600 dark:text-gray-400">Unassigned · {{ unassignedLines.length }}</span>
+            <span *ngFor="let label of unassignedLines" class="max-w-[10rem] truncate rounded bg-gray-100 px-1.5 py-0.5 text-gray-500 dark:bg-gray-800" [title]="label">{{ label }}</span>
+            <span class="text-gray-400">— no past supplier, pick one</span>
+          </div>
+        </div>
+        <p class="mb-1 text-gray-500 dark:text-gray-400">By product</p>
         <div class="flex flex-col gap-1.5">
           <div *ngFor="let group of pastSuppliers" class="flex flex-wrap items-center gap-1.5">
             <span class="max-w-[14rem] truncate font-medium text-gray-700 dark:text-gray-300" [title]="group.rows[0].productName || group.rows[0].detail">{{ group.rows[0].partNo || group.rows[0].productName || group.rows[0].detail }}</span>
             <button *ngFor="let row of group.rows.slice(0, 4)" type="button" [disabled]="isAskedPast(row)" (click)="askPast(row)"
-              [title]="'Last quoted ' + (row.lastQuotedAt | date: 'dd MMM yy') + ' · won ' + row.timesSelected + '/' + row.timesQuoted"
-              class="inline-flex items-center gap-1 rounded-full border border-dashed border-sky-300 px-2 py-0.5 text-sky-700 hover:bg-sky-50 disabled:opacity-40 dark:border-sky-800 dark:text-sky-300 dark:hover:bg-sky-950/40">
+              [title]="pastTitle(row)"
+              class="inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 hover:bg-sky-50 disabled:opacity-40 dark:hover:bg-sky-950/40"
+              [ngClass]="row.expired ? 'border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300' : 'border-sky-300 text-sky-700 dark:border-sky-800 dark:text-sky-300'">
               <span>{{ isAskedPast(row) ? '✓' : '+' }}</span><span class="max-w-[10rem] truncate">{{ row.supplierName }}</span>
-              <span class="text-gray-500 dark:text-gray-400">{{ row.lastPrice | number: '1.2-2' }} {{ row.currency }}<span *ngIf="row.leadTimeDays != null"> · {{ row.leadTimeDays }}d</span></span>
+              <span class="text-gray-500 dark:text-gray-400">{{ row.referencePrice | number: '1.2-2' }} {{ row.currency }} · {{ row.referenceSource }} {{ row.referenceDate | date: 'MMM yy' }}<span *ngIf="row.expired" class="text-amber-600 dark:text-amber-400"> · expired</span></span>
             </button>
           </div>
         </div>
@@ -151,6 +171,7 @@
       </button>
     </ng-container>
     <ng-template #unchecked><span class="text-gray-400">{{ stockLoading ? 'Checking stock…' : '' }}</span></ng-template>
+    <span *ngIf="isLastPrice(line)" class="rounded bg-amber-50 px-1.5 py-0.5 font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" title="Filled from this supplier's last quote or PO. Ask them to confirm price and quantity">Last price, confirm</span>
 
   </div>
 </ng-template>

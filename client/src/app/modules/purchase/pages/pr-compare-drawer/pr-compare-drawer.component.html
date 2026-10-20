@@ -1,5 +1,5 @@
 <app-sf-drawer [title]="'Compare & award' + (data()?.enquiry?.enquiryId ? ' · ' + data()?.enquiry?.enquiryId : '')"
-    subtitle="Award each product to one supplier before sending the request for approval"
+    subtitle="Award each product to one supplier, or split its quantity between suppliers, before sending the request for approval"
     width="min(1320px, 97vw)" [open]="open" (closed)="closed.emit()">
 
   @if (loading()) { <p class="text-sm text-gray-500">Loading…</p> }
@@ -28,6 +28,7 @@
             <li class="flex items-center gap-3 px-4 py-1.5 text-[13px]">
               <span class="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100" [title]="u.detail">{{ u.detail }}</span>
               <span class="text-xs text-gray-500">{{ u.itemName }} · Qty {{ u.quantity }}{{ u.uom ? ' ' + u.uom : '' }}</span>
+              @if (u.currentSupplier) { <span class="text-xs text-gray-600 dark:text-gray-300">Current supplier: <span class="font-medium">{{ u.currentSupplier }}</span></span> }
             </li>
           }
         </ul>
@@ -36,8 +37,8 @@
     @if (!d.rows.length) {
       <p class="text-sm text-gray-500">No supplier has been asked for a price yet. Select products in the request, pick a supplier and create the RFQ, then compare the prices here.</p>
     } @else {
-      <app-rfq-compare-matrix [data]="d" [locked]="locked" [busy]="busy()"
-        (award)="onAward($event)" (awardGroup)="onAwardGroup($event)" (awardSupplier)="onAwardSupplier($event)"></app-rfq-compare-matrix>
+      <app-rfq-compare-matrix [data]="d" [locked]="locked" [busy]="busy()" [allowSplit]="true"
+        (award)="onAward($event)" (awardGroup)="onAwardGroup($event)" (awardSupplier)="onAwardSupplier($event)" (awardCheapest)="onAwardCheapest($event)"></app-rfq-compare-matrix>
     }
   }
 

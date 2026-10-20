@@ -147,6 +147,8 @@ export interface RfqQuote {
     isAlternative?: boolean;
     remarks?: string;
     selected: boolean;
+    /** Set when the line is split between suppliers: the part of the line's quantity this quote won. Blank = the whole line. */
+    awardedQty?: number;
     createdBy?: Types.ObjectId;
     createdAt?: Date;
 }
@@ -326,6 +328,7 @@ const rfqQuoteSchema = new Schema<RfqQuote>({
     isAlternative: { type: Boolean, default: false },
     remarks: { type: String },
     selected: { type: Boolean, default: false },
+    awardedQty: { type: Number, min: 0 },
     createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     createdAt: { type: Date, default: Date.now }
 }, { _id: true });

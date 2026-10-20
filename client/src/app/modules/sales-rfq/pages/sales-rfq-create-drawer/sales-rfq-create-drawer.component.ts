@@ -1,4 +1,4 @@
-import { DatePipe, DecimalPipe, NgFor, NgIf } from '@angular/common';
+import { DatePipe, DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { Component, DestroyRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
@@ -77,7 +77,7 @@ const UNAVAILABLE_OPTION: SfOption[] = [{ label: 'Unavailable', value: 'Unavaila
   selector: 'app-sales-rfq-create-drawer',
   standalone: true,
   templateUrl: './sales-rfq-create-drawer.component.html',
-  imports: [NgIf, NgFor, DatePipe, DecimalPipe, FormsModule, ReactiveFormsModule, SmartFormModule,
+  imports: [NgIf, NgFor, NgClass, DatePipe, DecimalPipe, FormsModule, ReactiveFormsModule, SmartFormModule,
     ActionButtonComponent, ItemEntryComponent, SupplierFormDrawerComponent, ProductFormDrawerComponent],
   providers: [CatalogueSuggestionSource],
 })
@@ -93,6 +93,8 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   @Input() purchaseId: string | null = null;
   /** Purchase mode: saved line ids to ask about (all lines when empty). */
   @Input() purchaseLineKeys: string[] = [];
+  /** A supplier pill was clicked: that supplier's tab opens first with the clicked line added to it, beside every line already tied to it. */
+  @Input() purchaseFocus: { supplierId?: string; supplierName: string; lineKey: string } | null = null;
   /** Purchase mode: the supplier chosen in the selection banner, placed on the first tab. */
   @Input() purchaseSupplier: { supplierId: string; supplierName: string; contactEmail?: string; isSupplierApproved?: boolean } | null = null;
   /** Emits once RFQs are created or the edited one is saved. */
@@ -137,6 +139,8 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
 
   /** Who quoted each picked product before, newest/most-used first. */
   pastSuppliers: { productId: string; rows: any[] }[] = [];
+  /** The same history turned around: each past supplier with the picked products they can be asked for in one RFQ. */
+  pastBySupplier: { row: any; products: { productId: string; label: string; row: any }[]; expired: number }[] = [];
   private history$ = new Subject<void>();
 
   loading = false;
@@ -180,7 +184,8 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
         debounceTime(400),
         switchMap(() => {
           const supplierIds = this.suppliers.map((s) => s.supplierId);
-          if (!supplierIds.length) return of({ success: true, data: [] as SalesRfqSupplierActivity[] });
+          // A supplier's quantity is not reserved across purchase requests, so a PR skips the other-RFQs check.
+          if (!supplierIds.length || this.purchaseId) return of({ success: true, data: [] as SalesRfqSupplierActivity[] });
           const lines = this.flatLines.map((l) => ({ partNo: l.productId ?? undefined, detail: l.detail }));
           return this.salesRfqService.supplierActivity({ supplierIds, lines }).pipe(catchError(() => of({ success: false, data: [] as SalesRfqSupplierActivity[] })));
         }),
@@ -205,7 +210,10 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
         }),
         takeUntilDestroyed(this.destroyRef)
       )
-      .subscribe((groups) => (this.pastSuppliers = groups.filter((g) => g.rows.length)));
+      .subscribe((groups) => {
+        this.pastSuppliers = groups.filter((g) => g.rows.length);
+        this.pastBySupplier = this.groupBySupplier(this.pastSuppliers);
+      });
 
     // Re-checks stock once the lines settle (a product picked, a quantity changed).
     this.stock$.pipe(debounceTime(700), takeUntilDestroyed(this.destroyRef)).subscribe(() => this.checkStock());
@@ -266,7 +274,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
         const data = res.data;
         this.purchase = data.purchase;
         const wanted = new Set(this.purchaseLineKeys);
-        const lines = data.lines.filter((l) => !wanted.size || wanted.has(l.itemDetailKey));
+        const lines = data.lines.filter((l) => this.purchaseFocus || !wanted.size || wanted.has(l.itemDetailKey));
         this.purchaseKeys = new Set(data.lines.map((l) => l.itemDetailKey));
         this.fetchSupplierOptions('').pipe(catchError(() => of({ success: false, data: [] as SalesRfqSupplierOption[] }))).subscribe((r) => {
           this.supplierOptions = r.data || [];
@@ -372,6 +380,8 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
       const typed = l.supplierName?.trim().toLowerCase();
       const byName = typed ? this.supplierOptions.find((o) => o.supplierName.trim().toLowerCase() === typed) : null;
       if (byName) found.set(byName.supplierId, { supplierId: byName.supplierId, supplierName: byName.supplierName });
+      const focus = this.purchaseFocus;
+      if (focus?.supplierId && focus.lineKey === l.itemDetailKey) found.set(focus.supplierId, { supplierId: focus.supplierId, supplierName: focus.supplierName });
       if (!found.size) return void loose.push(l);
       found.forEach((s) => {
         const option = this.supplierOptions.find((o) => o.supplierId === s.supplierId);
@@ -390,7 +400,10 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
       });
     });
     if (!tabs.size) return this.toSeed(lines.map(toLine));
-    const seed = Array.from(tabs.values()).map((t) => ({ ...this.toSeed(t.lines.map(toLine))[0], meta: t.meta }));
+    const ordered = Array.from(tabs.values());
+    const first = ordered.findIndex((t) => t.meta.supplierId === this.purchaseFocus?.supplierId);
+    if (first > 0) ordered.unshift(...ordered.splice(first, 1));
+    const seed = ordered.map((t) => ({ ...this.toSeed(t.lines.map(toLine))[0], meta: t.meta }));
     if (loose.length) seed.push({ ...this.toSeed(loose.map(toLine))[0], meta: null });
     return seed;
   }
@@ -559,6 +572,66 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   /** Past-supplier row: ask that supplier again (unless already on a tab). */
   askPast(row: any): void {
     this.pickSupplier({ supplierId: row.supplierId, supplierName: row.supplierName, isSupplierApproved: true } as unknown as SalesRfqSupplierOption);
+    // Lines are copied onto the new tab first, so fill once they are there.
+    setTimeout(() => this.fillLastPrices(String(row.supplierId)));
+  }
+
+  /** Price filled from history, per line; the hint shows while the price is still the filled one. */
+  private lastPriceFilled = new WeakMap<FormGroup, number>();
+
+  /** Puts this supplier's last price (better of last quote and last PO) on its tab's blank lines; the supplier still confirms it. */
+  private fillLastPrices(supplierId: string): void {
+    const tab = this.suppliers.find((s) => s.supplierId === supplierId);
+    if (!tab) return;
+    const currency = this.terms.currency || 'QAR';
+    this.filledLines
+      .filter((l) => l.option === tab.option && l.productId)
+      .forEach((l) => {
+        const row = this.pastSuppliers.find((g) => g.productId === l.productId)?.rows.find((r) => String(r.supplierId) === supplierId);
+        const price = row?.referencePrice;
+        const cost = l.group.get('unitCost');
+        if (price == null || !cost || (cost.value != null && cost.value !== '')) return;
+        if (row.currency && row.currency !== currency) return;
+        cost.setValue(price);
+        this.lastPriceFilled.set(l.group, Number(price));
+      });
+  }
+
+  isLastPrice(line: FormGroup): boolean {
+    const filled = this.lastPriceFilled.get(line);
+    return filled != null && Number(line.get('unitCost')?.value) === filled;
+  }
+
+  /** Tooltip: the last quote and the last PO side by side, so the buyer can see which to trust. */
+  pastTitle(row: any): string {
+    const fmt = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+    const parts: string[] = [];
+    if (row.lastPrice != null) parts.push(`Last quote ${row.lastPrice} ${row.currency || ''} on ${fmt(row.lastQuotedAt)}${row.validityDate ? ` (valid until ${fmt(row.validityDate)}${row.expired ? ', expired' : ''})` : ''}`);
+    if (row.lastPoPrice != null) parts.push(`Last PO ${row.lastPoNo}: ${row.lastPoPrice} on ${fmt(row.lastPoDate)}`);
+    parts.push('Ask again to confirm the price and quantity');
+    return parts.join(' · ');
+  }
+
+  /** Suppliers covering the most products first, so one RFQ asks for as much as possible. */
+  private groupBySupplier(groups: { productId: string; rows: any[] }[]) {
+    const bySupplier = new Map<string, { row: any; products: { productId: string; label: string; row: any }[]; expired: number }>();
+    groups.forEach((g) => g.rows.forEach((row) => {
+      const id = String(row.supplierId);
+      const entry = bySupplier.get(id) ?? { row, products: [], expired: 0 };
+      if (entry.products.some((p) => p.productId === g.productId)) return;
+      entry.products.push({ productId: g.productId, label: row.partNo || row.productName || row.detail, row });
+      if (row.expired) entry.expired++;
+      bySupplier.set(id, entry);
+    }));
+    return [...bySupplier.values()].sort((a, b) => b.products.length - a.products.length);
+  }
+
+  /** Filled lines no past supplier has quoted (free text, or a product nobody has offered yet), minus lines stock covers. */
+  get unassignedLines(): string[] {
+    const known = new Set(this.pastSuppliers.map((g) => g.productId));
+    return this.filledLines
+      .filter((l) => !(l.productId && known.has(l.productId)) && !this.isCovered(l.group))
+      .map((l) => l.detail || l.itemName || 'Untitled line');
   }
 
   isAskedPast(row: any): boolean {

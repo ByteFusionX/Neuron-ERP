@@ -10,6 +10,7 @@ import { resolveSourceSalesRfqId } from "./rfq.controller";
 import { getAvailability, getLastReceiptCosts } from "../services/stock.service";
 import Product from "../models/products.model";
 import StockMovement from "../models/stockMovement.model";
+import PurchaseOrder from "../models/purchaseOrder.model";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
 
@@ -1250,8 +1251,32 @@ const buildRfqComparison = async (rfqs: any[]) => {
     const products: any[] = productIds.length ? await Product.find({ _id: { $in: productIds } }).select('itemCode partNo').lean() : [];
     const productById = new Map(products.map((p) => [String(p._id), p]));
 
+    // What we last paid for each product on a purchase order, any supplier, so a dearer price can be flagged.
+    const lastPaid: any[] = productIds.length ? await PurchaseOrder.aggregate([
+        { $match: { poStatus: { $ne: 'Rejected' }, 'items.partNo': { $in: productIds.map((id) => new ObjectId(id)) } } },
+        { $unwind: '$items' },
+        { $match: { 'items.partNo': { $in: productIds.map((id) => new ObjectId(id)) } } },
+        { $sort: { poDate: -1 } },
+        {
+            $group: {
+                _id: '$items.partNo',
+                unitCost: { $first: '$items.unitCost' },
+                currency: { $first: '$currency' },
+                poNo: { $first: '$poNo' },
+                poDate: { $first: '$poDate' },
+                supplierId: { $first: '$supplierId' },
+            },
+        },
+        { $lookup: { from: 'suppliers', localField: 'supplierId', foreignField: '_id', as: 'supplier' } },
+    ]) : [];
+    const lastPaidByProduct = new Map(lastPaid.map((p) => {
+        const priceQar = p.unitCost != null ? toQar(Number(p.unitCost), p, rates) : null;
+        return [String(p._id), { priceQar, poNo: p.poNo, poDate: p.poDate, supplierName: p.supplier?.[0]?.supplierName || '' }];
+    }));
+
     const rows = grouped.map((row) => {
         const first = row.members[0].line;
+        const rowQty = Number(first.quantity) || 0;
         const product = productById.get(String(first.partNo));
         const cells = row.members.map(({ rfq, line }) => {
             const quote = quoteFor(rfq, line);
@@ -1261,9 +1286,12 @@ const buildRfqComparison = async (rfqs: any[]) => {
                 lineKey: line.itemDetailKey,
                 lineStatus: line.lineStatus || RfqLineStatus.Pending,
                 awardReason: line.awardReason,
+                // What this supplier won of the line: all of it, unless the line was split.
+                awardedQty: line.lineStatus === RfqLineStatus.Confirmed ? (quote?.awardedQty ?? rowQty) : 0,
                 quote: quote ? {
                     _id: quote._id,
                     unitPrice: quote.unitPrice,
+                    unitPriceQar: quote.unitPrice != null ? toQar(Number(quote.unitPrice), quote, rates) : null,
                     unitLanded: unit,
                     unitLandedQar: unit != null ? toQar(unit, quote, rates) : null,
                     currency: quote.currency || 'QAR',
@@ -1271,6 +1299,7 @@ const buildRfqComparison = async (rfqs: any[]) => {
                     availability: quote.availability,
                     quantity: quote.quantity,
                     remarks: quote.remarks,
+                    validityDate: quote.validityDate,
                     selected: !!quote.selected,
                 } : null,
             };
@@ -1278,7 +1307,8 @@ const buildRfqComparison = async (rfqs: any[]) => {
         const priced = cells.filter((c) => c.quote?.unitLandedQar != null);
         const lowest = priced.sort((a, b) => a.quote!.unitLandedQar! - b.quote!.unitLandedQar!)[0];
         const won = cells.find((c) => c.lineStatus === RfqLineStatus.Confirmed);
-        const status = won ? 'awarded'
+        const allocatedQty = cells.reduce((sum, c) => sum + (c.awardedQty || 0), 0);
+        const status = won ? (allocatedQty + 0.0001 >= rowQty ? 'awarded' : 'partial')
             : cells.every((c) => c.lineStatus === RfqLineStatus.Unavailable) ? 'unavailable'
                 : cells.some((c) => c.quote && c.quote.availability !== RfqAvailability.Unavailable) ? 'open' : 'waiting';
         return {
@@ -1291,7 +1321,9 @@ const buildRfqComparison = async (rfqs: any[]) => {
             itemCode: product?.itemCode || '',
             status,
             awardedRfqId: won?.rfqId ?? null,
+            allocatedQty,
             lowestRfqId: lowest?.rfqId ?? null,
+            lastPaid: lastPaidByProduct.get(String(first.partNo)) ?? null,
             cells,
         };
     });
@@ -1303,6 +1335,7 @@ const buildRfqComparison = async (rfqs: any[]) => {
             rfqNo: rfq.rfqNo,
             status: rfq.status,
             supplierName: rfqSupplierName(rfq),
+            supplierId: rfq.suppliers?.[0]?.supplierId ? String(rfq.suppliers[0].supplierId) : undefined,
             supplierStatus: rfq.suppliers?.[0]?.status,
             deadline: rfq.deadline,
             quotationId: rfq.quotationId,
@@ -1310,7 +1343,7 @@ const buildRfqComparison = async (rfqs: any[]) => {
             wonCount: (rfq.requestedLines || []).filter((l: any) => l.lineStatus === RfqLineStatus.Confirmed).length,
         })),
         rows,
-        coverage: { total: rows.length, awarded: count('awarded'), unavailable: count('unavailable'), open: count('open') + count('waiting') },
+        coverage: { total: rows.length, awarded: count('awarded'), unavailable: count('unavailable'), open: count('open') + count('waiting') + count('partial') },
     };
 };
 
@@ -1340,6 +1373,23 @@ export const getEnquiryRfqComparison = async (req: Request, res: Response, next:
 };
 
 /**
+ * After a split award or a take-back: once the shares add up to the line's quantity the suppliers still
+ * without a share are Lost; while some quantity is left they stay open (Pending) so they can take it.
+ */
+const settleSplitRow = (row: { members: { rfq: any; line: any }[] }, rowQty: number, changed: Set<any>) => {
+    const allocated = row.members.reduce((sum, { rfq, line }) => {
+        if (line.lineStatus !== RfqLineStatus.Confirmed) return sum;
+        const quote = quoteFor(rfq, line);
+        return sum + (Number(quote?.awardedQty) || rowQty);
+    }, 0);
+    const covered = allocated + 0.0001 >= rowQty;
+    row.members.forEach(({ rfq, line }) => {
+        if (covered && line.lineStatus === RfqLineStatus.Pending) { line.lineStatus = RfqLineStatus.Lost; changed.add(rfq); }
+        else if (!covered && line.lineStatus === RfqLineStatus.Lost) { line.lineStatus = RfqLineStatus.Pending; changed.add(rfq); }
+    });
+};
+
+/**
  * Awards products across sibling RFQs: the chosen line is Confirmed and the same product on the other
  * RFQs becomes Lost; a null quoteId reopens the product everywhere. Returns the RFQs it touched, or the
  * error to send back. The caller saves.
@@ -1353,11 +1403,22 @@ const applyCrossRfqAwards = async (rfqs: any[], awards: any[]): Promise<{ error?
         const row = rows.find((r) => r.members.some((m) => String(m.rfq._id) === String(award?.rfqId) && m.line.itemDetailKey === award?.lineKey));
         if (!row) return { error: { status: 404, body: { success: false, message: "That product is not on this enquiry's RFQs." } }, changed };
         const member = row.members.find((m) => String(m.rfq._id) === String(award.rfqId))!;
+        const rowQty = Number(row.members[0].line.quantity) || 0;
+
+        // Split award: `qty: 0` takes back only this supplier's share and leaves the others' shares alone.
+        if (!award.quoteId && award.qty === 0) {
+            (member.rfq.quotes || []).filter((q: any) => q.itemDetailKey === member.line.itemDetailKey).forEach((q: any) => { q.selected = false; q.awardedQty = undefined; });
+            member.line.lineStatus = RfqLineStatus.Pending;
+            member.line.awardReason = undefined;
+            changed.add(member.rfq);
+            settleSplitRow(row, rowQty, changed);
+            continue;
+        }
 
         if (!award.quoteId) {
             row.members.forEach(({ rfq, line }) => {
                 if (line.lineStatus === RfqLineStatus.Unavailable) return;
-                (rfq.quotes || []).filter((q: any) => q.itemDetailKey === line.itemDetailKey).forEach((q: any) => (q.selected = false));
+                (rfq.quotes || []).filter((q: any) => q.itemDetailKey === line.itemDetailKey).forEach((q: any) => { q.selected = false; q.awardedQty = undefined; });
                 line.lineStatus = RfqLineStatus.Pending;
                 line.awardReason = undefined;
                 changed.add(rfq);
@@ -1370,6 +1431,33 @@ const applyCrossRfqAwards = async (rfqs: any[], awards: any[]): Promise<{ error?
         if (chosen.availability === RfqAvailability.Unavailable) {
             return { error: { status: 400, body: { success: false, message: `${chosen.supplierName || rfqSupplierName(member.rfq)} marked "${member.line.detail}" unavailable.` } }, changed };
         }
+        // Part of the line: this supplier takes `qty` and the rest is awarded to others. No "why not the lowest"
+        // is asked, since splitting is how a short or dearer supplier gets used.
+        const partQty = Number(award.qty);
+        if (partQty > 0 && rowQty > 0 && partQty < rowQty) {
+            const taken = row.members.reduce((sum, { rfq, line }) => {
+                if (rfq === member.rfq || line.lineStatus !== RfqLineStatus.Confirmed) return sum;
+                const quote = quoteFor(rfq, line);
+                return sum + (Number(quote?.awardedQty) || rowQty);
+            }, 0);
+            if (partQty + taken > rowQty + 0.0001) {
+                return { error: { status: 400, body: { success: false, message: `Only ${Math.max(0, rowQty - taken)} of "${member.line.detail}" is left to award.` } }, changed };
+            }
+            const offered = Number(chosen.quantity) || 0;
+            if (offered > 0 && partQty > offered) {
+                return { error: { status: 400, body: { success: false, message: `${chosen.supplierName || rfqSupplierName(member.rfq)} quoted only ${offered} of "${member.line.detail}".` } }, changed };
+            }
+            (member.rfq.quotes || []).filter((q: any) => q.itemDetailKey === member.line.itemDetailKey).forEach((q: any) => {
+                q.selected = String(q._id) === String(chosen._id);
+                q.awardedQty = q.selected ? partQty : undefined;
+            });
+            member.line.lineStatus = RfqLineStatus.Confirmed;
+            member.line.awardReason = undefined;
+            changed.add(member.rfq);
+            settleSplitRow(row, rowQty, changed);
+            continue;
+        }
+
         const chosenQar = toQar(unitLandedCost(chosen), chosen, rates);
         const aboveLowest = chosenQar != null && row.members.some(({ rfq, line }) => {
             if (rfq === member.rfq) return false;
@@ -1386,11 +1474,11 @@ const applyCrossRfqAwards = async (rfqs: any[], awards: any[]): Promise<{ error?
         row.members.forEach(({ rfq, line }) => {
             const lineQuotes = (rfq.quotes || []).filter((q: any) => q.itemDetailKey === line.itemDetailKey);
             if (rfq === member.rfq) {
-                lineQuotes.forEach((q: any) => (q.selected = String(q._id) === String(chosen._id)));
+                lineQuotes.forEach((q: any) => { q.selected = String(q._id) === String(chosen._id); q.awardedQty = undefined; });
                 line.lineStatus = RfqLineStatus.Confirmed;
                 line.awardReason = aboveLowest ? reason : undefined;
             } else {
-                lineQuotes.forEach((q: any) => (q.selected = false));
+                lineQuotes.forEach((q: any) => { q.selected = false; q.awardedQty = undefined; });
                 if (line.lineStatus !== RfqLineStatus.Unavailable) line.lineStatus = RfqLineStatus.Lost;
                 line.awardReason = undefined;
             }
@@ -1892,8 +1980,9 @@ export const getSupplierProductHistory = async (req: Request, res: Response, nex
         else if (!supplierId) return res.status(200).json({ success: true, data: [] });
         if (supplierId && ObjectId.isValid(supplierId)) match['quotes.supplierId'] = new ObjectId(supplierId);
 
-        const data = await Rfq.aggregate([
-            { $match: { isDeleted: false, rfqType: RfqType.Sales } },
+        // Quotes from any employee's RFQs count, sales and purchase-request ones alike.
+        const quoted: any[] = await Rfq.aggregate([
+            { $match: { isDeleted: false, status: { $ne: RfqStatus.Cancelled } } },
             { $unwind: '$quotes' },
             { $match: match },
             { $sort: { 'quotes.createdAt': -1 } },
@@ -1908,6 +1997,7 @@ export const getSupplierProductHistory = async (req: Request, res: Response, nex
                     brandOffered: { $first: '$quotes.brandOffered' },
                     moq: { $first: '$quotes.moq' },
                     lastQuotedAt: { $first: '$quotes.createdAt' },
+                    validityDate: { $first: '$quotes.validityDate' },
                     lastRfqNo: { $first: '$rfqNo' },
                     lowestPrice: { $min: '$quotes.unitPrice' },
                     timesQuoted: { $sum: 1 },
@@ -1921,7 +2011,7 @@ export const getSupplierProductHistory = async (req: Request, res: Response, nex
                 $project: {
                     _id: 0, supplierId: '$_id.supplierId', productId: '$_id.productId',
                     supplierName: 1, detail: 1, lastPrice: 1, currency: 1, leadTimeDays: 1, brandOffered: 1, moq: 1,
-                    lastQuotedAt: 1, lastRfqNo: 1, lowestPrice: 1, timesQuoted: 1, timesSelected: 1,
+                    lastQuotedAt: 1, validityDate: 1, lastRfqNo: 1, lowestPrice: 1, timesQuoted: 1, timesSelected: 1,
                     partNo: { $arrayElemAt: ['$product.partNo', 0] },
                     productName: { $arrayElemAt: ['$product.productDescription', 0] },
                 },
@@ -1929,6 +2019,57 @@ export const getSupplierProductHistory = async (req: Request, res: Response, nex
             { $sort: { timesSelected: -1, lastQuotedAt: -1 } },
             { $limit: 200 },
         ]);
+
+        // What we last paid each supplier for the product, from the purchase orders.
+        const poMatch: any = { poStatus: { $ne: 'Rejected' }, supplierId: { $ne: null }, 'items.partNo': { $ne: null } };
+        if (productId && ObjectId.isValid(productId)) poMatch['items.partNo'] = new ObjectId(productId);
+        if (supplierId && ObjectId.isValid(supplierId)) poMatch.supplierId = new ObjectId(supplierId);
+        const ordered: any[] = await PurchaseOrder.aggregate([
+            { $match: poMatch },
+            { $unwind: '$items' },
+            { $match: { 'items.partNo': poMatch['items.partNo'] } },
+            { $sort: { poDate: -1 } },
+            {
+                $group: {
+                    _id: { supplierId: '$supplierId', productId: '$items.partNo' },
+                    lastPoPrice: { $first: '$items.unitCost' },
+                    lastPoQty: { $first: '$items.quantity' },
+                    lastPoNo: { $first: '$poNo' },
+                    lastPoDate: { $first: '$poDate' },
+                    poCurrency: { $first: '$currency' },
+                },
+            },
+            { $lookup: { from: 'suppliers', localField: '_id.supplierId', foreignField: '_id', as: 'supplier' } },
+            { $lookup: { from: 'products', localField: '_id.productId', foreignField: '_id', as: 'product' } },
+        ]);
+
+        const keyOf = (s: any, p: any) => `${s}|${p}`;
+        const byKey = new Map<string, any>(quoted.map((q) => [keyOf(q.supplierId, q.productId), q]));
+        ordered.forEach((o) => {
+            const key = keyOf(o._id.supplierId, o._id.productId);
+            const po = { lastPoPrice: o.lastPoPrice, lastPoQty: o.lastPoQty, lastPoNo: o.lastPoNo, lastPoDate: o.lastPoDate };
+            const row = byKey.get(key);
+            if (row) Object.assign(row, po);
+            else byKey.set(key, {
+                supplierId: o._id.supplierId, productId: o._id.productId,
+                supplierName: o.supplier?.[0]?.supplierName || '', detail: o.product?.[0]?.productDescription || '',
+                currency: o.poCurrency, partNo: o.product?.[0]?.partNo, productName: o.product?.[0]?.productDescription,
+                timesQuoted: 0, timesSelected: 0, ...po,
+            });
+        });
+
+        // The pill's headline price is the newest of the last quote and the last PO.
+        const data = [...byKey.values()].map((row) => {
+            const poNewer = row.lastPoPrice != null && (!row.lastQuotedAt || new Date(row.lastPoDate) >= new Date(row.lastQuotedAt));
+            return {
+                ...row,
+                referencePrice: poNewer ? row.lastPoPrice : row.lastPrice,
+                referenceSource: poNewer ? 'PO' : 'Quote',
+                referenceDate: poNewer ? row.lastPoDate : row.lastQuotedAt,
+                // A quote past its valid-until date is still shown, as a warning.
+                expired: !poNewer && !!row.validityDate && new Date(row.validityDate).getTime() < Date.now(),
+            };
+        }).sort((a, b) => (b.timesSelected - a.timesSelected) || (new Date(b.referenceDate).getTime() - new Date(a.referenceDate).getTime())).slice(0, 200);
         return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
@@ -2181,7 +2322,9 @@ export const syncPurchaseFromRfqs = async (purchaseId: any, force = false) => {
                     _id: quote._id,
                     supplierId: quote.supplierId,
                     supplierName: quote.supplierName,
-                    quantity: quote.quantity,
+                    // A split line orders only the share this supplier won.
+                    quantity: quote.selected && quote.awardedQty ? quote.awardedQty : quote.quantity,
+                    awardedQty: quote.selected && quote.awardedQty ? quote.awardedQty : undefined,
                     unitPrice: toNumber(quote.unitPrice),
                     discountType: quote.discountType || 'amount',
                     discountValue: toNumber(quote.discountValue),
@@ -2200,10 +2343,18 @@ export const syncPurchaseFromRfqs = async (purchaseId: any, force = false) => {
                     createdAt: quote.createdAt || new Date(),
                 };
             });
-            const won = offers.find((offer) => offer.quote.selected);
+            const winners = offers.filter((offer) => offer.quote.selected);
+            const won = winners[0];
             if (won) {
-                detail.unitCost = costInCurrency(won.quote, currency, rates);
-                detail.availability = won.quote.leadTimeDays != null ? `${won.quote.leadTimeDays} days` : (won.quote.etaTerms || detail.availability);
+                // A split line costs the average of its suppliers' prices, weighted by the share each one supplies.
+                const shares = winners.map((offer) => Number(offer.quote.awardedQty) || 0);
+                const split = winners.length > 1 || shares[0] > 0;
+                const totalShare = shares.reduce((sum, share) => sum + share, 0);
+                detail.unitCost = split && totalShare > 0
+                    ? Number((winners.reduce((sum, offer, n) => sum + costInCurrency(offer.quote, currency, rates) * shares[n], 0) / totalShare).toFixed(4))
+                    : costInCurrency(won.quote, currency, rates);
+                const slowest = winners.map((offer) => offer.quote.leadTimeDays).filter((d: any) => d != null);
+                detail.availability = slowest.length ? `${Math.max(...slowest)} days` : (won.quote.etaTerms || detail.availability);
             } else if (hadAward) {
                 detail.unitCost = 0;
             }
@@ -2216,8 +2367,9 @@ export const syncPurchaseFromRfqs = async (purchaseId: any, force = false) => {
     if (purchase.sourceType === 'manual') {
         const winners = new Set<string>();
         (purchase.items || []).forEach((item: any) => (item.itemDetails || []).forEach((detail: any) => {
-            const won = (detail.comparisons || []).find((c: any) => c.selected);
-            if (won?.supplierId) winners.add(String(won.supplierId));
+            (detail.comparisons || []).filter((c: any) => c.selected).forEach((won: any) => {
+                if (won.supplierId) winners.add(String(won.supplierId));
+            });
         }));
         if (winners.size === 1) purchase.supplierId = new ObjectId(Array.from(winners)[0]);
     }
@@ -2346,13 +2498,43 @@ export const getPurchaseRfqComparison = async (req: Request, res: Response, next
         // Products no supplier has been asked about never appear in the grid, so list them: they still need a supplier.
         const asked = new Set<string>();
         rfqs.forEach((rfq) => (rfq.requestedLines || []).forEach((line: any) => asked.add(String(line.itemDetailKey))));
-        const unasked = purchaseLines(purchase.toObject())
+        const lines = purchaseLines(purchase.toObject());
+        // The supplier already chosen on the job sheet for a line, shown beside it as the current supplier.
+        const currentSupplier = new Map<string, string>();
+        lines.forEach((line) => { if (line.supplierName) currentSupplier.set(line.itemDetailKey, line.supplierName); });
+        (comparison.rows as any[]).forEach((row) => { row.currentSupplier = currentSupplier.get(String(row.key)); });
+        const unasked = lines
             .filter((line) => line.quantity > 0 && !asked.has(line.itemDetailKey))
-            .map(({ itemDetailKey, itemName, detail, quantity, uom, itemCode }) => ({ itemDetailKey, itemName, detail, quantity, uom, itemCode }));
+            .map(({ itemDetailKey, itemName, detail, quantity, uom, itemCode, supplierName }) => ({ itemDetailKey, itemName, detail, quantity, uom, itemCode, currentSupplier: supplierName }));
+        // Suppliers asked about the same product on other requests, offered as pills on lines with no RFQ here yet.
+        const partIds = [...new Set(lines.map((l) => l.partNo).filter((id: any) => id && ObjectId.isValid(String(id))).map(String))];
+        const past: any[] = partIds.length ? await Rfq.find({
+            rfqType: RfqType.Procurement, isDeleted: false, status: { $ne: RfqStatus.Cancelled },
+            purchaseRequestId: { $ne: purchase._id }, 'suppliers.0': { $exists: true },
+            'requestedLines.partNo': { $in: partIds.map((id) => new ObjectId(id)) },
+        }).select('suppliers requestedLines.partNo').sort({ createdAt: -1 }).limit(300).lean() : [];
+        const byPart = new Map<string, Map<string, { supplierId?: string; supplierName: string }>>();
+        past.forEach((rfq: any) => {
+            const supplierId = rfq.suppliers?.[0]?.supplierId ? String(rfq.suppliers[0].supplierId) : undefined;
+            const supplierName = rfqSupplierName(rfq);
+            if (!supplierName) return;
+            (rfq.requestedLines || []).forEach((l: any) => {
+                const key = String(l.partNo);
+                const m = byPart.get(key) ?? new Map();
+                m.set(supplierId || supplierName, { supplierId, supplierName });
+                byPart.set(key, m);
+            });
+        });
+        const previousSuppliers: Record<string, { supplierId?: string; supplierName: string }[]> = {};
+        lines.forEach((l) => {
+            const m = byPart.get(String(l.partNo));
+            if (m) previousSuppliers[l.itemDetailKey] = [...m.values()];
+        });
         return res.status(200).json({
             success: true,
             data: {
                 enquiry: { _id: purchase._id, enquiryId: purchase.purchaseNo, status: purchase.status },
+                previousSuppliers,
                 ...comparison,
                 coverage: { ...comparison.coverage, total: comparison.coverage.total + unasked.length, open: comparison.coverage.open + unasked.length },
                 unasked,

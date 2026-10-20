@@ -574,9 +574,9 @@ export const updateIssuedQuantities = async (
         if (item.itemDetails && Array.isArray(item.itemDetails)) {
             item.itemDetails.forEach((itemDetail: any) => {
                 if (itemDetail.comparisons && Array.isArray(itemDetail.comparisons)) {
-                    const selectedComparison = itemDetail.comparisons.find((comp: any) => comp.selected === true);
-                    if (selectedComparison && selectedComparison.supplierId && 
-                        selectedComparison.supplierId.toString() === supplierIdStr) {
+                    const selectedComparison = itemDetail.comparisons.find((comp: any) =>
+                        comp.selected === true && comp.supplierId && comp.supplierId.toString() === supplierIdStr);
+                    if (selectedComparison) {
                         const key = itemDetail.detail;
                         const quantityToAdjust = itemsMap.get(key) || 0;
                         

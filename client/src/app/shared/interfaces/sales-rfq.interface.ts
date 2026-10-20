@@ -34,6 +34,7 @@ export interface SalesRfqCompareColumn {
   rfqNo: string;
   status: SalesRfqStatus;
   supplierName: string;
+  supplierId?: string;
   supplierStatus?: SalesRfqSupplierStatus;
   deadline?: string;
   quotationId?: string | null;
@@ -46,9 +47,12 @@ export interface SalesRfqCompareCell {
   lineKey: string;
   lineStatus: SalesRfqLineStatus;
   awardReason?: string;
+  /** What this supplier won of the product: all of it, or its share when the product is split. 0 when not won. */
+  awardedQty?: number;
   quote: {
     _id: string;
     unitPrice?: number;
+    unitPriceQar?: number | null;
     unitLanded: number | null;
     unitLandedQar: number | null;
     currency: string;
@@ -56,12 +60,13 @@ export interface SalesRfqCompareCell {
     availability?: SalesRfqAvailability;
     quantity?: number;
     remarks?: string;
+    validityDate?: string;
     selected: boolean;
   } | null;
 }
 
-/** 'waiting' = no usable price yet; 'open' = priced but not awarded. */
-export type SalesRfqCompareRowStatus = 'awarded' | 'open' | 'waiting' | 'unavailable';
+/** 'waiting' = no usable price yet; 'open' = priced but not awarded; 'partial' = split, with quantity still to award. */
+export type SalesRfqCompareRowStatus = 'awarded' | 'partial' | 'open' | 'waiting' | 'unavailable';
 
 export interface SalesRfqCompareRow {
   key: string;
@@ -72,8 +77,14 @@ export interface SalesRfqCompareRow {
   partNo?: string;
   itemCode?: string;
   status: SalesRfqCompareRowStatus;
+  /** Purchase request: the supplier already chosen for this line on the job sheet. */
+  currentSupplier?: string;
   awardedRfqId: string | null;
+  /** Quantity already awarded across suppliers. */
+  allocatedQty?: number;
   lowestRfqId: string | null;
+  /** What we last paid for this product on a purchase order (any supplier), unit price in QAR. */
+  lastPaid?: { priceQar: number | null; poNo?: string; poDate?: string; supplierName?: string } | null;
   cells: SalesRfqCompareCell[];
 }
 
@@ -83,7 +94,9 @@ export interface SalesRfqComparison {
   rows: SalesRfqCompareRow[];
   coverage: { total: number; awarded: number; unavailable: number; open: number };
   /** Purchase request: products no supplier has been asked about yet (they are not in `rows`). */
-  unasked?: { itemDetailKey: string; itemName: string; detail: string; quantity: number; uom?: string; itemCode?: string }[];
+  unasked?: { itemDetailKey: string; itemName: string; detail: string; quantity: number; uom?: string; itemCode?: string; currentSupplier?: string }[];
+  /** Purchase request: suppliers asked about the same product on other requests, by line key. */
+  previousSuppliers?: Record<string, { supplierId?: string; supplierName: string }[]>;
   quotationId: string | null;
 }
 
@@ -92,6 +105,8 @@ export interface SalesRfqEnquiryAward {
   lineKey: string;
   quoteId: string | null;
   reason?: string;
+  /** Purchase request split award: this supplier takes only this part of the quantity. 0 with a null quoteId takes back just this share. */
+  qty?: number;
 }
 
 export interface SalesRfqLine {
