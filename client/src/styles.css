@@ -399,6 +399,11 @@ th {
   max-width: 90vw !important;
 }
 
+/* Drawers stack from z-index 60 upward; tooltips (and menus) opened from inside one must render above it. */
+.cdk-overlay-container {
+  z-index: 2000;
+}
+
 /* app-modal-layout manages its own header/content/footer scroll regions,
    so the Material dialog surface itself must not scroll as one block. */
 .mdc-dialog__surface:has(app-modal-layout) {

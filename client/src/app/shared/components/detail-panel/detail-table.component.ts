@@ -3,6 +3,7 @@ import { CommonModule, formatNumber } from '@angular/common';
 import { DetailFootRow, DetailSummaryRow, DetailTableColumn } from './detail-panel.model';
 import { DetailBadgeComponent } from './detail-badge.component';
 import { DetailTone } from './detail-tone';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 /** One rendered line of the table: a group heading, a data row, or a per-group subtotal. */
 interface DetailTableLine {
@@ -27,7 +28,7 @@ interface DetailTableLine {
 @Component({
   selector: 'app-detail-table',
   standalone: true,
-  imports: [CommonModule, DetailBadgeComponent],
+  imports: [CommonModule, DetailBadgeComponent, MatTooltipModule],
   template: `
     <p *ngIf="title" class="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
       {{ title }} <span class="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ count }}</span>
@@ -83,7 +84,8 @@ interface DetailTableLine {
               class="border-b border-gray-100 transition-colors last:border-0 hover:bg-violet-50/60 dark:border-white/5 dark:hover:bg-white/[0.06]">
               <td *ngIf="numbered" class="px-3 py-2.5 text-right align-top text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{{ line.index }}</td>
               <td *ngFor="let c of columns" [class.text-right]="isRight(c)" [class.text-center]="c.align === 'center'" [class.tabular-nums]="isRight(c) || c.type === 'date'"
-                [ngClass]="[c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap', c.emphasis ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-800 dark:text-gray-100']"
+                [ngClass]="[c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap', c.truncate ? 'max-w-0 truncate' : '', c.emphasis ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-800 dark:text-gray-100']"
+                [matTooltip]="c.truncate ? line.row[c.key] : ''" matTooltipPosition="above" matTooltipClass="dt-tooltip"
                 class="px-3 py-2.5 align-top">
                 <ng-container [ngSwitch]="c.type">
                   <ng-container *ngSwitchCase="'currency'">{{ line.row[c.key] | number: '1.2-2' }}</ng-container>
@@ -104,7 +106,7 @@ interface DetailTableLine {
                     <span *ngIf="!line.row[c.key]" class="text-gray-400">—</span>
                   </ng-container>
                   <ng-container *ngSwitchCase="'stack'">
-                    <div class="font-medium text-gray-900 dark:text-white">{{ line.row[c.key] ?? '—' }}</div>
+                    <div [class.truncate]="c.truncate" class="font-medium text-gray-900 dark:text-white">{{ line.row[c.key] ?? '—' }}</div>
                     <div *ngIf="c.subKey && line.row[c.subKey]" [class.dt-clamp]="c.clamp"
                       class="mt-0.5 text-[12px] leading-snug text-gray-500 dark:text-gray-400">{{ line.row[c.subKey] }}</div>
                   </ng-container>

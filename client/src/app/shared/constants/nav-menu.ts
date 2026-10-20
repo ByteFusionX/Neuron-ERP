@@ -242,25 +242,22 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     group: 'Operations',
     items: [
       {
-        id: 'stockEntries',
-        label: 'Stocks',
+        id: 'stockOverview',
+        label: 'Stock Overview',
         icon: 'heroCube',
-        hasDropdown: true,
+        route: '/stock/overview',
         privilegeKey: 'inventory',
         privilegeValue: 'none',
         inventorySubKey: 'stockEntries',
-        children: [
-          {
-            id: 'stockOverview',
-            label: 'Stock Overview',
-            route: '/stock/overview',
-          },
-          {
-            id: 'stockLedger',
-            label: 'Stock Ledger',
-            route: '/stock/ledger',
-          },
-        ],
+      },
+      {
+        id: 'stockLedger',
+        label: 'Stock Ledger',
+        icon: 'heroCube',
+        route: '/stock/ledger',
+        privilegeKey: 'inventory',
+        privilegeValue: 'none',
+        inventorySubKey: 'stockEntries',
       },
     ],
   },

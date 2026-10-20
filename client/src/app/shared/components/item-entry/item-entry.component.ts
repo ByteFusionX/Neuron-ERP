@@ -1,3 +1,4 @@
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { Component, ElementRef, EventEmitter, HostListener, Inject, Input, OnChanges, OnDestroy, OnInit, Optional, Output, SimpleChanges, TemplateRef, ViewChild } from '@angular/core';
 import { CommandPaletteService } from '../../../core/services/command-palette.service';
 import { CommonModule } from '@angular/common';
@@ -49,11 +50,21 @@ type LineFilter = 'missingPrice' | 'notInCatalogue' | 'notAwarded' | 'errors';
  *                     itemDetails: [{ itemCode, detail, quantity, unitCost, profit,
  *                                     unitSellingPrice, availability, supplierId, uom }] }] }]
  */
+/** A supplier pill under a purchase line: 'awarded' won it, 'priced' quoted, 'waiting' has an RFQ with no price yet, 'none' has no RFQ. */
+export interface LineSupplierOffer {
+  supplierId?: string;
+  supplierName: string;
+  state: 'awarded' | 'priced' | 'waiting' | 'none';
+  price?: number | null;
+  rfqId?: string;
+  quoteId?: string;
+}
+
 @Component({
   selector: 'app-item-entry',
   standalone: true,
   templateUrl: './item-entry.component.html',
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgIcon, DragDropModule, SmartFormModule, ActionButtonComponent, ImageViewerComponent, ParseBoldTextPipe, ParseBracketsTextPipe, LoadMoreOnScrollDirective],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, MatTooltipModule, NgIcon, DragDropModule, SmartFormModule, ActionButtonComponent, ImageViewerComponent, ParseBoldTextPipe, ParseBracketsTextPipe, LoadMoreOnScrollDirective],
   styles: [SF_STYLES + `
     :host { display: block; }
     /* The numeric strip is dense on purpose: seven fields per line have to fit without a horizontal scrollbar. */
@@ -161,6 +172,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   @Input() lineLocked: ((i: number, j: number, k: number) => boolean) | null = null;
   /** Purchase mode: a short badge shown beside a line's description. */
   @Input() lineBadge: ((i: number, j: number, k: number) => string | null) | null = null;
+  /** Purchase mode: the suppliers to show as pills under a line (its RFQ suppliers and the current one). */
+  @Input() lineOffers: ((line: any) => LineSupplierOffer[]) | null = null;
+  /** Purchase mode: a supplier pill was clicked on a line. */
+  @Output() offerPicked = new EventEmitter<{ lineKey: string; offer: LineSupplierOffer }>();
 
   /** Lines and items below this margin % are flagged amber (below zero is always red). Unset until the limit is decided. */
   /** Items loaded with more lines than this start collapsed. Unset until the limit is decided. */
@@ -175,6 +190,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   @Output() compareClicked = new EventEmitter<{ i: number; j: number; k: number }>();
   @Output() previousJobsClicked = new EventEmitter<void>();
   @Output() createProductRequested = new EventEmitter<CreateProductRequest>();
+  /** Purchase mode: the ticked lines (by line key) to put on the picked supplier's RFQ. */
+  @Output() addToRfq = new EventEmitter<{ supplierId: string; lineKeys: string[] }>();
   /** Deal mode: which option the user is working in. */
   @Output() optionChanged = new EventEmitter<number>();
   /** What an option tab is called; default "Option N". The RFQ drawer names tabs after their supplier. */
@@ -1694,13 +1711,13 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     { key: 'missingPrice', label: 'Missing price', hint: 'Lines with no selling price yet' },
     { key: 'notInCatalogue', label: 'Not in products', hint: 'Lines typed by hand that are not linked to a product in the catalogue' },
     { key: 'notAwarded', label: 'Not awarded', hint: 'Lines no supplier has been awarded yet. Award them through the RFQ button' },
-    { key: 'errors', label: 'Errors', hint: 'Filled-in lines that fail validation. Blank lines are not counted until you start typing in them' },
+    { key: 'errors', label: 'Errors', hint: 'Filled-in lines that fail validation or (purchase requests) have no supplier. Blank lines are not counted until you start typing in them' },
   ];
   /** The item "Jump to" just scrolled to, highlighted briefly. */
   flashItem: AbstractControl | null = null;
 
   get filterActive(): boolean {
-    return !!this.lineSearch.trim() || !!this.lineFilter;
+    return !!this.lineSearch.trim() || !!this.lineFilter || !!this.supplierScope;
   }
 
   visibleChips(): { key: LineFilter; label: string; hint: string }[] {
@@ -1710,6 +1727,15 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   toggleFilter(key: LineFilter): void {
     this.lineFilter = this.lineFilter === key ? null : key;
+    if (this.lineFilter) this.jumpToFirstFlagged(this.lineFilter);
+  }
+
+  /** Scrolls to the first item holding a line with the given problem. */
+  private jumpToFirstFlagged(key: LineFilter): void {
+    const i = this.selectedOption;
+    const items = this.itemsAt(i)?.controls || [];
+    const j = items.findIndex((_, jj) => (this.detailsAt(i, jj)?.controls || []).some((l) => this.lineFlags(l)[key]));
+    if (j >= 0) this.jumpTo(String(j));
   }
 
   clearFilters(): void {
@@ -1727,14 +1753,29 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       missingPrice: this.isRfq ? this.rfqPriced && v.unitCost == null : !(Number(v.unitSellingPrice) > 0),
       notInCatalogue: !v.productId && !!detail,
       notAwarded: !!this.lineAwarded && !this.lineAwarded(v),
-      errors: line.invalid,
+      errors: line.invalid || this.missingSupplier(v),
     };
   }
 
+  /** Purchase: every line needs a supplier (picked, awarded or at least asked through an RFQ). */
+  private missingSupplier(v: any): boolean {
+    if (!this.isPurchase) return false;
+    return !v.supplierId && !(this.lineOffers?.(v)?.length);
+  }
+
+  /** Purchase: show only the lines this supplier is asked about (null = every line). */
+  @Input() supplierScope: string | null = null;
+
+  private inSupplierScope(v: any): boolean {
+    return v.supplierId === this.supplierScope || !!this.lineOffers?.(v)?.some((o) => o.supplierId === this.supplierScope);
+  }
+
   lineVisible(i: number, j: number, k: number): boolean {
-    if (!this.filterActive) return true;
+    if (!this.filterActive && !this.supplierScope) return true;
     const line = this.detailsAt(i, j)?.at(k);
     if (!line) return false;
+    if (this.supplierScope && !this.inSupplierScope((line as FormGroup).getRawValue())) return false;
+    if (!this.filterActive) return true;
     if (this.lineFilter && !this.lineFlags(line)[this.lineFilter]) return false;
     const term = this.lineSearch.trim().toLowerCase();
     if (!term) return true;
@@ -1744,7 +1785,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   itemVisible(i: number, j: number): boolean {
-    if (!this.filterActive) return true;
+    if (!this.filterActive && !this.supplierScope) return true;
     return (this.detailsAt(i, j)?.controls || []).some((_, k) => this.lineVisible(i, j, k));
   }
 
@@ -1842,6 +1883,16 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     return id;
   }
 
+  /** "Add to RFQ": hands the host the picked supplier and the ticked lines, then clears both. */
+  bulkAddToRfq(): void {
+    const supplierId = this.bulkSupplierControl.value;
+    const lineKeys = this.selectedLines().map((l) => l.get('lineKey')?.value).filter((k): k is string => !!k);
+    if (!supplierId || !lineKeys.length) return;
+    this.addToRfq.emit({ supplierId, lineKeys });
+    this.bulkSupplierControl.reset(null);
+    this.clearSelection();
+  }
+
   /** The selected line groups, for a host's own bulk actions. */
   selectedLines(): FormGroup[] {
     return Array.from(this.selected) as FormGroup[];
@@ -1893,7 +1944,21 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private forSelected(fn: (line: FormGroup) => void): void {
-    this.selected.forEach((line) => fn(line as FormGroup));
+    this.bulkTargets().forEach(fn);
+  }
+
+  /** Deal mode has no separate selection: the lines ticked into the deal are the ones the bulk bar acts on. */
+  dealTickedLines(): FormGroup[] {
+    if (!this.isDeal) return [];
+    const option = this.optionalItems.at(this.selectedOption);
+    return (((option?.get('items') as FormArray)?.controls) || []).flatMap((item) =>
+      ((item.get('itemDetails') as FormArray).controls as FormGroup[]).filter((d) => !!d.get('dealSelected')?.value));
+  }
+
+  get dealTickedCount(): number { return this.dealTickedLines().length; }
+
+  private bulkTargets(): FormGroup[] {
+    return this.isDeal ? this.dealTickedLines() : (Array.from(this.selected) as FormGroup[]);
   }
 
   /** Applies every filled-in bulk field to the selected lines; blank fields are left untouched. */
@@ -1918,6 +1983,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     }
     // An awarded line keeps its awarded price and quantity, so the bar leaves it alone.
     const locked = new Set(this.selectedPositions().filter((p) => this.isLineLocked(p.i, p.j, p.k)).map((p) => this.detailsAt(p.i, p.j)!.at(p.k)));
+    const count = this.bulkTargets().length;
     this.forSelected((line) => !locked.has(line) && active.forEach(([name, v, numeric]) => {
       const c = line.get(name);
       c?.setValue(numeric ? Number(v) : v);
@@ -1925,7 +1991,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     }));
     [this.bulkQtyControl, this.bulkUomControl, this.bulkPriceControl, this.bulkMarginControl,
       this.bulkAvailabilityControl, this.bulkSupplierControl].forEach((c) => c.reset(null));
-    this.alerts.success(`${active.length} field${active.length > 1 ? 's' : ''} set on ${this.selectedCount} lines`);
+    this.alerts.success(`${active.length} field${active.length > 1 ? 's' : ''} set on ${count} lines`);
   }
 
   /** Removes the selected lines with one Undo. A group whose lines are all selected is removed too (the last group of an option keeps one blank line). */
