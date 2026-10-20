@@ -188,7 +188,6 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
     ibanKeys: { type: [String], index: true },
     address: {
         type: Address,
-        required: true,
     },
     supplierType: {
         type: String,
@@ -234,11 +233,11 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
     },
     creditDays: {
         type: Number,
-        required: true,
+        default: 0,
     },
     creditValue: {
         type: Number,
-        required: true,
+        default: 0,
     },
     createdDate: {
         type: Date,

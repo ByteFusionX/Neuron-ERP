@@ -509,8 +509,11 @@ const normalizeSupplierContacts = (rawContacts: unknown, legacy?: SupplierContac
 const normalizeSupplierAddresses = (rawAddresses: unknown, legacy?: Record<string, any>) => {
    const source: Record<string, any>[] = Array.isArray(rawAddresses) && rawAddresses.length ? rawAddresses : legacy ? [legacy] : [];
    const fields = ['label', 'streetNo', 'buildingNo', 'zoneNo', 'poBox', 'city', 'location'];
-   const addresses = source.map((a): Record<string, any> => ({ ...Object.fromEntries(fields.map((f) => [f, String(a?.[f] ?? "").trim()])), isPrimary: !!a?.isPrimary }));
-   if (!addresses.length || addresses.some((a) => !a.location)) return null;
+   // Every address field is optional; rows with nothing filled in are dropped.
+   const addresses = source
+      .map((a): Record<string, any> => ({ ...Object.fromEntries(fields.map((f) => [f, String(a?.[f] ?? "").trim()])), isPrimary: !!a?.isPrimary }))
+      .filter((a) => fields.some((f) => a[f]));
+   if (!addresses.length) return { addresses, address: undefined };
    const primaryIndex = Math.max(0, addresses.findIndex((a) => a.isPrimary));
    addresses.forEach((a, i) => { a.isPrimary = i === primaryIndex; });
    return { addresses, address: addresses[primaryIndex] };
@@ -639,8 +642,8 @@ export const createSupplier = async (req: Request, res: Response) => {
          ...(bankSet ? { bankAccounts: bankSet.bankAccounts, bankDetails: bankSet.bankDetails } : {}),
          documents: documents,
          products: products ?? [],
-         creditDays,
-         creditValue,
+         creditDays: creditDays ?? 0,
+         creditValue: creditValue ?? 0,
          createdBy: new Types.ObjectId(creatorId),
          createdDate: new Date(),
          updatedDate: new Date(),
@@ -1056,7 +1059,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
             companyEmail,
             companyPhone,
             website,
-            address,
+            address: address ?? null,
             addresses,
             supplierType,
             category,
@@ -1068,8 +1071,8 @@ export const updateSupplier = async (req: Request, res: Response) => {
             documents, // Always update documents (either new ones or existing ones)
             // Products live in the product catalogue now; the legacy embedded list is left untouched.
             ...(products === undefined ? {} : { products }),
-            creditDays,
-            creditValue,
+            creditDays: creditDays ?? 0,
+            creditValue: creditValue ?? 0,
             updatedDate: new Date(),
             status: newStatus, // Update status accordingly
             supplierId,

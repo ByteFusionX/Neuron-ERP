@@ -122,8 +122,8 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     addresses: this.fb.array([this.newAddress(true)]),
     contacts: this.fb.array([this.newContact(true)]),
     bankAccounts: this.fb.array([this.newBankAccount(true)]),
-    creditDays: [30, [Validators.required, Validators.min(0), Validators.max(999), integerValidator()]],
-    creditValue: [0, [Validators.required, Validators.min(0)]],
+    creditDays: [30 as number | null, [Validators.min(0), Validators.max(999), integerValidator()]],
+    creditValue: [0 as number | null, [Validators.min(0)]],
   });
 
   get addresses(): FormArray<FormGroup> { return this.supplierForm.controls.addresses as FormArray<FormGroup>; }
@@ -155,7 +155,7 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     return this.fb.group({
       label: [''],
       isPrimary: [primary],
-      location: ['', [Validators.required, notBlankValidator()]],
+      location: [''],
       city: [''],
       streetNo: [''],
       buildingNo: [''],
