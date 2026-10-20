@@ -70,19 +70,26 @@
             <p>{{ row.userAgent || 'No browser information captured.' }}</p>
           </section>
           <section class="diagnostic-block">
-            <h4>Console log</h4>
+            <div class="diagnostic-head"><h4>Console log</h4><button type="button" class="copy-btn" [disabled]="!row.consoleLog?.length" (click)="copyDiagnostic('Console log', row.consoleLog)" title="Copy console log" aria-label="Copy console log"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
             <pre>{{ row.consoleLog?.length ? (row.consoleLog | json) : 'No console errors captured.' }}</pre>
           </section>
           <section class="diagnostic-block">
-            <h4>Network errors</h4>
+            <div class="diagnostic-head"><h4>Network errors</h4><button type="button" class="copy-btn" [disabled]="!row.networkErrors?.length" (click)="copyDiagnostic('Network errors', row.networkErrors)" title="Copy network errors" aria-label="Copy network errors"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
             <pre>{{ row.networkErrors?.length ? (row.networkErrors | json) : 'No network errors captured.' }}</pre>
           </section>
           <section class="diagnostic-block">
-            <h4>Action trail</h4>
+            <div class="diagnostic-head"><h4>Action trail</h4><button type="button" class="copy-btn" [disabled]="!row.actionTrail?.length" (click)="copyDiagnostic('Action trail', row.actionTrail)" title="Copy action trail" aria-label="Copy action trail"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>
             <pre>{{ row.actionTrail?.length ? (row.actionTrail | json) : 'No action trail captured.' }}</pre>
           </section>
         </div>
       </ng-container>
     </ng-template>
   </app-data-grid>
+</div>
+
+<div *ngIf="previewUrl" class="image-preview" role="dialog" aria-modal="true" aria-label="Screenshot preview" (click)="closeScreenshot()">
+  <button type="button" class="image-preview-close" aria-label="Close preview" (click)="closeScreenshot()">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  </button>
+  <img [src]="previewUrl" alt="Bug report screenshot" (click)="$event.stopPropagation()">
 </div>

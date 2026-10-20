@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Socket } from 'ngx-socket-io';
 import { Subscription, timer } from 'rxjs';
@@ -92,12 +92,12 @@ export class BugReportsComponent implements OnInit, OnDestroy {
   data: BugReportListItem[] = [];
   isLoading = true;
   loadError = false;
+  previewUrl: string | null = null;
 
   readonly columns: DataGridColumn<BugReportListItem>[] = [
-    { key: 'reporter', label: 'Reported By', valueGetter: (row) => this.personName(row.reporterId), locked: true },
-    { key: 'reportingTo', label: 'Reporting To', valueGetter: (row) => this.personName(row.reportingTo, 'Unassigned') },
-    { key: 'description', label: 'Description', width: '320px' },
+    { key: 'createdAt', label: 'Reported On', type: 'date', sortable: true, locked: true },
     { key: 'route', label: 'Route' },
+    { key: 'description', label: 'Description', width: '320px' },
     {
       key: 'status',
       label: 'Status',
@@ -117,10 +117,10 @@ export class BugReportsComponent implements OnInit, OnDestroy {
         failed: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
       },
     },
+    { key: 'reporter', label: 'Reported By', valueGetter: (row) => this.personName(row.reporterId) },
     { key: 'screenshots', label: 'Screenshots', type: 'number', align: 'center', valueGetter: (row) => row.screenshotUrls?.length ?? 0 },
     { key: 'consoleErrors', label: 'Console Errors', type: 'number', align: 'center', valueGetter: (row) => row.consoleLog?.length ?? 0 },
     { key: 'networkErrors', label: 'Network Errors', type: 'number', align: 'center', valueGetter: (row) => row.networkErrors?.length ?? 0 },
-    { key: 'createdAt', label: 'Reported On', type: 'date', sortable: true },
   ];
 
   readonly rowActions: DataGridRowAction<BugReportListItem>[] = [
@@ -194,8 +194,27 @@ export class BugReportsComponent implements OnInit, OnDestroy {
     if (action.id === 'resolve') this.changeStatus(row, 'resolved', row.status);
   }
 
+  async copyDiagnostic(label: string, content: unknown[] | undefined): Promise<void> {
+    if (!content?.length) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(content, null, 2));
+      this.toastr.success(`${label} copied to clipboard`);
+    } catch {
+      this.toastr.error(`Could not copy ${label.toLowerCase()}`);
+    }
+  }
+
   openScreenshot(url: string): void {
-    window.open(url, '_blank', 'noopener,noreferrer');
+    this.previewUrl = url;
+  }
+
+  closeScreenshot(): void {
+    this.previewUrl = null;
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.previewUrl) this.closeScreenshot();
   }
 
   changeStatus(report: BugReportListItem, status: string, previousStatus = report.status): void {
