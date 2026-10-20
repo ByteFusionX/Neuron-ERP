@@ -74,7 +74,7 @@
 
     <!-- right: permanent, every tab (filled) -->
     <ng-template #detailFooterTemplate let-row>
-      <ng-container *ngIf="canConvertToQuote(row)">
+      <ng-container *ngIf="hasConvertibleStatus(row)">
         <app-action-button variant="primary" (click)="convertToQuote(row)">Convert to Quote</app-action-button>
       </ng-container>
     </ng-template>

@@ -420,7 +420,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', hidden: (row) => (!row.preSale?.presalePerson && row.status !== 'Sent to Presales') || !!row.preSale?.estimations },
       { id: 'sendToPresale', label: 'Send to Presale', icon: 'send', quick: true, hidden: (row) => !['new', 'in review'].includes(String(row.status || '').toLowerCase()) || this.reassignDenied },
       { id: 'resendToPresale', label: 'Resend to Presale', icon: 'refresh', quick: true, hidden: (row) => !this.canResendToPresale(row) || this.reassignDenied },
-      { id: 'convertToQuote', label: 'Convert to Quote', icon: 'check', quick: true, hidden: (row) => !this.canConvertToQuote(row) || !this.isCreator(row) },
+      { id: 'convertToQuote', label: 'Convert to Quote', icon: 'check', quick: true, hidden: (row) => !this.hasConvertibleStatus(row) || !this.isCreator(row) },
       { id: 'markLost', label: 'Mark Lost', icon: 'close', quick: true, variant: 'danger', hidden: (row) => ['Lost', 'Quoted', 'lost', 'quoted'].includes(row.status) || !this.isCreator(row) },
     ];
     // A lost enquiry is closed: no actions on the row, hover or menu, except reopening it or an admin deleting it.
@@ -496,14 +496,25 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Only in progress or estimated enquiries (plus legacy equivalents) can be handed to quotations. */
   canConvertToQuote(row: getEnquiry): boolean {
-    if (!row.client || !row.contact || !row.title?.trim()) return false;
+    return this.hasConvertDetails(row) && this.hasConvertibleStatus(row);
+  }
+
+  /** Same fields the server demands; the button stays visible when only these are missing so the click can explain why. */
+  hasConvertDetails(row: getEnquiry): boolean {
+    return !!(row.client && row.contact && row.title?.trim() && row.requirement?.trim());
+  }
+
+  hasConvertibleStatus(row: getEnquiry): boolean {
     return ['new', 'in progress', 'estimated', 'work in progress', 'ready for quotation'].includes(String(row.status || '').toLowerCase());
   }
 
   /** After the confirm, the enquiry is Quoted and the rest of the process lives on the quotation. */
   /** Says which of the two checks failed, instead of blaming the details when it is the status. */
   convertBlockedReason(row: getEnquiry): string {
-    if (!row.client || !row.contact || !row.title?.trim()) return 'Customer, contact and requirement summary are required before quotation.';
+    if (!row.client) return 'Add a customer to this enquiry before converting it to a quotation.';
+    if (!row.contact) return 'Add a contact to this enquiry before converting it to a quotation.';
+    if (!row.title?.trim()) return 'Add an enquiry title before converting it to a quotation.';
+    if (!row.requirement?.trim()) return 'Add a requirement (Edit enquiry, step 2) before converting it to a quotation.';
     return `This enquiry is "${this.statusLabel(row.status)}" — only new, in-progress or estimated enquiries can be converted to a quotation.`;
   }
 

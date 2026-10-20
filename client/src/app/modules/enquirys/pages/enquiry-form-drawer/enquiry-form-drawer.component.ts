@@ -130,12 +130,14 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     return !!this.enquiry;
   }
 
-  /** Fields that fix the enquiry's identity (number, customer, department, dates) are shown but locked. */
-  private readonly lockedOnEdit = ['client', 'department', 'accountingManager', 'date', 'nextFollowUpDate'] as const;
+  /** Fields that fix the enquiry's identity (number, customer, department, owner, dates) are shown read-only when editing. */
 
   private loadForEdit(e: getEnquiry): void {
     const id = (x: any): string | null => (x && typeof x === 'object' ? x._id : x) ?? null;
-    this.lockedOnEdit.forEach((name) => this.enquiryForm.get(name)!.disable({ emitEvent: false }));
+    // Locked fields stay enabled but read-only: a disabled control is never "valid", which blocked Next and Save.
+    // Their date rules only apply when raising an enquiry, so an old date or a lapsed follow-up must not block an edit.
+    this.enquiryForm.controls.date.clearValidators();
+    this.enquiryForm.controls.nextFollowUpDate.clearValidators();
     this.salesPersonName = `${e.salesPerson?.firstName ?? ''} ${e.salesPerson?.lastName ?? ''}`.trim();
     if (!this.customerOptions.length && e.client) this.customerOptions = [{ label: e.client.companyName, value: e.client._id }];
     if (!this.departmentOptions.length && e.department) this.departmentOptions = [{ label: e.department.departmentName, value: e.department._id }];
@@ -306,7 +308,8 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   private reset(): void {
     // A half-written new enquiry is kept while someone edits another one.
     if (!this.isEdit) this.draft?.clear();
-    this.lockedOnEdit.forEach((name) => this.enquiryForm.get(name)!.enable({ emitEvent: false }));
+    this.enquiryForm.controls.date.setValidators([Validators.required, dateRangeValidator(isoDateFromToday(-this.maxBackdateDays), isoDateFromToday(0))]);
+    this.enquiryForm.controls.nextFollowUpDate.setValidators([Validators.required, notPastDateValidator]);
     this.contactOptions = [];
     this.enquiryForm.reset({
       client: null,

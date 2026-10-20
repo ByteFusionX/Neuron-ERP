@@ -37,13 +37,13 @@
         <ng-container *ngIf="step === 1">
             <app-sf-section title="Customer" columns="2">
                 <app-sf-field label="Customer" [control]="enquiryForm.controls.client">
-                    <app-sf-combobox formControlName="client" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
+                    <app-sf-combobox [readonly]="isEdit" formControlName="client" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Contact" [hint]="enquiryForm.controls.client.value ? '' : 'Select customer first'" [control]="enquiryForm.controls.contact">
                     <app-sf-combobox formControlName="contact" [options]="contactOptions" emptyText="Select a customer first" placeholder="Select contact"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Department" [control]="enquiryForm.controls.department">
-                    <app-sf-combobox formControlName="department" [options]="departmentOptions" placeholder="Select department"></app-sf-combobox>
+                    <app-sf-combobox [readonly]="isEdit" formControlName="department" [options]="departmentOptions" placeholder="Select department"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Enquiry Owner">
                     <app-sf-input [ngModelOptions]="{ standalone: true }" [ngModel]="enquiryOwnerName" [readonly]="true"></app-sf-input>
@@ -64,14 +64,14 @@
                     <app-sf-currency formControlName="estimatedCost" placeholder="0.00"></app-sf-currency>
                 </app-sf-field>
                 <app-sf-field label="Assign Enquiry Owner" [hint]="isEdit ? '' : 'Optional — leave blank to assign it to yourself'" [control]="enquiryForm.controls.accountingManager">
-                    <app-sf-combobox formControlName="accountingManager" clearable [options]="accountingManagerOptions"
+                    <app-sf-combobox [readonly]="isEdit" formControlName="accountingManager" clearable [options]="accountingManagerOptions"
                         placeholder="Myself"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Enquiry Date" [control]="enquiryForm.controls.date">
-                    <app-sf-date formControlName="date" [min]="earliestEnquiryDate" [max]="today" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
+                    <app-sf-date [readonly]="isEdit" formControlName="date" [min]="earliestEnquiryDate" [max]="today" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
                 </app-sf-field>
                 <app-sf-field label="Next Follow-up Date" [control]="enquiryForm.controls.nextFollowUpDate">
-                    <app-sf-date formControlName="nextFollowUpDate" [min]="today" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
+                    <app-sf-date [readonly]="isEdit" formControlName="nextFollowUpDate" [min]="today" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
                 </app-sf-field>
             </app-sf-section>
         </ng-container>
