@@ -79,7 +79,8 @@ export class DealFormComponent implements OnInit, OnChanges {
   }
 
   private loadSuppliers(): void {
-    this.supplierService.supplierList().subscribe({
+    // Pending suppliers are included: an RFQ can award a line to one, and it must stay selectable here.
+    this.supplierService.supplierList(true).subscribe({
       next: (res) => {
         const list: any[] = res.data || res;
         this.supplierOptions = list
@@ -113,6 +114,7 @@ export class DealFormComponent implements OnInit, OnChanges {
   }
 
   get open(): boolean { return !!this.quotation; }
+  get isResubmit(): boolean { return (this.q as any)?.dealData?.status === 'rejected'; }
   get optionalItems(): FormArray { return this.form.get('optionalItems') as FormArray; }
   get costs(): FormArray { return this.form.get('costs') as FormArray; }
   get issues(): string[] { return this.step === 1 ? this.lineIssues : this.termIssues; }
@@ -120,13 +122,22 @@ export class DealFormComponent implements OnInit, OnChanges {
   private buildForm(): void {
     // The quoted numbers are the starting point. Suppliers awarded in an RFQ are carried over, others are chosen here;
     // optional items the customer did not include never reach the deal.
+    // Lines of the previous deal submission (a resubmit after rejection), keyed by item name + detail, so the
+    // supplier and tick chosen then are carried over.
+    const previous = new Map<string, any>();
+    ((this.q as any).dealData?.updatedItems ?? []).forEach((it: any) =>
+      (it.itemDetails ?? []).forEach((d: any) => previous.set(`${it.itemName}|${d.detail}`, d)));
+
     this.seed = this.q!.optionalItems.map((option) => ({
       totalDiscount: option.totalDiscount,
       items: option.items
         .filter((item) => !item.isOptional || !!item.includeInTotal)
         .map((item) => ({
           itemName: item.itemName,
-          itemDetails: item.itemDetails.map((d) => ({
+          itemDetails: item.itemDetails.map((d) => {
+            const prev = previous.get(`${item.itemName}|${d.detail}`);
+            const prevSupplier = prev ? (prev.supplierId?._id ?? prev.supplierId) : null;
+            return {
             productId: d.productId,
             itemCode: d.itemCode,
             partNo: d.partNo,
@@ -137,19 +148,31 @@ export class DealFormComponent implements OnInit, OnChanges {
             unitSellingPrice: d.unitSellingPrice,
             availability: d.availability,
             // The supplier awarded in the RFQ is kept as the starting point; it can still be changed here.
-            supplierId: ((d as any).supplierId?._id ?? (d as any).supplierId) || null,
+            supplierId: (prevSupplier || (d as any).supplierId?._id || (d as any).supplierId) || null,
             uom: d.uom,
-            dealSelected: true,
-          })),
+            dealSelected: prev ? !!prev.dealSelected : true,
+            };
+          }),
         })),
     }));
 
     this.form = this.fb.group({
-      // Starts from the terms already agreed on the quote; the approver sees exactly what is typed here.
-      paymentTerms: [String(this.q!.paymentTerms ?? '').slice(0, 200), Validators.required],
+      // Starts from the terms of the previous deal submission (a resubmit after rejection), else from the terms
+      // agreed on the quote; the approver sees exactly what is typed here.
+      paymentTerms: [String((this.q as any).dealData?.paymentTerms || this.q!.paymentTerms || '').slice(0, 200), Validators.required],
       optionalItems: this.fb.array([]),
       costs: this.fb.array([]),
       attachments: [[] as File[]],
+    });
+    // A resubmit after rejection starts from the adjustments entered on the previous submission.
+    ((this.q as any).dealData?.additionalCosts ?? []).forEach((cost: any) => {
+      const type = (cost.type || 'Additional Cost') as CostType;
+      this.costs.push(this.fb.group({
+        type: [type],
+        ...(type === 'Additional Cost' ? { name: [cost.name ?? '', Validators.required] } : {}),
+        ...(type === 'Supplier Discount' ? { supplierId: [cost.supplierId?._id ?? cost.supplierId ?? null, Validators.required] } : {}),
+        value: [cost.value ?? null, Validators.required],
+      }));
     });
     this.forms = [this.form];
     this.recompute();
@@ -182,15 +205,6 @@ export class DealFormComponent implements OnInit, OnChanges {
 
   toggleAll(checked: boolean): void {
     this.activeLines().forEach((d) => d.get('dealSelected')?.setValue(checked));
-    this.form.markAsDirty();
-  }
-
-  applyBulkSupplier(): void {
-    if (!this.bulkSupplier) return;
-    this.activeLines().forEach((d) => {
-      if (d.get('dealSelected')?.value) d.get('supplierId')?.setValue(this.bulkSupplier);
-    });
-    this.bulkSupplier = null;
     this.form.markAsDirty();
   }
 
@@ -255,7 +269,7 @@ export class DealFormComponent implements OnInit, OnChanges {
     this.allSelected = this.lineCount > 0 && this.selectedCount === this.lineCount;
 
     const used = new Set(lines.filter((l) => l.selected && l.supplierId).map((l) => l.supplierId));
-    this.discountSupplierOptions = this.supplierOptions.filter((o) => used.has(o.value));
+    this.discountSupplierOptions = this.usedSupplierOptions(used as Set<string>);
 
     const lineIssues: string[] = [];
     if (!this.selectedCount) lineIssues.push('Select at least one line');
@@ -269,6 +283,15 @@ export class DealFormComponent implements OnInit, OnChanges {
     if (this.costs.invalid) termIssues.push('Complete the adjustment rows');
     if (this.discountAdjustment > this.lineTotal + Math.max(this.costAdjustment, 0)) termIssues.push('Discounts cannot be more than the deal total');
     this.termIssues = termIssues;
+  }
+
+  /** Every supplier picked on a ticked line, even one the supplier list did not return. */
+  private usedSupplierOptions(used: Set<string>): SfOption<string>[] {
+    const known = new Set(this.supplierOptions.map((o) => o.value));
+    return [
+      ...this.supplierOptions.filter((o) => used.has(o.value)),
+      ...[...used].filter((id) => !known.has(id)).map((id) => ({ label: 'Selected supplier', value: id })),
+    ];
   }
 
   next(): void {
@@ -315,6 +338,7 @@ export class DealFormComponent implements OnInit, OnChanges {
           profit: d.profit,
           unitSellingPrice: d.unitSellingPrice,
           availability: d.availability,
+          uom: d.uom,
           supplierId: d.supplierId ?? '',
         })),
       })),

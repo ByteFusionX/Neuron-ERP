@@ -59,8 +59,8 @@
                 <p class="qt-meta-value">{{ formatAmount(row) }}</p>
             </div>
             <div class="qt-meta">
-                <p class="qt-meta-label">Date</p>
-                <p class="qt-meta-value">{{ row.date | date: 'dd MMM yyyy' }}</p>
+                <p class="qt-meta-label">Quoted Date</p>
+                <p class="qt-meta-value">{{ (row.quotedDate || row.date) | date: 'dd MMM yyyy' }}</p>
             </div>
         </ng-template>
 
@@ -81,7 +81,7 @@
 
         <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row let-tab="tab">
-            <app-action-button variant="primary" (click)="openFullQuotation(row, $event)" icon="view">Open full quotation</app-action-button>
+            <app-action-button variant="primary" (click)="openFullQuotation(row, $event)" icon="view">Detail view</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">

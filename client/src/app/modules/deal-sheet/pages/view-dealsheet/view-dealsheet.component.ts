@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { Router, ActivatedRoute } from '@angular/router';
+import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 import {
   dealData,
   priceDetails,
@@ -49,10 +49,8 @@ import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/det
 import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
-import { DetailMetricsComponent } from 'src/app/shared/components/detail-panel/detail-metrics.component';
 import {
   DetailDocument,
-  DetailMetric,
   DetailFootRow,
   DetailTableColumn,
 } from 'src/app/shared/components/detail-panel/detail-panel.model';
@@ -84,7 +82,7 @@ interface ViewDealsheetNavState {
     DetailBadgeComponent,
     DetailTableComponent,
     DetailDocumentsComponent,
-    DetailMetricsComponent,
+    RouterLink,
   ],
 })
 export class ViewDealsheetComponent implements OnInit {
@@ -346,7 +344,11 @@ export class ViewDealsheetComponent implements OnInit {
 
   updateOpen = false;
 
+  /** The drawer edits every saved line, not just the ticked ones the view shows. */
+  updateData?: ViewDealsheetNavState;
+
   onUpdate() {
+    this.updateData = { ...this.data, quoteItems: this.data.quoteData.dealData?.updatedItems ?? this.data.quoteItems };
     this.updateOpen = true;
   }
 
@@ -481,12 +483,28 @@ export class ViewDealsheetComponent implements OnInit {
     return !!this.reviewComment;
   }
 
-  get metricItems(): DetailMetric[] {
+  /** Same breakdown as the Financial summary in the deal sheet list's detail panel. */
+  get financialSummary(): { label: string; value: string; tone?: DetailTone }[] {
+    const po = this.viewMode === 'po';
+    const deal = this.data.quoteData.dealData;
+    const currency = this.data.quoteData.currency ? ` ${this.data.quoteData.currency}` : '';
+    const money = (v: number) => `${this.formatNumber(v)}${currency}`;
+    const net = this.data.priceDetails.totalSellingPrice;
+    const quoteDiscount = Number(deal?.totalDiscount) || 0;
+    const customerDiscount = (deal?.additionalCosts ?? [])
+      .filter((c: any) => c.type === 'Customer Discount')
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+    const cost = po ? this.poSummaryTotalCost : this.data.priceDetails.totalCost;
+    const profit = po ? this.poSummaryProfit : this.data.priceDetails.profit;
+    const perc = po ? this.poSummaryPerc : this.data.priceDetails.perc;
     return [
-      { label: 'Selling price', value: this.formatNumber(this.data.priceDetails.totalSellingPrice) },
-      { label: 'Cost', value: this.formatNumber(this.viewMode === 'po' ? this.poSummaryTotalCost : this.data.priceDetails.totalCost) },
-      { label: 'Profit', value: this.formatNumber(this.viewMode === 'po' ? this.poSummaryProfit : this.data.priceDetails.profit), tone: 'good' },
-      { label: 'Profit %', value: `${(this.viewMode === 'po' ? this.poSummaryPerc : this.data.priceDetails.perc).toFixed(2)}%`, tone: 'info' },
+      { label: 'Subtotal', value: money(net + quoteDiscount + customerDiscount) },
+      ...(quoteDiscount ? [{ label: 'Quotation discount', value: money(quoteDiscount) }] : []),
+      ...(customerDiscount ? [{ label: 'Customer discount', value: money(customerDiscount) }] : []),
+      { label: 'Net deal value', value: money(net), tone: 'good' as DetailTone },
+      { label: 'Total cost', value: money(cost) },
+      { label: 'Profit', value: money(profit) },
+      { label: 'Profit margin', value: `${perc.toFixed(1)}%` },
     ];
   }
 
@@ -497,11 +515,33 @@ export class ViewDealsheetComponent implements OnInit {
     const profit = po ? this.poSummaryProfit : this.data.priceDetails.profit;
     const perc = po ? this.poSummaryPerc : this.data.priceDetails.perc;
     const sell = this.data.priceDetails.totalSellingPrice;
+    const deal = this.data.quoteData?.dealData;
+    const quoteDiscount = Number(deal?.totalDiscount) || 0;
+    const customerDiscount = (deal?.additionalCosts ?? [])
+      .filter((c: any) => c.type === 'Customer Discount')
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+    const discountRows: DetailFootRow[] = quoteDiscount || customerDiscount
+      ? [
+          { label: 'Subtotal', cells: { totalSellingPrice: { value: sell + quoteDiscount + customerDiscount, format: 'currency' } } },
+          ...(quoteDiscount ? [{ label: 'Quotation discount', cells: { totalSellingPrice: { value: -quoteDiscount, format: 'currency' as const } } }] : []),
+          ...(customerDiscount ? [{ label: 'Customer discount', cells: { totalSellingPrice: { value: customerDiscount, format: 'currency' as const } } }] : []),
+        ]
+      : [];
     return [
-      { label: 'Total', emphasis: true, cells: { totalSellingPrice: { value: sell, format: 'currency' }, totalCost: { value: cost, format: 'currency' } } },
+      ...discountRows,
+      { label: discountRows.length ? 'Net deal value' : 'Total', emphasis: true, cells: { totalSellingPrice: { value: sell, format: 'currency' }, totalCost: { value: cost, format: 'currency' } } },
       { label: 'Profit', cells: { totalSellingPrice: { value: profit, format: 'currency' } } },
       { label: 'Profit %', cells: { totalSellingPrice: { value: perc, format: 'percent' } } },
     ];
+  }
+
+  get customer(): any {
+    return this.data?.quoteData?.client ?? {};
+  }
+
+  /** Customer ref shown in the side panel; falls back to nothing when the client is not populated. */
+  get customerRef(): string {
+    return this.customer.clientRef || '';
   }
 
   statusText = statusLabel;

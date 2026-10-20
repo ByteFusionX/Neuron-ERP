@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, Output, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DetailClauseListComponent } from 'src/app/shared/components/detail-panel/detail-clause-list.component';
 import { DetailRevisionChipComponent } from 'src/app/shared/components/detail-panel/detail-revision-chip.component';
@@ -61,6 +61,7 @@ const FIELD_LABELS: Record<keyof QuoteRevisionSnapshot, string> = {
   deliveryTerms: 'Delivery terms',
   deliveryLocation: 'Delivery location',
   validityDate: 'Validity date',
+  quotedDate: 'Quoted date',
 };
 
 /**
@@ -85,7 +86,7 @@ const FIELD_LABELS: Record<keyof QuoteRevisionSnapshot, string> = {
             <li *ngFor="let r of rows" class="shrink-0 md:shrink">
               <button
                 type="button"
-                (click)="selected = r"
+                (click)="select(r)"
                 class="w-full rounded-lg border px-3 py-2.5 text-left transition-colors"
                 [ngClass]="r === selected
                   ? 'border-violet-300 bg-violet-50 dark:border-violet-500/30 dark:bg-violet-500/10'
@@ -174,6 +175,14 @@ export class RevisionHistoryComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) data!: RevisionHistoryData;
   /** Change this (e.g. the current revision number) to refetch after an edit. */
   @Input() reloadKey: unknown;
+
+  /** Emits the revision number whenever the user picks one in the rail. */
+  @Output() revisionSelected = new EventEmitter<number>();
+
+  select(r: RevisionRow): void {
+    this.selected = r;
+    this.revisionSelected.emit(r.revision);
+  }
 
   rows: RevisionRow[] = [];
   selected: RevisionRow | null = null;

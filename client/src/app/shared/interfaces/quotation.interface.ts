@@ -60,6 +60,7 @@ export interface QuoteRevisionSnapshot {
     deliveryTerms?: string;
     deliveryLocation?: string;
     validityDate?: string;
+    quotedDate?: string;
 }
 
 export interface QuoteRevision {
@@ -149,6 +150,8 @@ export interface Quotatation {
     editHistory?: EditHistoryEntry[];
     /** Bumped when a sent quote's commercial content is edited. 0 on quotes that never were. */
     revision?: number;
+    /** The date printed on the PDF. `date` is the created date and never changes. Older quotes fall back to `date`. */
+    quotedDate?: string;
 }
 
 export interface getQuotatation {
@@ -157,6 +160,7 @@ export interface getQuotatation {
     client: getCustomer;
     attention: ContactDetail;
     date: string;
+    quotedDate?: string;
     department: getDepartment;
     departments?: getDepartment[];
     subject: string;
@@ -216,6 +220,7 @@ export interface getQuotation {
 export interface getDealSheet {
     dealSheet: Quotatation[];
     total: number;
+    viewCounts?: Record<string, number>;
 }
 
 export interface quotatationForm {

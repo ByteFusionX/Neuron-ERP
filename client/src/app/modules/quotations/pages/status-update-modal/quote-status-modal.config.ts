@@ -36,8 +36,8 @@ export function quoteStatusModalData(currentStatus: S, targetStatus?: S): Status
     targetStatus,
     statuses,
     canSelect: canSelectQuoteStatus,
-    // Marking Won asks for the acceptance note, so it is never a one-click change.
-    requireReasonFor: statuses.filter((s) => canSelectQuoteStatus(currentStatus, s) && (s === S.Won || needsReason(currentStatus, s))),
+    // Marking Won takes an optional acceptance note; Lost, reopening and stepping back still need a reason.
+    requireReasonFor: statuses.filter((s) => canSelectQuoteStatus(currentStatus, s) && needsReason(currentStatus, s)),
     reasonLabels: {
       [S.Won]: { label: 'How the customer accepted', placeholder: 'e.g. Accepted by email on 12 Oct, PO to follow' },
       [S.Lost]: { label: 'Reason for losing', placeholder: 'Why did we lose this quote?' },

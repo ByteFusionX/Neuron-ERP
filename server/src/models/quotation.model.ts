@@ -8,6 +8,7 @@ interface QuoteItemDetail {
     quantity: number;
     unitCost: number;
     unitSellingPrice: number;
+    profit?: number;
     availability: string;
     supplierName?: string;
     email?: string;
@@ -128,6 +129,7 @@ interface QuoteRevision {
         deliveryTerms?: string;
         deliveryLocation?: string;
         validityDate?: Date;
+        quotedDate?: Date;
     };
 }
 
@@ -155,6 +157,8 @@ interface Quotation extends Document {
     client: Types.ObjectId;
     attention: Types.ObjectId;
     date: Date;
+    /** The date printed on the quote PDF. `date` stays the created date and never changes. */
+    quotedDate?: Date;
     department: Types.ObjectId;
     departments: Types.ObjectId[];
     subject: string;
@@ -238,6 +242,12 @@ const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
     unitSellingPrice: {
         type: Number,
         required: true,
+    },
+    // Margin % the user entered. Kept so 0 (or 25, not 25.04) survives a reload instead of being re-derived from a rounded-up price.
+    profit: {
+        type: Number,
+        required: false,
+        min: 0,
     },
     availability: {
         type: String,
@@ -486,6 +496,9 @@ const quotationSchema = new Schema<Quotation>({
     date: {
         type: Date,
         required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
+    },
+    quotedDate: {
+        type: Date,
     },
     department: {
         type: Schema.Types.ObjectId,

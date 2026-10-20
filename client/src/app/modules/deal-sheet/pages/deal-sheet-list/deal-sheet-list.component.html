@@ -37,7 +37,7 @@
 
         <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row let-tab="tab">
-            <app-action-button variant="primary" (click)="openDealSheetView(row)" icon="view">View full deal sheet</app-action-button>
+            <app-action-button variant="primary" (click)="openDealSheetView(row)" icon="view">Detail view</app-action-button>
         </ng-template>
 
         <ng-template #detailMetaTemplate let-row>
@@ -54,7 +54,12 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'items'">
-                    <app-detail-table title="Deal items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals [currency]="row.currency"></app-detail-table>
+                    <app-detail-table title="Deal items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" [currency]="row.currency"></app-detail-table>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'costs'">
+                    <app-detail-table title="Additional costs and discounts" [columns]="costColumns" [rows]="costRows(row)" showTotals [currency]="row.currency"
+                        emptyMessage="No additional costs or discounts."></app-detail-table>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'documents'">

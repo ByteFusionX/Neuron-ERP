@@ -25,7 +25,6 @@ import {
   Quotatation,
   QuoteItem,
 } from 'src/app/shared/interfaces/quotation.interface';
-import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ItemEntryComponent, ItemEntryItemValue, ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
@@ -107,7 +106,6 @@ export class UpdateDealsheetComponent implements OnInit, OnChanges {
   constructor(
     private fb: FormBuilder,
     private supplierService: SupplierService,
-    private confirm: ConfirmDialogService,
   ) {}
 
   get title(): string {
@@ -144,7 +142,8 @@ export class UpdateDealsheetComponent implements OnInit, OnChanges {
   }
 
   ngOnInit(): void {
-    this.supplierService.supplierList().subscribe({
+    // Pending suppliers are included: an RFQ can award a line to one, and it must stay selectable here.
+    this.supplierService.supplierList(true).subscribe({
       next: (res) => {
         const list: any[] = res.data || res;
         this.supplierOptions = list
@@ -245,57 +244,6 @@ export class UpdateDealsheetComponent implements OnInit, OnChanges {
     this.form.markAsDirty();
   }
 
-  applyBulkSupplier(): void {
-    if (!this.bulkSupplier) return;
-    this.activeLines().forEach((d) => {
-      if (d.get('dealSelected')?.value) d.get('supplierId')?.setValue(this.bulkSupplier);
-    });
-    this.bulkSupplier = null;
-    this.form.markAsDirty();
-  }
-
-  /** Replaces the entered lines with the quotation's current ones, nothing ticked. */
-  async fetchLatestQuote(): Promise<void> {
-    const options = this.data?.quoteData.optionalItems ?? [];
-    if (!options.length || !options.some((o) => o.items?.length)) {
-      this.submitted = true;
-      this.lineIssues = ['The quotation has no items to fetch'];
-      return;
-    }
-    const { confirmed } = await this.confirm.open({
-      tone: 'warning',
-      title: 'Replace entered items?',
-      message: 'This removes the line items entered here and loads the latest quotation items instead.',
-      consequence: 'This cannot be undone.',
-      confirmLabel: 'Replace items',
-    });
-    if (!confirmed) return;
-
-    this.seed = options.map((option) => ({
-      totalDiscount: option.totalDiscount,
-      items: (option.items ?? [])
-        .filter((item) => !item.isOptional || !!item.includeInTotal)
-        .map((item) => {
-          const seeded = this.toSeedItem(item);
-          seeded.itemDetails = (seeded.itemDetails ?? []).map((d) => ({ ...d, supplierId: null, dealSelected: false }));
-          return seeded;
-        }),
-    }));
-    this.selectedOption = 0;
-    this.bulkSupplier = null;
-    const costs = this.costs.getRawValue();
-    const paymentTerms = this.paymentTermsControl.value;
-    this.form = this.fb.group({
-      paymentTerms: [paymentTerms, Validators.required],
-      optionalItems: this.fb.array([]),
-      costs: this.fb.array([]),
-    });
-    costs.forEach((c: any) => this.patchCost(c));
-    this.form.markAsDirty();
-    this.forms = [this.form];
-    this.attach();
-  }
-
   // --- step 2 helpers --------------------------------------------------------
 
   get paymentTermsControl(): AbstractControl {
@@ -364,10 +312,15 @@ export class UpdateDealsheetComponent implements OnInit, OnChanges {
     this.allSelected = this.lineCount > 0 && this.selectedCount === this.lineCount;
 
     const used = new Set(lines.filter((l) => l.selected && l.supplierId).map((l) => l.supplierId));
-    this.discountSupplierOptions = this.supplierOptions.filter((o) => used.has(o.value));
+    // Every supplier picked on a ticked line, even one the supplier list did not return.
+    const known = new Set(this.supplierOptions.map((o) => o.value));
+    this.discountSupplierOptions = [
+      ...this.supplierOptions.filter((o) => used.has(o.value)),
+      ...([...used] as string[]).filter((id) => !known.has(id)).map((id) => ({ label: 'Selected supplier', value: id })),
+    ];
 
     const lineIssues: string[] = [];
-    if (!this.lineCount) lineIssues.push('Add the quotation items first (Fetch latest quote items)');
+    if (!this.lineCount) lineIssues.push('This deal has no items to select');
     else if (!this.selectedCount) lineIssues.push('Select at least one line');
     const missing = lines.filter((l) => l.selected && !l.supplierId).length;
     if (missing) lineIssues.push(`${missing} selected line${missing === 1 ? ' needs' : 's need'} a supplier`);
@@ -422,6 +375,7 @@ export class UpdateDealsheetComponent implements OnInit, OnChanges {
           profit: d.profit,
           unitSellingPrice: d.unitSellingPrice,
           availability: d.availability,
+          uom: d.uom,
           supplierId: d.supplierId ?? '',
         })),
       })),

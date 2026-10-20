@@ -45,6 +45,7 @@ import {
   DetailOverviewField,
   DetailOverviewSection,
   DetailTableColumn,
+  DetailFootRow,
   DetailDocument,
   DetailTimelineEntry,
   DetailComment,
@@ -140,17 +141,24 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
+    { id: 'costs', label: 'Costs', icon: 'card' },
     { id: 'documents', label: 'Documents', icon: 'eye' },
     { id: 'comments', label: 'Comments', icon: 'chat' },
     { id: 'history', label: 'History', icon: 'clock' },
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'item', label: 'Item' },
+    { key: 'item', label: 'Item', wrap: true, clamp: true, tooltipKey: 'item' },
     { key: 'qty', label: 'Qty', type: 'number' },
     { key: 'price', label: 'Price', type: 'currency' },
     { key: 'sellingPrice', label: 'Selling Price', type: 'currency' },
-    { key: 'amount', label: 'Amount', type: 'currency', total: true },
+    { key: 'amount', label: 'Amount', type: 'currency' },
+  ];
+
+  readonly costColumns: DetailTableColumn[] = [
+    { key: 'type', label: 'Type', type: 'text' },
+    { key: 'name', label: 'Name', type: 'text', wrap: true },
+    { key: 'value', label: 'Value', type: 'currency', align: 'right', total: true },
   ];
 
   readonly dealStatusBadgeClasses: Record<string, string> = {
@@ -319,6 +327,12 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   private buildRowActions(): void {
     this.rowActions = [
       {
+        id: 'detailView',
+        label: 'Detail View',
+        icon: 'eye',
+        quick: true,
+      },
+      {
         id: 'viewDocuments',
         label: 'View Documents',
         icon: 'files',
@@ -401,13 +415,12 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     // The grid emits queryChange right after viewChange, which reloads the data and syncs the URL once.
   }
 
-  /** Only the active tab has a known total (rows are server-paged), so the others show no badge. */
-  private refreshViewCounts(): void {
-    this.views = this.views.map((v) => ({
-      ...v,
-      count: v.id === this.activeViewId ? this.total : undefined,
-      hideCount: v.id !== this.activeViewId,
-    }));
+  /** The server returns a total per tab; the active tab falls back to the page total. */
+  private refreshViewCounts(viewCounts?: Record<string, number>): void {
+    this.views = this.views.map((v) => {
+      const count = v.id === this.activeViewId ? this.total : viewCounts?.[v.id];
+      return { ...v, count, hideCount: count === undefined };
+    });
   }
 
   private updateUrlParams(): void {
@@ -470,7 +483,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         next: (data: getDealSheet) => {
           this.rows = data?.dealSheet ? [...data.dealSheet] : [];
           this.total = data?.total ?? 0;
-          this.refreshViewCounts();
+          this.refreshViewCounts(data?.viewCounts);
           this.isLoading = false;
         },
         error: () => {
@@ -487,6 +500,9 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   onRowAction(event: DataGridRowActionEvent<Quotatation>): void {
     const { action, row } = event;
     switch (action.id) {
+      case 'detailView':
+        this.openDealSheetView(row);
+        break;
       case 'viewDocuments':
         this.openDocumentsTab(row);
         break;
@@ -681,6 +697,34 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     return rows;
   }
 
+  costRows(row: Quotatation): Record<string, any>[] {
+    return (row.dealData?.additionalCosts ?? []).map((cost: any) => ({
+      type: cost.type || 'Cost',
+      name: cost.type === 'Supplier Discount'
+        ? cost.supplierDetails?.supplierName || cost.name || 'Supplier discount'
+        : cost.name || cost.type || 'Additional cost',
+      value: cost.value || 0,
+    }));
+  }
+
+  /** Item table footer: line subtotal, the discounts given to the customer, then the final deal value. */
+  itemFootRows(row: Quotatation): DetailFootRow[] {
+    const subtotal = this.itemRows(row).reduce((sum, r) => sum + (Number(r['amount']) || 0), 0);
+    const quoteDiscount = Number(row.dealData?.totalDiscount) || 0;
+    const customerDiscount = (row.dealData?.additionalCosts ?? [])
+      .filter((c) => c.type === 'Customer Discount')
+      .reduce((sum, c) => sum + (Number(c.value) || 0), 0);
+    const rows: DetailFootRow[] = [{ label: 'Subtotal', cells: { amount: { value: subtotal, format: 'currency' } } }];
+    if (quoteDiscount) rows.push({ label: 'Quotation discount', cells: { amount: { value: quoteDiscount, format: 'currency' } } });
+    if (customerDiscount) rows.push({ label: 'Customer discount', cells: { amount: { value: customerDiscount, format: 'currency' } } });
+    rows.push({ label: 'Net deal value', emphasis: true, cells: { amount: { value: subtotal - quoteDiscount - customerDiscount, format: 'currency' } } });
+    const price = dealSheetPriceDetails(row.dealData?.updatedItems, row.dealData?.additionalCosts, row.dealData?.totalDiscount);
+    rows.push({ label: 'Total cost', cells: { amount: { value: price.totalCost, format: 'currency' } } });
+    rows.push({ label: 'Profit', cells: { amount: { value: price.profit, format: 'currency' } } });
+    rows.push({ label: 'Profit margin', cells: { amount: { value: price.perc, format: 'percent' } } });
+    return rows;
+  }
+
   dealDocuments(row: Quotatation): DetailDocument[] {
     const docs: DetailDocument[] = [];
     (row.lpoFiles || []).forEach((file: any) =>
@@ -810,166 +854,45 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     const deal: any = row.dealData;
     const enquiry = row.enqId as any;
     const contact = (row as any).attention || (row as any).contact || enquiry?.contact;
-    const latestComment = deal?.comments?.length
-      ? deal.comments[deal.comments.length - 1]
-      : '';
+    const money = (v: number) => `${this.numberFormat.transform(v)} ${row.currency}`;
+    const price = dealSheetPriceDetails(deal?.updatedItems, deal?.additionalCosts, deal?.totalDiscount);
+    const quoteDiscount = Number(deal?.totalDiscount) || 0;
+    const customerDiscount = (deal?.additionalCosts ?? [])
+      .filter((c: any) => c.type === 'Customer Discount')
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+    const amountField = (label: string, value: number, tone?: DetailOverviewField['tone']): DetailOverviewField =>
+      ({ type: 'field', label, value: money(value), numeric: true, noHover: true, tone });
     return [
       {
-        title: 'General',
+        title: 'Deal',
         columns: '2',
         fields: [
-          {
-            type: 'field',
-            label: 'Deal No.',
-            value: deal?.dealId,
-            numeric: true,
-          },
+          { type: 'field', label: 'Deal No.', value: deal?.dealId, numeric: true },
           { type: 'dg', key: 'dealStatus', label: 'Status', noHover: true },
           ...(deal?.waiting
             ? [{ type: 'field' as const, label: 'Waiting on', value: describeDealWaiting(deal.waiting), noHover: true }]
             : []),
-          {
-            type: 'field',
-            label: 'Quote Id',
-            value: row.quoteId,
-            numeric: true,
-          },
-          { type: 'field', label: 'Customer', value: row.client?.companyName },
-          {
-            type: 'field',
-            label: 'Contact',
-            value: this.contactName(contact),
-          },
-          {
-            type: 'field',
-            label: 'Sales Person',
-            value: row.createdBy
-              ? `${row.createdBy.firstName} ${row.createdBy.lastName}`
-              : '',
-          },
-          {
-            type: 'field',
-            label: 'Department',
-            value: row.department?.departmentName,
-          },
-          {
-            type: 'field',
-            label: 'Priority',
-            value: enquiry?.priority || '—',
-          },
-          {
-            type: 'field',
-            label: 'Date',
-            value: this.datePipe.transform(deal?.savedDate || row.date, 'dd MMM yyyy') || '—',
-          },
-          {
-            type: 'field',
-            label: 'Payment Terms',
-            value: deal?.paymentTerms || '—',
-          },
+          { type: 'field', label: 'Quote Id', value: row.quoteId, numeric: true },
+          { type: 'field', label: 'Contact', value: this.contactName(contact) },
+          { type: 'field', label: 'Priority', value: enquiry?.priority || '—' },
+          { type: 'field', label: 'Payment Terms', value: deal?.paymentTerms || '—' },
           ...(this.approverName(row)
-            ? [
-                {
-                  type: 'field' as const,
-                  label: 'Approved by',
-                  value: this.approverName(row),
-                  noHover: true,
-                },
-              ]
+            ? [{ type: 'field' as const, label: 'Approved by', value: this.approverName(row), noHover: true }]
             : []),
         ],
       },
       {
-        title: 'Deal Sheet',
-        fields: [
-          {
-            type: 'field',
-            label: 'Amount',
-            value: this.formatAmount(row),
-            numeric: true,
-            noHover: true,
-          },
-          {
-            type: 'field',
-            label: 'Description',
-            value: enquiry?.title || (row as any).title || '—',
-            noHover: true,
-          },
-          {
-            type: 'field',
-            label: 'Requirement / Notes',
-            value: enquiry?.requirement || latestComment || '—',
-            noHover: true,
-          },
-        ],
-      },
-      {
-        title: 'Operations handoff readiness',
+        title: 'Financial summary',
         columns: '2',
-        fields: this.handoffReadinessFields(row),
-      },
-    ];
-  }
-
-  private handoffReadinessFields(row: Quotatation): DetailOverviewField[] {
-    const deal = row.dealData as any;
-    const selectedLines = this.itemRows(row);
-    const hasCurrentAcceptance =
-      !!(row as any).customerAcceptance &&
-      (row as any).customerAcceptance.acceptedRevision ===
-        (row.revision ?? 0) &&
-      Array.isArray((row as any).customerAcceptance.lpoFiles) &&
-      (row as any).customerAcceptance.lpoFiles.length > 0;
-    const lineIssues = selectedLines.length
-      ? selectedLines.filter(
-          (line) =>
-            !line['item'] || !Number(line['qty']) || !Number(line['price']),
-        ).length
-      : 1;
-
-    return [
-      {
-        type: 'field',
-        label: 'Payment terms',
-        value: deal?.paymentTerms ? 'Ready' : 'Missing',
-        noHover: true,
-      },
-      {
-        type: 'field',
-        label: 'Customer LPO',
-        value: row.lpoFiles?.length ? 'Attached' : 'Missing',
-        noHover: true,
-      },
-      {
-        type: 'field',
-        label: 'Accepted revision',
-        value: hasCurrentAcceptance
-          ? `Revision ${row.revision ?? 0}`
-          : 'Needs reconfirmation',
-        noHover: true,
-      },
-      {
-        type: 'field',
-        label: 'Execution lines',
-        value: selectedLines.length
-          ? `${selectedLines.length} selected`
-          : 'None selected',
-        numeric: true,
-        noHover: true,
-      },
-      {
-        type: 'field',
-        label: 'Line completeness',
-        value: lineIssues
-          ? `${lineIssues} issue${lineIssues === 1 ? '' : 's'} to check`
-          : 'Ready',
-        noHover: true,
-      },
-      {
-        type: 'field',
-        label: 'Approval gate',
-        value: 'Checked during approval',
-        noHover: true,
+        fields: [
+          amountField('Subtotal', price.totalSellingPrice + quoteDiscount + customerDiscount),
+          ...(quoteDiscount ? [amountField('Quotation discount', quoteDiscount)] : []),
+          ...(customerDiscount ? [amountField('Customer discount', customerDiscount)] : []),
+          amountField('Net deal value', price.totalSellingPrice, 'good'),
+          amountField('Total cost', price.totalCost),
+          amountField('Profit', price.profit),
+          { type: 'field', label: 'Profit margin', value: `${price.perc.toFixed(1)}%`, numeric: true, noHover: true },
+        ],
       },
     ];
   }

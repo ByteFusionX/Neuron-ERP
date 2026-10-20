@@ -356,7 +356,7 @@ export class QuotationListComponent implements AfterViewInit {
    *  (see `onCellEdit`), gated by `isStatusLocked`/`canSelectStatus`. `dealStatus` stays read-only. */
   private buildColumns(): void {
     this.columns = [
-      { key: 'date', label: 'Date', type: 'date', sortable: true, width: '120px' },
+      { key: 'date', label: 'Quoted Date', type: 'date', sortable: true, width: '120px', valueGetter: (r) => r.quotedDate ?? r.date },
       { key: 'quoteId', label: 'Quote Id', sortable: true },
       { key: 'customerName', label: 'Customer', valueGetter: (r) => r.client?.companyName },
       // Status and Deal Status come right after the customer so they stay on screen at ~1400px.
@@ -391,7 +391,7 @@ export class QuotationListComponent implements AfterViewInit {
         hidden: (r) => this.isCreatorOnlyView(r) || this.isFollowUpClosed(r),
       },
       {
-        id: 'addEvent', label: 'Add Event', icon: 'calendar', quick: true,
+        id: 'detailView', label: 'Detail View', icon: 'eye', quick: true,
         hidden: (r) => this.isCreatorOnlyView(r),
       },
       {
@@ -399,7 +399,7 @@ export class QuotationListComponent implements AfterViewInit {
         hidden: (r) => this.isCreatorOnlyView(r) || !(r.status === 'Won' && !r.lpoFiles?.length),
       },
       {
-        id: 'viewLpo', label: 'View Lpo', icon: 'eye', quick: true,
+        id: 'viewLpo', label: 'View Lpo', icon: 'eye',
         hidden: (r) => this.isCreatorOnlyView(r) || !(r.status === 'Won' && !!r.lpoFiles?.length),
       },
       {
@@ -412,20 +412,12 @@ export class QuotationListComponent implements AfterViewInit {
         hidden: (r) => this.isCreatorOnlyView(r) || !(r.status === 'Won' && r.lpoFiles?.length && (r.dealData as any)?.status === 'rejected'),
       },
       {
-        id: 'viewDeal', label: 'View Deal Sheet', icon: 'eye',
-        hidden: (r) => this.isCreatorOnlyView(r) || !this.hasDeal(r),
-      },
-      {
         id: 'updateStatus', label: 'Update Status', icon: 'refresh',
         hidden: (r) => this.isCreatorOnlyView(r) || r.status === 'Expired' || this.isStatusLocked(r),
       },
       {
         id: 'editQuote', label: 'Edit Quote', icon: 'pencil', quick: true,
-        hidden: (r) => this.isCreatorOnlyView(r) || this.isEditLocked(r),
-      },
-      {
-        id: 'viewRevisions', label: 'Revision History', icon: 'eye',
-        hidden: (r) => this.isCreatorOnlyView(r) || !r.revision,
+        hidden: (r) => this.isCreatorOnlyView(r) || (r.status === QuoteStatus.Won && !this.isDealRejected(r)) || this.isEditLocked(r),
       },
       {
         id: 'previewPdf', label: 'Preview PDF', icon: 'eye',
@@ -489,14 +481,21 @@ export class QuotationListComponent implements AfterViewInit {
   }
 
   /** Full edit is blocked once the deal is approved, or the quote is Won (super admins excepted, like the view page). */
+  private isDealRejected(r: Quotatation): boolean {
+    return (r.dealData as any)?.status?.toLowerCase() === 'rejected';
+  }
+
   private isEditLocked(r: Quotatation): boolean {
-    return (r.dealData as any)?.status?.toLowerCase() === 'approved' || (r.status === 'Won' && !this.isSuperAdmin);
+    return (r.dealData as any)?.status?.toLowerCase() === 'approved' || (r.status === 'Won' && !this.isSuperAdmin && !this.isDealRejected(r));
   }
 
   onRowAction(event: DataGridRowActionEvent<Quotatation>): void {
     const { action, row } = event;
     if (this.isCreatorOnlyView(row)) return;
     switch (action.id) {
+      case 'detailView':
+        this.openFullQuotation(row);
+        break;
       case 'followUp':
         this.openDetailTab(row, 'followups');
         break;
@@ -1093,7 +1092,7 @@ export class QuotationListComponent implements AfterViewInit {
             data.quotations.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
             const rows = data.quotations.map((element: any) => ({
-              date: this.datePipe.transform(element.date, 'dd/MM/yyyy'),
+              date: this.datePipe.transform(element.quotedDate ?? element.date, 'dd/MM/yyyy'),
               quoteId: element.quoteId,
               customerName: element.client.companyName,
               description: element.subject,
@@ -1328,7 +1327,7 @@ export class QuotationListComponent implements AfterViewInit {
           { type: 'dg', key: 'salesPerson' },
           ...(row.createdByUser ? [{ type: 'field' as const, label: 'Created By User', value: this.fullName(row.createdByUser), noHover: true }] : []),
           { type: 'field', label: 'Department', value: this.departmentNames(row) },
-          { type: 'field', label: 'Date', value: this.datePipe.transform(row.date, 'dd MMM yyyy') },
+          { type: 'field', label: 'Quoted Date', value: this.datePipe.transform(row.quotedDate ?? row.date, 'dd MMM yyyy') },
           { type: 'field', label: 'Closing / Valid Until', value: (row.closingDate || row.validityDate) ? this.datePipe.transform(row.closingDate || row.validityDate, 'dd MMM yyyy') : '—', noHover: true },
           { type: 'field', label: 'Payment Terms', value: row.paymentTerms || '—', noHover: true },
           { type: 'field', label: 'Delivery Terms', value: row.deliveryTerms || '—', noHover: true },

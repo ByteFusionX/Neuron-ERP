@@ -31,49 +31,25 @@
             <app-action-button variant="primary" *ngIf="data.approval && canDecide && viewMode === 'deal'" [disabled]="isApproving" (click)="onApprove()">
                 {{ isApproving ? 'Approving...' : 'Approve' }}
             </app-action-button>
-            <app-action-button variant="primary" *ngIf="data.quoteView && data.quoteData.dealData.status === 'rejected' && viewMode === 'deal'" (click)="onUpdate()" icon="edit">Edit Deal</app-action-button>
+            <app-action-button variant="primary" *ngIf="data.quoteData.dealData.status !== 'approved' && viewMode === 'deal'" (click)="onUpdate()" icon="edit">Edit Deal</app-action-button>
         </ng-container>
 
         <ng-container sidebar>
-            <app-detail-section title="Deal">
-                <app-detail-field label="Status">
-                    <app-detail-badge [label]="statusText(data.quoteData.dealData.status || 'pending')" [tone]="statusTone(data.quoteData.dealData.status)"></app-detail-badge>
-                </app-detail-field>
-                <app-detail-field label="Waiting on" *ngIf="waitingText">{{ waitingText }}</app-detail-field>
-                <app-detail-field label="Saved date">{{ data.quoteData.dealData.savedDate | date: 'dd MMM yyyy' }}</app-detail-field>
-                <app-detail-field label="Payment terms">{{ data.quoteData.dealData.paymentTerms || 'N/A' }}</app-detail-field>
-                <app-detail-field label="Approved by" *ngIf="approverName">{{ approverName }}</app-detail-field>
-                <div *ngIf="hasReviewComment" class="pt-2">
-                    <app-action-button variant="outline" (click)="openReview()" icon="view">View comment</app-action-button>
-                </div>
-            </app-detail-section>
-
-            <app-detail-section title="Approval stages" *ngIf="approvalStages.length">
-                <app-detail-field *ngFor="let stage of approvalStages" [label]="'Stage ' + stage.step">
-                    <div class="flex flex-col items-end gap-1 text-right">
-                        <span>
-                            {{ stage.roleName }}
-                            <span *ngIf="stage.originalRoleName" class="text-xs opacity-70">(escalated from {{ stage.originalRoleName }})</span>
-                        </span>
-                        <app-detail-badge [label]="stageLabel(stage)" [tone]="stageTone(stage)"></app-detail-badge>
-                        <span *ngIf="stage.updatedByName" class="text-xs opacity-70">{{ stage.updatedByName }}</span>
-                        <span *ngIf="stage.status === 'pending' && stage.escalationDueAt" class="text-xs opacity-70">Due {{ stage.escalationDueAt | date: 'dd MMM, HH:mm' }}</span>
-                    </div>
-                </app-detail-field>
-            </app-detail-section>
-
-            <app-detail-section title="Approval stages" *ngIf="!approvalStages.length && data.quoteData.dealData.status === 'pending'">
-                <app-detail-field label="Route">No approval workflow applies to this deal, so any deal sheet approver can decide. Add a Deal Sheet workflow in Settings → Approvals to route it by role.</app-detail-field>
-            </app-detail-section>
-
             <app-detail-section title="Quotation">
-                <app-detail-field label="Quote ID" numeric>{{ data.quoteData.quoteId || 'N/A' }}</app-detail-field>
+                <app-detail-field label="Quote ID" numeric>
+                    <a *ngIf="data.quoteData._id; else noQuote" [routerLink]="['/quotations/view', data.quoteData._id]" class="font-medium text-violet-600 hover:underline dark:text-violet-400">{{ data.quoteData.quoteId || 'N/A' }}</a>
+                    <ng-template #noQuote>{{ data.quoteData.quoteId || 'N/A' }}</ng-template>
+                </app-detail-field>
                 <app-detail-field label="Revision" numeric>{{ data.quoteData.revision ?? 0 }}</app-detail-field>
                 <app-detail-field label="Sales person">{{ salesPersonName }}</app-detail-field>
                 <app-detail-field label="Department">{{ data.quoteData.department?.departmentName || 'N/A' }}</app-detail-field>
             </app-detail-section>
 
             <app-detail-section title="Customer">
+                <app-detail-field label="Customer ID" numeric>
+                    <a *ngIf="customerRef; else noRef" [routerLink]="['/customers/view', customerRef]" class="font-medium text-violet-600 hover:underline dark:text-violet-400">{{ customerRef }}</a>
+                    <ng-template #noRef>N/A</ng-template>
+                </app-detail-field>
                 <app-detail-field label="Company">{{ data.quoteData.client?.companyName || 'N/A' }}</app-detail-field>
                 <app-detail-field label="LPO">{{ data.quoteData.lpoFiles?.length ? data.quoteData.lpoFiles.length + ' file(s)' : 'Not uploaded' }}</app-detail-field>
                 <app-detail-field label="Currency">{{ data.quoteData.currency || 'N/A' }}</app-detail-field>
@@ -93,8 +69,10 @@
                     </div>
                 </app-detail-section>
 
-                <app-detail-section title="Summary">
-                    <app-detail-metrics [items]="metricItems"></app-detail-metrics>
+                <app-detail-section title="Financial summary">
+                    <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+                        <app-detail-field *ngFor="let line of financialSummary" [label]="line.label" [tone]="line.tone ?? null" numeric stacked>{{ line.value }}</app-detail-field>
+                    </div>
                 </app-detail-section>
             </div>
 
@@ -134,4 +112,4 @@
     </app-detail-view-shell>
 </div>
 
-<app-update-dealsheet [open]="updateOpen" [data]="data" (saved)="onUpdateSaved($event)" (closed)="updateOpen = false"></app-update-dealsheet>
+<app-update-dealsheet [open]="updateOpen" [data]="updateData ?? data" (saved)="onUpdateSaved($event)" (closed)="updateOpen = false"></app-update-dealsheet>

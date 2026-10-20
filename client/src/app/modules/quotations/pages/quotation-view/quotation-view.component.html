@@ -93,7 +93,11 @@
 
       <!-- revisions -->
       <div *ngSwitchCase="'revisions'">
-        <app-revision-history [data]="revisionSource" [reloadKey]="revision"></app-revision-history>
+        <div *ngIf="viewedRevision !== null" class="mb-3 flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200">
+          <span>PDF download and preview use Rev {{ viewedRevision }}, dated {{ revisionDateLabel }}.</span>
+          <button type="button" class="font-semibold underline" (click)="clearViewedRevision()">Use current</button>
+        </div>
+        <app-revision-history [data]="revisionSource" [reloadKey]="revision" (revisionSelected)="onRevisionSelected($event)"></app-revision-history>
       </div>
 
       <!-- documents -->

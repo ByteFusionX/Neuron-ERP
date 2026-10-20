@@ -109,7 +109,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
 
   /** yyyy-MM-dd strings compare correctly as text. */
   private static notBeforeQuoteDate(control: AbstractControl): ValidationErrors | null {
-    const quoteDate = control.parent?.get('date')?.value;
+    const quoteDate = control.parent?.get('quotedDate')?.value;
     return control.value && quoteDate && control.value < quoteDate ? { beforeQuoteDate: true } : null;
   }
 
@@ -117,7 +117,10 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   quoteForm = this.fb.group({
     client: [null as string | null, Validators.required],
     attention: [null as string | null, Validators.required],
+    // Created date: set once when the quote is created, never shown or edited.
     date: [this.todayIso(), Validators.required],
+    // Quoted date: the date printed on the PDF.
+    quotedDate: [this.todayIso(), Validators.required],
     department: [null as string | null],
     departments: [[] as string[], Validators.required],
     subject: ['', Validators.required],
@@ -136,7 +139,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   });
   /** Step 1 and step 3 own these; step 2 owns `optionalItems`. */
   private readonly stepControls: Record<1 | 2 | 3, string[]> = {
-    1: ['client', 'attention', 'departments', 'subject', 'date', 'closingDate', 'currency', 'quoteCompany'],
+    1: ['client', 'attention', 'departments', 'subject', 'quotedDate', 'closingDate', 'currency', 'quoteCompany'],
     2: ['optionalItems'],
     3: ['customerNote', 'termsAndCondition'],
   };
@@ -341,6 +344,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       client: id(q.client),
       attention: id(q.attention),
       date: day(q.date),
+      quotedDate: day(q.quotedDate || q.date),
       closingDate: day(q.closingDate || q.validityDate),
       subject: q.subject ?? '',
       currency: q.currency ?? 'QAR',
@@ -399,7 +403,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     // The items component owns the array's shape, so let it rebuild the blank option.
     this.itemEntry ? this.itemEntry.reset() : this.optionalItems.clear();
     this.quoteForm.reset({
-      client: null, attention: null, date: this.todayIso(), department: null, departments: [], subject: '',
+      client: null, attention: null, date: this.todayIso(), quotedDate: this.todayIso(), department: null, departments: [], subject: '',
       currency: 'QAR', quoteCompany: null, closingDate: '', customerNote: '', termsAndCondition: '',
       paymentTerms: '', deliveryTerms: '', deliveryLocation: '', enqId: null, accountingManager: null,
     });
@@ -543,6 +547,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       client: v.client,
       attention: v.attention,
       date: v.date,
+      quotedDate: v.quotedDate,
       department: v.departments?.[0] ?? null,
       departments: v.departments,
       subject: v.subject,
@@ -582,7 +587,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     return payload;
   }
 
-  /** Final action: creates as Work In Progress, or saves the edit, each with a required note. */
+  /** Final action: creates as Work In Progress, or saves the edit; the edit note is optional. */
   submit(): void {
     if (this.quoteForm.invalid) {
       this.quoteForm.markAllAsTouched();
@@ -604,8 +609,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     }
     const description = edit
       ? this.revisesOnChange
-        ? 'This quotation is past the draft stage. If the items, notes, terms or currency changed, the current version is kept as a revision. Say what changed.'
-        : 'Say what you changed. It is recorded in the quotation history.'
+        ? 'This quotation is past the draft stage. If the items, notes, terms or currency changed, the current version is kept as a revision. You can add a note on what changed.'
+        : 'You can add a note on what you changed. It is recorded in the quotation history.'
       : '';
     this.confirmDialog
       .open({
@@ -613,8 +618,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
         title: edit ? 'Save changes' : 'Create quotation',
         message: description,
         confirmLabel: edit ? 'Save' : 'Create',
-        reason: true,
-        reasonLabel: edit ? 'What changed' : 'Note',
+        reason: 'optional',
+        reasonLabel: edit ? 'What changed (optional)' : 'Note (optional)',
       })
       .then((result) => {
         if (!result.confirmed) return;

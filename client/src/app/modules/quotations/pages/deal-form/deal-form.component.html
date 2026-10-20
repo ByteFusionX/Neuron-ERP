@@ -23,13 +23,6 @@
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <app-sf-checkbox [ngModelOptions]="{ standalone: true }" [ngModel]="allSelected" (ngModelChange)="toggleAll($event)"
                     [label]="'Select all (' + selectedCount + ' of ' + lineCount + ')'"></app-sf-checkbox>
-                <div class="flex items-center gap-2" *ngIf="selectedCount">
-                    <div class="w-56">
-                        <app-sf-combobox [ngModelOptions]="{ standalone: true }" [ngModel]="bulkSupplier" (ngModelChange)="bulkSupplier = $event"
-                            [options]="supplierOptions" placeholder="Supplier for selected lines"></app-sf-combobox>
-                    </div>
-                    <app-action-button variant="tool" [disabled]="!bulkSupplier" (click)="applyBulkSupplier()">Apply to {{ selectedCount }} line{{ selectedCount === 1 ? '' : 's' }}</app-action-button>
-                </div>
             </div>
         </div>
         </div>
@@ -126,8 +119,11 @@
         <app-action-button variant="secondary" (click)="drawer?.requestClose()">Cancel</app-action-button>
         <app-action-button *ngIf="step === 2" variant="secondary" (click)="back()">Back</app-action-button>
         <app-action-button *ngIf="step === 1" variant="primary" [disabled]="!!lineIssues.length" (click)="next()">Next</app-action-button>
-        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="deal-form" [disabled]="saving || !!termIssues.length">
-            {{ saving ? 'Converting…' : 'Convert to Deal Sheet' }}
+        <app-action-button *ngIf="step === 2 && !isResubmit" variant="primary" [disabled]="saving || !!termIssues.length" (click)="onSubmit()">
+            {{ saving ? 'Submitting…' : 'Submit' }}
+        </app-action-button>
+        <app-action-button *ngIf="step === 2 && isResubmit" variant="primary" [disabled]="saving || !!termIssues.length" (click)="onSubmit()">
+            {{ saving ? 'Resubmitting…' : 'Resubmit' }}
         </app-action-button>
     </ng-container>
 </app-sf-drawer>

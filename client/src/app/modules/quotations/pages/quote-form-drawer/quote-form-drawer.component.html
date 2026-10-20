@@ -86,8 +86,8 @@
                 <app-sf-field full label="Subject" [control]="quoteForm.controls.subject">
                     <app-sf-input formControlName="subject" placeholder="Quotation subject"></app-sf-input>
                 </app-sf-field>
-                <app-sf-field label="Date" [control]="quoteForm.controls.date">
-                    <app-sf-date formControlName="date" [readonly]="true" displayFormat="dd/MM/yyyy"></app-sf-date>
+                <app-sf-field label="Quoted Date" hint="The date printed on the quotation PDF" [control]="quoteForm.controls.quotedDate">
+                    <app-sf-date formControlName="quotedDate" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
                 </app-sf-field>
                 <app-sf-field label="Closing Date" hint="Last day to submit this quotation. It is also the Valid Until date shown on the PDF, and the quote shows as Expired after it" [control]="quoteForm.controls.closingDate" [messages]="{ beforeQuoteDate: 'Closing date cannot be before the quote date' }">
                     <app-sf-date formControlName="closingDate" typeable [min]="isEdit ? null : today" displayFormat="dd/MM/yyyy"></app-sf-date>

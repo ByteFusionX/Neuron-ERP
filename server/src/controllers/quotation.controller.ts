@@ -205,9 +205,9 @@ const quotePayloadProblem = (quoteData: any, isCreate: boolean): string | null =
     }
 
     const dateOf = (value: any) => (value ? new Date(value) : null);
-    const quoteDate = dateOf(quoteData?.date);
+    const quoteDate = dateOf(quoteData?.quotedDate ?? quoteData?.date);
     const closing = dateOf(quoteData?.closingDate);
-    for (const [label, value] of [['Date', quoteDate], ['Closing date', closing]] as const) {
+    for (const [label, value] of [['Quoted date', quoteDate], ['Closing date', closing]] as const) {
         if (value && Number.isNaN(value.getTime())) return `${label} is not a valid date`;
     }
     // A new Draft may be sparse; its dates are checked when it is completed.
@@ -286,6 +286,8 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
         await applyRequestedQuoteOwner(quoteData, createdBy);
         normalizeQuoteDepartments(quoteData)
         normalizeQuoteValidity(quoteData)
+        // The created date is fixed at creation; the quoted date defaults to it and is what the PDF prints.
+        if (!quoteData.quotedDate) quoteData.quotedDate = quoteData.date;
         const stripEmptyItemImages = (value: any): void => {
             if (Array.isArray(value)) {
                 value.forEach(stripEmptyItemImages);
@@ -616,7 +618,12 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             ...quotationLookupStages
         ]);
 
-        quoteData.forEach((q: any) => { q.isExpired = isQuoteExpired(q); });
+        quoteData.forEach((q: any) => {
+            q.isExpired = isQuoteExpired(q);
+            // Quotes saved before the quoted date existed fall back to the created date.
+            q.quotedDate = q.quotedDate ?? q.date;
+            delete q.revisions;
+        });
         return res.status(200).json({ total: total, quotations: quoteData ?? [] })
 
     } catch (error) {
@@ -898,6 +905,22 @@ const countDealSheets = async (filters: Record<string, any>, searchFilter: Recor
     return result?.[0]?.total ?? 0;
 };
 
+/** Per-tab totals for the deal sheet list, using the same access scope and search as the page query. */
+const dealViewCounts = async (accessFilter: Record<string, any>, searchFilter: Record<string, any>) => {
+    const base = { isDeleted: { $ne: true }, dealData: { $exists: true }, ...validDealSheetFilter };
+    const open = { 'dealData.status': { $nin: ['rejected', 'approved'] } };
+    const byView: Record<string, Record<string, any>> = {
+        all: base,
+        pending: { ...base, ...open },
+        approved: { ...base, 'dealData.status': 'approved' },
+        rejected: { ...base, 'dealData.status': 'rejected' },
+        revoked: { ...base, ...open, 'editHistory.action': 'DealRevoked' },
+    };
+    const keys = Object.keys(byView);
+    const totals = await Promise.all(keys.map((k) => countDealSheets({ $and: [byView[k], accessFilter] }, searchFilter)));
+    return Object.fromEntries(keys.map((k, i) => [k, totals[i]]));
+};
+
 export const getDealSheet = async (req: Request, res: Response, next: NextFunction) => {
     try {
         let { page, row, access, userId, searchQuery, searchCriteria, view, filters: gridFilters, sortKey, sortDir } = req.body;
@@ -1132,9 +1155,10 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
             }
         ]);
 
-        if (!dealData || !total) return res.status(204).json({ err: 'No Deal data found' })
+        const viewCounts = await dealViewCounts(accessFilter, searchFilter);
+        if (!dealData || !total) return res.status(200).json({ total: 0, dealSheet: [], viewCounts })
         await withDealStageNames(dealData);
-        return res.status(200).json({ total: total, dealSheet: dealData })
+        return res.status(200).json({ total: total, dealSheet: dealData, viewCounts })
 
     } catch (error) {
         console.log(error)
@@ -1384,9 +1408,10 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
             }
         ]);
 
-        if (!dealData || !total) return res.status(204).json({ err: 'No Deal data found' })
+        const viewCounts = await dealViewCounts(accessFilter, searchFilter);
+        if (!dealData || !total) return res.status(200).json({ total: 0, dealSheet: [], viewCounts })
         await withDealStageNames(dealData);
-        return res.status(200).json({ total: total, dealSheet: dealData })
+        return res.status(200).json({ total: total, dealSheet: dealData, viewCounts })
 
     } catch (error) {
         console.log(error)
@@ -1641,12 +1666,6 @@ const selectedDealLines = (items: any[]): any[] => (Array.isArray(items) ? items
 
 const hasActiveDeal = (quote: any): boolean => !!quote?.dealData?.status && quote.dealData.status !== 'rejected';
 
-const acceptedRevisionMatchesCurrentQuote = (quote: any): boolean =>
-    !!quote?.customerAcceptance
-    && quote.customerAcceptance.acceptedRevision === (quote.revision ?? 0)
-    && Array.isArray(quote.customerAcceptance.lpoFiles)
-    && quote.customerAcceptance.lpoFiles.length > 0;
-
 const currentRevisionWasSent = (quote: any): boolean => {
     const revision = quote?.revision ?? 0;
     return quote?.currentSentRevision === revision
@@ -1667,9 +1686,6 @@ const dealHandoffReadinessIssues = (quote: any): string[] => {
     }
     if (!Array.isArray(quote?.lpoFiles) || quote.lpoFiles.length === 0) {
         issues.push('customer LPO attachment');
-    }
-    if (!acceptedRevisionMatchesCurrentQuote(quote)) {
-        issues.push('customer acceptance for the current quotation revision');
     }
     if (!selectedLines.length) {
         issues.push('at least one selected execution line');
@@ -1702,7 +1718,7 @@ const dealHandoffReadinessIssues = (quote: any): string[] => {
         if (!isNonNegativeNumber(cost?.value)) {
             issues.push(`cost ${label} value`);
         }
-        if (['Additional Cost', 'Supplier Discount'].includes(cost?.type) && !hasReferenceValue(cost?.supplierId)) {
+        if (cost?.type === 'Supplier Discount' && !hasReferenceValue(cost?.supplierId)) {
             issues.push(`cost ${label} supplier`);
         }
     });
@@ -1781,6 +1797,14 @@ const asPlain = (items: any[] = []) => items.map((item: any) => (item?.toObject 
 
 /** Strips the "Error: " prefix the workflow service adds when it rewraps an error. */
 const workflowMessage = (error: any) => String(error?.message ?? error).replace(/^(Error:\s*)+/, '');
+
+// Older history rows were written without an editor (update-style $push skips validation); fill them so a later save() validates.
+const backfillEditHistoryEditor = (doc: any, editorId: any) => {
+    if (!editorId) return;
+    for (const entry of doc.editHistory ?? []) {
+        if (!entry.editedBy) entry.editedBy = editorId;
+    }
+};
 
 const pendingDealStage = (approvalStatus: any[] = []) => {
     const pending = approvalStatus.filter((a: any) => a.status === 'pending').sort((a: any, b: any) => a.step - b.step);
@@ -1911,6 +1935,8 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         delete quoteData.editHistory;
         delete quoteData.revision;
         delete quoteData.revisions;
+        // The created date never changes after the quote is saved.
+        delete quoteData.date;
         delete quoteData.createdBy;
         delete quoteData.createdByUser;
         const payloadProblem = quotePayloadProblem(quoteData, false);
@@ -1945,8 +1971,13 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
             if (existingQuote.dealData?.status === 'approved') {
                 return res.status(400).json({ message: "The deal sheet is approved, so this quote can no longer be edited" });
             }
+            // Editing a quote whose deal sheet was rejected sends it back to review; no other edit changes the status this way.
+            const dealRejected = existingQuote.dealData?.status === 'rejected';
+            if (dealRejected) {
+                quoteData.status = quoteStatus.UnderReview;
+            }
             // Status moves go through the same rules as the status endpoint, so an edit cannot skip them.
-            if (!reopened && quoteData.status && quoteData.status !== existingQuote.status) {
+            if (!dealRejected && !reopened && quoteData.status && quoteData.status !== existingQuote.status) {
                 if (!isKnownQuoteStatus(quoteData.status) || !canTransitionQuoteStatus(existingQuote.status, quoteData.status)) {
                     return res.status(400).json({ message: `A quote cannot move from "${existingQuote.status}" to "${quoteData.status}"` });
                 }
@@ -2003,6 +2034,7 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
                     deliveryTerms: existingQuote.deliveryTerms,
                     deliveryLocation: existingQuote.deliveryLocation,
                     validityDate: existingQuote.closingDate || existingQuote.validityDate,
+                    quotedDate: existingQuote.quotedDate || existingQuote.date,
                 },
             };
         }
@@ -2300,11 +2332,9 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         if (!quote.lpoFiles?.length) {
             return res.status(400).json({ message: "Upload the accepted customer LPO before raising a deal sheet" });
         }
-        if (!acceptedRevisionMatchesCurrentQuote(quote)) {
-            return res.status(409).json({ message: "The uploaded LPO does not match the current quotation revision. Upload the accepted LPO again before raising a deal sheet" });
-        }
-        if (hasActiveDeal(quote)) {
-            return res.status(409).json({ message: "A deal sheet is already in progress or approved for this quotation" });
+        // A pending deal can still be edited and resubmitted from the Deal Sheet page; only an approved one is locked.
+        if (quote.dealData?.status === 'approved') {
+            return res.status(409).json({ message: "This deal sheet is already approved and can no longer be edited" });
         }
         const customerGuard = await getCustomerCommercialGuard(quote.client, estimateQuoteValue(quote));
         if (customerGuard.blocked) {
@@ -2318,7 +2348,10 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
             return res.status(400).json({ message: "Invalid deal sheet payload" });
         }
         parsedDealData = normalizeTaxForCustomer(parsedDealData, customerGuard.customer);
-        const { paymentTerms, items, removedFiles, existingFiles, costs, totalDiscount } = parsedDealData;
+        const { paymentTerms, items, removedFiles, existingFiles, costs } = parsedDealData;
+        // The deal is built from the quote's first option and the discount isn't editable here, so the quote is the
+        // source of truth: it is never dropped or tampered with by the payload.
+        const totalDiscount = Number(quote.optionalItems?.[0]?.totalDiscount) || 0;
         if (!String(paymentTerms ?? '').trim()) {
             return res.status(400).json({ message: "Payment terms are required before raising a deal sheet" });
         }
@@ -2498,9 +2531,6 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
         }
         if (!quote.lpoFiles?.length) {
             return res.status(400).json({ message: "Customer LPO is required before approving the deal sheet" });
-        }
-        if (!acceptedRevisionMatchesCurrentQuote(quote)) {
-            return res.status(409).json({ message: "Customer acceptance is tied to an older quotation revision. Reconfirm the current revision before approval" });
         }
         if (quote.dealData.status !== 'pending') {
             return res.status(409).json({ message: `Deal sheet is already ${quote.dealData.status}` });
@@ -2710,11 +2740,12 @@ export const rejectDeal = async (req: Request, res: Response, next: NextFunction
         deal.dealData.seenedBySalsePerson = false
         deal.dealData.comments.push(comment);
         deal.editHistory.push({
-            editedBy: userData?._id,
+            editedBy: userData?._id ?? (req.user as any)?.id,
             editedAt: new Date(),
             action: 'DealRejected',
             reason: comment,
         } as any);
+        backfillEditHistoryEditor(deal, userData?._id ?? (req.user as any)?.id);
         const savedDeal = await deal.save();
         await logAudit(req, {
             entityType: 'quotation',
@@ -2791,6 +2822,7 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
             editedAt: new Date(),
             action: 'DealRevoked',
         } as any);
+        backfillEditHistoryEditor(deal, revokerData?._id ?? (req.user as any)?.id);
         await deal.save();
         await logAudit(req, {
             entityType: 'quotation',
@@ -3605,7 +3637,7 @@ export const getQuoteRevisions = async (req: Request, res: Response, next: NextF
     try {
         const { quoteId } = req.params;
         const quote = await Quotation.findById(quoteId)
-            .select('+revisions revision subject currency optionalItems customerNote termsAndCondition paymentTerms deliveryTerms deliveryLocation validityDate closingDate createdBy')
+            .select('+revisions revision subject currency optionalItems customerNote termsAndCondition paymentTerms deliveryTerms deliveryLocation validityDate closingDate date quotedDate createdBy')
             .lean();
 
         if (!quote) {
@@ -3649,6 +3681,7 @@ export const getQuoteRevisions = async (req: Request, res: Response, next: NextF
                         deliveryTerms: quote.deliveryTerms,
                         deliveryLocation: quote.deliveryLocation,
                         validityDate: quote.closingDate || quote.validityDate,
+                        quotedDate: quote.quotedDate || quote.date,
                     },
                 },
                 ...revisions,
@@ -3708,7 +3741,7 @@ export const normalizeQuoteDepartments = (quoteData: any) => {
 }
 
 const EDIT_HISTORY_IGNORED_FIELDS = new Set(['_id', '__v', 'editHistory', 'createdBy', 'quoteId', 'updatedAt', 'createdAt', 'saveNote']);
-const EDIT_HISTORY_DATE_FIELDS = new Set(['date', 'closingDate', 'validityDate']);
+const EDIT_HISTORY_DATE_FIELDS = new Set(['date', 'quotedDate', 'closingDate', 'validityDate']);
 const EDIT_HISTORY_MAX_VALUE_LENGTH = 300;
 
 const stringifyForHistory = (value: any): string => {

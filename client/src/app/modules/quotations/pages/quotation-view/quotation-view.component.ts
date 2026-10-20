@@ -54,7 +54,7 @@ import {
   DetailViewShellComponent,
   DetailViewStat,
 } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
-import { getQuotatation, QuoteStatus, quoteStatusLabel } from 'src/app/shared/interfaces/quotation.interface';
+import { getQuotatation, QuoteRevision, QuoteStatus, quoteStatusLabel } from 'src/app/shared/interfaces/quotation.interface';
 import { DomSanitizer } from '@angular/platform-browser';
 import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
@@ -280,6 +280,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
             this._employeeService.employeeData$.pipe(take(1)).subscribe((employee) => {
               this.isNoteOwner = !!employee && employee._id === this.quoteData?.createdBy?._id;
             });
+            this.viewedRevision = null;
+            this.loadRevisionDates();
             this.rebuild();
             this.loadStockHold();
             this.loading = false;
@@ -295,7 +297,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   /** Base tabs, plus Deal sheet once a deal exists and History for super admins. */
   private syncTabs(): void {
     const tabs = [...this.baseTabs];
-    if (this.revision) { tabs.splice(tabs.findIndex((t) => t.id === 'pricing') + 1, 0, this.revisionsTab); }
+    if (this.revision) { tabs.push(this.revisionsTab); }
     if (this.isSuperAdmin) { tabs.push(this.historyTab); }
     this.tabs = tabs;
     if (!tabs.some((t) => t.id === this.tab)) { this.tab = 'overview'; }
@@ -671,6 +673,74 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   }
   private _revSource?: { id: string; data: RevisionHistoryData };
 
+  /** Revision picked in the Revisions tab; null means the live (current) revision. */
+  viewedRevision: number | null = null;
+  private revisionList: QuoteRevision[] = [];
+
+  private loadRevisionDates(): void {
+    const q = this.quoteData;
+    this.revisionList = [];
+    if (!q?._id || !(q.revision && q.revision > 0)) return;
+    this.quotationService.getQuoteRevisions(q._id as string).subscribe({
+      next: (res) => {
+        if (this.quoteData?._id !== q._id) return;
+        this.revisionList = res.revisions || [];
+        this.rebuild();
+      },
+      error: () => {},
+    });
+  }
+
+  /** Revision whose content the page, PDF and preview represent. */
+  get activeRevision(): number {
+    return this.viewedRevision ?? this.revision;
+  }
+
+  /** The quoted date that revision carried; the live revision uses the quote's own, and older snapshots without one fall back to it. */
+  private revisionDate(rev: number): string | undefined {
+    const live = this.quoteData?.quotedDate || this.quoteData?.date;
+    if (rev === this.revision) return live;
+    return this.revisionList.find((r) => r.revision === rev)?.snapshot?.quotedDate || live;
+  }
+
+  get revisionDateLabel(): string {
+    const d = this.revisionDate(this.activeRevision);
+    return d ? this.formatDate(d) : '';
+  }
+
+  onRevisionSelected(rev: number): void {
+    this.viewedRevision = rev === this.revision ? null : rev;
+    this.rebuild();
+  }
+
+  clearViewedRevision(): void {
+    this.viewedRevision = null;
+    this.rebuild();
+  }
+
+  /** The quote exactly as it stood at the active revision, so the PDF never mixes in later or earlier edits. */
+  private quoteForActiveRevision(): getQuotatation {
+    const q = this.quoteData!;
+    const snap = this.viewedRevision === null ? null : this.revisionList.find((r) => r.revision === this.viewedRevision)?.snapshot;
+    // The PDF prints `date`, so it carries the quoted date, never the created date.
+    const merged: any = { ...q, date: this.revisionDate(this.activeRevision) || q.date };
+    if (snap) {
+      Object.assign(merged, {
+        subject: snap.subject,
+        currency: snap.currency,
+        optionalItems: snap.optionalItems,
+        customerNote: snap.customerNote,
+        termsAndCondition: snap.termsAndCondition,
+        paymentTerms: snap.paymentTerms,
+        deliveryTerms: snap.deliveryTerms,
+        deliveryLocation: snap.deliveryLocation,
+        closingDate: snap.validityDate,
+        validityDate: snap.validityDate,
+      });
+    }
+    return merged as getQuotatation;
+  }
+
   onQuoteEdit(): void {
     if (this.isEditDisabled) {
       return;
@@ -688,7 +758,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     } else {
       this.isDownloading = true;
     }
-    const quoteData = this.quoteData!;
+    const quoteData = this.quoteForActiveRevision();
     this.quotationService
       .generatePDF(quoteData, includeStamp)
       .then((pdf) => {
@@ -710,7 +780,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
 
   onPreviewPdf(): void {
     this.isPreviewing = true;
-    const quoteData = this.quoteData!;
+    const quoteData = this.quoteForActiveRevision();
     this.quotationService
       .generatePDF(quoteData)
       .then((pdf) => {
@@ -1384,7 +1454,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
         title: 'Quotation',
         facts: keep([
           { label: 'Subject', value: q.subject || '' },
-          { label: 'Date', value: date(q.date) },
+          { label: this.activeRevision > 0 ? `Quoted date (Rev ${this.activeRevision})` : 'Quoted date', value: date(this.revisionDate(this.activeRevision)) },
+          { label: 'Created', value: date(q.date) },
           { label: 'Closing date', value: date(q.closingDate || q.validityDate) },
           { label: 'Quoting company', value: q.quoteCompany || '' },
           { label: 'Department', value: q.department?.departmentName || '' },
