@@ -12,7 +12,7 @@
     [tabParam]="''"
   >
     <ng-container footerLeft>
-      <app-action-button variant="outline" *ngIf="canSaveDraft" (click)="onDraftClicks()">{{ isJobLess ? 'Save as draft' : 'Save' }}</app-action-button>
+      <app-action-button variant="outline" *ngIf="canSaveDraft" (click)="onDraftClicks()">Save</app-action-button>
     </ng-container>
     <ng-container footerRight>
       <app-action-button (click)="onDiscardClicks()">Discard</app-action-button>
@@ -39,10 +39,17 @@
         [lineAwarded]="lineAwarded"
         [lineLocked]="lineLocked"
         [lineBadge]="lineBadge"
+        [lineOffers]="lineOffers"
+        [supplierTabs]="supplierTabs()"
+    [activeTab]="activeTab"
+    (tabSelected)="activeTab = $event"
+    (supplierAdded)="onSupplierTabAdded($event)"
+    (offerPicked)="onOfferPicked($event)"
         (jobLessChange)="toggleJobLess($event)"
         (jobSelected)="onJobSelected($event)"
         (materialRequestsClicked)="onGetMaterialRequestsClicks()"
         (createProductRequested)="onCreatePartNumber()"
+        (addToRfq)="onAddToRfq($event)"
       ></app-pr-form>
     </div>
   </app-detail-view-shell>
@@ -50,12 +57,29 @@
 
 <!-- Drawer: create from the PR list, same shape as the quotation create drawer. -->
 <app-sf-drawer #prDrawer *ngIf="drawer" [title]="formTitle()" [subtitle]="drawerSubtitle()"
-  width="min(1200px, 96vw)" [open]="drawerShown" [dirty]="isDrawerDirty()" (closed)="closeDrawer()">
+  [width]="fullView ? '100vw' : 'min(1200px, 96vw)'" [open]="drawerShown" [dirty]="isDrawerDirty()" (closed)="closeDrawer()">
+  <button sfDrawerHeader type="button"
+    class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+    [attr.aria-label]="fullView ? 'Exit full view' : 'Expand to full view'" [title]="fullView ? 'Exit full view' : 'Expand to full view'"
+    (click)="fullView = !fullView">
+    <ng-icon [name]="fullView ? 'heroArrowsPointingIn' : 'heroArrowsPointingOut'" class="h-4 w-4"></ng-icon>
+  </button>
   <span sfDrawerHeader class="flex flex-wrap gap-1.5">
     <app-detail-badge *ngFor="let b of badges()" [label]="b.label" [tone]="b.tone || 'neutral'"></app-detail-badge>
   </span>
 
-  <app-pr-form
+  <ol class="mb-4 flex flex-wrap items-center gap-1.5 text-xs">
+    <ng-container *ngFor="let s of flowSteps; let last = last">
+      <li class="flex items-center gap-1 rounded-full px-2.5 py-1 font-medium"
+        [ngClass]="s.done ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">
+        {{ s.done ? '✓ ' : '' }}{{ s.label }}
+      </li>
+      <li *ngIf="!last" class="text-gray-300 dark:text-gray-600" aria-hidden="true">›</li>
+    </ng-container>
+  </ol>
+
+  <app-pr-form #prForm
+    [externalAddButtons]="true"
     [purchaseForm]="purchaseForm"
     [entryItems]="entryItems"
     [sourceTitle]="sourceTitle()"
@@ -74,31 +98,45 @@
     [lineAwarded]="lineAwarded"
         [lineLocked]="lineLocked"
     [lineBadge]="lineBadge"
+    [lineOffers]="lineOffers"
+    [supplierTabs]="supplierTabs()"
+    [activeTab]="activeTab"
+    (tabSelected)="activeTab = $event"
+    (supplierAdded)="onSupplierTabAdded($event)"
+    (offerPicked)="onOfferPicked($event)"
     (jobLessChange)="toggleJobLess($event)"
     (jobSelected)="onJobSelected($event)"
     (materialRequestsClicked)="onGetMaterialRequestsClicks()"
     (createProductRequested)="onCreatePartNumber()"
+    (addToRfq)="onAddToRfq($event)"
   ></app-pr-form>
 
   <ng-container sfDrawerFooter>
     <div class="mr-auto flex flex-wrap items-center gap-2">
-      <span *ngIf="purchaseId && !isEditing" class="text-xs text-gray-400 dark:text-gray-500">Draft {{ f['purchaseNo'].value }} saved</span>
+      <span *ngIf="purchaseId && !isEditing" class="text-xs text-gray-400 dark:text-gray-500">{{ f['purchaseNo'].value }} saved</span>
+      <app-action-button *ngIf="selectedJobSheet || isJobLess" variant="secondary" (click)="prForm.itemEntry?.addItemAndJump()">
+        <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add item
+      </app-action-button>
       <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onMrRequestClicks()">MR request</app-action-button>
       <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onSupplierClicks()">Supplier discount</app-action-button>
       <app-action-button variant="secondary" (click)="onSupplierRfqClicks()">Supplier RFQ</app-action-button>
-      <app-action-button variant="secondary" (click)="onCompareClicks()">Compare &amp; award</app-action-button>
-      <app-action-button *ngIf="purchaseId" variant="secondary" (click)="onFinalDasdboardClicks()">Final dashboard</app-action-button>
+      <app-action-button variant="secondary" (click)="onCompareClicks()">Compare &amp; award<span *ngIf="awardStats.total" class="ml-1 text-gray-400">({{ awardStats.awarded }}/{{ awardStats.total }})</span></app-action-button>
     </div>
+    <span *ngIf="submitBlockedReason" class="text-xs text-amber-600 dark:text-amber-400">{{ submitBlockedReason }}</span>
     <app-action-button variant="secondary" (click)="prDrawer.requestClose()">Cancel</app-action-button>
-    <app-action-button *ngIf="!isEditing" variant="tool" (click)="onDraftClicks()">{{ isJobLess ? 'Save as draft' : 'Save' }}</app-action-button>
-    <app-action-button *ngIf="allAwarded" variant="primary" (click)="onSubmit()">Submit for approval</app-action-button>
+    <app-action-button *ngIf="!isEditing" variant="tool" (click)="onDraftClicks()">Save</app-action-button>
+    <span [title]="submitBlockedReason || ''">
+      <app-action-button variant="primary" [disabled]="!!submitBlockedReason" (click)="onSubmit()">
+        <ng-icon name="heroPaperAirplane" class="h-3.5 w-3.5"></ng-icon> Approval
+      </app-action-button>
+    </span>
   </ng-container>
 </app-sf-drawer>
 
 <!-- Supplier tabs instead of Option 1 / Option 2: each tab is one supplier and the lines it is asked to price. -->
-<app-sales-rfq-create-drawer [open]="rfqOpen" [purchaseId]="purchaseId" (saved)="onRfqSaved()" (closed)="rfqOpen = false"></app-sales-rfq-create-drawer>
+<app-sales-rfq-create-drawer [open]="rfqOpen" [purchaseId]="purchaseId" [purchaseLineKeys]="rfqLineKeys" [purchaseFocus]="rfqFocus" (saved)="onRfqSaved()" (closed)="rfqOpen = false"></app-sales-rfq-create-drawer>
 
 <app-pr-compare-drawer #compareList [open]="compareOpen" [purchaseId]="purchaseId" (changed)="onAwardsChanged()" (closed)="compareOpen = false"></app-pr-compare-drawer>
 
 <app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>
-
+<app-supplier-discount [open]="discountOpen" [purchaseId]="purchaseId" (saved)="loadPurchaseData()" (closed)="discountOpen = false"></app-supplier-discount>

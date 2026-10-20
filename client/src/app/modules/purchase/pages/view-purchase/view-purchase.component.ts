@@ -215,7 +215,7 @@ export class ViewPurchaseComponent {
     ];
 
     this.itemColumns = [
-      { key: 'item', label: 'Item', type: 'stack', subKey: 'partNo' },
+      { key: 'item', label: 'Item', type: 'stack', subKey: 'partNo', truncate: true },
       ...(manual || !p.jobId?._id ? [] : [{ key: 'tag', label: '' } as DetailTableColumn]),
       { key: 'qty', label: 'Qty', type: 'number', align: 'right' },
       { key: 'unitCost', label: 'Unit cost', type: 'currency' },

@@ -3,8 +3,7 @@ import { Component, ViewChild, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { forkJoin, Observable, of, Subscription } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { Subscription } from 'rxjs';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
@@ -81,7 +80,8 @@ export class PurchaseRequestListComponent {
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'item', label: 'Item' },
+    { key: 'item', label: 'Item', truncate: true },
+    { key: 'award', label: 'Award', type: 'badge', badgeTones: { Awarded: 'good', 'Not awarded': 'neutral' } },
     { key: 'qty', label: 'Qty', type: 'number' },
     { key: 'price', label: 'Price', type: 'currency' },
     { key: 'amount', label: 'Amount', type: 'currency', total: true },
@@ -93,7 +93,7 @@ export class PurchaseRequestListComponent {
 
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'PR' }];
   /** Jobs allocated to the signed-in buyer, waiting for their PR; the tab shows only while there are some. */
-  private readonly newView: DataGridView<any> = { id: 'new', label: 'New', hidePill: true };
+  private readonly newView: DataGridView<any> = { id: 'new', label: 'New' };
   private baseViews: DataGridView<any>[] = [
     { id: 'all', label: 'All', hidePill: true },
     { id: 'inProgress', label: 'In Progress' },
@@ -182,6 +182,8 @@ export class PurchaseRequestListComponent {
       { key: 'selectedPrQuantity', label: 'PR Qty', align: 'right', valueGetter: (r) => r.selectedPrQuantity ?? '-' },
       { key: 'issuedPoQuantity', label: 'PO Qty', align: 'right', valueGetter: (r) => r.issuedPoQuantity ?? '-' },
       { key: 'remainingPoQuantity', label: 'Remaining', align: 'right', valueGetter: (r) => r.remainingPoQuantity ?? '-' },
+      { key: 'awarded', label: 'Awarded', align: 'right', valueGetter: (r) => { const a = this.awardStats(r); return a.total ? `${a.awarded}/${a.total}` : '-'; } },
+      { key: 'nextStep', label: 'Next step', valueGetter: (r) => this.nextStep(r) },
       { key: 'createdBy', label: 'Created By', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '-' },
       { key: 'supplier', label: 'Supplier', valueGetter: (r) => r.supplierId?.supplierName || '-' },
       {
@@ -219,6 +221,42 @@ export class PurchaseRequestListComponent {
   private allAwarded(r: any): boolean {
     const lines = (r.items ?? []).flatMap((item: any) => item.itemDetails ?? []).filter((d: any) => Number(d.quantity) > 0);
     return lines.length > 0 && lines.every((d: any) => (d.comparisons ?? []).some((c: any) => c.selected));
+  }
+
+  awardStats(r: any): { awarded: number; total: number } {
+    const lines = (r.items ?? []).flatMap((item: any) => item.itemDetails ?? []).filter((d: any) => Number(d.quantity) > 0);
+    return { awarded: lines.filter((d: any) => (d.comparisons ?? []).some((c: any) => c.selected)).length, total: lines.length };
+  }
+
+  /** The one thing this request is waiting on, shown in the grid and the details panel. */
+  nextStep(r: any): string {
+    if (this.canCreateFromJob(r)) return 'Create PR';
+    if (['New', 'Drafted', 'In Progress'].includes(r.status)) {
+      const { awarded, total } = this.awardStats(r);
+      if (!total) return 'Add items';
+      const offersIn = (r.items ?? []).some((item: any) => (item.itemDetails ?? []).some((d: any) => (d.comparisons ?? []).length));
+      if (!offersIn) return 'Send RFQ';
+      if (awarded < total) return 'Compare & award';
+      return 'Send for approval';
+    }
+    if (r.status === 'Rejected') return 'Fix and resubmit';
+    if (r.status === 'Pending') return 'Awaiting approval';
+    if (this.isFullyApproved(r)) return (r.remainingPoQuantity ?? 1) > 0 ? 'Initiate LPO' : 'Done';
+    return '-';
+  }
+
+  /** Progress strip for the details panel. */
+  flowSteps(r: any): { label: string; done: boolean }[] {
+    const { awarded, total } = this.awardStats(r);
+    const submitted = !['New', 'Drafted', 'In Progress'].includes(r.status) && r.status !== 'Rejected';
+    const offersIn = (r.items ?? []).some((item: any) => (item.itemDetails ?? []).some((d: any) => (d.comparisons ?? []).length));
+    return [
+      { label: 'Created', done: total > 0 },
+      { label: 'Offers in', done: offersIn || submitted },
+      { label: `Awarded${total ? ` ${awarded}/${total}` : ''}`, done: (total > 0 && awarded === total) || submitted },
+      { label: 'Submitted', done: submitted },
+      { label: 'Approved', done: this.isFullyApproved(r) },
+    ];
   }
 
   private hasItems(r: any): boolean {
@@ -334,27 +372,23 @@ export class PurchaseRequestListComponent {
   private loadViewCounts(): void {
     // The New count is always fetched so a buyer with allocated jobs gets the tab.
     const countViews = [...this.baseViews, this.newView];
-    const requests = countViews.reduce((acc, view) => {
-      acc[view.id] = this.purchaseService.getPurchases({
-        page: 1,
-        row: 1,
-        status: this.statusesForView(view.id),
-        search: this.searchQuery || undefined,
-        sourceType: this.sourceTypeForView(view.id),
-        poProgress: this.poProgressForView(view.id),
-        allocation: this.allocationForView(view.id),
-      }).pipe(catchError(() => of(null)));
-      return acc;
-    }, {} as Record<string, Observable<any>>);
-
     this.subscriptions.add(
-      forkJoin(requests).subscribe({
-        next: (results) => {
+      this.purchaseService.getPurchaseCounts({
+        search: this.searchQuery || undefined,
+        views: countViews.map((view) => ({
+          id: view.id,
+          status: this.statusesForView(view.id),
+          sourceType: this.sourceTypeForView(view.id),
+          poProgress: this.poProgressForView(view.id),
+          allocation: this.allocationForView(view.id),
+        })),
+      }).subscribe({
+        next: ({ counts }) => {
           this.baseViews = this.baseViews.map((view) => ({
             ...view,
-            count: results[view.id]?.purchase?.total ?? view.count ?? 0,
+            count: counts[view.id] ?? view.count ?? 0,
           }));
-          this.newCount = results['new']?.purchase?.total ?? this.newCount;
+          this.newCount = counts['new'] ?? this.newCount;
           this.refreshViews();
         },
         error: (error) => console.error('Error loading view counts:', error),
@@ -509,11 +543,23 @@ export class PurchaseRequestListComponent {
     return row?.currency ? `${formatted} ${row.currency}` : formatted;
   }
 
+  private itemRowsCache = new WeakMap<object, Record<string, any>[]>();
+
+  /** Cached per PR: a fresh array every change-detection pass would rebuild the table rows and dismiss the hover tooltip. */
   itemRows(row: any): Record<string, any>[] {
+    const cached = this.itemRowsCache.get(row);
+    if (cached) return cached;
+    const rows = this.buildItemRows(row);
+    this.itemRowsCache.set(row, rows);
+    return rows;
+  }
+
+  private buildItemRows(row: any): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
     (row.items ?? []).forEach((item: any) => {
       (item.itemDetails ?? []).forEach((d: any) => {
-        rows.push({ item: d.detail, qty: d.quantity, price: d.unitCost, amount: (d.quantity ?? 0) * (d.unitCost ?? 0) });
+        const won = (d.comparisons ?? []).find((c: any) => c.selected);
+        rows.push({ item: d.detail, award: won ? 'Awarded' : 'Not awarded', qty: d.quantity, price: d.unitCost, amount: (d.quantity ?? 0) * (d.unitCost ?? 0) });
       });
     });
     return rows;

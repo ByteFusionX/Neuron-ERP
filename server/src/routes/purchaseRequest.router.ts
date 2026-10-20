@@ -4,6 +4,7 @@ import {
     generatePurchaseNumber,
     getPurchaseRequestById,
     getPurchaseRequests,
+    getPurchaseRequestCounts,
     getPurchaseRequestsByStatus,
     getPurchaseRequestsByJobId,
     updatePurchaseRequestStatus,
@@ -26,6 +27,7 @@ purchaseRequestRouter.use(requirePrivilege("purchase"));
 
 purchaseRequestRouter.post('/purchase-request', requirePrivilege("purchase", "create"), createPurchaseRequest)
 purchaseRequestRouter.post('/purchase-requests', getPurchaseRequests)
+purchaseRequestRouter.post('/purchase-requests/counts', getPurchaseRequestCounts)
 purchaseRequestRouter.get('/purchase-request/status/:id', getPurchaseRequestsByStatus)
 purchaseRequestRouter.get('/purchase-request/job/:jobId', getPurchaseRequestsByJobId)
 purchaseRequestRouter.get('/purchase-request/generate-purchase-no', generatePurchaseNumber)

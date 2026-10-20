@@ -24,14 +24,15 @@ import { DetailTableComponent } from 'src/app/shared/components/detail-panel/det
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { CreatePurchaseComponent } from '../create-purchase/create-purchase.component';
 
-const ALL_STATUSES = ['Pending', 'Drafted', 'Approved'];
-const DRAFT_STATUSES = ['Drafted'];
+const ALL_STATUSES = ['Pending', 'In Progress', 'Drafted', 'Approved'];
+const DRAFT_STATUSES = ['In Progress', 'Drafted'];
 const PENDING_STATUSES = ['Pending'];
 const APPROVED_STATUSES = ['Approved'];
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
   Pending: 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
+  'In Progress': 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900 dark:border-sky-900',
   Drafted: 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700',
 };
 
@@ -61,7 +62,7 @@ export class GeneralPurchaseListComponent {
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'General' }];
   views: DataGridView<any>[] = [
     { id: 'all', label: 'All' },
-    { id: 'draft', label: 'Draft' },
+    { id: 'draft', label: 'In Progress' },
     { id: 'pending', label: 'Pending' },
     { id: 'approved', label: 'Approved' },
     { id: 'completed', label: 'Completed' },

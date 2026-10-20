@@ -119,8 +119,8 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
         } = req.body;
 
         const isManual = sourceType === 'manual';
-        // A job's PR has no Draft status: one saved before submitting is In Progress, on the buyer's New tab.
-        const isDraft = status === PurchaseRequestStatus.Drafted || (!isManual && (status === PurchaseRequestStatus.New || status === PurchaseRequestStatus.InProgress));
+        // No PR has a Draft status: one saved before submitting is In Progress (legacy Drafted still counts as unsubmitted).
+        const isDraft = status === PurchaseRequestStatus.Drafted || status === PurchaseRequestStatus.New || status === PurchaseRequestStatus.InProgress;
 
         if (!purchaseNo || !status || (!isManual && (!jobId || !dealSheetId))) {
             return res.status(400).json({
@@ -285,6 +285,179 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
         next(error);
     }
 };
+
+// Shared by the list and the tab counts so both agree on what a PO progress bucket means.
+const PO_QUANTITY_STAGES: any[] = [
+    {
+        $lookup: {
+            from: 'purchaseorders',
+            let: { purchaseRequestId: '$_id' },
+            pipeline: [
+                {
+                    $match: {
+                        $expr: {
+                            $and: [
+                                { $eq: ['$purchaseId', '$$purchaseRequestId'] },
+                                { $not: [{ $in: ['$poStatus', ['Draft', 'Rejected']] }] }
+                            ]
+                        }
+                    }
+                },
+                { $project: { items: 1, poStatus: 1, supplierId: 1 } }
+            ],
+            as: 'linkedPurchaseOrders'
+        }
+    },
+    {
+        $addFields: {
+            selectedPrQuantity: {
+                $reduce: {
+                    input: { $ifNull: ['$items', []] },
+                    initialValue: 0,
+                    in: {
+                        $add: [
+                            '$$value',
+                            {
+                                $reduce: {
+                                    input: { $ifNull: ['$$this.itemDetails', []] },
+                                    initialValue: 0,
+                                    in: {
+                                        $add: [
+                                            '$$value',
+                                            {
+                                                $let: {
+                                                    vars: {
+                                                        selectedComparisons: {
+                                                            $filter: {
+                                                                input: { $ifNull: ['$$this.comparisons', []] },
+                                                                as: 'comparison',
+                                                                cond: { $eq: ['$$comparison.selected', true] }
+                                                            }
+                                                        },
+                                                        detailQuantity: { $ifNull: ['$$this.quantity', 0] }
+                                                    },
+                                                    in: {
+                                                        $cond: [
+                                                            { $gt: [{ $size: '$$selectedComparisons' }, 0] },
+                                                            {
+                                                                $reduce: {
+                                                                    input: '$$selectedComparisons',
+                                                                    initialValue: 0,
+                                                                    in: { $add: ['$$value', { $ifNull: ['$$this.quantity', '$$detailQuantity'] }] }
+                                                                }
+                                                            },
+                                                            0
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            issuedPoQuantity: {
+                $reduce: {
+                    input: { $ifNull: ['$linkedPurchaseOrders', []] },
+                    initialValue: 0,
+                    in: {
+                        $add: [
+                            '$$value',
+                            {
+                                $reduce: {
+                                    input: { $ifNull: ['$$this.items', []] },
+                                    initialValue: 0,
+                                    in: { $add: ['$$value', { $ifNull: ['$$this.quantity', 0] }] }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    },
+    {
+        $addFields: {
+            remainingPoQuantity: { $max: [{ $subtract: ['$selectedPrQuantity', '$issuedPoQuantity'] }, 0] },
+            hasRemainingPo: { $gt: [{ $subtract: ['$selectedPrQuantity', '$issuedPoQuantity'] }, 0] },
+            quoteLineCount: {
+                $reduce: {
+                    input: { $ifNull: ['$items', []] },
+                    initialValue: 0,
+                    in: {
+                        $add: [
+                            '$$value',
+                            {
+                                $reduce: {
+                                    input: { $ifNull: ['$$this.itemDetails', []] },
+                                    initialValue: 0,
+                                    in: { $add: ['$$value', { $size: { $ifNull: ['$$this.comparisons', []] } }] }
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            awardedLineCount: {
+                $reduce: {
+                    input: { $ifNull: ['$items', []] },
+                    initialValue: 0,
+                    in: {
+                        $add: [
+                            '$$value',
+                            {
+                                $reduce: {
+                                    input: { $ifNull: ['$$this.itemDetails', []] },
+                                    initialValue: 0,
+                                    in: {
+                                        $add: [
+                                            '$$value',
+                                            {
+                                                $size: {
+                                                    $filter: {
+                                                        input: { $ifNull: ['$$this.comparisons', []] },
+                                                        as: 'comparison',
+                                                        cond: { $eq: ['$$comparison.selected', true] }
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    },
+];
+
+const poProgressStages = (poProgress?: string): any[] => [
+    ...(poProgress === 'ready' ? [{
+        $match: {
+            status: PurchaseRequestStatus.Approved,
+            issuedPoQuantity: { $lte: 0 }
+        }
+    }] : []),
+    ...(poProgress === 'remaining' ? [{
+        $match: {
+            status: PurchaseRequestStatus.Approved,
+            issuedPoQuantity: { $gt: 0 },
+            hasRemainingPo: true
+        }
+    }] : []),
+    ...(poProgress === 'completed' ? [{
+        $match: {
+            status: PurchaseRequestStatus.Approved,
+            selectedPrQuantity: { $gt: 0 },
+            hasRemainingPo: false
+        }
+    }] : []),
+];
 
 export const getPurchaseRequests = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -596,152 +769,7 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                     }
                 }
             },
-            {
-                $lookup: {
-                    from: 'purchaseorders',
-                    let: { purchaseRequestId: '$_id' },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $and: [
-                                        { $eq: ['$purchaseId', '$$purchaseRequestId'] },
-                                        { $not: [{ $in: ['$poStatus', ['Draft', 'Rejected']] }] }
-                                    ]
-                                }
-                            }
-                        },
-                        { $project: { items: 1, poStatus: 1, supplierId: 1 } }
-                    ],
-                    as: 'linkedPurchaseOrders'
-                }
-            },
-            {
-                $addFields: {
-                    selectedPrQuantity: {
-                        $reduce: {
-                            input: { $ifNull: ['$items', []] },
-                            initialValue: 0,
-                            in: {
-                                $add: [
-                                    '$$value',
-                                    {
-                                        $reduce: {
-                                            input: { $ifNull: ['$$this.itemDetails', []] },
-                                            initialValue: 0,
-                                            in: {
-                                                $add: [
-                                                    '$$value',
-                                                    {
-                                                        $let: {
-                                                            vars: {
-                                                                selectedComparisons: {
-                                                                    $filter: {
-                                                                        input: { $ifNull: ['$$this.comparisons', []] },
-                                                                        as: 'comparison',
-                                                                        cond: { $eq: ['$$comparison.selected', true] }
-                                                                    }
-                                                                },
-                                                                detailQuantity: { $ifNull: ['$$this.quantity', 0] }
-                                                            },
-                                                            in: {
-                                                                $cond: [
-                                                                    { $gt: [{ $size: '$$selectedComparisons' }, 0] },
-                                                                    {
-                                                                        $reduce: {
-                                                                            input: '$$selectedComparisons',
-                                                                            initialValue: 0,
-                                                                            in: { $add: ['$$value', { $ifNull: ['$$this.quantity', '$$detailQuantity'] }] }
-                                                                        }
-                                                                    },
-                                                                    0
-                                                                ]
-                                                            }
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    },
-                    issuedPoQuantity: {
-                        $reduce: {
-                            input: { $ifNull: ['$linkedPurchaseOrders', []] },
-                            initialValue: 0,
-                            in: {
-                                $add: [
-                                    '$$value',
-                                    {
-                                        $reduce: {
-                                            input: { $ifNull: ['$$this.items', []] },
-                                            initialValue: 0,
-                                            in: { $add: ['$$value', { $ifNull: ['$$this.quantity', 0] }] }
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-            },
-            {
-                $addFields: {
-                    remainingPoQuantity: { $max: [{ $subtract: ['$selectedPrQuantity', '$issuedPoQuantity'] }, 0] },
-                    hasRemainingPo: { $gt: [{ $subtract: ['$selectedPrQuantity', '$issuedPoQuantity'] }, 0] },
-                    quoteLineCount: {
-                        $reduce: {
-                            input: { $ifNull: ['$items', []] },
-                            initialValue: 0,
-                            in: {
-                                $add: [
-                                    '$$value',
-                                    {
-                                        $reduce: {
-                                            input: { $ifNull: ['$$this.itemDetails', []] },
-                                            initialValue: 0,
-                                            in: { $add: ['$$value', { $size: { $ifNull: ['$$this.comparisons', []] } }] }
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    },
-                    awardedLineCount: {
-                        $reduce: {
-                            input: { $ifNull: ['$items', []] },
-                            initialValue: 0,
-                            in: {
-                                $add: [
-                                    '$$value',
-                                    {
-                                        $reduce: {
-                                            input: { $ifNull: ['$$this.itemDetails', []] },
-                                            initialValue: 0,
-                                            in: {
-                                                $add: [
-                                                    '$$value',
-                                                    {
-                                                        $size: {
-                                                            $filter: {
-                                                                input: { $ifNull: ['$$this.comparisons', []] },
-                                                                as: 'comparison',
-                                                                cond: { $eq: ['$$comparison.selected', true] }
-                                                            }
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-            },
+            ...PO_QUANTITY_STAGES,
             {
                 $addFields: {
                     rfqStatus: {
@@ -755,26 +783,7 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                     }
                 }
             },
-            ...(poProgress === 'ready' ? [{
-                $match: {
-                    status: PurchaseRequestStatus.Approved,
-                    issuedPoQuantity: { $lte: 0 }
-                }
-            }] : []),
-            ...(poProgress === 'remaining' ? [{
-                $match: {
-                    status: PurchaseRequestStatus.Approved,
-                    issuedPoQuantity: { $gt: 0 },
-                    hasRemainingPo: true
-                }
-            }] : []),
-            ...(poProgress === 'completed' ? [{
-                $match: {
-                    status: PurchaseRequestStatus.Approved,
-                    selectedPrQuantity: { $gt: 0 },
-                    hasRemainingPo: false
-                }
-            }] : []),
+            ...poProgressStages(poProgress),
             ...(rfqStatus ? [{
                 $match: {
                     ...(rfqStatus === 'quoted' && { quoteLineCount: { $gt: 0 } }),
@@ -878,6 +887,78 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
 }
 
 // Get list of PRs by status
+/**
+ * Tab counts for the PR list in one call. Each view only needs a total, so this filters and counts
+ * and joins only what that view's filter reads, instead of running the list's full pipeline per tab.
+ */
+export const getPurchaseRequestCounts = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { views, search } = req.body;
+        const searchText = typeof search === 'string' ? search.trim() : '';
+
+        const employee = await getEmployeeData(req.user);
+        if (!employee) {
+            return res.status(401).json({ success: false, message: "Employee not found", status: 401 });
+        }
+
+        const privileges = employee.category?.privileges;
+        const accessFilter = privileges?.purchase?.viewReport
+            ? await buildPrivilegeAccessFilter(employee._id, privileges.purchase.viewReport, 'createdBy')
+            : {};
+        const isSuperAdmin = String(employee.category?.role).toLowerCase() === 'superadmin';
+
+        const countView = async (view: any): Promise<number> => {
+            if (view.allocation === 'new') {
+                return (await getNewTabJobs(employee._id, isSuperAdmin, searchText, 1, 1)).total;
+            }
+
+            const matchStage: any = { isDeleted: false, ...accessFilter };
+            matchStage.status = Array.isArray(view.status) ? { $in: view.status } : view.status;
+            if (view.sourceType === 'manual') matchStage.sourceType = 'manual';
+            else if (view.sourceType === 'job') matchStage.sourceType = { $ne: 'manual' };
+
+            const pipeline: any[] = [{ $match: matchStage }];
+
+            // Search reads the supplier, customer and job joins, so only a searched count pays for them.
+            if (searchText) {
+                const joinOne = (from: string, field: string) => [
+                    { $lookup: { from, localField: field, foreignField: '_id', as: field, pipeline: [{ $project: { supplierName: 1, companyName: 1, jobId: 1 } }] } },
+                    { $unwind: { path: `${field}`, preserveNullAndEmptyArrays: true } },
+                ];
+                pipeline.push(
+                    ...joinOne('customers', 'customerId'),
+                    ...joinOne('suppliers', 'supplierId'),
+                    ...joinOne('jobs', 'jobId'),
+                    {
+                        $match: {
+                            $or: ['purchaseNo', 'supplierId.supplierName', 'customerId.companyName', 'jobId.jobId']
+                                .map((field) => ({ [field]: { $regex: escapeRegex(searchText), $options: 'i' } }))
+                        }
+                    }
+                );
+            }
+
+            // Only the PO progress tabs need the purchase order quantities.
+            if (view.poProgress) {
+                pipeline.push(...PO_QUANTITY_STAGES, ...poProgressStages(view.poProgress));
+            }
+
+            pipeline.push({ $count: 'total' });
+            const result = await PurchaseRequest.aggregate(pipeline);
+            return result[0]?.total ?? 0;
+        };
+
+        const requested: any[] = Array.isArray(views) ? views : [];
+        const totals = await Promise.all(requested.map(countView));
+        const counts: Record<string, number> = {};
+        requested.forEach((view, i) => { counts[String(view.id)] = totals[i]; });
+
+        return res.status(200).json({ success: true, counts, status: 200 });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const getPurchaseRequestsByStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { status } = req.params;
@@ -2199,12 +2280,27 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
 
         const populatedPurchaseRequest = purchaseRequest[0];
 
+        // One batched lookup instead of a round trip per comparison.
+        const comparisonSupplierIds = new Set<string>();
         for (const item of populatedPurchaseRequest.items) {
             for (const itemDetail of item.itemDetails) {
                 for (const comparison of itemDetail.comparisons) {
-                    const supplier = await supplierModel.findById(comparison.supplierId);
-                    if (supplier) {
-                        comparison.supplierName = supplier.supplierName;
+                    if (comparison.supplierId) comparisonSupplierIds.add(String(comparison.supplierId));
+                }
+            }
+        }
+        const comparisonSuppliers = await supplierModel
+            .find({ _id: { $in: [...comparisonSupplierIds] } })
+            .select('supplierName')
+            .lean();
+        const supplierNameById = new Map(comparisonSuppliers.map((s: any) => [String(s._id), s.supplierName]));
+
+        for (const item of populatedPurchaseRequest.items) {
+            for (const itemDetail of item.itemDetails) {
+                for (const comparison of itemDetail.comparisons) {
+                    const supplierName = supplierNameById.get(String(comparison.supplierId));
+                    if (supplierName) {
+                        comparison.supplierName = supplierName;
                     }
                     comparison.totalCost = comparison.quantity * comparison.unitPrice;
                 }
@@ -2796,7 +2892,13 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
             const lines: any[] = (Array.isArray(updateData.items) ? updateData.items : (await PurchaseRequest.findById(id).lean() as any)?.items || [])
                 .flatMap((item: any) => item.itemDetails || [])
                 .filter((detail: any) => Number(detail.quantity) > 0);
-            const open = lines.filter((detail: any) => !(detail.comparisons || []).some((c: any) => c.selected));
+            // Awarded means a supplier won it, and for a line split between suppliers their shares add up to the whole quantity.
+            const open = lines.filter((detail: any) => {
+                const won = (detail.comparisons || []).filter((c: any) => c.selected);
+                if (!won.length) return true;
+                if (!won.some((c: any) => c.awardedQty)) return false;
+                return won.reduce((sum: number, c: any) => sum + (Number(c.awardedQty) || Number(detail.quantity) || 0), 0) + 0.0001 < Number(detail.quantity);
+            });
             if (!lines.length || open.length) {
                 return res.status(400).json({
                     success: false,

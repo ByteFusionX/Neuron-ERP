@@ -1,9 +1,11 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { FormArray, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { NgIcon } from '@ng-icons/core';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { ItemEntryComponent, ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
+import { LineSupplierOffer } from 'src/app/shared/components/item-entry/item-entry.component';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 
 @Component({
@@ -16,6 +18,7 @@ import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form'
     DetailBadgeComponent,
     ActionButtonComponent,
     ItemEntryComponent,
+    NgIcon,
   ],
   templateUrl: './pr-form.component.html',
   styleUrl: './pr-form.component.css',
@@ -39,6 +42,10 @@ export class PrFormComponent {
     return id ? (this.supplierOptions().find((o) => o.value === id)?.label ?? '') : '';
   }
 
+  /** The host renders Add item itself (drawer footer), so the entry toolbar omits it. */
+  @Input() externalAddButtons = false;
+  @ViewChild(ItemEntryComponent) itemEntry?: ItemEntryComponent;
+
   @Input() isEditing = false;
   @Input() sourceLocked = false;
   @Input() isJobLess = false;
@@ -47,11 +54,21 @@ export class PrFormComponent {
   @Input() lineAwarded: (line: any) => boolean = () => true;
   @Input() lineBadge: (i: number, j: number, k: number) => string | null = () => null;
 
+  @Input() lineOffers: (line: any) => LineSupplierOffer[] = () => [];
+  @Output() offerPicked = new EventEmitter<{ lineKey: string; offer: LineSupplierOffer }>();
+
+  @Input() supplierTabs: { id: string; name: string; count: number }[] = [];
+  @Input() activeTab = 'items';
+  addingSupplier = false;
+  @Output() tabSelected = new EventEmitter<string>();
+  @Output() supplierAdded = new EventEmitter<string>();
+
   @Output() jobLessChange = new EventEmitter<boolean>();
   @Output() jobSelected = new EventEmitter<string>();
   @Output() materialRequestsClicked = new EventEmitter<void>();
   /** Ticked lines to ask a supplier about, with the supplier picked in the selection bar if any. */
   @Output() createProductRequested = new EventEmitter<void>();
+  @Output() addToRfq = new EventEmitter<{ supplierId: string; lineKeys: string[] }>();
 
   get f() {
     return this.purchaseForm.controls;

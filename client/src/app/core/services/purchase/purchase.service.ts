@@ -41,6 +41,14 @@ export class PurchaseService {
     return this.http.post<any>(`${this.api}/purchase/purchase-requests`, params, { context: context() });
   }
 
+  /** Tab totals for several PR list views in one call; each view carries the same filters as a list query. */
+  getPurchaseCounts(params: {
+    search?: string;
+    views: { id: string; status?: string[]; sourceType?: string; poProgress?: string; allocation?: string }[];
+  }): Observable<{ counts: Record<string, number> }> {
+    return this.http.post<{ counts: Record<string, number> }>(`${this.api}/purchase/purchase-requests/counts`, params, { context: context() });
+  }
+
   getRfqComparison(rfqId: string): Observable<any> {
     return this.http.get<any>(`${this.api}/purchase/rfq/${rfqId}/compare`, { context: context() });
   }
