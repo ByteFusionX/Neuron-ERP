@@ -103,6 +103,7 @@ export const routes: Routes = [
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/customers/customers.component').then((c) => c.CustomersComponent),
     children: [
+      { path: 'view/:ref', canActivate: [RoleGuard], loadComponent: () => import('./modules/customers/pages/customer-view/customer-view.component').then((c) => c.CustomerViewComponent) },
       { path: '', canActivate: [RoleGuard], component: CustomersListComponent },
     ]
   },
