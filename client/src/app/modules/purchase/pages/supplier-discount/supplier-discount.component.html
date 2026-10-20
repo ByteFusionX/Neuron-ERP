@@ -1,24 +1,8 @@
-<div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
-  <app-detail-view-shell
-    class="min-h-0 flex-1"
-    [loading]="isLoading()"
-    [breadcrumbs]="breadcrumbs"
-    avatarText="SD"
-    title="Supplier discounts"
-    [subtitle]="subtitle"
-    [stats]="stats"
-    [hasSidebar]="false"
-    [tabParam]="''"
-  >
-    <ng-container footerLeft>
-      <app-action-button *ngIf="isExist" variant="outline" (click)="onClearClicks()">Clear all</app-action-button>
-    </ng-container>
-    <ng-container footerRight>
-      <app-action-button (click)="onClose()">Discard</app-action-button>
-      <app-action-button variant="primary" (click)="onSubmit()">Save &amp; exit</app-action-button>
-    </ng-container>
-
-    <div tabBody class="mx-auto max-w-3xl space-y-4">
+<app-sf-drawer #discountDrawer title="Supplier discounts" [subtitle]="subtitle" width="min(640px, 96vw)" [open]="open" (closed)="closed.emit()">
+  @if (isLoading()) {
+    <p class="text-sm text-gray-500">Loading…</p>
+  } @else {
+    <div class="space-y-4">
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Discounts received</h2>
@@ -62,5 +46,11 @@
         </ng-template>
       </div>
     </div>
-  </app-detail-view-shell>
-</div>
+  }
+
+  <ng-container sfDrawerFooter>
+    <app-action-button *ngIf="isExist" class="mr-auto" variant="outline" (click)="onClearClicks()">Clear all</app-action-button>
+    <app-action-button variant="secondary" (click)="discountDrawer.requestClose()">Discard</app-action-button>
+    <app-action-button variant="primary" (click)="onSubmit()">Save</app-action-button>
+  </ng-container>
+</app-sf-drawer>

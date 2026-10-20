@@ -1,9 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { Component, EventEmitter, inject, Input, OnChanges, OnDestroy, Output, SimpleChanges, signal } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AddSupplierDiscountComponent, AddSupplierDiscountResult } from '../add-supplier-discount/add-supplier-discount.component';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
-import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
 import { SupplierService } from 'src/app/core/services/supplier.service';
@@ -12,95 +11,73 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailAvatarComponent } from 'src/app/shared/components/detail-panel/detail-avatar.component';
 import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
-import {
-  DetailViewBreadcrumb,
-  DetailViewShellComponent,
-  DetailViewStat,
-} from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
+import { SmartFormModule } from 'src/app/shared/components/smart-form';
 
+/** Discounts suppliers gave on one purchase request, edited in a drawer over the request. */
 @Component({
   selector: 'app-supplier-discount',
-  imports: [CommonModule, ReactiveFormsModule, DetailViewShellComponent, ActionButtonComponent, DetailAvatarComponent, DetailPanelIconComponent],
+  imports: [CommonModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, DetailAvatarComponent, DetailPanelIconComponent],
   templateUrl: './supplier-discount.component.html',
   styleUrl: './supplier-discount.component.css'
 })
-export class SupplierDiscountComponent implements OnInit, OnDestroy {
+export class SupplierDiscountComponent implements OnChanges, OnDestroy {
+  @Input() open = false;
+  @Input() purchaseId: string | null = null;
+
+  /** Discounts were saved or cleared, so the host can reload the request. */
+  @Output() saved = new EventEmitter<void>();
+  @Output() closed = new EventEmitter<void>();
+
   private modal = inject(ModalService)
   private confirmDialog = inject(ConfirmDialogService)
   private fb = inject(FormBuilder)
   private purchaseService = inject(PurchaseService)
-  private router = inject(Router)
-  private route = inject(ActivatedRoute)
   private toaster = inject(ToastrService)
-  private subscriptions = new Subscription()
   private supplierService = inject(SupplierService)
+  private subscriptions = new Subscription()
 
-  purchaseId!: string;
-  isLoading = signal<boolean>(true);
-  isExist: boolean = false;
+  isLoading = signal<boolean>(false);
+  isExist = false;
   currency = signal<string>('')
-
-  breadcrumbs: DetailViewBreadcrumb[] = [];
-  subtitle = '';
-  stats: DetailViewStat[] = [];
+  purchaseNo = '';
+  jobId = '';
 
   supplierForm: FormGroup = this.fb.group({
-    jobId: [''],
-    purchaseNo: ['', [Validators.required]],
     suppliers: this.fb.array([]),
     totalDiscount: [0],
   })
 
-  ngOnInit(): void {
-    this.purchaseId = this.route.snapshot.paramMap.get('purchaseId') || '';
-
-    if (!this.purchaseId) {
-      this.toaster.error('Invalid purchase ID');
-      this.router.navigate(['/purchase/pr']);
-      return;
-    }
-
-    this.loadPurchaseData();
-
+  constructor() {
     this.supplierDiscount.valueChanges.subscribe(() => {
-      const total = this.calculateTotalDiscount();
-      this.supplierForm.get('totalDiscount')?.setValue(total, { emitEvent: false });
-      this.buildHeader();
+      this.supplierForm.get('totalDiscount')?.setValue(this.calculateTotalDiscount(), { emitEvent: false });
     });
   }
 
-  private buildHeader(): void {
-    const { purchaseNo, jobId } = this.supplierForm.getRawValue();
-    this.breadcrumbs = [
-      { label: 'Home', link: '/' },
-      { label: 'PR', link: '/purchase/pr' },
-      { label: purchaseNo || 'Purchase', link: ['/purchase/edit', this.purchaseId] },
-      { label: 'Supplier discounts' },
-    ];
-    this.subtitle = [purchaseNo, jobId ? `Job ${jobId}` : ''].filter(Boolean).join(' · ');
-    const total = this.calculateTotalDiscount();
-    this.stats = [
-      { label: 'PR No', value: purchaseNo || '-' },
-      { label: 'Job ID', value: jobId || '-' },
-      { label: 'Suppliers', value: String(this.supplierDiscount.length) },
-      { label: 'Total discount', value: `${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${this.currency()}`.trim() },
-    ];
+  get supplierDiscount(): FormArray {
+    return this.supplierForm.get('suppliers') as FormArray;
+  }
+
+  get subtitle(): string {
+    return [this.purchaseNo, this.jobId ? `Job ${this.jobId}` : ''].filter(Boolean).join(' · ');
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if ((changes['open'] || changes['purchaseId']) && this.open && this.purchaseId) this.loadPurchaseData();
   }
 
   loadPurchaseData(): void {
+    if (!this.purchaseId) return;
+    this.isLoading.set(true);
+    this.supplierDiscount.clear();
+    this.isExist = false;
     this.subscriptions.add(
       this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
         next: (res) => {
-          if (res.data) {
-            const purchase = res.data;
-            if (purchase.currency) {
-              this.currency.set(purchase.currency);
-            }
-            this.supplierForm.patchValue({
-              jobId: purchase.jobId?.jobId || purchase.jobId,
-              purchaseNo: purchase.purchaseNo,
-            });
-
+          const purchase = res.data;
+          if (purchase) {
+            this.currency.set(purchase.currency || '');
+            this.purchaseNo = purchase.purchaseNo || '';
+            this.jobId = purchase.jobId?.jobId || purchase.jobId || '';
             if (purchase.supplierDiscounts?.suppliers) {
               this.isExist = true;
               purchase.supplierDiscounts.suppliers.forEach((s: any) => {
@@ -109,13 +86,13 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
               });
             }
           }
-          this.buildHeader();
           this.isLoading.set(false);
         },
         error: (error) => {
           console.error('Error loading purchase data:', error);
           this.toaster.error('Failed to load purchase data');
-          this.router.navigate(['/purchase/pr']);
+          this.isLoading.set(false);
+          this.closed.emit();
         }
       })
     );
@@ -145,6 +122,7 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
   }
 
   onSubmit() {
+    if (!this.purchaseId) return;
     if (this.supplierForm.valid && this.supplierDiscount.length > 0) {
       const supplierDiscounts = {
         suppliers: this.supplierDiscount.value.map((supplier: any) => ({
@@ -159,7 +137,8 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
           next: (res) => {
             if (res.success) {
               this.toaster.success('Supplier discounts updated successfully');
-              this.router.navigate(['/purchase/edit', this.purchaseId]);
+              this.saved.emit();
+              this.closed.emit();
             }
           },
           error: (error) => {
@@ -173,14 +152,6 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
     }
   }
 
-  onClose() {
-    this.router.navigate(['/purchase/edit', this.purchaseId]);
-  }
-
-  get supplierDiscount(): FormArray {
-    return this.supplierForm.get('suppliers') as FormArray;
-  }
-
   onDeleteSupplier(index: number) {
     this.supplierDiscount.removeAt(index);
   }
@@ -190,6 +161,7 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
   }
 
   async onClearClicks() {
+    if (!this.purchaseId) return;
     const { confirmed } = await this.confirmDialog.open({
       tone: 'warning',
       title: 'Clear supplier discounts',
@@ -205,7 +177,8 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
             this.isExist = false;
             this.supplierDiscount.clear();
             this.toaster.success('Supplier discounts cleared successfully');
-            this.router.navigate(['/purchase/edit', this.purchaseId]);
+            this.saved.emit();
+            this.closed.emit();
           }
         },
         error: (error) => {

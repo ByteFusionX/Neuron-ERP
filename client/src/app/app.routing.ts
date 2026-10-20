@@ -20,7 +20,6 @@ import { PurchaseRequestListComponent } from './modules/purchase/pages/purchase-
 import { GeneralPurchaseListComponent } from './modules/purchase/pages/general-purchase-list/general-purchase-list.component';
 import { RfqListComponent } from './modules/purchase/pages/rfq-list/rfq-list.component';
 import { CreatePurchaseComponent } from './modules/purchase/pages/create-purchase/create-purchase.component';
-import { SupplierDiscountComponent } from './modules/purchase/pages/supplier-discount/supplier-discount.component';
 import { SupplierOffersComponent } from './modules/purchase/pages/supplier-offers/supplier-offers.component';
 import { ViewPurchaseComponent } from './modules/purchase/pages/view-purchase/view-purchase.component';
 import { InitiateLpoComponent } from './modules/purchase-order/pages/initiate-lpo/initiate-lpo.component';
@@ -103,8 +102,8 @@ export const routes: Routes = [
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/customers/customers.component').then((c) => c.CustomersComponent),
     children: [
-      { path: 'view/:ref', canActivate: [RoleGuard], loadComponent: () => import('./modules/customers/pages/customer-view/customer-view.component').then((c) => c.CustomerViewComponent) },
       { path: '', canActivate: [RoleGuard], component: CustomersListComponent },
+      { path: 'view/:ref', canActivate: [RoleGuard], loadComponent: () => import('./modules/customers/pages/customer-view/customer-view.component').then((c) => c.CustomerViewComponent) },
     ]
   },
   {
@@ -318,7 +317,6 @@ export const routes: Routes = [
       { path: 'pendings', redirectTo: 'pr' },
       { path: 'approves', redirectTo: 'pr' },
       { path: 'create', component: CreatePurchaseComponent },
-      { path: 'supplier-discount/:purchaseId', component: SupplierDiscountComponent },
       { path: 'rfq-offers/:purchaseId', component: SupplierOffersComponent },
       { path: 'view-purchase/:id', component: ViewPurchaseComponent },
       { path: 'po', component: LpoApprovalComponent },
