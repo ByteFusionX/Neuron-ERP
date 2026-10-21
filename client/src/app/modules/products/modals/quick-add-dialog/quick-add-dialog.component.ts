@@ -3,12 +3,16 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { FormModalShellComponent, MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
+import { SfCheckboxComponent } from 'src/app/shared/components/smart-form/sf-checkbox.component';
 
 export interface QuickAddDialogData {
   /** Singular noun, e.g. "Category". */
   title: string;
   /** Saves the trimmed name; the dialog closes with whatever it returns. */
-  create: (name: string) => Observable<any>;
+  create: (name: string, isActive: boolean) => Observable<any>;
+  /** Shows the Active checkbox (master data); the quick-add pickers leave it off. */
+  showActive?: boolean;
+  initialActive?: boolean;
   /** Existing name: the dialog renames instead of adding. */
   initial?: string;
 }
@@ -17,7 +21,7 @@ export interface QuickAddDialogData {
 @Component({
   selector: 'app-quick-add-dialog',
   standalone: true,
-  imports: [SmartFormModule, FormModalShellComponent],
+  imports: [SmartFormModule, SfCheckboxComponent, FormModalShellComponent],
   template: `
     <app-form-modal-shell
       icon="plus" tone="violet" [title]="(data.initial ? 'Edit ' : 'Add ') + data.title"
@@ -30,6 +34,9 @@ export interface QuickAddDialogData {
           <app-sf-field [label]="data.title + ' name'" [control]="form.controls.name">
             <app-sf-input formControlName="name" placeholder="Enter a name" [maxlength]="60" clearable></app-sf-input>
           </app-sf-field>
+          @if (data.showActive) {
+            <app-sf-checkbox formControlName="isActive" label="Active"></app-sf-checkbox>
+          }
           @if (serverError) {
             <p class="text-xs text-red-600 dark:text-red-400" role="alert">{{ serverError }}</p>
           }
@@ -49,6 +56,7 @@ export class QuickAddDialogComponent {
   serverError = '';
 
   form = this.fb.group({
+    isActive: [this.data.initialActive ?? true],
     name: [this.data.initial ?? '', [Validators.required, Validators.maxLength(60), (c: { value: string | null }) => ((c.value ?? '').trim() ? null : { required: true })]],
   });
 
@@ -64,7 +72,7 @@ export class QuickAddDialogComponent {
       return;
     }
     this.saving = true;
-    this.data.create((this.form.value.name ?? '').trim()).subscribe({
+    this.data.create((this.form.value.name ?? '').trim(), this.form.value.isActive !== false).subscribe({
       next: (result) => this.ref.close(result),
       error: (error) => {
         this.saving = false;

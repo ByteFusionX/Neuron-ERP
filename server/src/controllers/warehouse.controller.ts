@@ -23,6 +23,7 @@ export const createWarehouse = async (req: Request, res: Response, next: NextFun
             wareHouseName: data.wareHouseName.trim(),
             createdBy: employee._id,
             createdDate: data.createdDate,
+            isActive: data.isActive !== false,
             isDeleted: false
         });
 
@@ -70,7 +71,7 @@ export const updateWarehouse = async (req: Request, res: Response, next: NextFun
 
         const updated = await Warehouse.findOneAndUpdate(
             { _id: id, isDeleted: { $ne: true } },
-            { $set: { ...(data.wareHouseName ? { wareHouseName: data.wareHouseName.trim() } : {}) } },
+            { $set: { ...(data.wareHouseName ? { wareHouseName: data.wareHouseName.trim() } : {}), ...(typeof data.isActive === 'boolean' ? { isActive: data.isActive } : {}) } },
             { new: true }
         );
         if (!updated) return res.status(404).json({ message: "Warehouse not found" });

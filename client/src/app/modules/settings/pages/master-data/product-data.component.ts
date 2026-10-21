@@ -31,8 +31,8 @@ export class ProductDataComponent {
       custom: this.named('Category', {
         load: () => this.categoryService.getProductCategories(),
         nameOf: (c: any) => c.categoryName,
-        create: (name) => this.categoryService.createProductCategory({ categoryName: name, createdDate: new Date() } as any),
-        update: (id, name) => this.categoryService.updateProductCategory(id, { categoryName: name } as any),
+        create: (name, isActive) => this.categoryService.createProductCategory({ categoryName: name, createdDate: new Date(), isActive } as any),
+        update: (id, name, isActive) => this.categoryService.updateProductCategory(id, { categoryName: name, isActive } as any),
         remove: (id) => this.categoryService.deleteProductCategory(id),
       }),
     },
@@ -41,8 +41,8 @@ export class ProductDataComponent {
       custom: this.named('Warehouse', {
         load: () => this.warehouseService.getWarehouses(),
         nameOf: (w: any) => w.wareHouseName,
-        create: (name) => this.warehouseService.createWarehouse({ wareHouseName: name, createdDate: new Date() } as any),
-        update: (id, name) => this.warehouseService.updateWarehouse(id, { wareHouseName: name } as any),
+        create: (name, isActive) => this.warehouseService.createWarehouse({ wareHouseName: name, createdDate: new Date(), isActive } as any),
+        update: (id, name, isActive) => this.warehouseService.updateWarehouse(id, { wareHouseName: name, isActive } as any),
         remove: (id) => this.warehouseService.deleteWarehouse(id),
       }),
     },
@@ -54,8 +54,8 @@ export class ProductDataComponent {
   private named(noun: string, api: {
     load: () => Observable<any[]>;
     nameOf: (item: any) => string;
-    create: (name: string) => Observable<any>;
-    update: (id: string, name: string) => Observable<any>;
+    create: (name: string, isActive: boolean) => Observable<any>;
+    update: (id: string, name: string, isActive: boolean) => Observable<any>;
     remove: (id: string) => Observable<any>;
   }): MasterTab['custom'] {
     const dialog = (data: QuickAddDialogData) =>
@@ -64,13 +64,13 @@ export class ProductDataComponent {
       load: () => api.load().pipe(map((items): MasterCustomRow[] => (items ?? []).map((item) => ({
         _id: item._id,
         name: api.nameOf(item),
-        createdBy: '',
+        createdBy: item.createdBy?.firstName ? `${item.createdBy.firstName} ${item.createdBy.lastName ?? ''}`.trim() : '',
         createdAt: item.createdDate ? new Date(item.createdDate).toISOString() : '',
-        status: 'Active',
+        status: item.isActive === false ? 'Inactive' : 'Active',
         source: item,
       })))),
-      create: async () => !!(await dialog({ title: noun, create: api.create })),
-      edit: async (row) => !!(await dialog({ title: noun, initial: row.name, create: (name) => api.update(row._id, name) })),
+      create: async () => !!(await dialog({ title: noun, showActive: true, create: api.create })),
+      edit: async (row) => !!(await dialog({ title: noun, showActive: true, initial: row.name, initialActive: row.status !== 'Inactive', create: (name, isActive) => api.update(row._id, name, isActive) })),
       remove: async (row) => {
         const { confirmed } = await this.confirm.open({
           tone: 'reject',

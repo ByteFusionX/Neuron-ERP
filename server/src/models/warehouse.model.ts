@@ -4,6 +4,7 @@ interface Warehouse {
     wareHouseName: string;
     createdBy: Types.ObjectId;
     createdDate: Date;
+    isActive: boolean;
     isDeleted: boolean;
 }
 
@@ -20,6 +21,10 @@ const warehouseSchema = new Schema<Warehouse>({
     createdDate: {
         type: Date,
         required: true,
+    },
+    isActive: {
+        type: Boolean,
+        default: true,
     },
     isDeleted: {
         type: Boolean,
