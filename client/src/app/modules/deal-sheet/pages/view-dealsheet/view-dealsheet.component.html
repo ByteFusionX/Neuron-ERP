@@ -25,10 +25,10 @@
         </ng-container>
         <ng-container footerRight>
             <app-action-button variant="secondary" (click)="onClose()">Close</app-action-button>
-            <app-action-button variant="primary" *ngIf="data.approval && canDecide && viewMode === 'deal'" [disabled]="isRejecting" (click)="onReject()">
+            <app-action-button variant="primary" *ngIf="data.approval && canRejectDeal && viewMode === 'deal'" [disabled]="isRejecting" (click)="onReject()">
                 {{ isRejecting ? 'Rejecting...' : 'Reject' }}
             </app-action-button>
-            <app-action-button variant="primary" *ngIf="data.approval && canDecide && viewMode === 'deal'" [disabled]="isApproving" (click)="onApprove()">
+            <app-action-button variant="primary" *ngIf="data.approval && canApproveDeal && viewMode === 'deal'" [disabled]="isApproving" (click)="onApprove()">
                 {{ isApproving ? 'Approving...' : 'Approve' }}
             </app-action-button>
             <app-action-button variant="primary" *ngIf="data.quoteData.dealData.status !== 'approved' && viewMode === 'deal'" (click)="onUpdate()" icon="edit">Edit Deal</app-action-button>

@@ -215,6 +215,7 @@ export interface DefaultAndText {
 export interface getQuotation {
     quotations: Quotatation[];
     total: number;
+    viewCounts?: Record<string, number>;
 }
 
 export interface getDealSheet {

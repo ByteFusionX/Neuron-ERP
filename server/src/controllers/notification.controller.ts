@@ -10,6 +10,7 @@ import { ObjectId } from "mongodb";
 import { sendWebPushToEmployees } from "../services/webPush.service";
 import NotificationPreference from "../models/notificationPreference.model";
 import { isAppMailConfigured } from "../services/email.service";
+import { dealSheetCan } from "../common/utils/dealSheetPrivilege";
 
 
 interface NotificationData {
@@ -130,7 +131,7 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                     case 'FeedbackRequest':
                         return privileges.assignedJob?.viewReport !== 'none';
                     case 'DealSheet':
-                        return privileges.dealSheet === true;
+                        return dealSheetCan(privileges, "view");
                     case 'DealSheetResponse':
                     case 'Quotation':
                         return privileges.quotation?.viewReport !== 'none';

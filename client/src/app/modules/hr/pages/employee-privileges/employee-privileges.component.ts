@@ -66,7 +66,9 @@ const PRIVILEGE_MODULES: PrivilegeModule[] = [
     { path: 'quotation.create', label: 'Create quotations' },
   ]},
   { key: 'dealSheet', label: 'Deal Sheet', flags: [
-    { path: 'dealSheet', label: 'Approve deal sheets' },
+    { path: 'dealSheet.approve', label: 'Approve deal sheets' },
+    { path: 'dealSheet.reject', label: 'Reject deal sheets' },
+    { path: 'dealSheet.revoke', label: 'Revoke approved deal sheets' },
   ]},
   { key: 'jobSheet', label: 'Job Sheet', flags: [
     { path: 'jobSheet.allocateJobs', label: 'Allocate jobs' },

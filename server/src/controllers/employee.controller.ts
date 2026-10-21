@@ -1264,6 +1264,19 @@ export const setEmployeeExtraPrivilege = async (
     const fullPath = action ? `${modulePath}.${action}` : modulePath;
     const fieldPath = `extraPrivileges.${fullPath}`;
 
+    // A grant saved before dealSheet was split into actions is a bare `true`; Mongo can't set a
+    // field under a boolean, so expand it to the actions it used to cover first.
+    if (action && modulePath === "dealSheet") {
+      await Employee.updateOne(
+        { _id: employeeId, "extraPrivileges.dealSheet": { $type: "bool" } },
+        [{ $set: { "extraPrivileges.dealSheet": { $cond: [
+          "$extraPrivileges.dealSheet",
+          { approve: true, reject: true, revoke: true },
+          {},
+        ] } } }],
+      );
+    }
+
     const update = value === false
       ? { $unset: { [fieldPath]: "" } }
       : { $set: { [fieldPath]: true } };

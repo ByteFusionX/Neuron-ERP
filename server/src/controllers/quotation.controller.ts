@@ -23,6 +23,7 @@ import { calculateDiscountPrice, getAdminAuthoredEmployeeIds, getAllReportedEmpl
 const { ObjectId } = require('mongodb');
 import { newTrash } from '../controllers/trash.controller'
 import { removeFile } from '../common/utils/util'
+import { dealSheetCan } from "../common/utils/dealSheetPrivilege";
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import { releaseQuoteStockHolds } from './quoteStockHold.controller';
 import Event from '../models/events.model'
@@ -624,7 +625,25 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             q.quotedDate = q.quotedDate ?? q.date;
             delete q.revisions;
         });
-        return res.status(200).json({ total: total, quotations: quoteData ?? [] })
+        // Badge counts for every tab, scoped by access only (not by the active tab's filters).
+        const baseView = { isDeleted: { $ne: true }, status: { $ne: 'revised' } };
+        const countOf = (extra: any) => Quotation.countDocuments({ $and: [baseView, accessFilter, extra] });
+        const followUpCount = (view: string) => countOf({ ...followUpViewFilter('followUp.nextFollowUpDate', view), status: { $nin: QUOTE_FOLLOW_UP_CLOSED }, $nor: [pastDateFilter] });
+        const [vAll, vPending, vRejected, vApproved, vMine, vOverdue, vToday, vUpcoming] = await Promise.all([
+            countOf({}),
+            countOf({ $or: [{ 'dealData.status': 'pending' }, { status: 'Won', 'dealData.status': { $exists: false } }] }),
+            countOf({ 'dealData.status': 'rejected' }),
+            countOf({ 'dealData.status': 'approved' }),
+            actingUserId ? countOf({ createdBy: actingUserId }) : Promise.resolve(0),
+            followUpCount('overdue'),
+            followUpCount('today'),
+            followUpCount('upcoming'),
+        ]);
+        const viewCounts = {
+            all: vAll, 'pending-deal': vPending, 'rejected-deal': vRejected, 'ready-for-job': vApproved,
+            mine: vMine, 'fu-overdue': vOverdue, 'fu-today': vToday, 'fu-upcoming': vUpcoming,
+        };
+        return res.status(200).json({ total: total, quotations: quoteData ?? [], viewCounts })
 
     } catch (error) {
         console.log(error)
@@ -689,7 +708,7 @@ export const getQuotationById = async (req: Request, res: Response, next: NextFu
             if (access === 'createdAndReported') {
                 reportedToUserIds.push(new ObjectId(userId));
             }
-            accessFilter = { createdBy: { $in: reportedToUserIds } };
+            accessFilter = { createdBy: { $in: [...reportedToUserIds, ...await getAdminAuthoredEmployeeIds()] } };
         } else if (access === 'created') {
             accessFilter = { createdBy: new ObjectId(userId) };
         }
@@ -2442,7 +2461,7 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
                 {
                     privilegeKey: 'dealSheet',
                     checkFunction: (privileges) => {
-                        return privileges.dealSheet === true;
+                        return dealSheetCan(privileges, "approve") || dealSheetCan(privileges, "reject");
                     }
                 },
                 socket
@@ -2858,7 +2877,7 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
                 {
                     privilegeKey: 'dealSheet',
                     checkFunction: (privileges) => {
-                        return privileges.dealSheet === true;
+                        return dealSheetCan(privileges, "view");
                     }
                 },
                 socket

@@ -18,6 +18,7 @@ import { HttpEventType } from '@angular/common/http';
 import { switchMap, take } from 'rxjs';
 import saveAs from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
+import { dealSheetPrivileges, canDoDealSheet } from 'src/app/shared/utils/privilege-fallback';
 import { DealDecisionService, canDecideDeal, describeDealWaiting } from '../../services/deal-decision.service';
 import { describeApprovalGateError } from 'src/app/shared/utils/approval-gate-error.util';
 import { dealSheetPriceDetails, selectedDealItems } from 'src/app/shared/utils/deal-pricing.util';
@@ -141,6 +142,8 @@ export class ViewDealsheetComponent implements OnInit {
   userId!: string;
   private roleId: string | undefined;
   private isSuperAdmin = false;
+  private canApprove = false;
+  private canReject = false;
 
   ngOnInit(): void {
     const state = history.state as ViewDealsheetNavState;
@@ -164,7 +167,7 @@ export class ViewDealsheetComponent implements OnInit {
         switchMap((employee) =>
           this._quoteService.getQuotationById(
             id,
-            employee?.category?.privileges?.quotation?.viewReport,
+            dealSheetPrivileges(employee?.category?.privileges).viewReport,
             employee?._id,
           ),
         ),
@@ -214,6 +217,8 @@ export class ViewDealsheetComponent implements OnInit {
         this.userId = data?._id;
         this.roleId = (data?.category as any)?._id;
         this.isSuperAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
+        this.canApprove = canDoDealSheet(data, 'approve');
+        this.canReject = canDoDealSheet(data, 'reject');
         this.markQuotationSeenIfCreator();
       }
     });
@@ -442,6 +447,14 @@ export class ViewDealsheetComponent implements OnInit {
   }
 
   /** A deal that moved up after its time limit can only be decided by the role it moved to (or a Super Admin). */
+  get canApproveDeal(): boolean {
+    return this.canApprove && this.canDecide;
+  }
+
+  get canRejectDeal(): boolean {
+    return this.canReject && this.canDecide;
+  }
+
   get canDecide(): boolean {
     return canDecideDeal(this.data?.quoteData?.dealData?.waiting, { _id: this.userId, roleId: this.roleId, isSuperAdmin: this.isSuperAdmin });
   }

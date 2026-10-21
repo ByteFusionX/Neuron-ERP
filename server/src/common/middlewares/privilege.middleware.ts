@@ -65,7 +65,9 @@ export const requirePrivilege = (moduleKey: string, action?: string, legacyKey?:
     const extra = extraExpired ? undefined : resolvePrivilege(employee.extraPrivileges, moduleKey);
 
     if (action) {
-      if (privilege?.[action] === true || extra?.[action] === true) {
+      // A bare-boolean grant (saved before the module was split into actions) covers every action.
+      const legacyExtra = legacyKey === moduleKey && extra === true;
+      if (privilege?.[action] === true || extra?.[action] === true || legacyExtra) {
         return next();
       }
       return res.status(403).json({ message: "Forbidden" });

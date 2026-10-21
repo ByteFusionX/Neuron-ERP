@@ -276,7 +276,8 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
     }
 
     function canViewDealSheet(): boolean {
-        return privileges?.dealSheet !== false;
+        const dealSheet = privileges?.dealSheet;
+        return typeof dealSheet === 'object' && dealSheet !== null ? hasView(dealSheet.viewReport) : dealSheet !== false;
     }
 
     function canViewSettings(): boolean {

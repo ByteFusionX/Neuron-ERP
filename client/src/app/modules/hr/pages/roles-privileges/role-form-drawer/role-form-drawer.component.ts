@@ -7,10 +7,10 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
 import { GROUP_KEYS } from 'src/app/shared/constants/nav-menu';
-import { customerPrivileges, departmentPrivileges, employeePrivileges } from 'src/app/shared/utils/privilege-fallback';
+import { customerPrivileges, dealSheetPrivileges, departmentPrivileges, employeePrivileges } from 'src/app/shared/utils/privilege-fallback';
 
 type CheckKey = 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked'
-  | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'grnChecked' | 'technicalChecked' | 'supplierChecked'
+  | 'quotationChecked' | 'dealSheetChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'grnChecked' | 'technicalChecked' | 'supplierChecked'
   | 'inventoryChecked' | 'dispatchChecked' | 'invoiceChecked' | 'claimsChecked' | 'portalChecked';
 
 interface PrivilegeChoice { value: string; label: string; }
@@ -110,6 +110,7 @@ export class RoleFormDrawerComponent implements OnChanges {
   enquiryChecked = false;
   assignedJobsChecked = false;
   quotationChecked = false;
+  dealSheetChecked = false;
   jobSheetChecked = false;
   purchaseChecked = false;
   purchaseOrderChecked = false;
@@ -203,8 +204,13 @@ export class RoleFormDrawerComponent implements OnChanges {
       ],
     },
     {
-      key: 'dealSheet', label: 'Deal Sheet', abbr: 'DS', description: 'Deal sheet approvals',
-      scopes: [], flags: [{ path: 'dealSheet', label: 'Approve deal sheets' }],
+      key: 'dealSheet', label: 'Deal Sheet', abbr: 'DS', description: 'Deal sheet approvals', master: 'dealSheetChecked', group: 'dealSheet',
+      scopes: [scope('dealSheet.viewReport')],
+      flags: [
+        { path: 'dealSheet.approve', label: 'Approve deal sheets' },
+        { path: 'dealSheet.reject', label: 'Reject deal sheets' },
+        { path: 'dealSheet.revoke', label: 'Revoke approved deal sheets' },
+      ],
     },
     {
       key: 'jobSheet', label: 'Job Sheet', abbr: 'JS', description: 'Jobs and allocation', master: 'jobSheetChecked', group: 'jobSheet',
@@ -441,7 +447,12 @@ export class RoleFormDrawerComponent implements OnChanges {
         lpo: [true],
         delete: [true],
       }),
-      dealSheet: [false],
+      dealSheet: this._fb.group({
+        viewReport: 'none',
+        approve: [false],
+        reject: [false],
+        revoke: [false],
+      }),
       jobSheet: this._fb.group({
         viewReport: 'none',
         allocateJobs: [false],
@@ -619,6 +630,8 @@ export class RoleFormDrawerComponent implements OnChanges {
         departments: departmentPrivileges(category.privileges),
         employee: { ...category.privileges.employee, ...employeePrivileges(category.privileges) },
         customer: { ...category.privileges.customer, ...customerPrivileges(category.privileges) },
+        // A legacy boolean `dealSheet` loads as its split form and is saved that way.
+        dealSheet: dealSheetPrivileges(category.privileges),
       } : category.privileges) as any,
     });
     const compare = this.dashboardGroup.get('compareAgainst');
@@ -637,7 +650,7 @@ export class RoleFormDrawerComponent implements OnChanges {
   private applyChecks(privileges: Privileges | null): void {
     if (!privileges) {
       this.dashboardChecked = this.employeeChecked = this.announcementChecked = this.customerChecked = this.enquiryChecked =
-        this.assignedJobsChecked = this.quotationChecked = this.jobSheetChecked = this.purchaseChecked = this.purchaseOrderChecked =
+        this.assignedJobsChecked = this.quotationChecked = this.dealSheetChecked = this.jobSheetChecked = this.purchaseChecked = this.purchaseOrderChecked =
         this.grnChecked = this.technicalChecked = this.supplierChecked = this.inventoryChecked = this.dispatchChecked =
         this.invoiceChecked = this.claimsChecked = this.portalChecked = false;
       return;
@@ -653,6 +666,7 @@ export class RoleFormDrawerComponent implements OnChanges {
       this.enquiryChecked = privileges.enquiry.viewReport !== 'none',
       this.assignedJobsChecked = privileges.assignedJob.viewReport !== 'none',
       this.quotationChecked = privileges.quotation.viewReport !== 'none',
+      this.dealSheetChecked = dealSheetPrivileges(privileges).viewReport !== 'none',
       this.jobSheetChecked = privileges.jobSheet?.viewReport !== 'none',
       this.purchaseChecked = privileges.purchase?.viewReport !== 'none',
       this.purchaseOrderChecked = privileges.purchaseOrder ?
@@ -824,6 +838,8 @@ export class RoleFormDrawerComponent implements OnChanges {
       } else {
         this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canApprovePR: false } } });
       }
+    } else if (formControlName === 'dealSheet') {
+      this.categoryForm.patchValue({ privileges: { dealSheet: { viewReport: checked ? 'all' : 'none', approve: false, reject: false, revoke: false } } });
     } else if (formControlName === 'grn') {
       if (checked) {
         this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canUploadInvoice: false } } });

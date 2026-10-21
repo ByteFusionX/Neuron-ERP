@@ -24,6 +24,7 @@ import { SfDateComponent } from 'src/app/shared/components/smart-form/sf-date.co
 import { SfFieldComponent } from 'src/app/shared/components/smart-form/sf-field.component';
 import { ApprovalJourneyComponent } from 'src/app/shared/components/approval-journey/approval-journey.component';
 import { ApprovalJourneyStage } from 'src/app/shared/components/approval-journey/approval-journey.model';
+import { dealSheetPrivileges } from 'src/app/shared/utils/privilege-fallback';
 
 type WorkflowGridRow = {
   _id: string;
@@ -214,7 +215,7 @@ export class ApprovalWorkflowComponent implements OnInit, OnDestroy {
   /** Privilege a role needs to act in the feature being edited (none for other features). */
   private holdsRequiredPrivilege(category: GetCategory): boolean {
     if (this.editingFeature === WorkflowFeature.PRESALE) return !!category.privileges?.assignedJob?.assign;
-    if (this.editingFeature === WorkflowFeature.DEAL_SHEET) return (category.privileges as any)?.dealSheet === true;
+    if (this.editingFeature === WorkflowFeature.DEAL_SHEET) return dealSheetPrivileges(category.privileges).approve;
     return true;
   }
 

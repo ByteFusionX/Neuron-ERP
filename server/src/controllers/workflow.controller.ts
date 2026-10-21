@@ -3,6 +3,7 @@ import Workflow from '../models/workflow.model';
 import WorkflowDelegation from "../models/workflowDelegation.model";
 import { ObjectId } from "mongodb";
 import { getEmployeeData } from "../common/utils/util";
+import { dealSheetCan } from "../common/utils/dealSheetPrivilege";
 import Category from "../models/category.model";
 import { DEFAULT_CONDITION_FLAGS, DEFAULT_WORKING_DAYS } from "../services/workflow.service";
 
@@ -146,7 +147,7 @@ const presaleRolesMissingPrivilege = async (steps: any[], keep: string[] = []) =
 /** Deal sheet stages approve deals, so every newly added role must hold the deal sheet privilege (the approve endpoint is gated on it). */
 const dealSheetRolesMissingPrivilege = async (steps: any[], keep: string[] = []) => {
     const roles = await Category.find({ _id: { $in: steps.map(step => step.role).filter(id => !keep.includes(String(id))) } }).select('categoryName privileges.dealSheet').lean();
-    return roles.filter((role: any) => role.privileges?.dealSheet !== true).map((role: any) => role.categoryName);
+    return roles.filter((role: any) => !dealSheetCan(role.privileges, "approve")).map((role: any) => role.categoryName);
 };
 
 const normalizeClock = (value: any, fallback: string) => {

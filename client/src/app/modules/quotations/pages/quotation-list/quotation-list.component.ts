@@ -691,6 +691,7 @@ export class QuotationListComponent implements AfterViewInit {
           // Expired is derived from the date on the server; the list shows it in place of the real status.
           this.rows = data ? data.quotations.map((q) => (q.isExpired ? { ...q, status: QuoteStatus.Expired } : q)) : [];
           this.total = data ? data.total : 0;
+          this.viewCounts = data?.viewCounts ?? {};
           this.refreshViewCounts();
           this.isLoading = false;
         },
@@ -1192,9 +1193,14 @@ export class QuotationListComponent implements AfterViewInit {
     this.refreshViewCounts();
   }
 
-  /** Only the active tab has a known total (rows are server-paged), so the others show no badge. */
+  private viewCounts: Record<string, number> = {};
+
+  /** Every tab shows its count from the server; the active tab uses the live (filtered) total. */
   private refreshViewCounts() {
-    this.views = this.views.map((v) => ({ ...v, count: v.id === this.activeViewId ? this.total : undefined, hideCount: v.id !== this.activeViewId }));
+    this.views = this.views.map((v) => {
+      const count = v.id === this.activeViewId ? this.total : this.viewCounts[v.id];
+      return { ...v, count, hideCount: count === undefined };
+    });
   }
 
   checkPermission() {

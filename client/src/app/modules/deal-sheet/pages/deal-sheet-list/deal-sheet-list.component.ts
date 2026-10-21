@@ -54,6 +54,7 @@ import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { DealDecisionService, DEAL_STATUSES, canDecideDeal, describeDealWaiting } from '../../services/deal-decision.service';
+import { canDoDealSheet, dealSheetPrivileges } from 'src/app/shared/utils/privilege-fallback';
 import { describeApprovalGateError } from 'src/app/shared/utils/approval-gate-error.util';
 import { dealSheetPriceDetails, selectedDealItems } from 'src/app/shared/utils/deal-pricing.util';
 import { statusLabel } from 'src/app/shared/utils/text-format.util';
@@ -108,6 +109,9 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   isLoading = true;
   userId: string | undefined;
   isSuperAdmin = false;
+  private canApprove = false;
+  private canReject = false;
+  private canRevoke = false;
   private roleId: string | undefined;
 
   rows: Quotatation[] = [];
@@ -246,6 +250,9 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       this.userId = employee?._id;
       this.isSuperAdmin = /^superadmin$/i.test(String(employee?.category.role ?? ''));
       this.roleId = (employee?.category as any)?._id;
+      this.canApprove = canDoDealSheet(employee, 'approve');
+      this.canReject = canDoDealSheet(employee, 'reject');
+      this.canRevoke = canDoDealSheet(employee, 'revoke');
     });
   }
 
@@ -343,7 +350,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         label: 'Approve',
         icon: 'check',
         quick: true,
-        hidden: (r) => r.dealData?.status !== 'pending' || !this.canDecide(r),
+        hidden: (r) => r.dealData?.status !== 'pending' || !this.canApprove || !this.canDecide(r),
       },
       {
         id: 'reject',
@@ -351,7 +358,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         icon: 'close',
         variant: 'danger',
         quick: true,
-        hidden: (r) => r.dealData?.status !== 'pending' || !this.canDecide(r),
+        hidden: (r) => r.dealData?.status !== 'pending' || !this.canReject || !this.canDecide(r),
       },
       {
         id: 'resetWorkflow',
@@ -371,7 +378,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         id: 'revoke',
         label: 'Revoke Deal',
         icon: 'refresh',
-        hidden: (r) => r.dealData?.status !== 'approved',
+        hidden: (r) => r.dealData?.status !== 'approved' || !this.canRevoke,
       },
     ];
   }
@@ -453,7 +460,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     let userId: string | undefined;
     let role: string | undefined;
     this._employeeService.employeeData$.pipe(take(1)).subscribe((employee) => {
-      access = employee?.category.privileges.quotation.viewReport;
+      access = dealSheetPrivileges(employee?.category.privileges).viewReport;
       role = employee?.category.role;
       userId = employee?._id;
       this.userId = userId;

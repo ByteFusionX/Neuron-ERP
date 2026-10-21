@@ -115,6 +115,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         icon: 'heroClipboardDocumentCheck',
         route: '/deal-sheet/dealsheets',
         privilegeKey: 'dealSheet',
+        privilegeValue: 'none',
         notificationKey: 'dealSheetCount',
       },
     ],

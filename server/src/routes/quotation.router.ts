@@ -46,10 +46,11 @@ quoteRouter.get('/product-suggestions', requireAnyPrivilege("quotation", "assign
 // quote in the first place - not by `dealSheet`, which is reserved for
 // approval-side actions (approve/reject/revoke/view pending & approved).
 quoteRouter.patch('/deal/:quoteId', requirePrivilege("quotation", "create"), upload.array('attachments'), saveDealSheet)
-quoteRouter.post('/deal/approve', requirePrivilege("dealSheet"), approveDeal)
-quoteRouter.post('/deal/reject', requirePrivilege("dealSheet"), rejectDeal)
-quoteRouter.post('/deal/revoke', requirePrivilege("dealSheet"), revokeDeal)
-quoteRouter.post('/deal/reset-workflow', requirePrivilege("dealSheet"), resetDealWorkflow)
+// The third argument is the legacy flag: a role still holding the old `dealSheet: true` boolean keeps every action.
+quoteRouter.post('/deal/approve', requirePrivilege("dealSheet", "approve", "dealSheet"), approveDeal)
+quoteRouter.post('/deal/reject', requirePrivilege("dealSheet", "reject", "dealSheet"), rejectDeal)
+quoteRouter.post('/deal/revoke', requirePrivilege("dealSheet", "revoke", "dealSheet"), revokeDeal)
+quoteRouter.post('/deal/reset-workflow', requirePrivilege("dealSheet", "approve", "dealSheet"), resetDealWorkflow)
 quoteRouter.post('/deal/get', requirePrivilege("dealSheet"), getDealSheet)
 quoteRouter.post('/deal/approved/get', requirePrivilege("dealSheet"), getApprovedDealSheet)
 
