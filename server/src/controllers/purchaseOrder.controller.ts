@@ -161,33 +161,39 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
+    // Quantities are checked per PR line (prLineKey = PR itemDetail _id), so two lines with the same part stay apart.
+    // An item without prLineKey (older payloads) falls back to the first awarded line with the same part/detail.
     const itemKey = (entry: any) => (entry.partNo ? entry.partNo.toString() : entry.detail);
-    const existingOrders = await PurchaseOrder.find({
-      purchaseId: new mongoose.Types.ObjectId(purchaseId),
-      supplierId: new mongoose.Types.ObjectId(supplierId),
-      poStatus: { $nin: ['Draft', 'Rejected'] }
-    });
-    const reservedByItem = new Map<string, number>();
-    existingOrders.forEach((po: any) => {
-      (po.items || []).forEach((item: any) => {
-        const key = itemKey(item);
-        reservedByItem.set(key, (reservedByItem.get(key) || 0) + (Number(item.quantity) || 0));
-      });
-    });
     const allowedByItem = new Map<string, number>();
+    const lineByItemKey = new Map<string, string>();
     (existingPurchaseRequest.items || []).forEach((item: any) => {
       (item.itemDetails || []).forEach((detail: any) => {
         const selected = (detail.comparisons || []).find((comparison: any) =>
           comparison.selected === true && comparison.supplierId?.toString() === supplierId.toString()
         );
         if (!selected) return;
-        const key = itemKey(detail);
+        const key = String(detail._id);
         allowedByItem.set(key, (allowedByItem.get(key) || 0) + (Number(selected.quantity ?? detail.quantity) || 0));
+        if (!lineByItemKey.has(itemKey(detail))) lineByItemKey.set(itemKey(detail), key);
+      });
+    });
+    const lineKeyOf = (entry: any) => (entry.prLineKey ? String(entry.prLineKey) : lineByItemKey.get(itemKey(entry)) || itemKey(entry));
+    const existingOrders = await PurchaseOrder.find({
+      purchaseId: new mongoose.Types.ObjectId(purchaseId),
+      supplierId: new mongoose.Types.ObjectId(supplierId),
+      poStatus: { $nin: ['Draft', 'Rejected', 'Cancelled'] }
+    });
+    const reservedByItem = new Map<string, number>();
+    existingOrders.forEach((po: any) => {
+      (po.items || []).forEach((item: any) => {
+        const key = lineKeyOf(item);
+        reservedByItem.set(key, (reservedByItem.get(key) || 0) + (Number(item.quantity) || 0));
       });
     });
     const requestedByItem = new Map<string, number>();
     items.forEach((item: any) => {
-      const key = itemKey(item);
+      item.prLineKey = lineKeyOf(item);
+      const key = item.prLineKey;
       requestedByItem.set(key, (requestedByItem.get(key) || 0) + (Number(item.quantity) || 0));
     });
     for (const [key, requestedQty] of requestedByItem.entries()) {
@@ -252,6 +258,24 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
 
     const rfqId = await resolvePoRfqId(purchaseId, quoteId, supplierId);
     if (rfqId) purchaseOrderData.rfqId = rfqId;
+
+    // Each line points at the awarded quote it came from: same PR line, same supplier, selected.
+    if (purchaseId && mongoose.Types.ObjectId.isValid(purchaseId)) {
+      const rfqs: any[] = await Rfq.find(
+        { purchaseRequestId: purchaseId, rfqType: { $ne: RfqType.Sales }, isDeleted: false, status: { $ne: 'Cancelled' } },
+        { quotes: 1 }
+      ).lean();
+      const quoteByLine = new Map<string, any>();
+      rfqs.forEach((rfq) => (rfq.quotes || []).forEach((q: any) => {
+        if (q.selected && String(q.supplierId) === String(supplierId) && !quoteByLine.has(String(q.itemDetailKey))) {
+          quoteByLine.set(String(q.itemDetailKey), q._id);
+        }
+      }));
+      items.forEach((item: any) => {
+        const quoteId = quoteByLine.get(String(item.prLineKey));
+        if (quoteId) item.rfqQuoteId = quoteId;
+      });
+    }
 
     // The issued LPO goes to the PO Approval workflow. With no matching steps (limits / requester is Admin) there is nothing to approve.
     let workflowSteps: any[];
@@ -1269,6 +1293,36 @@ export const updatePurchaseOrderStatus = async (req: Request, res: Response) => 
       message: "Failed to update purchase order status",
       error: error.message,
     });
+  }
+};
+
+/** Marks an approved LPO as sent to the supplier (Approved → Placed). Manual only; goods are received against Placed LPOs. */
+export const placePurchaseOrder = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid Purchase Order ID" });
+    }
+    const employee = await getEmployeeData(req.user);
+    if (!employee) {
+      return res.status(401).json({ success: false, message: "Employee not found" });
+    }
+    const placed = await PurchaseOrder.findOneAndUpdate(
+      { _id: id, poStatus: 'Approved' },
+      { $set: { poStatus: 'Placed', placedAt: new Date(), placedBy: employee._id, updatedAt: new Date() } },
+      { new: true }
+    );
+    if (!placed) {
+      const exists = await PurchaseOrder.exists({ _id: id });
+      return res.status(exists ? 409 : 404).json({
+        success: false,
+        message: exists ? "Only an approved LPO can be placed" : "Purchase order not found",
+      });
+    }
+    return res.status(200).json({ success: true, message: "Order placed", data: placed });
+  } catch (error: any) {
+    console.error("Place purchase order error:", error);
+    return res.status(500).json({ success: false, message: "Failed to place the order", error: error.message });
   }
 };
 

@@ -6,6 +6,7 @@ export const LpoActionGates = {
   canEdit: (poStatus: string): boolean => poStatus === 'Draft' || poStatus === 'Rejected',
   canSendForApproval: (poStatus: string): boolean => poStatus === 'Draft' || poStatus === 'Rejected',
   canReIssue: (poStatus: string): boolean =>
-    poStatus !== 'Draft' && poStatus !== 'Rejected' && poStatus !== 'Approved' && poStatus !== 'Closed',
-  canRevoke: (poStatus: string): boolean => poStatus !== 'Approved' && poStatus !== 'Closed',
+    poStatus !== 'Draft' && poStatus !== 'Rejected' && poStatus !== 'Approved' && poStatus !== 'Placed' && poStatus !== 'Closed',
+  canRevoke: (poStatus: string): boolean => poStatus !== 'Approved' && poStatus !== 'Placed' && poStatus !== 'Closed',
+  canPlace: (poStatus: string): boolean => poStatus === 'Approved',
 };

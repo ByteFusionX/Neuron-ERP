@@ -119,7 +119,7 @@ export class CreateGrnComponent implements OnInit {
       .getAllPurchaseOrders({
         page: 1,
         row: 500,
-        status: ['Approved', 'Closed'],
+        status: ['Placed', 'Closed'],
       })
       .subscribe({
         next: (response: any) => {

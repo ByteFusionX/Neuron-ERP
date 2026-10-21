@@ -23,16 +23,18 @@ import { ResetWorkflowComponent, ResetWorkflowModalData } from 'src/app/modules/
 import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 
-const ALL_STATUSES = ['Pending for Approval', 'Approved', 'Closed', 'Rejected'];
+const ALL_STATUSES = ['Pending for Approval', 'Approved', 'Placed', 'Closed', 'Rejected'];
 const PENDING_STATUSES = ['Pending for Approval'];
-const APPROVED_STATUSES = ['Approved'];
+const APPROVED_STATUSES = ['Approved', 'Placed'];
 const CLOSED_STATUSES = ['Closed'];
 const REJECTED_STATUSES = ['Rejected'];
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   'Pending for Approval': 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
   Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
+  Placed: 'bg-teal-50 text-teal-700 ring-teal-200 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:ring-teal-900 dark:border-teal-900',
   Closed: 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900 dark:border-sky-900',
   Rejected: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
 };
@@ -69,8 +71,10 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   private modal = inject(ModalService);
   private workflowService = inject(WorkflowService);
   private employeeService = inject(EmployeeService);
+  private confirmDialog = inject(ConfirmDialogService);
   private poWorkflowSteps: { id: string; label: string }[] = [];
   isSuperAdmin = false;
+  canInitiateLPO = false;
   private subscriptions = new Subscription();
 
   rows: any[] = [];
@@ -119,6 +123,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.employeeService.employeeData$.subscribe((employee: any) => {
         this.isSuperAdmin = /^superadmin$/i.test(employee?.category?.role ?? '');
+        this.canInitiateLPO = !!employee?.category?.privileges?.purchaseOrder?.canInitiateLPO;
       })
     );
     this.subscriptions.add(
@@ -158,6 +163,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     this.rowActions = [
       { id: 'openFullLpo', label: 'Open full PO', icon: 'eye', quick: true, panel: true },
       { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', quick: true, hidden: (r) => r.poStatus !== 'Pending for Approval' || !this.isSuperAdmin },
+      { id: 'place', label: 'Place order', icon: 'check', quick: true, hidden: (r) => r.poStatus !== 'Approved' || !this.canInitiateLPO },
     ];
   }
 
@@ -188,7 +194,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
       case 'approved':
         return APPROVED_STATUSES;
       case 'partiallyReceived':
-        return ['Approved', 'Closed'];
+        return ['Placed', 'Closed'];
       case 'closed':
         return CLOSED_STATUSES;
       case 'rejected':
@@ -272,6 +278,29 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   onRowAction(event: DataGridRowActionEvent<any>): void {
     if (event.action.id === 'openFullLpo') this.openFullLpo(event.row);
     if (event.action.id === 'resetWorkflow') this.resetWorkflow(event.row);
+    if (event.action.id === 'place') this.placeOrder(event.row);
+  }
+
+  async placeOrder(row: any): Promise<void> {
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Place order',
+      message: 'Confirm the order has been sent to the supplier. Goods can be received against it after this.',
+      details: [
+        { label: 'PO no', value: row.poNo || '-' },
+        { label: 'Supplier', value: row.supplierId?.supplierName || '-' },
+        { label: 'Total', value: this.formatAmount(row) },
+      ],
+      confirmLabel: 'Place order',
+    });
+    if (!confirmed) return;
+    this.purchaseOrderService.placePurchaseOrder(row._id).subscribe({
+      next: () => {
+        this.notificationService.success('Order placed');
+        this.loadData();
+      },
+      error: (error) => this.notificationService.error(error.error?.message || 'Failed to place the order'),
+    });
   }
 
   resetWorkflow(row: any): void {

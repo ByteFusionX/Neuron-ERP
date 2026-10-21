@@ -29,6 +29,7 @@
         <app-action-button [disabled]="isApproving || isRejecting" (click)="onReject()">{{ isRejecting ? 'Rejecting…' : 'Reject' }}</app-action-button>
         <app-action-button variant="primary" [disabled]="isApproving || isRejecting" (click)="onApprove()">{{ isApproving ? 'Approving…' : 'Approve' }}</app-action-button>
       </ng-container>
+      <app-action-button *ngIf="canPlace()" variant="primary" [disabled]="isPlacing" (click)="onPlace()">{{ isPlacing ? 'Placing…' : 'Place order' }}</app-action-button>
       <app-action-button variant="outline" (click)="onBack()">Back</app-action-button>
     </ng-container>
 

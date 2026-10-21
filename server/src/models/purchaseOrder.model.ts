@@ -10,6 +10,9 @@ interface PurchaseOrder extends Document {
         unitCost: number;
         totalCost: number;
         partNo?: any;
+        prLineKey?: string;
+        rfqQuoteId?: any;
+        receivedQty?: number;
     }[];
     supplierId: any;
     purchaseId: any;
@@ -48,6 +51,8 @@ interface PurchaseOrder extends Document {
     currency?: string;
     originalPoId?: any;
     stockHoldId?: any;
+    placedAt?: Date;
+    placedBy?: any;
 }
 
 const purchaseOrderItemSchema = new Schema({
@@ -70,6 +75,18 @@ const purchaseOrderItemSchema = new Schema({
     partNo: {
         type: Schema.Types.ObjectId,
         ref: 'Product'
+    },
+    // Links the line back to the PR line it covers and the RFQ quote it was awarded from.
+    prLineKey: {
+        type: String
+    },
+    rfqQuoteId: {
+        type: Schema.Types.ObjectId
+    },
+    receivedQty: {
+        type: Number,
+        default: 0,
+        min: 0
     }
 }, { _id: false });
 
@@ -82,7 +99,8 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         },
         poStatus: {
             type: String,
-            enum: ["Pending for Approval", "Approved", "Closed", "Rejected"],
+            // Draft, Placed and Cancelled are for POs raised from a PR's awards; Placed is set by hand after approval.
+            enum: ["Draft", "Pending for Approval", "Approved", "Placed", "Closed", "Rejected", "Cancelled"],
             default: "Pending for Approval",
         },
         approvalStatus: {
@@ -126,9 +144,9 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
             required: true,
             ref: "Purchase",
         },
+        // Optional: PRs raised without a job sheet have no job.
         jobId: {
             type: Schema.Types.ObjectId,
-            required: true,
             ref: "Job",
         },
         quoteId: {
@@ -214,6 +232,13 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         stockHoldId: {
             type: Schema.Types.ObjectId,
             ref: "StockHold",
+        },
+        placedAt: {
+            type: Date,
+        },
+        placedBy: {
+            type: Schema.Types.ObjectId,
+            ref: "Employee",
         },
     },
     { timestamps: true }

@@ -727,7 +727,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
             const lpo = response.success ? response.data : response;
             
             // Check if LPO is approved - prevent re-issue
-            if (lpo.poStatus === 'Approved') {
+            if (lpo.poStatus === 'Approved' || lpo.poStatus === 'Placed') {
               this.notificationService.error('Cannot re-issue an approved LPO');
               this.isLoading = false;
               this.closeDrawer();

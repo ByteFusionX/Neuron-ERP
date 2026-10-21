@@ -563,7 +563,8 @@ export const jobSheetsWithCompletedPO = async (req: Request, res: Response, next
 export const jobSheetsWithApprovedPOAndNoGRN = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const approvedPOs = await PurchaseOrder.find({
-            poStatus: 'Approved'
+            // Goods are received only once the order is placed with the supplier.
+            poStatus: 'Placed'
         }).select('_id jobId');
 
         if (!approvedPOs.length) {
@@ -1674,7 +1675,7 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
             summary.totalPOs += purchaseOrders.length;
 
             for (const po of purchaseOrders) {
-                if (po.poStatus === 'Approved') summary.approvedPOs++;
+                if (po.poStatus === 'Approved' || po.poStatus === 'Placed') summary.approvedPOs++;
                 if (po.poStatus === 'Closed') summary.closedPOs++;
 
                 const poTimestamp = new Date(po.updatedAt || po.createdAt);

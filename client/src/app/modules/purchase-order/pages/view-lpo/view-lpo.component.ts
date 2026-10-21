@@ -59,7 +59,7 @@ export class ViewLpoComponent implements OnInit {
   ];
 
   private static readonly STATUS_TONES: Record<string, 'good' | 'warn' | 'bad' | 'neutral'> = {
-    'Approved': 'good', 'Closed': 'good', 'Pending for Approval': 'warn', 'Rejected': 'bad', 'Draft': 'neutral',
+    'Approved': 'good', 'Placed': 'good', 'Closed': 'good', 'Cancelled': 'bad', 'Pending for Approval': 'warn', 'Rejected': 'bad', 'Draft': 'neutral',
   };
 
   get breadcrumbs(): DetailViewBreadcrumb[] {
@@ -146,7 +146,9 @@ export class ViewLpoComponent implements OnInit {
   currency = signal<string>('QAR');
   isApproving = false;
   isRejecting = false;
+  isPlacing = false;
   canApprovePOs = signal<boolean>(false);
+  canInitiateLPO = signal<boolean>(false);
   currentEmployeeId: string | null = null;
   currentCategoryId: string | null = null;
   isSuperAdmin = false;
@@ -169,6 +171,7 @@ export class ViewLpoComponent implements OnInit {
       this.isSuperAdmin = /^superadmin$/i.test(data?.category?.role ?? '');
       if (data?.category?.privileges) {
         this.canApprovePOs.set(data.category.privileges.purchaseOrder?.canApprovePOs || false);
+        this.canInitiateLPO.set(data.category.privileges.purchaseOrder?.canInitiateLPO || false);
       }
     });
   }
@@ -445,6 +448,40 @@ export class ViewLpoComponent implements OnInit {
       error: (error) => {
         this.notificationService.error(error.error?.message || 'Failed to reject LPO');
         this.isRejecting = false;
+      }
+    });
+  }
+
+  /** Placing is manual, by someone who can issue LPOs, once the LPO is approved. */
+  canPlace(): boolean {
+    return this.lpo?.poStatus === 'Approved' && this.canInitiateLPO();
+  }
+
+  async onPlace(): Promise<void> {
+    if (!this.canPlace()) return;
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Place order',
+      message: 'Confirm the order has been sent to the supplier. Goods can be received against it after this.',
+      details: [
+        { label: 'PO no', value: this.lpo?.poNo || '-' },
+        { label: 'Supplier', value: this.supplier?.supplierName || '-' },
+        { label: 'Total', value: this.formatCurrency(this.getTotalAfterDiscount()) },
+      ],
+      confirmLabel: 'Place order',
+    });
+    if (!confirmed) return;
+
+    this.isPlacing = true;
+    this.purchaseOrderService.placePurchaseOrder(this.lpoId).subscribe({
+      next: () => {
+        this.notificationService.success('Order placed');
+        this.isPlacing = false;
+        this.loadLpo();
+      },
+      error: (error) => {
+        this.notificationService.error(error.error?.message || 'Failed to place the order');
+        this.isPlacing = false;
       }
     });
   }

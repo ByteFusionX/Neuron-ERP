@@ -86,6 +86,12 @@ export const createGRN = async (req: Request, res: Response) => {
         message: "Purchase order not found"
       });
     }
+    if (!['Placed', 'Closed'].includes(purchaseOrder.poStatus as string)) {
+      return res.status(409).json({
+        success: false,
+        message: "Goods can only be received against a placed LPO"
+      });
+    }
 
     if (!grnNo || !grnDate || !warehouse || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({

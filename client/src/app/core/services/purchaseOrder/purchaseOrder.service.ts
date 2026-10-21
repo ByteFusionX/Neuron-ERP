@@ -95,6 +95,11 @@ export class PurchaseOrderService {
     return this.http.patch<any>(`${this.baseUrl}/${id}/approve`, { comment }, { context: context() });
   }
 
+  /** Approved → Placed: the order has been sent to the supplier. */
+  placePurchaseOrder(id: string): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${id}/place`, {}, { context: context() });
+  }
+
   rejectPurchaseOrder(id: string, comment?: string): Observable<any> {
     return this.http.patch<any>(`${this.baseUrl}/${id}/reject`, { comment }, { context: context() });
   }

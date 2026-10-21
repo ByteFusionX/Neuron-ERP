@@ -24,6 +24,8 @@ import { SfDrawerComponent } from 'src/app/shared/components/smart-form/sf-drawe
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog/confirm-dialog.service';
+import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
+import { proratedRfqDiscount, RfqTotalDiscount } from 'src/app/shared/utils/rfq-discount.util';
 
 /** One line the supplier can still be ordered for, as the LPO endpoint reports it, plus the buyer's pick. */
 interface IssueLine {
@@ -67,6 +69,7 @@ export class InitiateLpoComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private supplierService = inject(SupplierService)
   private purchaseOrderService = inject(PurchaseOrderService);
+  private salesRfqService = inject(SalesRfqService);
   private grnService = inject(GrnService);
   private deliveryNoteService = inject(DeliveryNoteService);
   private dialog = inject(MatDialog);
@@ -80,6 +83,8 @@ export class InitiateLpoComponent implements OnInit {
 
   /** Set when a list opens this as a slide-over; absent when reached through the /purchase/initiate-lpo/:id route. */
   @Input() purchaseIdInput: string | null = null;
+  /** Opens on this supplier's tab (the PR drawer's POs step creates one supplier's PO at a time). */
+  @Input() initialSupplierId: string | null = null;
   @Output() closed = new EventEmitter<void>();
   /** Fired on close when at least one LPO was issued, so the host list can refresh. */
   @Output('issued') issuedChange = new EventEmitter<void>();
@@ -254,13 +259,16 @@ export class InitiateLpoComponent implements OnInit {
     });
   }
 
-  /** Step 1 → 2: checks the picks, then fills the terms the supplier agreed. */
-  /** The supplier's approved discount on this purchase. */
+  /** Each supplier's total RFQ discount, by supplier id. */
+  private rfqDiscounts = new Map<string, RfqTotalDiscount>();
+
+  /** The supplier's total RFQ discount, pro-rated to the value of this PO; the buyer can still change it. */
   discountOf(group: SupplierGroup | undefined): number {
-    if (!group) return 0;
-    return Number((this.purchase as any)?.supplierDiscounts?.suppliers?.find((s: any) => s.supplierId === group.supplierId)?.discount) || 0;
+    if (!group?.supplierId) return 0;
+    return proratedRfqDiscount(this.rfqDiscounts.get(group.supplierId), this.pickedTotal(group));
   }
 
+  /** Step 1 → 2: checks the picks, then fills the terms the supplier agreed. */
   goToTerms(): void {
     const group = this.activeGroup;
     if (!group) return;
@@ -405,6 +413,7 @@ export class InitiateLpoComponent implements OnInit {
       items: picked.map((l) => ({
         detail: l.item.detail,
         partNo: l.item.partNo || null,
+        prLineKey: l.item._id,
         quantity: l.qty,
         unitCost: this.unitPriceOf(l),
         totalCost: l.qty * this.unitPriceOf(l),
@@ -596,6 +605,15 @@ export class InitiateLpoComponent implements OnInit {
       return;
     }
 
+    // Each supplier's discount on its whole RFQ, for the PO discount.
+    this.salesRfqService.comparePurchase(this.purchaseId).subscribe({
+      next: (res) => {
+        this.rfqDiscounts.clear();
+        (res?.data?.rfqs ?? []).forEach((c) => { if (c.supplierId) this.rfqDiscounts.set(String(c.supplierId), c); });
+      },
+      error: () => this.rfqDiscounts.clear(),
+    });
+
     this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
       next: (response) => {
         this.purchase = response.data;
@@ -676,9 +694,11 @@ export class InitiateLpoComponent implements OnInit {
       group.etaTerms = group.etaTerms || item.etaTerms || '';
     });
     this.supplierGroups = Array.from(groups.values()).sort((a, b) => a.supplierName.localeCompare(b.supplierName));
+    const wanted = this.initialSupplierId ? this.supplierGroups.find((g) => g.supplierId === this.initialSupplierId) : undefined;
+    if (wanted && !this.activeKey) this.activeKey = wanted.key;
     if (!this.supplierGroups.some((g) => g.key === this.activeKey)) this.activeKey = this.supplierGroups[0]?.key ?? '';
     this.ensureLines(this.activeGroup);
-    this.selectFirstOpenSupplier();
+    if (!wanted) this.selectFirstOpenSupplier();
   }
 
   /** One sheet per supplier: the items, quantities and agreed prices to put on its LPO. */
