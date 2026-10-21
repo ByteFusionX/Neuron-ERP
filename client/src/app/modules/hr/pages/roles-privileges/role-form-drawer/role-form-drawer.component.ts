@@ -210,6 +210,7 @@ export class RoleFormDrawerComponent implements OnChanges {
         { path: 'dealSheet.approve', label: 'Approve deal sheets' },
         { path: 'dealSheet.reject', label: 'Reject deal sheets' },
         { path: 'dealSheet.revoke', label: 'Revoke approved deal sheets' },
+        { path: 'dealSheet.update', label: 'Update (edit) deal sheets' },
       ],
     },
     {
@@ -452,6 +453,7 @@ export class RoleFormDrawerComponent implements OnChanges {
         approve: [false],
         reject: [false],
         revoke: [false],
+        update: [false],
       }),
       jobSheet: this._fb.group({
         viewReport: 'none',
@@ -839,7 +841,7 @@ export class RoleFormDrawerComponent implements OnChanges {
         this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canApprovePR: false } } });
       }
     } else if (formControlName === 'dealSheet') {
-      this.categoryForm.patchValue({ privileges: { dealSheet: { viewReport: checked ? 'all' : 'none', approve: false, reject: false, revoke: false } } });
+      this.categoryForm.patchValue({ privileges: { dealSheet: { viewReport: checked ? 'all' : 'none', approve: false, reject: false, revoke: false, update: false } } });
     } else if (formControlName === 'grn') {
       if (checked) {
         this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canUploadInvoice: false } } });

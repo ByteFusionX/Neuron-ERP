@@ -69,6 +69,7 @@ const PRIVILEGE_MODULES: PrivilegeModule[] = [
     { path: 'dealSheet.approve', label: 'Approve deal sheets' },
     { path: 'dealSheet.reject', label: 'Reject deal sheets' },
     { path: 'dealSheet.revoke', label: 'Revoke approved deal sheets' },
+    { path: 'dealSheet.update', label: 'Update (edit) deal sheets' },
   ]},
   { key: 'jobSheet', label: 'Job Sheet', flags: [
     { path: 'jobSheet.allocateJobs', label: 'Allocate jobs' },

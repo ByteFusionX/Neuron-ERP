@@ -1271,7 +1271,7 @@ export const setEmployeeExtraPrivilege = async (
         { _id: employeeId, "extraPrivileges.dealSheet": { $type: "bool" } },
         [{ $set: { "extraPrivileges.dealSheet": { $cond: [
           "$extraPrivileges.dealSheet",
-          { approve: true, reject: true, revoke: true },
+          { approve: true, reject: true, revoke: true, update: true },
           {},
         ] } } }],
       );

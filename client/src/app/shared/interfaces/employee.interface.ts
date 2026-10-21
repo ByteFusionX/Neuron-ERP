@@ -280,7 +280,7 @@ export interface Privileges {
     transferProcurementPerson: boolean;
   };
   /** Roles saved before the split hold a bare boolean (true = view + approve + reject + revoke). */
-  dealSheet: boolean | { viewReport: string; approve?: boolean; reject?: boolean; revoke?: boolean };
+  dealSheet: boolean | { viewReport: string; approve?: boolean; reject?: boolean; revoke?: boolean; update?: boolean };
   purchase: {
     viewReport: string;
     create: boolean;

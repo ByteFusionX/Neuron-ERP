@@ -31,23 +31,25 @@ export function customerPrivileges(p: Privileges | undefined) {
 
 // `dealSheet` used to be one boolean covering view, approve, reject and revoke. A role keeps all of
 // them until it is re-saved with the split object; an explicit value always wins.
-export function dealSheetPrivileges(p: Privileges | undefined): { viewReport: string; approve: boolean; reject: boolean; revoke: boolean } {
+export function dealSheetPrivileges(p: Privileges | undefined): { viewReport: string; approve: boolean; reject: boolean; revoke: boolean; update: boolean } {
   const d = p?.dealSheet;
   if (typeof d === 'boolean') {
     // The old boolean had no data scope; deals were scoped by the quotation view level, so keep that.
     const quoteScope = p?.quotation?.viewReport;
-    return { viewReport: d ? (quoteScope && quoteScope !== 'none' ? quoteScope : 'all') : 'none', approve: d, reject: d, revoke: d };
+    return { viewReport: d ? (quoteScope && quoteScope !== 'none' ? quoteScope : 'all') : 'none', approve: d, reject: d, revoke: d, update: d };
   }
   return {
     viewReport: d?.viewReport ?? 'none',
     approve: d?.approve === true,
     reject: d?.reject === true,
     revoke: d?.revoke === true,
+    // Roles split before `update` existed could always edit a deal they could see, so a missing value stays allowed.
+    update: d?.update !== false && (d?.update === true || (!!d?.viewReport && d.viewReport !== 'none')),
   };
 }
 
-/** Whether this employee may approve, reject or revoke deals: role, individual grant (until it expires), or admin tier. */
-export function canDoDealSheet(employee: any, action: 'approve' | 'reject' | 'revoke'): boolean {
+/** Whether this employee may approve, reject, revoke or update deals: role, individual grant (until it expires), or admin tier. */
+export function canDoDealSheet(employee: any, action: 'approve' | 'reject' | 'revoke' | 'update'): boolean {
   const role = String(employee?.category?.role ?? '');
   if (/^(superadmin|admin)$/i.test(role)) return true;
   if (dealSheetPrivileges(employee?.category?.privileges)[action]) return true;

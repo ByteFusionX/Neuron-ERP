@@ -31,7 +31,7 @@
             <app-action-button variant="primary" *ngIf="data.approval && canApproveDeal && viewMode === 'deal'" [disabled]="isApproving" (click)="onApprove()">
                 {{ isApproving ? 'Approving...' : 'Approve' }}
             </app-action-button>
-            <app-action-button variant="primary" *ngIf="data.quoteData.dealData.status !== 'approved' && viewMode === 'deal'" (click)="onUpdate()" icon="edit">Edit Deal</app-action-button>
+            <app-action-button variant="primary" *ngIf="data.quoteData.dealData.status !== 'approved' && canUpdate && viewMode === 'deal'" (click)="onUpdate()" icon="edit">Edit Deal</app-action-button>
         </ng-container>
 
         <ng-container sidebar>

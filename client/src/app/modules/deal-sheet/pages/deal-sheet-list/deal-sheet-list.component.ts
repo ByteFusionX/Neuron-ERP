@@ -112,6 +112,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   private canApprove = false;
   private canReject = false;
   private canRevoke = false;
+  private canUpdate = false;
   private roleId: string | undefined;
 
   rows: Quotatation[] = [];
@@ -253,6 +254,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       this.canApprove = canDoDealSheet(employee, 'approve');
       this.canReject = canDoDealSheet(employee, 'reject');
       this.canRevoke = canDoDealSheet(employee, 'revoke');
+      this.canUpdate = canDoDealSheet(employee, 'update');
     });
   }
 
@@ -372,7 +374,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         label: 'Update Deal',
         icon: 'pencil',
         quick: true,
-        hidden: (r) => r.dealData?.status === 'approved',
+        hidden: (r) => r.dealData?.status === 'approved' || !this.canUpdate,
       },
       {
         id: 'revoke',

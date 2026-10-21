@@ -73,6 +73,7 @@ export interface Privileges {
     approve?: boolean;
     reject?: boolean;
     revoke?: boolean;
+    update?: boolean;
   };
   purchase: {
     viewReport: string;

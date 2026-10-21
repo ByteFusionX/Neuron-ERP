@@ -144,6 +144,7 @@ export class ViewDealsheetComponent implements OnInit {
   private isSuperAdmin = false;
   private canApprove = false;
   private canReject = false;
+  canUpdate = false;
 
   ngOnInit(): void {
     const state = history.state as ViewDealsheetNavState;
@@ -219,6 +220,7 @@ export class ViewDealsheetComponent implements OnInit {
         this.isSuperAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
         this.canApprove = canDoDealSheet(data, 'approve');
         this.canReject = canDoDealSheet(data, 'reject');
+        this.canUpdate = canDoDealSheet(data, 'update');
         this.markQuotationSeenIfCreator();
       }
     });
