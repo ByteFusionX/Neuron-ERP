@@ -14,6 +14,7 @@ export interface ProductCategory {
   createdBy?: any;
   createdDate: Date;
   isDeleted?: boolean;
+  isActive?: boolean;
 }
 
 @Injectable({

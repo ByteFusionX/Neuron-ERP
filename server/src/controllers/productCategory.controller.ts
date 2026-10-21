@@ -23,7 +23,8 @@ export const createProductCategory = async (req: Request, res: Response, next: N
             categoryName: data.categoryName.trim(),
             createdBy: employee._id,
             createdDate: data.createdDate,
-            isDeleted: false
+            isDeleted: false,
+            isActive: data.isActive !== false
         });
 
         return res.status(201).json(category);
@@ -35,7 +36,7 @@ export const createProductCategory = async (req: Request, res: Response, next: N
 
 export const getProductCategories = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const categories = await ProductCategory.find({ isDeleted: { $ne: true } }).sort({ createdDate: -1 });
+        const categories = await ProductCategory.find({ isDeleted: { $ne: true } }).sort({ createdDate: -1 }).populate('createdBy', 'firstName lastName');
         if (!categories || categories.length === 0) return res.status(204).json();
         return res.status(200).json(categories);
     } catch (error) {
@@ -70,7 +71,7 @@ export const updateProductCategory = async (req: Request, res: Response, next: N
 
         const updated = await ProductCategory.findOneAndUpdate(
             { _id: id, isDeleted: { $ne: true } },
-            { $set: { ...(data.categoryName ? { categoryName: data.categoryName.trim() } : {}) } },
+            { $set: { ...(data.categoryName ? { categoryName: data.categoryName.trim() } : {}), ...(typeof data.isActive === 'boolean' ? { isActive: data.isActive } : {}) } },
             { new: true }
         );
         if (!updated) return res.status(404).json({ message: "Category not found" });

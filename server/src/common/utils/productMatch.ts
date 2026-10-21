@@ -97,18 +97,15 @@ export const findDuplicates = async (input: {
     const brandKey = brandKeyOf(input.brand);
 
     if (norm) {
+        // Exact match only (ignoring case and outer spaces); AB-123 is not treated as AB123.
+        const exact = new RegExp(`^\\s*${escapeRegex(String(input.partNo).trim())}\\s*$`, 'i');
         const sameNumber: any[] = await Product.find({
             ...LIVE, ...exclude,
-            $or: [
-                { partNoNormalized: norm },
-                { 'aliases.valueNormalized': norm },
-                // Products saved before the backfill ran have no normalised key yet.
-                { partNoNormalized: { $exists: false }, partNo: new RegExp(`^${escapeRegex(String(input.partNo).trim())}$`, 'i') },
-            ],
-        }).select(`${select} brandKey partNoNormalized aliases`).lean();
+            $or: [{ partNo: exact }, { 'aliases.value': exact }],
+        }).select(`${select} brandKey aliases`).lean();
         for (const p of sameNumber) {
             const sameBrand = (p.brandKey ?? brandKeyOf(p.brand)) === brandKey;
-            const viaAlias = (p.partNoNormalized ?? normalizePartNo(p.partNo)) !== norm;
+            const viaAlias = !exact.test(String(p.partNo ?? ''));
             if (viaAlias) add(p, 'block', `This number is already an alias of ${p.itemCode}`);
             else if (sameBrand) add(p, 'block', `Same brand and part number as ${p.itemCode}`);
             else add(p, 'warn', `Same part number under another brand (${p.brand}): ${p.itemCode}`);
@@ -116,11 +113,12 @@ export const findDuplicates = async (input: {
     }
 
     for (const alias of input.aliases ?? []) {
+        const aliasExact = new RegExp(`^\\s*${escapeRegex(alias.value.trim())}\\s*$`, 'i');
         const clash: any[] = await Product.find({
             ...LIVE, ...exclude,
             $or: [
-                { partNoNormalized: alias.valueNormalized, brandKey },
-                { aliases: { $elemMatch: { valueNormalized: alias.valueNormalized, type: alias.type, ...(alias.supplierId ? { supplierId: alias.supplierId } : {}), ...(alias.customerId ? { customerId: alias.customerId } : {}) } } },
+                { partNo: aliasExact, brandKey },
+                { aliases: { $elemMatch: { value: aliasExact, type: alias.type, ...(alias.supplierId ? { supplierId: alias.supplierId } : {}), ...(alias.customerId ? { customerId: alias.customerId } : {}) } } },
             ],
         }).select(select).lean();
         for (const p of clash) add(p, 'block', `Alias "${alias.value}" already belongs to ${p.itemCode}`);

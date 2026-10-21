@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, inject } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormControl, FormGroup, ValidationErrors, Validators } from '@angular/forms';
 import { ToastrService } from 'ngx-toastr';
-import { Subscription, debounceTime, distinctUntilChanged, of, switchMap, catchError } from 'rxjs';
+import { Observable, Subscription, debounceTime, distinctUntilChanged, map, of, switchMap, catchError } from 'rxjs';
 import { ProductService, Product, DuplicateMatch, PRODUCT_ALIAS_TYPES, ProductAliasType } from 'src/app/core/services/product/product.service';
 import { ProductCategoryService } from 'src/app/core/services/product-category/product-category.service';
 import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.service';
@@ -12,6 +12,9 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { PRODUCT_TYPES } from 'src/app/shared/interfaces/product.interface';
 import { ModalService } from 'src/app/shared/components/modal';
 import { QuickAddDialogComponent, QuickAddDialogData } from '../../modals/quick-add-dialog/quick-add-dialog.component';
+
+/** Category option that reveals a free-text field; the typed name is saved as an inactive category. */
+const OTHER_CATEGORY = '__other__';
 
 /** Rejects whitespace-only text, which `Validators.required` lets through. */
 const notBlank = (c: AbstractControl): ValidationErrors | null =>
@@ -50,6 +53,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
 
   typeOptions: SfOption[] = PRODUCT_TYPES.map((t) => ({ label: t, value: t }));
   categoryOptions: SfOption[] = [];
+  private allCategories: any[] = [];
   segmentOptions: SfOption[] = [];
   warehouseOptions: SfOption[] = [];
   unitOptions: SfOption[] = [];
@@ -73,12 +77,14 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     type: ['' as string, Validators.required],
     productSegment: ['', Validators.required],
     productCategory: ['', Validators.required],
+    otherCategory: ['', [Validators.maxLength(60)]],
     warehouse: [''],
     brand: ['', [Validators.required, notBlank]],
     unitOfMeasure: ['', Validators.required],
     isActive: [true],
   });
 
+  get isOtherCategory(): boolean { return this.productForm.controls.productCategory.value === OTHER_CATEGORY; }
   get isEdit(): boolean { return this.mode === 'edit'; }
   get title(): string { return this.isEdit ? 'Edit Product' : 'Create Product'; }
   get subtitle(): string { return this.isEdit ? 'Update catalogue item details' : 'Add a stock, non-stock or service item'; }
@@ -147,6 +153,15 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     );
 
     this.subscriptions.add(
+      this.productForm.controls.productCategory.valueChanges.subscribe((category) => {
+        const other = this.productForm.controls.otherCategory;
+        other.setValidators(category === OTHER_CATEGORY ? [Validators.required, notBlank, Validators.maxLength(60)] : [Validators.maxLength(60)]);
+        if (category !== OTHER_CATEGORY) other.setValue('', { emitEvent: false });
+        other.updateValueAndValidity({ emitEvent: false });
+      })
+    );
+
+    this.subscriptions.add(
       this.productForm.valueChanges.pipe(
         debounceTime(400),
         switchMap(() => {
@@ -170,21 +185,30 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   private loadCategories(selectedId?: string): void {
     this.productCategoryService.getProductCategories().subscribe({
       next: (categories) => {
-        this.categoryOptions = (categories ?? []).map((c: any) => ({ label: c.categoryName, value: c._id }));
+        this.allCategories = categories ?? [];
+        this.refreshCategoryOptions();
         if (selectedId) this.productForm.patchValue({ productCategory: selectedId });
         else this.matchPrefillCategory();
-        if (!this.isEdit && !this.productForm.controls.productCategory.value && this.categoryOptions.length === 1) {
-          this.productForm.controls.productCategory.setValue(String(this.categoryOptions[0].value));
-        }
       },
       error: () => this.toastr.error('Failed to load product categories'),
     });
   }
 
+  /** Active categories only, plus the one this product already uses, then "Other". */
+  private refreshCategoryOptions(): void {
+    const current = this.productForm.controls.productCategory.value;
+    this.categoryOptions = [
+      ...this.allCategories
+        .filter((c) => c.isActive !== false || c._id === current)
+        .map((c) => ({ label: c.categoryName, value: c._id })),
+      { label: 'Other', value: OTHER_CATEGORY },
+    ];
+  }
+
   private loadWarehouses(selectedId?: string): void {
     this.warehouseService.getWarehouses().subscribe({
       next: (warehouses) => {
-        this.warehouseOptions = (warehouses ?? []).map((w: any) => ({ label: w.wareHouseName, value: w._id }));
+        this.warehouseOptions = (warehouses ?? []).filter((w: any) => w.isActive !== false || w._id === this.productForm.value.warehouse).map((w: any) => ({ label: w.wareHouseName, value: w._id }));
         if (selectedId) this.productForm.patchValue({ warehouse: selectedId });
       },
       error: () => this.toastr.error('Failed to load warehouses'),
@@ -238,6 +262,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       nickName: product.nickName || '',
     });
     this.seedAliases(product.aliases);
+    this.refreshCategoryOptions();
     this.duplicateMatches = [];
     this.productForm.controls.itemCode.disable();
     // Identity fields are locked once the product exists.
@@ -265,23 +290,13 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   private resetForm(): void {
     this.productForm.reset({
       partNo: '', itemCode: '', productName: '', productDescription: '', type: '',
-      productSegment: '', productCategory: '', warehouse: '', brand: '', unitOfMeasure: '',
+      productSegment: '', productCategory: '', otherCategory: '', warehouse: '', brand: '', unitOfMeasure: '',
       isActive: true, isGeneric: false, parentModel: '', nickName: '',
     });
     this.productForm.controls.partNo.enable({ emitEvent: false });
     this.productForm.controls.isGeneric.enable({ emitEvent: false });
     this.aliasRows.clear();
     this.duplicateMatches = [];
-  }
-
-  createCategory(): void {
-    this.openQuickAdd('Category', (name) => this.productCategoryService.createProductCategory({ categoryName: name, createdDate: new Date() } as any))
-      .subscribe((category) => {
-        if (!category) return;
-        this.toastr.success('Category created successfully');
-        this.categoryOptions = [...this.categoryOptions, { label: category.categoryName, value: category._id }];
-        this.productForm.patchValue({ productCategory: category._id });
-      });
   }
 
   createBrand(): void {
@@ -341,6 +356,30 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     }
 
     this.saving = true;
+    if (this.isOtherCategory) {
+      this.resolveOtherCategory().subscribe({
+        next: (categoryId) => this.saveProduct(categoryId),
+        error: (error) => {
+          this.saving = false;
+          this.toastr.error(error?.error?.message || 'Failed to save the new category');
+        },
+      });
+      return;
+    }
+    this.saveProduct(this.productForm.getRawValue().productCategory ?? '');
+  }
+
+  /** Saves the typed name as an inactive category; a name that already exists is reused instead of duplicated. */
+  private resolveOtherCategory(): Observable<string> {
+    const name = (this.productForm.value.otherCategory ?? '').trim();
+    const existing = this.allCategories.find((c) => String(c.categoryName).trim().toLowerCase() === name.toLowerCase());
+    if (existing) return of(existing._id);
+    return this.productCategoryService
+      .createProductCategory({ categoryName: name, createdDate: new Date(), isActive: false })
+      .pipe(map((category) => category._id as string));
+  }
+
+  private saveProduct(categoryId: string): void {
     const raw = this.productForm.getRawValue();
     const payload: Partial<Product> = {
       partNo: raw.partNo ?? '',
@@ -349,7 +388,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       productDescription: raw.productDescription ?? '',
       type: raw.type ?? '',
       productSegment: raw.productSegment ?? '',
-      productCategory: raw.productCategory ?? '',
+      productCategory: categoryId,
       warehouse: raw.warehouse ?? '',
       brand: raw.brand ?? '',
       unitOfMeasure: raw.unitOfMeasure ?? '',
@@ -381,7 +420,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   get invalidFieldLabels(): string[] {
     const labels: Record<string, string> = {
       partNo: 'Part No', productName: 'Product Name', productDescription: 'Description', type: 'Type',
-      productSegment: 'Department', productCategory: 'Category', brand: 'Brand', unitOfMeasure: 'Unit of Measure',
+      productSegment: 'Department', productCategory: 'Category', otherCategory: 'New category', brand: 'Brand', unitOfMeasure: 'Unit of Measure',
     };
     return Object.entries(labels).filter(([key]) => this.productForm.get(key)?.invalid).map(([, label]) => label);
   }

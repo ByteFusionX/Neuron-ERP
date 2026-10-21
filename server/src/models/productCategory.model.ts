@@ -5,6 +5,7 @@ interface ProductCategory {
     createdBy: Types.ObjectId;
     createdDate: Date;
     isDeleted: boolean;
+    isActive: boolean;
 }
 
 
@@ -15,6 +16,7 @@ const productCategorySchema = new Schema<ProductCategory>({
     },
     createdBy: {
         type: Schema.Types.ObjectId,
+        ref: 'Employee',
         required: true,
     },
     createdDate: {
@@ -24,6 +26,11 @@ const productCategorySchema = new Schema<ProductCategory>({
     isDeleted: {
         type: Boolean,
         default: false,
+    },
+    // Categories typed in via "Other" on a product start inactive; absent on older rows, which count as active.
+    isActive: {
+        type: Boolean,
+        default: true,
     },
 });
 

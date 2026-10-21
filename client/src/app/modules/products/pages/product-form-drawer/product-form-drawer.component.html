@@ -29,7 +29,7 @@
             @if (duplicateMatches.length) {
                 <div class="col-span-2 rounded-md border px-3 py-2 text-sm"
                     [class]="blockingMatch ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-800'">
-                    <p class="font-medium">{{ blockingMatch ? 'This part number is already in the catalogue' : 'Similar part number found' }}</p>
+                    <p class="font-medium">{{ blockingMatch ? 'This product is already in the catalogue' : 'Same part number found under another brand' }}</p>
                     @for (m of duplicateMatches; track m._id) {
                         <p>{{ m.reason }}@if (m.productDescription) { — {{ m.productDescription }} }</p>
                     }
@@ -70,9 +70,13 @@
                 <app-sf-combobox formControlName="productSegment" [options]="segmentOptions" placeholder="Select department"></app-sf-combobox>
             </app-sf-field>
             <app-sf-field label="Category" [control]="productForm.controls.productCategory">
-                <app-sf-combobox formControlName="productCategory" [options]="categoryOptions" placeholder="Select category"
-                    footerLabel="Add category" (footerAction)="createCategory()"></app-sf-combobox>
+                <app-sf-combobox formControlName="productCategory" [options]="categoryOptions" placeholder="Select category"></app-sf-combobox>
             </app-sf-field>
+            @if (isOtherCategory) {
+                <app-sf-field label="New category" [control]="productForm.controls.otherCategory">
+                    <app-sf-input formControlName="otherCategory" placeholder="Enter the category you need" [maxlength]="60"></app-sf-input>
+                </app-sf-field>
+            }
             <app-sf-field label="Warehouse" [control]="productForm.controls.warehouse">
                 <app-sf-combobox formControlName="warehouse" [options]="warehouseOptions" placeholder="Select warehouse"
                     footerLabel="Add warehouse" (footerAction)="createWarehouse()"></app-sf-combobox>

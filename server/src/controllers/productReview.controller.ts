@@ -10,27 +10,12 @@ import { auditProduct, getDepartmentCode, nextItemCode } from "./product.control
 /** Duplicate lookup for the product form and pickers: `?partNo=&brand=&excludeId=`. */
 export const checkDuplicate = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { partNo, brand, excludeId, name } = req.query;
+        const { partNo, brand, excludeId } = req.query;
         const exclude = typeof excludeId === 'string' ? excludeId : undefined;
         const matches: any[] = typeof partNo === 'string' && normalizePartNo(partNo)
             ? await findDuplicates({ partNo, brand: typeof brand === 'string' ? brand : '', excludeId: exclude })
             : [];
-        // Same name under another part number is allowed, but worth a heads-up.
-        const productName = typeof name === 'string' ? name.trim() : '';
-        if (productName) {
-            const escaped = productName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const filter: any = { productName: { $regex: `^\\s*${escaped}\\s*$`, $options: 'i' } };
-            if (exclude && ObjectId.isValid(exclude)) filter._id = { $ne: new ObjectId(exclude) };
-            const sameName = await Product.find(filter).limit(5).lean();
-            for (const p of sameName) {
-                if (matches.some((m) => String(m._id) === String(p._id))) continue;
-                matches.push({
-                    _id: p._id, itemCode: p.itemCode, partNo: p.partNo, brand: p.brand,
-                    productDescription: p.productDescription, approvalStatus: p.approvalStatus, level: 'warn',
-                    reason: `A product named "${p.productName}" already exists (${p.itemCode || 'no code'}, part no ${p.partNo || '-'})`,
-                });
-            }
-        }
+        // Product names may repeat, so only the part number is checked.
         return res.status(200).json({ matches });
     } catch (error) {
         console.error(error);
