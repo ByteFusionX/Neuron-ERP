@@ -77,6 +77,9 @@
         <app-sf-field label="ETA terms">
           <app-sf-input [(ngModel)]="terms.deliveryTerms" (ngModelChange)="dirty = true" [ngModelOptions]="{ standalone: true }" placeholder="e.g. within 2 weeks of PO"></app-sf-input>
         </app-sf-field>
+        <app-sf-field label="Shipping terms">
+          <app-sf-input [(ngModel)]="terms.shippingTerms" (ngModelChange)="dirty = true" [ngModelOptions]="{ standalone: true }" placeholder="e.g. By sea, supplier pays freight"></app-sf-input>
+        </app-sf-field>
         <app-sf-field label="Deliver to">
           <app-sf-input [(ngModel)]="terms.deliveryLocation" (ngModelChange)="dirty = true" [ngModelOptions]="{ standalone: true }" placeholder="e.g. Our store, Doha"></app-sf-input>
         </app-sf-field>

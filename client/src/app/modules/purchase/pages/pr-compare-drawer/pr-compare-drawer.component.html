@@ -29,6 +29,11 @@
               <span class="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100" [title]="u.detail">{{ u.detail }}</span>
               <span class="text-xs text-gray-500">{{ u.itemName }} · Qty {{ u.quantity }}{{ u.uom ? ' ' + u.uom : '' }}</span>
               @if (u.currentSupplier) { <span class="text-xs text-gray-600 dark:text-gray-300">Current supplier: <span class="font-medium">{{ u.currentSupplier }}</span></span> }
+              @if (u.short) { <span class="text-xs font-medium text-orange-700 dark:text-orange-300" [title]="u.shortReason || ''">Short</span> }
+              @if (!locked) {
+                <button type="button" class="text-xs font-medium text-gray-500 hover:text-gray-800 hover:underline disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-200"
+                  [disabled]="busy()" (click)="onMarkShort(u.itemDetailKey, u.detail, !u.short)">{{ u.short ? 'Clear short' : 'Mark short' }}</button>
+              }
             </li>
           }
         </ul>
@@ -37,7 +42,8 @@
     @if (!d.rows.length) {
       <p class="text-sm text-gray-500">No supplier has been asked for a price yet. Select products in the request, pick a supplier and create the RFQ, then compare the prices here.</p>
     } @else {
-      <app-rfq-compare-matrix [data]="d" [locked]="locked" [busy]="busy()" [allowSplit]="true"
+      <app-rfq-compare-matrix [data]="d" [locked]="locked" [busy]="busy()" [allowSplit]="true" [allowShort]="true"
+        (markShort)="onMarkShort($event.row.key, $event.row.detail, $event.short)"
         (award)="onAward($event)" (awardGroup)="onAwardGroup($event)" (awardSupplier)="onAwardSupplier($event)" (awardCheapest)="onAwardCheapest($event)"></app-rfq-compare-matrix>
     }
   }
@@ -46,8 +52,8 @@
     @if (data(); as d) {
       <p class="mr-auto text-xs text-gray-500">
         @if (readOnly) { Awarded suppliers are the ones the LPOs are issued to. }
-        @else if (allAwarded) { Every product is awarded. You can send the request for approval. }
-        @else { Award every product to send the request for approval }
+        @else if (allAwarded) { Every product is awarded{{ d.coverage.short ? ' or marked short' : '' }}. You can send the request for approval. }
+        @else { {{ d.coverage.open }} product{{ d.coverage.open === 1 ? '' : 's' }} left: award the full quantity or mark short to send for approval }
       </p>
     }
     <app-action-button variant="primary" (click)="closed.emit()">Done</app-action-button>

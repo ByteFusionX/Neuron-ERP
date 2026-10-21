@@ -38,18 +38,30 @@
         [selectedJobSheet]="selectedJobSheet"
         [lineAwarded]="lineAwarded"
         [lineLocked]="lineLocked"
+    [readOnly]="!canSaveDraft"
         [lineBadge]="lineBadge"
+        [linePills]="linePills"
         [lineOffers]="lineOffers"
         [supplierTabs]="supplierTabs()"
+    [tabTerms]="tabTerms()"
+    (termsChanged)="onTabTermsChanged($event)"
+    (discountSaved)="onRfqDiscountSaved($event)"
+    [supplierRfqs]="supplierRfqs()"
     [activeTab]="activeTab"
+    [tabLineKeys]="activeTabLineKeys()"
+    [tabExcludedKeys]="activeTabExcludedKeys()"
+    (linesRemovedFromTab)="onLinesRemovedFromTab($event)"
+    (linesAwardedToTab)="onLinesAwardedToTab($event)"
     (tabSelected)="activeTab = $event"
     (supplierAdded)="onSupplierTabAdded($event)"
+    (linesAddedToTab)="onLinesAddedToTab($event)"
+    (supplierClosed)="onSupplierTabClosed($event)"
     (offerPicked)="onOfferPicked($event)"
+    (pillPicked)="onPillPicked($event)"
         (jobLessChange)="toggleJobLess($event)"
         (jobSelected)="onJobSelected($event)"
         (materialRequestsClicked)="onGetMaterialRequestsClicks()"
         (createProductRequested)="onCreatePartNumber()"
-        (addToRfq)="onAddToRfq($event)"
       ></app-pr-form>
     </div>
   </app-detail-view-shell>
@@ -68,18 +80,40 @@
     <app-detail-badge *ngFor="let b of badges()" [label]="b.label" [tone]="b.tone || 'neutral'"></app-detail-badge>
   </span>
 
-  <ol class="mb-4 flex flex-wrap items-center gap-1.5 text-xs">
-    <ng-container *ngFor="let s of flowSteps; let last = last">
-      <li class="flex items-center gap-1 rounded-full px-2.5 py-1 font-medium"
-        [ngClass]="s.done ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">
-        {{ s.done ? '✓ ' : '' }}{{ s.label }}
-      </li>
-      <li *ngIf="!last" class="text-gray-300 dark:text-gray-600" aria-hidden="true">›</li>
-    </ng-container>
+  <ol class="mb-5 flex items-center gap-2">
+    <li *ngFor="let s of steps" class="flex flex-1 items-center gap-2">
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+        [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
+        [disabled]="stepLocked(s.n)" [title]="stepLocked(s.n) ? 'POs open once the request is approved' : ''"
+        (click)="goToStep(s.n)">
+        <span class="grid h-6 w-6 shrink-0 place-content-center rounded-full text-[11px] font-semibold"
+          [ngClass]="s.n === step
+            ? 'bg-violet-600 text-white'
+            : stepDone(s.n)
+              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+              : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">
+          <ng-icon *ngIf="s.n !== step && stepDone(s.n); else stepNumber" name="heroCheck" class="h-3.5 w-3.5"></ng-icon>
+          <ng-template #stepNumber>{{ s.n }}</ng-template>
+        </span>
+        <span class="truncate text-xs font-medium"
+          [ngClass]="s.n === step ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'">{{ s.label }}
+          <ng-container *ngIf="s.n === 2 && askSummary().rfqs"> ({{ askSummary().rfqs }})</ng-container>
+          <ng-container *ngIf="s.n === 3 && awardStats.total"> {{ awardStats.awarded }}/{{ awardStats.total }}</ng-container>
+        </span>
+      </button>
+      <span *ngIf="s.n < 4" class="h-px w-4 shrink-0 bg-gray-200 dark:bg-erp-border-dark"></span>
+    </li>
   </ol>
 
+  <p *ngIf="!canSaveDraft && step < 4" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+    This request is {{ f['status'].value }}: lines, RFQs and awards can no longer change.
+  </p>
+
+  <div [hidden]="step >= 3">
   <app-pr-form #prForm
-    [externalAddButtons]="true"
+    [stage]="step === 1 ? 'need' : 'ask'"
+    [askSummary]="askSummary()"
+    [externalAddButtons]="false"
     [purchaseForm]="purchaseForm"
     [entryItems]="entryItems"
     [sourceTitle]="sourceTitle()"
@@ -97,46 +131,105 @@
     [selectedJobSheet]="selectedJobSheet"
     [lineAwarded]="lineAwarded"
         [lineLocked]="lineLocked"
+    [readOnly]="!canSaveDraft"
     [lineBadge]="lineBadge"
+    [linePills]="linePills"
     [lineOffers]="lineOffers"
     [supplierTabs]="supplierTabs()"
+    [tabTerms]="tabTerms()"
+    (termsChanged)="onTabTermsChanged($event)"
+    (discountSaved)="onRfqDiscountSaved($event)"
+    [supplierRfqs]="supplierRfqs()"
     [activeTab]="activeTab"
+    [tabLineKeys]="activeTabLineKeys()"
+    [tabExcludedKeys]="activeTabExcludedKeys()"
     (tabSelected)="activeTab = $event"
     (supplierAdded)="onSupplierTabAdded($event)"
+    (linesAddedToTab)="onLinesAddedToTab($event)"
+    (linesRemovedFromTab)="onLinesRemovedFromTab($event)"
+    (linesAwardedToTab)="onLinesAwardedToTab($event)"
+    (supplierClosed)="onSupplierTabClosed($event)"
     (offerPicked)="onOfferPicked($event)"
+    (pillPicked)="onPillPicked($event)"
     (jobLessChange)="toggleJobLess($event)"
     (jobSelected)="onJobSelected($event)"
     (materialRequestsClicked)="onGetMaterialRequestsClicks()"
     (createProductRequested)="onCreatePartNumber()"
-    (addToRfq)="onAddToRfq($event)"
   ></app-pr-form>
+  </div>
+
+  <div *ngIf="step === 3" class="space-y-3">
+    <app-pr-review-step
+      [rows]="reviewRows()"
+      [columns]="reviewColumns()"
+      [missingFromPr]="missingFromPr()"
+      [currency]="currency() || 'QAR'"
+      [busy]="reviewBusy()"
+      [locked]="!canSaveDraft"
+      [discounts]="supplierRfqs()"
+      (awarded)="onReviewAward($event)"
+      (awardedMany)="onReviewAwardMany($event)"
+      (shortToggled)="onReviewShort($event)"
+    ></app-pr-review-step>
+  </div>
+
+  <!-- POs: one per awarded supplier, raised once the request is approved -->
+  <div *ngIf="step === 4" class="space-y-3">
+    <!-- The cards come from the awards; only the POs inside them wait for the load. -->
+    <p *ngIf="posLoading()" class="text-xs text-gray-500">Loading POs…</p>
+    <article *ngFor="let c of poCards()" class="flex flex-wrap items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-erp-border-dark dark:bg-erp-surface-dark">
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{{ c.name }}</p>
+        <p class="text-xs text-gray-500">{{ c.lines }} line{{ c.lines === 1 ? '' : 's' }} awarded · {{ c.value | number: '1.2-2' }} {{ currency() || 'QAR' }}</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span *ngFor="let l of c.lpos" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2 py-1 text-xs dark:border-erp-border-dark">
+          <button type="button" class="font-medium text-violet-600 hover:underline" (click)="onViewPo(l._id)">{{ l.poNo }}</button>
+          <span class="rounded-full px-2 py-0.5 text-[11px] font-medium" [ngClass]="poTone(l.poStatus)">{{ l.poStatus }}</span>
+          <app-action-button *ngIf="l.poStatus === 'Approved'" variant="primary" [disabled]="placingId === l._id" (click)="onPlacePo(l)">{{ placingId === l._id ? 'Placing…' : 'Place order' }}</app-action-button>
+        </span>
+        <app-action-button *ngIf="!c.lpos.length" variant="primary" (click)="onCreatePo(c.supplierId)">
+          <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Create PO
+        </app-action-button>
+        <app-action-button *ngIf="c.lpos.length" variant="ghost" (click)="onCreatePo(c.supplierId)">Another PO</app-action-button>
+      </div>
+    </article>
+    <p *ngIf="!posLoading() && !poCards().length" class="rounded-2xl border border-dashed border-gray-200 px-3 py-10 text-center text-sm text-gray-500 dark:border-erp-border-dark">No awarded suppliers on this request.</p>
+  </div>
 
   <ng-container sfDrawerFooter>
     <div class="mr-auto flex flex-wrap items-center gap-2">
       <span *ngIf="purchaseId && !isEditing" class="text-xs text-gray-400 dark:text-gray-500">{{ f['purchaseNo'].value }} saved</span>
-      <app-action-button *ngIf="selectedJobSheet || isJobLess" variant="secondary" (click)="prForm.itemEntry?.addItemAndJump()">
-        <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add item
-      </app-action-button>
-      <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onMrRequestClicks()">MR request</app-action-button>
-      <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onSupplierClicks()">Supplier discount</app-action-button>
-      <app-action-button variant="secondary" (click)="onSupplierRfqClicks()">Supplier RFQ</app-action-button>
-      <app-action-button variant="secondary" (click)="onCompareClicks()">Compare &amp; award<span *ngIf="awardStats.total" class="ml-1 text-gray-400">({{ awardStats.awarded }}/{{ awardStats.total }})</span></app-action-button>
+      <ng-container *ngIf="step <= 2 && canSaveDraft">
+        <ng-container *ngIf="selectedJobSheet || isJobLess">
+          <app-action-button variant="secondary" (click)="onCreatePartNumber()">
+            <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add product
+          </app-action-button>
+          <app-action-button variant="secondary" (click)="createSupplierOpen = true">
+            <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add supplier
+          </app-action-button>
+        </ng-container>
+        <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onMrRequestClicks()">MR request</app-action-button>
+      </ng-container>
     </div>
-    <span *ngIf="submitBlockedReason" class="text-xs text-amber-600 dark:text-amber-400">{{ submitBlockedReason }}</span>
-    <app-action-button variant="secondary" (click)="prDrawer.requestClose()">Cancel</app-action-button>
-    <app-action-button *ngIf="!isEditing" variant="tool" (click)="onDraftClicks()">Save</app-action-button>
-    <span [title]="submitBlockedReason || ''">
+    <span *ngIf="step === 3 && canSaveDraft && submitBlockedReason" class="text-xs text-amber-600 dark:text-amber-400">{{ submitBlockedReason }}</span>
+    <app-action-button variant="secondary" (click)="prDrawer.requestClose()">{{ canSaveDraft ? 'Cancel' : 'Close' }}</app-action-button>
+    <app-action-button *ngIf="step > 1" variant="secondary" (click)="onBackClicks()">Back</app-action-button>
+    <app-action-button *ngIf="canSaveDraft" variant="tool" (click)="onDraftClicks()">Save</app-action-button>
+    <app-action-button *ngIf="step === 1" variant="primary" (click)="onNextClicks()">Next: Ask suppliers</app-action-button>
+    <app-action-button *ngIf="step === 2" variant="primary" (click)="onNextClicks()">Next: Compare & award</app-action-button>
+    <app-action-button *ngIf="step === 3 && isApproved" variant="primary" (click)="goToStep(4)">Next: POs</app-action-button>
+    <span *ngIf="step === 3 && canSaveDraft" [title]="submitBlockedReason || ''">
       <app-action-button variant="primary" [disabled]="!!submitBlockedReason" (click)="onSubmit()">
-        <ng-icon name="heroPaperAirplane" class="h-3.5 w-3.5"></ng-icon> Approval
+        <ng-icon name="heroPaperAirplane" class="h-3.5 w-3.5"></ng-icon> Send for approval
       </app-action-button>
     </span>
   </ng-container>
 </app-sf-drawer>
 
-<!-- Supplier tabs instead of Option 1 / Option 2: each tab is one supplier and the lines it is asked to price. -->
-<app-sales-rfq-create-drawer [open]="rfqOpen" [purchaseId]="purchaseId" [purchaseLineKeys]="rfqLineKeys" [purchaseFocus]="rfqFocus" (saved)="onRfqSaved()" (closed)="rfqOpen = false"></app-sales-rfq-create-drawer>
 
-<app-pr-compare-drawer #compareList [open]="compareOpen" [purchaseId]="purchaseId" (changed)="onAwardsChanged()" (closed)="compareOpen = false"></app-pr-compare-drawer>
+<app-initiate-lpo *ngIf="createPoSupplierId && purchaseId" [purchaseIdInput]="purchaseId" [initialSupplierId]="createPoSupplierId"
+  (issued)="onPoIssued()" (closed)="onCreatePoClosed()"></app-initiate-lpo>
 
+<app-supplier-form-drawer [open]="createSupplierOpen" mode="create" (saved)="onSupplierCreated($event)" (closed)="createSupplierOpen = false"></app-supplier-form-drawer>
 <app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>
-<app-supplier-discount [open]="discountOpen" [purchaseId]="purchaseId" (saved)="loadPurchaseData()" (closed)="discountOpen = false"></app-supplier-discount>

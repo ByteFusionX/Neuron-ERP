@@ -36,6 +36,16 @@ export interface SalesRfqCompareColumn {
   supplierName: string;
   supplierId?: string;
   supplierStatus?: SalesRfqSupplierStatus;
+  sentVia?: string;
+  declineReason?: string;
+  replyTerms?: SalesRfqTerms;
+  /** Discount on the supplier's whole quote, taken after line discounts. */
+  totalDiscountType?: 'amount' | 'percent';
+  totalDiscountValue?: number;
+  /** Unit price × quoted qty over every priced line: what an amount discount is pro-rated against. */
+  quotedTotal?: number;
+  /** What was asked of the supplier when the RFQ was created. */
+  requestedTerms?: SalesRfqTerms;
   deadline?: string;
   quotationId?: string | null;
   lineCount: number;
@@ -85,18 +95,37 @@ export interface SalesRfqCompareRow {
   lowestRfqId: string | null;
   /** What we last paid for this product on a purchase order (any supplier), unit price in QAR. */
   lastPaid?: { priceQar: number | null; poNo?: string; poDate?: string; supplierName?: string } | null;
+  /** Purchase request: the buyer accepted this line as not fully covered, with a reason. */
+  short?: boolean;
+  shortReason?: string;
   cells: SalesRfqCompareCell[];
+}
+
+/** A supplier's latest priced quote for a product on another request; referenced from there, never copied. */
+export interface SalesRfqPastQuote {
+  rfqNo?: string;
+  purchaseNo?: string;
+  unitPrice: number;
+  currency: string;
+  /** Quantity the supplier quoted for. */
+  quantity: number;
+  quotedAt?: string;
+  awarded: boolean;
+  awardedAt?: string;
+  /** Quantity awarded to this supplier for the product across other requests. */
+  awardedQty: number;
 }
 
 export interface SalesRfqComparison {
   enquiry: { _id: string; enquiryId?: string; title?: string; status?: string; client?: { companyName?: string } };
   rfqs: SalesRfqCompareColumn[];
   rows: SalesRfqCompareRow[];
-  coverage: { total: number; awarded: number; unavailable: number; open: number };
+  /** `short` (purchase request): lines marked short, not counted in `open`. */
+  coverage: { total: number; awarded: number; unavailable: number; open: number; short?: number };
   /** Purchase request: products no supplier has been asked about yet (they are not in `rows`). */
-  unasked?: { itemDetailKey: string; itemName: string; detail: string; quantity: number; uom?: string; itemCode?: string; currentSupplier?: string }[];
+  unasked?: { itemDetailKey: string; itemName: string; detail: string; quantity: number; uom?: string; itemCode?: string; currentSupplier?: string; short?: boolean; shortReason?: string }[];
   /** Purchase request: suppliers asked about the same product on other requests, by line key. */
-  previousSuppliers?: Record<string, { supplierId?: string; supplierName: string }[]>;
+  previousSuppliers?: Record<string, { supplierId?: string; supplierName: string; last?: SalesRfqPastQuote }[]>;
   quotationId: string | null;
 }
 
@@ -213,7 +242,7 @@ export interface SalesRfqFxRates {
 export interface SalesRfqTerms {
   paymentTerms?: string;
   deliveryTerms?: string;
-  incoterm?: string;
+  shippingTerms?: string;
   deliveryLocation?: string;
   validityDate?: string;
   currency?: string;

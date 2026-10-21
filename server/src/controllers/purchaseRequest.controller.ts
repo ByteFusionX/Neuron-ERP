@@ -119,8 +119,8 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
         } = req.body;
 
         const isManual = sourceType === 'manual';
-        // No PR has a Draft status: one saved before submitting is In Progress (legacy Drafted still counts as unsubmitted).
-        const isDraft = status === PurchaseRequestStatus.Drafted || status === PurchaseRequestStatus.New || status === PurchaseRequestStatus.InProgress;
+        // New and In Progress are the unsubmitted states: New is the allocated job, In Progress a saved PR.
+        const isDraft = status === PurchaseRequestStatus.New || status === PurchaseRequestStatus.InProgress;
 
         if (!purchaseNo || !status || (!isManual && (!jobId || !dealSheetId))) {
             return res.status(400).json({
@@ -173,6 +173,8 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
         }
 
         const requestData: any = {...req.body, createdBy: employee._id};
+        // The first save of an allocated job starts the work; status is never picked by hand.
+        if (isDraft) requestData.status = PurchaseRequestStatus.InProgress;
 
         if (currency) {
             requestData.currency = currency;
@@ -298,7 +300,7 @@ const PO_QUANTITY_STAGES: any[] = [
                         $expr: {
                             $and: [
                                 { $eq: ['$purchaseId', '$$purchaseRequestId'] },
-                                { $not: [{ $in: ['$poStatus', ['Draft', 'Rejected']] }] }
+                                { $not: [{ $in: ['$poStatus', ['Draft', 'Rejected', 'Cancelled']] }] }
                             ]
                         }
                     }
@@ -383,6 +385,55 @@ const PO_QUANTITY_STAGES: any[] = [
         $addFields: {
             remainingPoQuantity: { $max: [{ $subtract: ['$selectedPrQuantity', '$issuedPoQuantity'] }, 0] },
             hasRemainingPo: { $gt: [{ $subtract: ['$selectedPrQuantity', '$issuedPoQuantity'] }, 0] },
+            // PO progress column: placed (or closed) LPOs, LPOs still before Placed, awarded suppliers with no LPO yet.
+            placedPoCount: {
+                $size: { $filter: { input: { $ifNull: ['$linkedPurchaseOrders', []] }, as: 'po', cond: { $in: ['$$po.poStatus', ['Placed', 'Closed']] } } }
+            },
+            pendingPoCount: {
+                $size: { $filter: { input: { $ifNull: ['$linkedPurchaseOrders', []] }, as: 'po', cond: { $not: [{ $in: ['$$po.poStatus', ['Placed', 'Closed']] }] } } }
+            },
+            notCreatedPoCount: {
+                $size: {
+                    $setDifference: [
+                        {
+                            $reduce: {
+                                input: { $ifNull: ['$items', []] },
+                                initialValue: [],
+                                in: {
+                                    $setUnion: [
+                                        '$$value',
+                                        {
+                                            $reduce: {
+                                                input: { $ifNull: ['$$this.itemDetails', []] },
+                                                initialValue: [],
+                                                in: {
+                                                    $setUnion: [
+                                                        '$$value',
+                                                        {
+                                                            $map: {
+                                                                input: {
+                                                                    $filter: {
+                                                                        input: { $ifNull: ['$$this.comparisons', []] },
+                                                                        as: 'comparison',
+                                                                        cond: { $and: [{ $eq: ['$$comparison.selected', true] }, { $ne: [{ $ifNull: ['$$comparison.supplierId', null] }, null] }] }
+                                                                    }
+                                                                },
+                                                                as: 'comparison',
+                                                                in: '$$comparison.supplierId'
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        { $map: { input: { $ifNull: ['$linkedPurchaseOrders', []] }, as: 'po', in: '$$po.supplierId' } }
+                    ]
+                }
+            },
             quoteLineCount: {
                 $reduce: {
                     input: { $ifNull: ['$items', []] },
@@ -710,7 +761,7 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                 $addFields: {
                     overallStatus: {
                         $cond: {
-                            if: { $in: ["$status", ["Drafted", "New", "In Progress"]] },
+                            if: { $in: ["$status", ["New"]] },
                             then: { $toLower: "$status" },
                             else: {
                                 $let: {
@@ -1329,8 +1380,8 @@ export const updatePurchaseItems = async (req: Request, res: Response, next: Nex
             updatedAt: new Date()
         };
 
-        if (purchaseRequest.status === 'Drafted' || !purchaseRequest.status) {
-            updateData.status = 'Drafted';
+        if (!purchaseRequest.status) {
+            updateData.status = 'New';
         }
 
         const updatedPurchaseRequest = await PurchaseRequest.findByIdAndUpdate(
@@ -1407,8 +1458,8 @@ export const updatePurchaseSupplierOffers = async (req: Request, res: Response, 
             updatedAt: new Date()
         };
 
-        if (purchaseRequest.status === 'Drafted' || !purchaseRequest.status) {
-            updateData.status = 'Drafted';
+        if (!purchaseRequest.status) {
+            updateData.status = 'New';
         }
 
         const updatedPurchaseRequest = await PurchaseRequest.findByIdAndUpdate(
@@ -1423,68 +1474,6 @@ export const updatePurchaseSupplierOffers = async (req: Request, res: Response, 
             success: true,
             message: "Purchase supplier offers updated successfully",
             data: syncedPurchaseRequest || updatedPurchaseRequest,
-            status: 200
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const updatePurchaseSupplierDiscounts = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { id } = req.params;
-        const tokenData = req.user;
-        const employee = await getEmployeeData(tokenData);
-        const { supplierDiscounts } = req.body;
-
-        if (!supplierDiscounts) {
-            return res.status(400).json({
-                success: false,
-                message: "Supplier discounts are required",
-                status: 400
-            });
-        }
-
-        const purchaseRequest = await PurchaseRequest.findById(id);
-
-        if (!purchaseRequest || purchaseRequest.isDeleted) {
-            return res.status(404).json({
-                success: false,
-                message: "Purchase request not found",
-                status: 404
-            });
-        }
-
-        let totalDiscount = 0;
-        if (supplierDiscounts.suppliers && Array.isArray(supplierDiscounts.suppliers)) {
-            supplierDiscounts.suppliers.forEach((supplier: any) => {
-                totalDiscount += supplier.discount || 0;
-            });
-        }
-
-        const updateData: any = {
-            supplierDiscounts: {
-                ...supplierDiscounts,
-                totalDiscount
-            },
-            updatedBy: employee._id,
-            updatedAt: new Date()
-        };
-
-        if (purchaseRequest.status === 'Drafted' || !purchaseRequest.status) {
-            updateData.status = 'Drafted';
-        }
-
-        const updatedPurchaseRequest = await PurchaseRequest.findByIdAndUpdate(
-            id,
-            { $set: updateData },
-            { new: true, runValidators: true }
-        );
-
-        return res.status(200).json({
-            success: true,
-            message: "Supplier discounts updated successfully",
-            data: updatedPurchaseRequest,
             status: 200
         });
     } catch (error) {
@@ -1744,8 +1733,8 @@ export const updatePurchaseMrRequest = async (req: Request, res: Response, next:
             updatedAt: new Date()
         };
 
-        if (purchaseRequest.status === 'Drafted' || !purchaseRequest.status) {
-            updateData.status = 'Drafted';
+        if (!purchaseRequest.status) {
+            updateData.status = 'New';
         }
 
         const updatedPurchaseRequest = await PurchaseRequest.findByIdAndUpdate(
@@ -2414,13 +2403,31 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
             });
         }
 
-        const updatedApprovalStatus = await updateApprovalStatus(
-            status,
-            purchaseRequest.approvalStatus,
-            comment || '',
-            employee,
-            purchaseApprovalContext(purchaseRequest)
-        );
+        if (purchaseRequest.status !== PurchaseRequestStatus.Pending) {
+            return res.status(409).json({
+                success: false,
+                message: `This request is already ${String(purchaseRequest.status).toLowerCase()}.`,
+                status: 409
+            });
+        }
+
+        let updatedApprovalStatus: any[];
+        try {
+            updatedApprovalStatus = await updateApprovalStatus(
+                status,
+                purchaseRequest.approvalStatus,
+                comment || '',
+                employee,
+                purchaseApprovalContext(purchaseRequest)
+            );
+        } catch (error: any) {
+            // Workflow refusals (not this approver's step, over the limit, nothing pending) are the caller's, not a server fault.
+            return res.status(400).json({
+                success: false,
+                message: String(error?.message || error).replace(/^(Error: )+/, ''),
+                status: 400
+            });
+        }
         purchaseRequest.approvalStatus = updatedApprovalStatus;
 
         const hasRejected = updatedApprovalStatus.some((approval: any) => approval.status === 'rejected');
@@ -2649,7 +2656,7 @@ export const getApprovalsByEmployee = async (req: Request, res: Response, next: 
             {
                 $match: {
                     isDeleted: false,
-                    status: { $nin: [PurchaseRequestStatus.Drafted, PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress] }
+                    status: { $nin: [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress] }
                 }
             },
             {
@@ -2875,18 +2882,31 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
             }
         }
 
-        const isStatusChangingFromDraft = (existingPurchaseRequest.status === PurchaseRequestStatus.Drafted || existingPurchaseRequest.status === PurchaseRequestStatus.New || existingPurchaseRequest.status === PurchaseRequestStatus.InProgress) && 
-                                          updateData.status && 
-                                          updateData.status !== PurchaseRequestStatus.Drafted &&
-                                          updateData.status !== PurchaseRequestStatus.New &&
-                                          updateData.status !== PurchaseRequestStatus.InProgress;
+        const wasUnsubmitted = existingPurchaseRequest.status === PurchaseRequestStatus.New || existingPurchaseRequest.status === PurchaseRequestStatus.InProgress;
+        const isStatusChangingFromDraft = wasUnsubmitted &&
+                                          updateData.status &&
+                                          updateData.status !== PurchaseRequestStatus.New && updateData.status !== PurchaseRequestStatus.InProgress;
+        // Saving an unsubmitted PR keeps it In Progress; it never drops back to New.
+        if (wasUnsubmitted && !isStatusChangingFromDraft) updateData.status = PurchaseRequestStatus.InProgress;
 
 
         const isStatusChangingFromRejected = existingPurchaseRequest.status === PurchaseRequestStatus.Rejected && 
                                             updateData.status && 
                                             updateData.status === PurchaseRequestStatus.Pending;
 
-        // A request goes for approval only once every product has an awarded supplier offer.
+        // Short marks are set from Compare & award, not the form, so a form save keeps them.
+        if (Array.isArray(updateData.items)) {
+            const shortById = new Map<string, any>();
+            (existingPurchaseRequest.items || []).forEach((item: any) => (item.itemDetails || []).forEach((d: any) => {
+                if (d.short) shortById.set(String(d._id), { short: true, shortReason: d.shortReason });
+            }));
+            updateData.items.forEach((item: any) => (item.itemDetails || []).forEach((d: any) => {
+                const kept = d?._id && shortById.get(String(d._id));
+                if (kept && d.short === undefined) Object.assign(d, kept);
+            }));
+        }
+
+        // A request goes for approval only once every product is fully awarded or marked short.
         if (isStatusChangingFromDraft || isStatusChangingFromRejected) {
             await syncPurchaseFromRfqs(id);
             const lines: any[] = (Array.isArray(updateData.items) ? updateData.items : (await PurchaseRequest.findById(id).lean() as any)?.items || [])
@@ -2894,15 +2914,18 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
                 .filter((detail: any) => Number(detail.quantity) > 0);
             // Awarded means a supplier won it, and for a line split between suppliers their shares add up to the whole quantity.
             const open = lines.filter((detail: any) => {
+                // A line marked short goes as it is, with whatever share is awarded.
+                if (detail.short && String(detail.shortReason || '').trim()) return false;
                 const won = (detail.comparisons || []).filter((c: any) => c.selected);
-                if (!won.length) return true;
+                // A line nobody has awarded goes with its default supplier (from the deal sheet) when it has one.
+                if (!won.length) return !detail.supplierId;
                 if (!won.some((c: any) => c.awardedQty)) return false;
                 return won.reduce((sum: number, c: any) => sum + (Number(c.awardedQty) || Number(detail.quantity) || 0), 0) + 0.0001 < Number(detail.quantity);
             });
             if (!lines.length || open.length) {
                 return res.status(400).json({
                     success: false,
-                    message: !lines.length ? "Add at least one product before sending for approval" : `${open.length} product(s) have no awarded supplier offer. Raise an RFQ and award every product first.`,
+                    message: !lines.length ? "Add at least one product before sending for approval" : `${open.length} product(s) are not fully awarded. Award the full quantity, or mark the product short with a reason.`,
                     status: 400
                 });
             }

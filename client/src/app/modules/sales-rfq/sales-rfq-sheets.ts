@@ -36,7 +36,7 @@ function requestedTermsRows(rfq: SalesRfq): [string, string][] {
   return ([
     ['Payment terms requested', t.paymentTerms],
     ['Delivery terms requested', t.deliveryTerms],
-    ['Incoterm', t.incoterm],
+    ['Shipping terms', t.shippingTerms],
     ['Delivery location', t.deliveryLocation],
     ['Preferred currency', t.currency],
   ] as [string, string | undefined][]).filter(([, v]) => !!v) as [string, string][];

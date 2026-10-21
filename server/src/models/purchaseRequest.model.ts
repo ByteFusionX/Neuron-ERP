@@ -163,9 +163,7 @@ type PurchaseRequestItem = Omit<Item, 'itemDetails'> & {
 export enum PurchaseRequestStatus {
     New = 'New',
     InProgress = 'In Progress',
-    Drafted = 'Drafted',
     Pending = 'Pending',
-    ReadyToProcessLPO = 'ReadyToProcessLPO',
     Rejected = 'Rejected',
     OnHoldCancelled = 'OnHoldCancelled',
     Approved = 'Approved'
@@ -181,6 +179,7 @@ interface PurchaseRequest extends Document {
     sourceType: PurchaseRequestSourceType;
     purchaseNo: String;
     items: PurchaseRequestItem[];
+    /** @deprecated Discounts now live on the RFQ quotes. Kept for old PRs; don't write to it. */
     supplierDiscounts: discounts[];
     status: PurchaseRequestStatus;
     rejectedReason: rejectedReason[];
@@ -199,10 +198,11 @@ interface PurchaseRequest extends Document {
         createdDate: Date;
     };
     customerId: Types.ObjectId;
+    /** @deprecated A PR can go to many suppliers; the supplier is on each RFQ and PO. Kept for old PRs; don't write to it. */
     supplierId?: Types.ObjectId;
     totalLpo: Number | String;
     procurementPerson?: Types.ObjectId;
-    // The buyer picked when the job was allocated; the PR shows on their New tab.
+    /** @deprecated Never written; the assignee is procurementPerson, copied from the job. */
     allocatedTo?: Types.ObjectId;
     allocatedBy?: Types.ObjectId;
     allocatedAt?: Date;

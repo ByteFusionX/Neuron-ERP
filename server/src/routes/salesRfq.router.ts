@@ -21,6 +21,8 @@ import {
     getPurchaseRfqs,
     getPurchaseRfqComparison,
     awardPurchaseRfqLines,
+    markPurchaseLineShort,
+    setPurchaseRfqDiscount,
     importPurchaseSalesRfqs,
     getRfqPriceHistory,
     getSupplierProductHistory,
@@ -63,6 +65,8 @@ salesRfqRouter.get('/purchase/:purchaseId', getPurchaseRfqs);
 salesRfqRouter.post('/from-purchase/:purchaseId', createPurchaseRfqs);
 salesRfqRouter.get('/purchase/:purchaseId/compare', getPurchaseRfqComparison);
 salesRfqRouter.put('/purchase/:purchaseId/award', awardPurchaseRfqLines);
+salesRfqRouter.put('/purchase/:purchaseId/short', markPurchaseLineShort);
+salesRfqRouter.put('/purchase/:purchaseId/rfqs/:rfqId/discount', setPurchaseRfqDiscount);
 salesRfqRouter.post('/purchase/:purchaseId/import-sales', importPurchaseSalesRfqs);
 salesRfqRouter.get('/:id', getSalesRfqById);
 salesRfqRouter.put('/:id', updateSalesRfq);

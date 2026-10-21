@@ -11,7 +11,6 @@ import {
     updatePurchaseRequest,
     updatePurchaseItems,
     updatePurchaseSupplierOffers,
-    updatePurchaseSupplierDiscounts,
     updatePurchaseMrRequest,
     getConvertibleJobs,
     mergeItemsToDealSheet,
@@ -38,7 +37,6 @@ purchaseRequestRouter.patch('/purchase-request/status/:id', requirePrivilege("pu
 purchaseRequestRouter.post('/purchase-request/reset-workflow/:id', resetPurchaseWorkflow)
 purchaseRequestRouter.patch('/purchase-request/items/:id', updatePurchaseItems)
 purchaseRequestRouter.patch('/purchase-request/supplier-offers/:id', updatePurchaseSupplierOffers)
-purchaseRequestRouter.patch('/purchase-request/supplier-discount/:id', updatePurchaseSupplierDiscounts)
 purchaseRequestRouter.patch('/purchase-request/mr-request/:id', updatePurchaseMrRequest)
 // merging PR items into a deal sheet is gated by the dealSheet flag too, on
 // top of base purchase-module access.

@@ -31,11 +31,11 @@ import { WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
 
 type SourceType = 'job' | 'manual';
 
-const ALL_STATUSES = ['In Progress', 'Pending', 'Drafted', 'Rejected', 'Approved'];
+const ALL_STATUSES = ['New', 'In Progress', 'Pending', 'Rejected', 'Approved'];
 const PENDING_STATUSES = ['Pending'];
 const APPROVED_STATUSES = ['Approved'];
-// A job allocated to a buyer starts as New; once the buyer saves the PR it is In Progress, then Pending, then Approved.
-const NEW_STATUSES = ['New'];
+// A job allocated to a buyer is New (open to work) until the PR is sent for approval: then Pending, then Approved.
+const NEW_STATUSES = ['New', 'In Progress'];
 const IN_PROGRESS_STATUSES = ['In Progress'];
 const REJECTED_STATUSES = ['Rejected'];
 
@@ -43,8 +43,7 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
   Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
   Pending: 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
   New: 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900 dark:border-sky-900',
-  'In Progress': 'bg-indigo-50 text-indigo-700 ring-indigo-200 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-900 dark:border-indigo-900',
-  Drafted: 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700',
+  'In Progress': 'bg-violet-50 text-violet-700 ring-violet-200 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900 dark:border-violet-900',
   Rejected: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
 };
 
@@ -152,6 +151,7 @@ export class PurchaseRequestListComponent {
       this.searchQuery = params['search'] || '';
       // The URL is the single source for the tab, so a deep link loads that tab's rows (not "All" under a highlighted tab).
       this.activeViewId = PR_VIEW_IDS.includes(params['view']) ? params['view'] : 'all';
+      this.buildColumns();
       if (this.grid) {
         this.grid.page = this.page;
         this.grid.activeViewId = this.activeViewId;
@@ -183,18 +183,18 @@ export class PurchaseRequestListComponent {
       { key: 'issuedPoQuantity', label: 'PO Qty', align: 'right', valueGetter: (r) => r.issuedPoQuantity ?? '-' },
       { key: 'remainingPoQuantity', label: 'Remaining', align: 'right', valueGetter: (r) => r.remainingPoQuantity ?? '-' },
       { key: 'awarded', label: 'Awarded', align: 'right', valueGetter: (r) => { const a = this.awardStats(r); return a.total ? `${a.awarded}/${a.total}` : '-'; } },
-      { key: 'nextStep', label: 'Next step', valueGetter: (r) => this.nextStep(r) },
+      { key: 'poProgress', label: 'POs', valueGetter: (r) => this.poProgressLabel(r) },
       { key: 'createdBy', label: 'Created By', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '-' },
       { key: 'supplier', label: 'Supplier', valueGetter: (r) => r.supplierId?.supplierName || '-' },
       {
-        key: 'procurementPerson', label: 'Allocated To',
+        key: 'procurementPerson', label: 'Assigned To',
         valueGetter: (r) => r.procurementPerson?.firstName ? `${r.procurementPerson.firstName} ${r.procurementPerson.lastName}` : '-',
       },
       { key: 'allocatedBy', label: 'Allocated By', valueGetter: (r) => r.allocatedBy?.firstName ? `${r.allocatedBy.firstName} ${r.allocatedBy.lastName}` : '-' },
       {
         key: 'status', label: 'Status', type: 'badge', sortable: true,
         valueGetter: (r) => {
-          if (r.status === 'Drafted' || r.status === 'New' || r.status === 'In Progress' || r.status === 'Rejected') return r.status;
+          if (r.status === 'New' || r.status === 'In Progress' || r.status === 'Rejected') return r.status;
           const v = String(r.overallStatus || r.status || 'Pending');
           return v.charAt(0).toUpperCase() + v.slice(1).toLowerCase();
         },
@@ -214,30 +214,40 @@ export class PurchaseRequestListComponent {
 
   /** Drafts and rejected requests go back to be fixed. */
   canEdit(r: any): boolean {
-    return r.status === 'Drafted' || r.status === 'In Progress' || r.status === 'Rejected' || (r.status === 'New' && this.hasItems(r));
+    return r.status === 'Rejected' || r.status === 'In Progress' || (r.status === 'New' && this.hasItems(r));
   }
 
   /** Every product line has an awarded supplier offer (done in Compare & award). */
   private allAwarded(r: any): boolean {
     const lines = (r.items ?? []).flatMap((item: any) => item.itemDetails ?? []).filter((d: any) => Number(d.quantity) > 0);
-    return lines.length > 0 && lines.every((d: any) => (d.comparisons ?? []).some((c: any) => c.selected));
+    return lines.length > 0 && lines.every((d: any) => d.supplierId || (d.comparisons ?? []).some((c: any) => c.selected));
   }
 
   awardStats(r: any): { awarded: number; total: number } {
     const lines = (r.items ?? []).flatMap((item: any) => item.itemDetails ?? []).filter((d: any) => Number(d.quantity) > 0);
-    return { awarded: lines.filter((d: any) => (d.comparisons ?? []).some((c: any) => c.selected)).length, total: lines.length };
+    return { awarded: lines.filter((d: any) => d.supplierId || (d.comparisons ?? []).some((c: any) => c.selected)).length, total: lines.length };
+  }
+
+  /** "x placed / y pending / z not created" once the PR is approved; LPOs are only raised after that. */
+  poProgressLabel(r: any): string {
+    if (r.status !== 'Approved') return '-';
+    const placed = r.placedPoCount ?? 0;
+    const pending = r.pendingPoCount ?? 0;
+    const notCreated = r.notCreatedPoCount ?? 0;
+    if (!placed && !pending && !notCreated) return '-';
+    return `${placed} placed / ${pending} pending / ${notCreated} not created`;
   }
 
   /** The one thing this request is waiting on, shown in the grid and the details panel. */
   nextStep(r: any): string {
     if (this.canCreateFromJob(r)) return 'Create PR';
-    if (['New', 'Drafted', 'In Progress'].includes(r.status)) {
+    if (r.status === 'New' || r.status === 'In Progress') {
       const { awarded, total } = this.awardStats(r);
       if (!total) return 'Add items';
+      // RFQ is optional: a line with a chosen supplier can go straight to approval.
+      if (awarded === total) return 'Send for approval';
       const offersIn = (r.items ?? []).some((item: any) => (item.itemDetails ?? []).some((d: any) => (d.comparisons ?? []).length));
-      if (!offersIn) return 'Send RFQ';
-      if (awarded < total) return 'Compare & award';
-      return 'Send for approval';
+      return offersIn ? 'Compare & award' : 'Pick supplier or send RFQ';
     }
     if (r.status === 'Rejected') return 'Fix and resubmit';
     if (r.status === 'Pending') return 'Awaiting approval';
@@ -248,7 +258,7 @@ export class PurchaseRequestListComponent {
   /** Progress strip for the details panel. */
   flowSteps(r: any): { label: string; done: boolean }[] {
     const { awarded, total } = this.awardStats(r);
-    const submitted = !['New', 'Drafted', 'In Progress'].includes(r.status) && r.status !== 'Rejected';
+    const submitted = !['New', 'In Progress', 'Rejected'].includes(r.status);
     const offersIn = (r.items ?? []).some((item: any) => (item.itemDetails ?? []).some((d: any) => (d.comparisons ?? []).length));
     return [
       { label: 'Created', done: total > 0 },
@@ -277,11 +287,13 @@ export class PurchaseRequestListComponent {
     this.rowActions = [
       { id: 'edit', label: 'Edit', icon: 'pencil', quick: true, hidden: (r) => !this.canEdit(r) },
       { id: 'createPr', label: 'Create PR', icon: 'plus', quick: true, hidden: (r) => !this.canCreateFromJob(r) },
-      { id: 'sendApproval', label: 'Send for approval', icon: 'send', quick: true, hidden: (r) => r.status !== 'In Progress' || !this.allAwarded(r) },
+      { id: 'sendApproval', label: 'Send for approval', icon: 'send', quick: true, hidden: (r) => !['New', 'In Progress'].includes(r.status) || !this.hasItems(r) || !this.allAwarded(r) },
       {
         id: 'initiateLpo', label: 'Initiate LPO', icon: 'send', quick: true,
         hidden: (r) => !this.isFullyApproved(r),
       },
+      // The PR drawer's POs step: one card per awarded supplier with Create PO / Place order.
+      { id: 'pos', label: 'POs', icon: 'eye', quick: true, hidden: (r) => !this.isFullyApproved(r) },
       {
         id: 'approve', label: 'Approve', icon: 'check', quick: true,
         hidden: (r) => !this.canDecide(r),
@@ -429,6 +441,9 @@ export class PurchaseRequestListComponent {
       case 'edit':
         this.onEditPr(row);
         break;
+      case 'pos':
+        this.onEditPr(row);
+        break;
       case 'sendApproval':
         void this.sendForApproval(row);
         break;
@@ -468,7 +483,7 @@ export class PurchaseRequestListComponent {
       .afterClosed().subscribe((reset) => { if (reset) this.getPurchases(); });
   }
 
-  /** Moves a saved In Progress PR to Pending without opening the drawer. */
+  /** Moves a saved New PR to Pending without opening the drawer. */
   async sendForApproval(row: any): Promise<void> {
     if (!this.hasItems(row)) {
       this.notificationService.error('Add at least one item before sending for approval');
@@ -580,10 +595,8 @@ export class PurchaseRequestListComponent {
       add('done', 'check_circle', `Allocated to ${name(row.procurementPerson) || 'buyer'}`, join(row.allocatedBy ? `By ${name(row.allocatedBy)}` : '', when(row.allocatedAt)));
     }
 
-    if (row.status === 'New') {
-      add('current', 'schedule', 'Waiting for the buyer to create the purchase request');
-    } else if (row.status === 'In Progress' || row.status === 'Drafted') {
-      add('current', 'schedule', 'Being prepared by the buyer');
+    if (row.status === 'New' || row.status === 'In Progress') {
+      add('current', 'schedule', Array.isArray(row.items) && row.items.length ? 'Purchase request in progress' : 'Waiting for the buyer to create the purchase request');
     }
 
     (row.approvalStatus ?? []).forEach((approval: any, i: number, all: any[]) => {

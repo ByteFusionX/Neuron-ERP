@@ -1,14 +1,18 @@
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, inject, signal, viewChild } from '@angular/core';
+import { Component, computed, EventEmitter, Input, OnChanges, Output, SimpleChanges, inject, signal, viewChild } from '@angular/core';
 import { ToastrService } from 'ngx-toastr';
 import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog/confirm-dialog.service';
 import { RfqCompareAward, RfqCompareMatrixComponent } from 'src/app/shared/components/rfq-compare-matrix/rfq-compare-matrix.component';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
-import { SalesRfqComparison, SalesRfqEnquiryAward } from 'src/app/shared/interfaces/sales-rfq.interface';
+import { SalesRfqCompareColumn, SalesRfqCompareRow, SalesRfqComparison, SalesRfqEnquiryAward } from 'src/app/shared/interfaces/sales-rfq.interface';
 
 /** Statuses in which a purchase request still takes awards (it freezes once it is with the approvers). */
-const EDITABLE_STATUSES = ['New', 'In Progress', 'Drafted', 'Rejected'];
+const EDITABLE_STATUSES = ['New', 'In Progress', 'Rejected'];
+
+export interface PrCompareDraftLine { key: string; itemName: string; detail: string; quantity: number; uom?: string; itemCode?: string }
+/** Supplier tabs of the request form (with the lines under each) that may not have an RFQ yet. */
+export interface PrCompareDrafts { suppliers: { id: string; name: string; lineKeys: string[] }[]; lines: PrCompareDraftLine[] }
 
 /**
  * Every supplier RFQ of one purchase request side by side. Each product is awarded to one supplier;
@@ -41,7 +45,39 @@ export class PrCompareDrawerComponent implements OnChanges {
   private toaster = inject(ToastrService);
   private confirm = inject(ConfirmDialogService);
 
-  readonly data = signal<SalesRfqComparison | null>(null);
+  @Input() set drafts(v: PrCompareDrafts | null) { this.draftsSig.set(v ?? { suppliers: [], lines: [] }); }
+  private readonly draftsSig = signal<PrCompareDrafts>({ suppliers: [], lines: [] });
+
+  private readonly loaded = signal<SalesRfqComparison | null>(null);
+
+  /**
+   * The saved comparison plus what exists only in the form: supplier tabs with no RFQ become empty columns,
+   * and lines nobody has priced yet become rows waiting for a price.
+   */
+  readonly data = computed<SalesRfqComparison | null>(() => {
+    const d = this.loaded();
+    if (!d) return null;
+    const { suppliers, lines } = this.draftsSig();
+    const known = new Set(d.rfqs.map((r) => r.supplierId).filter(Boolean));
+    const extra = suppliers.filter((s) => !known.has(s.id));
+    const draftCols: SalesRfqCompareColumn[] = extra.map((s) => ({
+      _id: `draft:${s.id}`, rfqNo: 'Not sent', status: 'Draft', supplierName: s.name, supplierId: s.id,
+      lineCount: s.lineKeys.length, wonCount: 0,
+    }));
+    const have = new Set(d.rows.map((r) => r.key));
+    const emptyCell = (rfqId: string, lineKey: string) => ({ rfqId, lineKey, lineStatus: 'Pending' as const, quote: null });
+    const rows: SalesRfqCompareRow[] = d.rows.map((r) => ({ ...r, cells: [...r.cells, ...draftCols.map((c) => emptyCell(c._id, r.key))] }));
+    lines.filter((l) => !have.has(l.key)).forEach((l) => {
+      const here = suppliers.filter((s) => s.lineKeys.includes(l.key));
+      rows.push({
+        key: l.key, itemName: l.itemName, detail: l.detail, quantity: l.quantity, uom: l.uom, itemCode: l.itemCode,
+        status: 'waiting', currentSupplier: here.map((s) => s.name).join(', ') || undefined,
+        awardedRfqId: null, lowestRfqId: null,
+        cells: [...d.rfqs, ...draftCols].map((c) => emptyCell(c._id, l.key)),
+      });
+    });
+    return { ...d, rfqs: [...d.rfqs, ...draftCols], rows };
+  });
   readonly loading = signal(false);
   readonly busy = signal(false);
   readonly loadError = signal<string | null>(null);
@@ -49,7 +85,7 @@ export class PrCompareDrawerComponent implements OnChanges {
   ngOnChanges(changes: SimpleChanges): void {
     if ((changes['open'] || changes['purchaseId']) && this.open && this.purchaseId) this.load();
     if (changes['open'] && this.open) this.firstLoad = true;
-    if (changes['open'] && !this.open) this.data.set(null);
+    if (changes['open'] && !this.open) this.loaded.set(null);
   }
 
   get locked(): boolean {
@@ -64,7 +100,38 @@ export class PrCompareDrawerComponent implements OnChanges {
 
   get allAwarded(): boolean {
     const d = this.data();
-    return !!d && d.coverage.total > 0 && d.coverage.awarded === d.coverage.total;
+    return !!d && d.coverage.total > 0 && d.coverage.open === 0;
+  }
+
+  /** Short asks for the reason; clearing needs no confirmation. */
+  async onMarkShort(lineKey: string, detail: string, short: boolean): Promise<void> {
+    if (!this.purchaseId) return;
+    let reason: string | undefined;
+    if (short) {
+      const result = await this.confirm.open({
+        tone: 'approve',
+        title: `Mark "${detail}" short?`,
+        message: 'The request can go for approval without this product fully awarded. Only the awarded quantity is ordered.',
+        reason: true,
+        reasonLabel: 'Why is it short?',
+        confirmLabel: 'Mark short',
+        cancelLabel: 'Cancel',
+      });
+      if (!result.confirmed || !result.reason?.trim()) return;
+      reason = result.reason.trim();
+    }
+    this.busy.set(true);
+    this.service.markPurchaseShort(this.purchaseId, lineKey, short, reason).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.load();
+        this.changed.emit();
+      },
+      error: (err) => {
+        this.busy.set(false);
+        this.toaster.error(err?.error?.message || 'Could not save the short mark.');
+      },
+    });
   }
 
   load(): void {
@@ -73,7 +140,7 @@ export class PrCompareDrawerComponent implements OnChanges {
     this.loadError.set(null);
     this.service.comparePurchase(this.purchaseId).subscribe({
       next: (res) => {
-        this.data.set(res.data);
+        this.loaded.set(res.data);
         this.loading.set(false);
         if (this.firstLoad) {
           this.firstLoad = false;

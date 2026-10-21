@@ -152,6 +152,15 @@
                     <span class="h-1.5 w-1.5 shrink-0 rounded-full" [ngClass]="badge.dot"></span>
                     <span class="truncate">{{ badge.label }}</span>
                   </span>
+                  @if (row.short && row.shortReason && row.status !== 'awarded') {
+                    <span class="mt-1 block text-[11px] text-orange-700 dark:text-orange-300" [title]="row.shortReason">{{ row.shortReason }}</span>
+                  }
+                  @if (allowShort() && !locked() && row.status !== 'awarded') {
+                    <button type="button" class="mt-1 block text-[11px] font-medium text-gray-500 underline-offset-2 hover:text-gray-800 hover:underline disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-200"
+                      [disabled]="busy()" (click)="markShort.emit({ row, short: !row.short })">
+                      {{ row.short ? 'Clear short' : 'Mark short' }}
+                    </button>
+                  }
                 </th>
                 @for (col of d.rfqs; track col._id) {
                   @let cell = cellFor(row, col);

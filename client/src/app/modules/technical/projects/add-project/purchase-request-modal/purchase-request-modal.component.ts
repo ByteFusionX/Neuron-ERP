@@ -68,10 +68,8 @@ export class PurchaseRequestModalComponent implements OnInit {
         return 'text-green-600 bg-green-100';
       case 'Rejected':
         return 'text-red-600 bg-red-100';
-      case 'Drafted':
+      case 'New':
         return 'text-gray-600 bg-gray-100';
-      case 'ReadyToProcessLPO':
-        return 'text-blue-600 bg-blue-100';
       case 'OnHoldCancelled':
         return 'text-orange-600 bg-orange-100';
       default:

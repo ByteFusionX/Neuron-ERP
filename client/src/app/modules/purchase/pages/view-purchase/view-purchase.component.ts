@@ -36,8 +36,7 @@ const STATUS_TONES: Record<string, DetailTone> = {
   Pending: 'warn',
   Approved: 'good',
   Rejected: 'bad',
-  Drafted: 'neutral',
-  'In Progress': 'info',
+  New: 'info',
 };
 
 @Component({

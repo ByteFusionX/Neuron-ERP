@@ -94,7 +94,7 @@ export class ItemIssueHistoryModalComponent implements OnInit {
   ngOnInit(): void {
     // Issued: total qty across LPOs still pending approval, approved, or closed.
     this.totalIssuedQty = this.data.lpoStatuses
-      .filter((lpo) => ['Pending for Approval', 'Approved', 'Closed'].includes(lpo.poStatus))
+      .filter((lpo) => ['Pending for Approval', 'Approved', 'Placed', 'Closed'].includes(lpo.poStatus))
       .reduce((sum, lpo) => sum + (lpo.issuedQty || 0), 0);
     // Pending: qty on LPOs still awaiting approval.
     this.pendingQty = this.data.lpoStatuses
@@ -160,7 +160,7 @@ export class ItemIssueHistoryModalComponent implements OnInit {
   }
 
   canViewOrDownload(row: CombinedIssueRow): boolean {
-    return (row.poStatus === 'Approved' || row.poStatus === 'Closed') && !!row.lpo;
+    return (row.poStatus === 'Approved' || row.poStatus === 'Placed' || row.poStatus === 'Closed') && !!row.lpo;
   }
 
   canEdit(row: CombinedIssueRow): boolean {

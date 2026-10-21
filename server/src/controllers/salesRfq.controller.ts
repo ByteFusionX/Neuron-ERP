@@ -204,7 +204,7 @@ const validateLines = (lines: any[]): string | null => {
     return unlinked >= 0 ? `Line ${unlinked + 1} (${lines[unlinked].itemName}) is not linked to a product in the catalogue. Pick it from the catalogue or create the product first.` : null;
 };
 
-const TERM_FIELDS = ['paymentTerms', 'deliveryTerms', 'incoterm', 'deliveryLocation', 'validityDate', 'currency', 'warrantyTerms'];
+const TERM_FIELDS = ['paymentTerms', 'deliveryTerms', 'shippingTerms', 'deliveryLocation', 'validityDate', 'currency', 'warrantyTerms'];
 
 /** Keeps only the known term fields; empty strings are dropped. */
 const buildTerms = (body: any) => {
@@ -263,7 +263,7 @@ const touch = (rfq: any, employee: any) => {
 };
 
 /** A purchase request takes RFQ prices and awards only until it is sent for approval. */
-export const PR_EDITABLE_STATUSES = ['New', 'In Progress', 'Drafted', 'Rejected'];
+export const PR_EDITABLE_STATUSES = ['New', 'In Progress', 'Rejected'];
 
 const isRfqLocked = (rfq: any) => LOCKED_STATUSES.includes(rfq.status) || !!rfq.$locals?.purchaseLocked;
 
@@ -1337,6 +1337,17 @@ const buildRfqComparison = async (rfqs: any[]) => {
             supplierName: rfqSupplierName(rfq),
             supplierId: rfq.suppliers?.[0]?.supplierId ? String(rfq.suppliers[0].supplierId) : undefined,
             supplierStatus: rfq.suppliers?.[0]?.status,
+            sentVia: rfq.suppliers?.[0]?.sentVia,
+            declineReason: rfq.suppliers?.[0]?.declineReason,
+            replyTerms: rfq.suppliers?.[0]?.replyTerms,
+            totalDiscountType: rfq.suppliers?.[0]?.totalDiscountType || 'amount',
+            totalDiscountValue: rfq.suppliers?.[0]?.totalDiscountValue || 0,
+            // Everything the supplier priced, at its quoted qty: the base an amount discount is pro-rated against.
+            quotedTotal: (rfq.requestedLines || []).reduce((sum: number, line: any) => {
+                const q = quoteFor(rfq, line);
+                return q && q.availability !== RfqAvailability.Unavailable ? sum + (Number(q.unitPrice) || 0) * (Number(q.quantity) || 0) : sum;
+            }, 0),
+            requestedTerms: rfq.requestedTerms,
             deadline: rfq.deadline,
             quotationId: rfq.quotationId,
             lineCount: (rfq.requestedLines || []).length,
@@ -2254,6 +2265,8 @@ const reopenPurchaseAwards = async (purchaseId: any, lineKeys: string[]) => {
     }
 };
 
+const MAX_SUPPLIERS_PER_LINE = 5;
+
 /** The request's lines as RFQ lines; the key is the saved line's id, which is how the request finds its prices again. */
 const purchaseLines = (purchase: any) => {
     const lines: any[] = [];
@@ -2274,6 +2287,8 @@ const purchaseLines = (purchase: any) => {
                 .filter((c: any) => c.supplierId)
                 .map((c: any) => ({ supplierId: String(c.supplierId), supplierName: c.supplierName })),
             supplierName: detail.supplierName || undefined,
+            short: !!detail.short,
+            shortReason: detail.shortReason || undefined,
         });
     }));
     return lines;
@@ -2316,7 +2331,13 @@ export const syncPurchaseFromRfqs = async (purchaseId: any, force = false) => {
                 .filter((quote: any) => quote.itemDetailKey === key && quote.availability !== RfqAvailability.Unavailable)
                 .forEach((quote: any) => offers.push({ rfq, quote })));
             const hadAward = (detail.comparisons || []).some((c: any) => c.selected);
-            detail.comparisons = offers.map(({ rfq, quote }) => {
+            // Offers from suppliers no RFQ asked about this line (the deal sheet's supplier) stay on the line.
+            const askedSuppliers = new Set<string>();
+            asked.forEach((rfq) => (rfq.suppliers || []).forEach((s: any) => s.supplierId && askedSuppliers.add(String(s.supplierId))));
+            const quoteIds = new Set(offers.map(({ quote }) => String(quote._id)));
+            const kept = (detail.comparisons || []).filter((c: any) =>
+                c.supplierId && !askedSuppliers.has(String(c.supplierId)) && !quoteIds.has(String(c._id)));
+            const rfqComparisons = offers.map(({ rfq, quote }) => {
                 const invite = (rfq.suppliers || []).find((s: any) => String(s._id) === String(quote.inviteId || ''));
                 return {
                     _id: quote._id,
@@ -2345,6 +2366,9 @@ export const syncPurchaseFromRfqs = async (purchaseId: any, force = false) => {
             });
             const winners = offers.filter((offer) => offer.quote.selected);
             const won = winners[0];
+            // An RFQ award takes the line from the deal sheet's supplier; without one, the kept offer still holds it.
+            if (won) kept.forEach((c: any) => { c.selected = false; });
+            detail.comparisons = [...kept, ...rfqComparisons];
             if (won) {
                 // A split line costs the average of its suppliers' prices, weighted by the share each one supplies.
                 const shares = winners.map((offer) => Number(offer.quote.awardedQty) || 0);
@@ -2355,7 +2379,15 @@ export const syncPurchaseFromRfqs = async (purchaseId: any, force = false) => {
                     : costInCurrency(won.quote, currency, rates);
                 const slowest = winners.map((offer) => offer.quote.leadTimeDays).filter((d: any) => d != null);
                 detail.availability = slowest.length ? `${Math.max(...slowest)} days` : (won.quote.etaTerms || detail.availability);
-            } else if (hadAward) {
+                // The awarded supplier replaces the deal sheet's supplier on the line.
+                const names = Array.from(new Set<string>(winners.map((offer) => String(offer.quote.supplierName || '')).filter(Boolean)));
+                if (names.length) detail.supplierName = names.join(' / ');
+                if (winners.length === 1) {
+                    const invite = (won.rfq.suppliers || []).find((s: any) => String(s._id) === String(won.quote.inviteId || ''));
+                    detail.email = invite?.contactEmail || undefined;
+                    detail.phoneNo = undefined;
+                }
+            } else if (hadAward && !kept.some((c: any) => c.selected)) {
                 detail.unitCost = 0;
             }
         }
@@ -2433,6 +2465,18 @@ export const createPurchaseRfqs = async (req: Request, res: Response, next: Next
         if (!req.body?.deadline) return res.status(400).json({ success: false, message: 'Say when the supplier prices are needed by.' });
 
         const live: any[] = await loadPurchaseRfqs(purchase._id);
+        // At most five suppliers are asked about any one product, counting the RFQs already raised.
+        const perLine = new Map<string, Set<string>>();
+        const addSupplier = (key: string, supplier: string) => perLine.set(key, (perLine.get(key) ?? new Set<string>()).add(supplier));
+        live.forEach((rfq) => {
+            const supplier = String(rfq.suppliers?.[0]?.supplierId || rfqSupplierName(rfq));
+            (rfq.requestedLines || []).forEach((line: any) => addSupplier(String(line.itemDetailKey), supplier));
+        });
+        invites.forEach((invite) => invite.lineKeys.forEach((key: string) => addSupplier(String(key), String(invite.supplierId || invite.supplierName))));
+        const crowded = allLines.filter((line) => (perLine.get(line.itemDetailKey)?.size ?? 0) > MAX_SUPPLIERS_PER_LINE);
+        if (crowded.length) {
+            return res.status(400).json({ success: false, message: `At most ${MAX_SUPPLIERS_PER_LINE} suppliers can be asked about one product. Too many on: ${crowded.slice(0, 3).map((l) => l.detail).join(', ')}${crowded.length > 3 ? ` and ${crowded.length - 3} more` : ''}.` });
+        }
         const sourceRfqId = await resolveSourceSalesRfqId(purchase);
         const result: any[] = [];
         // The drawer may ask for less than the request needs (the rest is in stock); only the quantity can differ.
@@ -2441,18 +2485,27 @@ export const createPurchaseRfqs = async (req: Request, res: Response, next: Next
             const qty = toNumber(line?.quantity);
             if (line?.itemDetailKey && qty > 0) askedQty.set(String(line.itemDetailKey), qty);
         });
+        const newKeys: string[] = [];
         for (const invite of invites) {
             const wanted = allLines.filter((line) => invite.lineKeys.includes(line.itemDetailKey))
                 .map((line) => buildLine({ ...line, quantity: askedQty.get(line.itemDetailKey) ?? line.quantity }));
             const existing = live.find((rfq) => (rfq.suppliers || []).some((s: any) => sameSupplier(s, invite)));
             if (existing) {
                 const have = new Set<string>((existing.requestedLines || []).map((line: any) => line.itemDetailKey));
-                wanted.filter((line: any) => !have.has(line.itemDetailKey)).forEach((line: any) => existing.requestedLines.push(line));
+                const added = wanted.filter((line: any) => !have.has(line.itemDetailKey));
+                added.forEach((line: any) => existing.requestedLines.push(line));
+                // Saving again with a changed quantity updates the line already asked; its award is left as it was.
+                wanted.filter((line: any) => have.has(line.itemDetailKey) && askedQty.has(line.itemDetailKey)).forEach((line: any) => {
+                    const current = existing.requestedLines.find((l: any) => l.itemDetailKey === line.itemDetailKey);
+                    if (current && current.quantity !== line.quantity) current.quantity = line.quantity;
+                });
+                newKeys.push(...added.map((line: any) => line.itemDetailKey));
                 const exInvite = existing.suppliers[0];
                 exInvite.lineKeys = Array.from(new Set<string>([...(exInvite.lineKeys || []), ...invite.lineKeys]));
                 if (invite.contactEmail) exInvite.contactEmail = invite.contactEmail;
                 if (existing.status === RfqStatus.Closed) existing.status = RfqStatus.Open;
                 if (req.body?.deadline) existing.deadline = req.body.deadline;
+                if (req.body?.requestedTerms) existing.requestedTerms = { ...((existing.requestedTerms as any)?.toObject?.() ?? existing.requestedTerms ?? {}), ...buildTerms(req.body.requestedTerms) };
                 touch(existing, employee);
                 await existing.save();
                 result.push({ _id: existing._id, rfqNo: existing.rfqNo, supplierName: exInvite.supplierName, supplierId: String(exInvite.supplierId), inviteId: String(exInvite._id), merged: true });
@@ -2478,9 +2531,13 @@ export const createPurchaseRfqs = async (req: Request, res: Response, next: Next
                 createdBy: employee._id,
             });
             result.push({ _id: rfq._id, rfqNo: rfq.rfqNo, supplierName: invite.supplierName, supplierId: String(invite.supplierId), inviteId: String(rfq.suppliers?.[0]?._id || ''), merged: false });
+            newKeys.push(...wanted.map((line: any) => line.itemDetailKey));
         }
         // Asking another supplier about a product reopens it: the buyer awards it again once the new price is in.
-        await reopenPurchaseAwards(purchase._id, invites.flatMap((invite) => invite.lineKeys));
+        // Lines an RFQ already carried keep their award, so saving the same RFQs again changes nothing.
+        await reopenPurchaseAwards(purchase._id, newKeys);
+        // Work has started on the request once it has an RFQ.
+        if (purchase.status === 'New' && result.length) await PurchaseRequest.updateOne({ _id: purchase._id }, { $set: { status: 'In Progress' } });
         await syncPurchaseFromRfqs(purchase._id);
         return res.status(201).json({ success: true, message: `${result.length} RFQ(s) saved`, data: result });
     } catch (error) {
@@ -2502,30 +2559,60 @@ export const getPurchaseRfqComparison = async (req: Request, res: Response, next
         // The supplier already chosen on the job sheet for a line, shown beside it as the current supplier.
         const currentSupplier = new Map<string, string>();
         lines.forEach((line) => { if (line.supplierName) currentSupplier.set(line.itemDetailKey, line.supplierName); });
-        (comparison.rows as any[]).forEach((row) => { row.currentSupplier = currentSupplier.get(String(row.key)); });
+        const shortByKey = new Map<string, string>();
+        lines.forEach((line) => { if (line.short) shortByKey.set(line.itemDetailKey, line.shortReason || ''); });
+        (comparison.rows as any[]).forEach((row) => {
+            row.currentSupplier = currentSupplier.get(String(row.key));
+            if (shortByKey.has(String(row.key))) { row.short = true; row.shortReason = shortByKey.get(String(row.key)); }
+        });
         const unasked = lines
             .filter((line) => line.quantity > 0 && !asked.has(line.itemDetailKey))
-            .map(({ itemDetailKey, itemName, detail, quantity, uom, itemCode, supplierName }) => ({ itemDetailKey, itemName, detail, quantity, uom, itemCode, currentSupplier: supplierName }));
+            .map(({ itemDetailKey, itemName, detail, quantity, uom, itemCode, supplierName, short, shortReason }) => ({ itemDetailKey, itemName, detail, quantity, uom, itemCode, currentSupplier: supplierName, short, shortReason }));
+        // Short lines count as settled: the request may go for approval with them as they are.
+        const shortOpen = (comparison.rows as any[]).filter((row) => row.short && row.status !== 'awarded').length + unasked.filter((u) => u.short).length;
         // Suppliers asked about the same product on other requests, offered as pills on lines with no RFQ here yet.
         const partIds = [...new Set(lines.map((l) => l.partNo).filter((id: any) => id && ObjectId.isValid(String(id))).map(String))];
         const past: any[] = partIds.length ? await Rfq.find({
             rfqType: RfqType.Procurement, isDeleted: false, status: { $ne: RfqStatus.Cancelled },
             purchaseRequestId: { $ne: purchase._id }, 'suppliers.0': { $exists: true },
             'requestedLines.partNo': { $in: partIds.map((id) => new ObjectId(id)) },
-        }).select('suppliers requestedLines.partNo').sort({ createdAt: -1 }).limit(300).lean() : [];
-        const byPart = new Map<string, Map<string, { supplierId?: string; supplierName: string }>>();
+        }).select('rfqNo purchaseNo updatedAt suppliers requestedLines.partNo requestedLines.itemDetailKey quotes').sort({ createdAt: -1 }).limit(300).lean() : [];
+        type PastQuote = { rfqNo?: string; purchaseNo?: string; unitPrice: number; currency: string; quantity: number; quotedAt?: Date; awarded: boolean; awardedAt?: Date; awardedQty: number };
+        type PastSupplier = { supplierId?: string; supplierName: string; last?: PastQuote };
+        const byPart = new Map<string, Map<string, PastSupplier>>();
         past.forEach((rfq: any) => {
             const supplierId = rfq.suppliers?.[0]?.supplierId ? String(rfq.suppliers[0].supplierId) : undefined;
             const supplierName = rfqSupplierName(rfq);
             if (!supplierName) return;
             (rfq.requestedLines || []).forEach((l: any) => {
                 const key = String(l.partNo);
-                const m = byPart.get(key) ?? new Map();
-                m.set(supplierId || supplierName, { supplierId, supplierName });
+                const m = byPart.get(key) ?? new Map<string, PastSupplier>();
+                const entry: PastSupplier = m.get(supplierId || supplierName) ?? { supplierId, supplierName };
+                // Quotes are referenced from where they were received, never copied; the newest priced one is shown.
+                const quote = quoteFor(rfq, l);
+                if (quote && quote.availability !== RfqAvailability.Unavailable && quote.unitPrice != null) {
+                    const quotedAt = quote.createdAt;
+                    const awarded = !!quote.selected;
+                    const awardedQty = awarded ? (toNumber(quote.awardedQty) || toNumber(quote.quantity)) : 0;
+                    const last = entry.last;
+                    // Awarded quantity of this supplier and product across every other request, for the over-award warning.
+                    const prevAwarded = (last?.awardedQty ?? 0) + awardedQty;
+                    const newer = !last || new Date(quotedAt || 0).getTime() > new Date(last.quotedAt || 0).getTime();
+                    if (newer) {
+                        entry.last = {
+                            rfqNo: rfq.rfqNo, purchaseNo: rfq.purchaseNo, unitPrice: Number(quote.unitPrice), currency: quote.currency || 'QAR',
+                            quantity: toNumber(quote.quantity), quotedAt, awarded, awardedAt: awarded ? rfq.updatedAt : undefined, awardedQty: prevAwarded,
+                        };
+                    } else if (last) {
+                        last.awardedQty = prevAwarded;
+                        if (awarded && !last.awarded) { last.awarded = true; last.awardedAt = rfq.updatedAt; }
+                    }
+                }
+                m.set(supplierId || supplierName, entry);
                 byPart.set(key, m);
             });
         });
-        const previousSuppliers: Record<string, { supplierId?: string; supplierName: string }[]> = {};
+        const previousSuppliers: Record<string, PastSupplier[]> = {};
         lines.forEach((l) => {
             const m = byPart.get(String(l.partNo));
             if (m) previousSuppliers[l.itemDetailKey] = [...m.values()];
@@ -2536,7 +2623,7 @@ export const getPurchaseRfqComparison = async (req: Request, res: Response, next
                 enquiry: { _id: purchase._id, enquiryId: purchase.purchaseNo, status: purchase.status },
                 previousSuppliers,
                 ...comparison,
-                coverage: { ...comparison.coverage, total: comparison.coverage.total + unasked.length, open: comparison.coverage.open + unasked.length },
+                coverage: { ...comparison.coverage, total: comparison.coverage.total + unasked.length, open: comparison.coverage.open + unasked.length - shortOpen, short: shortOpen },
                 unasked,
                 quotationId: null,
             }
@@ -2571,6 +2658,63 @@ export const awardPurchaseRfqLines = async (req: Request, res: Response, next: N
         }
         await syncPurchaseFromRfqs(purchase._id);
         return res.status(200).json({ success: true, message: "Award saved", data: { changed: applied.changed.size } });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/** Sets the discount a supplier gives on its whole RFQ total (amount or percent; 0 clears it). */
+export const setPurchaseRfqDiscount = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const employee = await getEmployeeData(req.user);
+        const purchase = await loadPurchase(req.params.purchaseId, res);
+        if (!purchase) return;
+        if (!PR_EDITABLE_STATUSES.includes(purchase.status)) {
+            return res.status(409).json({ success: false, message: "This request is with the approvers, so discounts can no longer change." });
+        }
+        const type = req.body?.type === 'percent' ? 'percent' : 'amount';
+        const value = Number(req.body?.value) || 0;
+        if (value < 0 || (type === 'percent' && value > 100)) {
+            return res.status(400).json({ success: false, message: "Enter a discount between 0 and 100%, or a positive amount." });
+        }
+        const rfq: any = await Rfq.findOne({ _id: req.params.rfqId, purchaseRequestId: purchase._id, isDeleted: false });
+        const invite = rfq?.suppliers?.[0];
+        if (!invite) return res.status(404).json({ success: false, message: "That RFQ is not on this request." });
+        invite.totalDiscountType = type;
+        invite.totalDiscountValue = value;
+        if (employee) rfq.updatedBy = employee._id;
+        rfq.updatedAt = new Date();
+        await rfq.save();
+        return res.status(200).json({ success: true, message: value ? "Discount saved" : "Discount cleared" });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/** Marks a request line short (accepted as not fully covered, with a reason) or clears the mark. */
+export const markPurchaseLineShort = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const employee = await getEmployeeData(req.user);
+        const purchase = await loadPurchase(req.params.purchaseId, res);
+        if (!purchase) return;
+        if (!PR_EDITABLE_STATUSES.includes(purchase.status)) {
+            return res.status(409).json({ success: false, message: "This request is with the approvers, so lines can no longer change." });
+        }
+        const short = !!req.body?.short;
+        const reason = String(req.body?.reason || '').trim();
+        if (short && !reason) return res.status(400).json({ success: false, message: "Say why this product is short." });
+        let line: any = null;
+        (purchase.items || []).forEach((item: any) => (item.itemDetails || []).forEach((detail: any) => {
+            if (String(detail._id) === String(req.body?.lineKey)) line = detail;
+        }));
+        if (!line) return res.status(404).json({ success: false, message: "That product is not on this request." });
+        line.short = short;
+        line.shortReason = short ? reason : undefined;
+        if (employee) purchase.updatedBy = employee._id;
+        purchase.updatedAt = new Date();
+        purchase.markModified('items');
+        await purchase.save({ validateModifiedOnly: true });
+        return res.status(200).json({ success: true, message: short ? "Marked short" : "Short mark cleared" });
     } catch (error) {
         next(error);
     }
@@ -2650,6 +2794,8 @@ export const importSalesRfqsIntoPurchase = async (purchase: any, employee: any) 
                     sentVia: invite.sentVia,
                     repliedAt: invite.repliedAt,
                     replyTerms: invite.replyTerms,
+                    totalDiscountType: invite.totalDiscountType,
+                    totalDiscountValue: invite.totalDiscountValue,
                     remarks: invite.remarks,
                     declineReason: invite.declineReason,
                 }],

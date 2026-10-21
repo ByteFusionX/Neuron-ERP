@@ -79,6 +79,16 @@ export class SalesRfqService {
     return this.http.put<{ success: boolean; message?: string }>(`${this.api}/purchase/${purchaseId}/award`, { awards }, { context: context() });
   }
 
+  /** Marks a request line short (not fully covered, with a reason), or clears the mark. */
+  markPurchaseShort(purchaseId: string, lineKey: string, short: boolean, reason?: string): Observable<{ success: boolean; message?: string }> {
+    return this.http.put<{ success: boolean; message?: string }>(`${this.api}/purchase/${purchaseId}/short`, { lineKey, short, reason }, { context: context() });
+  }
+
+  /** Sets the discount a supplier gives on its whole RFQ total; 0 clears it. */
+  setPurchaseRfqDiscount(purchaseId: string, rfqId: string, type: 'amount' | 'percent', value: number): Observable<{ success: boolean; message?: string }> {
+    return this.http.put<{ success: boolean; message?: string }>(`${this.api}/purchase/${purchaseId}/rfqs/${rfqId}/discount`, { type, value }, { context: context() });
+  }
+
   getById(id: string): Observable<{ success: boolean; data: SalesRfq }> {
     return this.http.get<{ success: boolean; data: SalesRfq }>(`${this.api}/${id}`, { context: context() });
   }

@@ -99,7 +99,7 @@ export class PurchaseService {
   }
 
   createPurchaseDraft(purchaseData: PurchaseData): Observable<any> {
-    const draftData = { ...purchaseData, status: 'Drafted' };
+    const draftData = { ...purchaseData, status: 'In Progress' };
     return this.createPurchase(draftData);
   }
 
@@ -109,10 +109,6 @@ export class PurchaseService {
 
   updatePurchaseSupplierOffers(purchaseId: string, items: any[]): Observable<any> {
     return this.http.patch<any>(`${this.api}/purchase/purchase-request/supplier-offers/${purchaseId}`, { items }, { context: context() });
-  }
-
-  updatePurchaseSupplierDiscounts(purchaseId: string, supplierDiscounts: any): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/supplier-discount/${purchaseId}`, { supplierDiscounts }, { context: context() });
   }
 
   updatePurchaseMrRequest(purchaseId: string, mrRequest: any): Observable<any> {

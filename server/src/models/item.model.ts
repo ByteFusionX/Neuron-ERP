@@ -8,6 +8,8 @@ export interface ItemDetail {
     unitSellingPrice: number;
     profit: number;
     availability: string;
+    uom?: string;
+    itemCode?: string;
     partNo?: Types.ObjectId;
     supplierName?: string;
     email?: string;
@@ -16,6 +18,8 @@ export interface ItemDetail {
     isNewlyAdded?: boolean;
     merged?: boolean;
     fromMrRequest?: boolean;
+    short?: boolean;
+    shortReason?: string;
 }
 
 export interface Item extends Document {
@@ -50,6 +54,14 @@ const itemDetailSchema = new Schema({
     },
     availability: {
         type: String,
+    },
+    uom: {
+        type: String,
+        trim: true
+    },
+    itemCode: {
+        type: String,
+        trim: true
     },
     partNo: {
         type: Schema.Types.ObjectId,
@@ -91,6 +103,15 @@ const itemDetailSchema = new Schema({
     fromMrRequest: {
         type: Boolean,
         default: false
+    },
+    // A PR line the buyer accepts as not fully covered (no supplier, or not enough quantity); it may go for approval as it is.
+    short: {
+        type: Boolean,
+        default: false
+    },
+    shortReason: {
+        type: String,
+        trim: true
     },
     comparisons: {
         type: [supplierComparisonSchema],

@@ -1,112 +1,127 @@
 <form [formGroup]="purchaseForm" class="space-y-4" (ngSubmit)="$event.preventDefault()">
   <!-- Items = every line; one tab per supplier narrows the lines to that supplier -->
-  <div *ngIf="selectedJobSheet || isJobLess" class="flex flex-wrap items-center gap-2 border-b border-gray-100 pb-3 dark:border-erp-border-dark">
-    <div class="flex flex-wrap items-center gap-1">
-      <button type="button" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
-        [ngClass]="activeTab === 'items' ? 'bg-violet-600 text-white' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'"
-        (click)="tabSelected.emit('items')">Items</button>
-      <button *ngFor="let t of supplierTabs" type="button" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
-        [ngClass]="activeTab === t.id ? 'bg-violet-600 text-white' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'"
-        (click)="tabSelected.emit(t.id)">
-        <span class="max-w-[10rem] truncate">{{ t.name }}</span>
-        <span class="tabular-nums opacity-70">{{ t.count }}</span>
-      </button>
-    </div>
-    <app-action-button *ngIf="!addingSupplier" variant="ghost" (click)="addingSupplier = true">
-      <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add supplier
-    </app-action-button>
-    <div *ngIf="addingSupplier" class="w-60">
-      <app-sf-combobox [options]="supplierOptions()" placeholder="Select supplier…" aria-label="Add supplier"
-        [ngModel]="null" [ngModelOptions]="{ standalone: true }"
-        (ngModelChange)="addingSupplier = false; $event && supplierAdded.emit($event)"></app-sf-combobox>
-    </div>
+  <!-- Only the choices a new PR still has to make; everything else is in the drawer header -->
+  <div *ngIf="!isEditing && !sourceLocked" class="grid items-end gap-x-6 gap-y-3 sm:grid-cols-3">
+    <app-sf-switch
+      label="Create without a job"
+      [ngModel]="isJobLess"
+      (ngModelChange)="jobLessChange.emit($event)"
+      [ngModelOptions]="{ standalone: true }"
+    ></app-sf-switch>
+    <app-sf-field *ngIf="!isJobLess" label="Job" required class="sm:col-span-2">
+      <app-sf-combobox
+        [options]="jobOptions()"
+        placeholder="Search job ID"
+        [ngModel]="requestedJobId()"
+        (ngModelChange)="jobSelected.emit($event)"
+        [ngModelOptions]="{ standalone: true }"
+      ></app-sf-combobox>
+    </app-sf-field>
   </div>
 
-  <section class="pr-drawer-banner">
-    <div class="flex flex-wrap items-start justify-between gap-4">
-      <div class="min-w-0">
-        <p class="pr-banner-kicker">Purchase request</p>
-        <h2 class="pr-banner-title">{{ sourceTitle }}</h2>
-        <p class="pr-banner-subtitle">{{ sourceSubtitle }}</p>
+  <!-- Ask suppliers step: how many lines still have no supplier asked, and the per-line limit -->
+  <div *ngIf="stage === 'ask' && (selectedJobSheet || isJobLess)" class="flex flex-wrap items-center gap-2 rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-2.5 text-xs text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/20 dark:text-violet-200">
+    <span>Tick lines on <b>Items</b> and click <b>RFQ</b> to ask a supplier. One RFQ per supplier; at most {{ maxSuppliersPerLine }} suppliers per line.</span>
+    <span *ngIf="askSummary" class="ml-auto flex flex-wrap gap-1.5">
+      <span class="rounded-full bg-white px-2.5 py-0.5 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ askSummary.rfqs }} RFQ{{ askSummary.rfqs === 1 ? '' : 's' }}</span>
+      <span *ngIf="askSummary.unasked" class="rounded-full bg-amber-100 px-2.5 py-0.5 font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{{ askSummary.unasked }} line{{ askSummary.unasked === 1 ? '' : 's' }} not asked</span>
+      <span *ngIf="askSummary.full" class="rounded-full bg-gray-100 px-2.5 py-0.5 font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ askSummary.full }} at {{ maxSuppliersPerLine }}/{{ maxSuppliersPerLine }}</span>
+    </span>
+  </div>
+
+  <div *ngIf="(selectedJobSheet || isJobLess) && stage !== 'need'" class="flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-erp-border-dark pb-3">
+    <div class="flex flex-wrap items-center gap-1">
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
+        [ngClass]="activeTab === 'items' ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 dark:border-erp-border-dark text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
+        (click)="tabSelected.emit('items')"
+      >
+        Items
+        <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="activeTab === 'items' ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ itemCount() }}</span>
+      </button>
+      <div
+        *ngFor="let t of supplierTabs"
+        class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
+        [ngClass]="activeTab === t.id ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 dark:border-erp-border-dark text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
+      >
+        <button type="button" class="inline-flex items-center gap-1.5" [title]="t.name" (click)="tabSelected.emit(t.id)">
+          <span class="max-w-[7rem] truncate">{{ t.name }}</span>
+          <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="activeTab === t.id ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ t.count }}<ng-container *ngIf="t.total != null">/{{ t.total }}</ng-container></span>
+        </button>
+        <button
+          *ngIf="t.closable"
+          type="button"
+          class="-mr-1 grid h-4 w-4 place-content-center rounded hover:bg-black/10"
+          title="Close supplier tab"
+          aria-label="Close supplier tab"
+          (click)="supplierClosed.emit(t.id)"
+        >
+          <ng-icon name="heroXMark" class="h-3 w-3"></ng-icon>
+        </button>
       </div>
-      <app-sf-switch
-        *ngIf="!isEditing && !sourceLocked"
-        class="shrink-0"
-        label="Create without a job"
-        [ngModel]="isJobLess"
-        (ngModelChange)="jobLessChange.emit($event)"
-        [ngModelOptions]="{ standalone: true }"
-      ></app-sf-switch>
     </div>
+    <span *ngIf="activeTab === 'items' && !readOnly" class="ml-auto" [attr.title]="selectedKeys.length ? null : 'Select items to create an RFQ'">
+      <app-action-button variant="ghost" [disabled]="!selectedKeys.length" (click)="openRfqModal()">
+        <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> RFQ<ng-container *ngIf="selectedKeys.length"> ({{ selectedKeys.length }})</ng-container>
+      </app-action-button>
+    </span>
+  </div>
 
-    <div class="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-5">
-      <ng-container *ngIf="!isJobLess">
-        <app-sf-field *ngIf="!isEditing && !sourceLocked" label="Job" required class="sm:col-span-2">
-          <app-sf-combobox
-            [options]="jobOptions()"
-            placeholder="Search job ID"
-            [ngModel]="requestedJobId()"
-            (ngModelChange)="jobSelected.emit($event)"
-            [ngModelOptions]="{ standalone: true }"
-          ></app-sf-combobox>
-        </app-sf-field>
-        <div *ngIf="isEditing || sourceLocked" class="pr-meta">
-          <p class="pr-meta-label">Job ID</p>
-          <p class="pr-meta-value">{{ f['jobId'].value || '-' }}</p>
-        </div>
-        <div class="pr-meta">
-          <p class="pr-meta-label">PR No</p>
-          <p class="pr-meta-value tabular-nums">{{ f['purchaseNo'].value || '-' }}</p>
-        </div>
-        <div class="pr-meta">
-          <p class="pr-meta-label">Deal sheet</p>
-          <p class="pr-meta-value">{{ f['dealSheetId'].value || '-' }}</p>
-        </div>
-        <div class="pr-meta">
-          <p class="pr-meta-label">Customer</p>
-          <p class="pr-meta-value">{{ f['customer'].value || '-' }}</p>
-        </div>
-        <div class="pr-meta">
-          <p class="pr-meta-label">Sales person</p>
-          <p class="pr-meta-value">{{ f['salesManager'].value || '-' }}</p>
-        </div>
+  <!-- Supplier tab: what this supplier is asked, and what it replied -->
+  <section *ngIf="activeTab !== 'items' && (selectedJobSheet || isJobLess) && (activeRfq || activeTerms)" class="rounded-xl border border-gray-200 px-4 py-3 dark:border-erp-border-dark">
+    <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <ng-container *ngIf="activeRfq as r; else unsaved">
+        <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ r.rfqNo }}</span>
+        <span class="text-sm text-gray-700 dark:text-gray-300">{{ r.supplierName }}</span>
+        <span *ngIf="r.supplierStatus" class="rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ r.supplierStatus }}</span>
+        <span *ngIf="r.supplierStatus === 'Declined' && r.declineReason" class="text-xs text-red-600">{{ r.declineReason }}</span>
       </ng-container>
-
-      <ng-container *ngIf="isJobLess">
-        <div class="pr-meta">
-          <p class="pr-meta-label">PR No</p>
-          <p class="pr-meta-value tabular-nums">{{ f['purchaseNo'].value || '-' }}</p>
-        </div>
-        <div class="pr-meta">
-          <p class="pr-meta-label">Created by</p>
-          <p class="pr-meta-value">{{ f['salesManager'].value || '-' }}</p>
-        </div>
-        <div class="pr-meta sm:col-span-2">
-          <p class="pr-meta-label">Supplier</p>
-          <p class="pr-meta-value">{{ supplierName() || 'Chosen through RFQs' }}</p>
-        </div>
+      <ng-template #unsaved>
+        <span class="text-sm text-gray-700 dark:text-gray-300">{{ activeTabName }}</span>
+        <span class="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">RFQ is created when the request is saved</span>
+      </ng-template>
+      <button *ngIf="!readOnly" type="button" class="ml-auto text-xs font-medium text-violet-600 hover:underline" (click)="openRfqModal(activeTab)">Edit terms</button>
+    </div>
+    <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div class="pr-meta"><p class="pr-meta-label">Price needed by</p><p class="pr-meta-value">{{ (activeTerms?.deadline | date: 'dd MMM yyyy') || '-' }}</p></div>
+      <div class="pr-meta"><p class="pr-meta-label">Payment terms</p><p class="pr-meta-value">{{ activeTerms?.paymentTerms || '-' }}</p></div>
+      <div class="pr-meta"><p class="pr-meta-label">Delivery terms</p><p class="pr-meta-value">{{ activeTerms?.deliveryTerms || '-' }}</p></div>
+      <div class="pr-meta"><p class="pr-meta-label">Shipping terms</p><p class="pr-meta-value">{{ activeTerms?.shippingTerms || '-' }}</p></div>
+      <div class="pr-meta"><p class="pr-meta-label">Place of delivery</p><p class="pr-meta-value">{{ activeTerms?.deliveryLocation || '-' }}</p></div>
+    </div>
+    <div *ngIf="activeRfq as r" class="mt-3 grid gap-x-6 gap-y-3 border-t border-gray-100 pt-3 dark:border-erp-border-dark sm:grid-cols-2 lg:grid-cols-5">
+      <div class="pr-meta"><p class="pr-meta-label">Sent via</p><p class="pr-meta-value">{{ r.sentVia || '-' }}</p></div>
+      <div class="pr-meta"><p class="pr-meta-label">Reply currency</p><p class="pr-meta-value">{{ r.replyTerms?.currency || '-' }}</p></div>
+      <div class="pr-meta"><p class="pr-meta-label">Reply payment terms</p><p class="pr-meta-value">{{ r.replyTerms?.paymentTerms || '-' }}</p></div>
+      <div class="pr-meta"><p class="pr-meta-label">Valid until</p><p class="pr-meta-value">{{ (r.replyTerms?.validityDate | date: 'dd MMM yyyy') || '-' }}</p></div>
+      <div class="pr-meta"><p class="pr-meta-label">Warranty</p><p class="pr-meta-value">{{ r.replyTerms?.warrantyTerms || '-' }}</p></div>
+    </div>
+    <!-- Discount the supplier gives on its whole quote, on top of any line discounts -->
+    <div *ngIf="activeRfq as r" class="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 text-xs dark:border-erp-border-dark">
+      <span class="pr-meta-label">Total discount</span>
+      <ng-container *ngIf="!readOnly; else discountView">
+        <select class="h-8 rounded-lg border border-gray-300 px-2 text-xs dark:border-gray-700 dark:bg-transparent"
+          [ngModel]="discountDraft(r).type" (ngModelChange)="setDiscountDraft(r, { type: $event })" [ngModelOptions]="{ standalone: true }">
+          <option value="amount">Amount</option>
+          <option value="percent">%</option>
+        </select>
+        <input type="number" min="0" [max]="discountDraft(r).type === 'percent' ? 100 : null"
+          class="h-8 w-28 rounded-lg border border-gray-300 px-2 text-right text-xs tabular-nums dark:border-gray-700 dark:bg-transparent"
+          [ngModel]="discountDraft(r).value" (ngModelChange)="setDiscountDraft(r, { value: +$event || 0 })" [ngModelOptions]="{ standalone: true }" />
+        <app-action-button variant="secondary" [disabled]="!discountDirty(r)" (click)="saveDiscount(r)">Save</app-action-button>
       </ng-container>
-
-      <div class="pr-meta">
-        <p class="pr-meta-label">Items</p>
-        <p class="pr-meta-value tabular-nums">{{ itemCount() }}</p>
-      </div>
-      <div class="pr-meta">
-        <p class="pr-meta-label">Total LPO value</p>
-        <p class="pr-meta-value tabular-nums">{{ liveTotalLpo() | number: '1.2-2' }} {{ currency() || 'QAR' }}</p>
-      </div>
+      <ng-template #discountView>
+        <span class="pr-meta-value">{{ r.totalDiscountValue ? (r.totalDiscountType === 'percent' ? r.totalDiscountValue + '%' : (r.totalDiscountValue | number: '1.2-2')) : '-' }}</span>
+      </ng-template>
+      <span *ngIf="r.quotedTotal" class="ml-auto text-gray-500">
+        Quoted {{ r.quotedTotal | number: '1.2-2' }}<ng-container *ngIf="savedDiscount(r) > 0"> − {{ savedDiscount(r) | number: '1.2-2' }} = <b class="tabular-nums text-gray-900 dark:text-gray-100">{{ r.quotedTotal - savedDiscount(r) | number: '1.2-2' }}</b></ng-container>
+      </span>
     </div>
   </section>
 
-  <div *ngIf="selectedJobSheet || isJobLess" class="flex flex-wrap items-center gap-2">
-    <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">Items</span>
-    <app-detail-badge [label]="itemCount() + ''" tone="neutral"></app-detail-badge>
-    <app-action-button *ngIf="!isJobLess" class="ml-auto" variant="tool" (click)="materialRequestsClicked.emit()">
-      From MR
-    </app-action-button>
-  </div>
-
-  <ng-container *ngIf="selectedJobSheet || isJobLess; else noJob">
+  <!-- Read-only once the request has left In Progress: inert blocks typing, clicks and focus but keeps the lines visible. -->
+  <div *ngIf="selectedJobSheet || isJobLess; else noJob" [attr.inert]="readOnly ? '' : null" [class.opacity-80]="readOnly">
     <app-item-entry
       mode="purchase"
       [quoteLayout]="true"
@@ -115,20 +130,26 @@
       [optionalItems]="entryItems"
       [seedOptionalItems]="entrySeed()"
       [currency]="currency() || 'QAR'"
-      [showTotalsBar]="false"
       [supplierOptions]="supplierOptions()"
       [allowCreateProduct]="true"
       [bulkSelect]="true"
+      [flat]="true"
       [lineLocked]="lineLocked"
       [lineAwarded]="lineAwarded"
       [lineBadge]="lineBadge"
+      [linePills]="linePills"
+      (pillClicked)="pillPicked.emit($event)"
       [lineOffers]="lineOffers"
       [supplierScope]="activeTab === 'items' ? null : activeTab"
+      [supplierScopeName]="activeTab === 'items' ? '' : activeTabName"
+      [scopeLineKeys]="tabLineKeys"
+      [scopeExcludedKeys]="tabExcludedKeys"
+      (removeFromTab)="linesRemovedFromTab.emit($event)"
+      (awardToTab)="linesAwardedToTab.emit($event)"
       (offerPicked)="offerPicked.emit($event)"
-      (createProductRequested)="createProductRequested.emit()"
-      (addToRfq)="addToRfq.emit($event)"
-    ></app-item-entry>
-  </ng-container>
+      (addToTab)="linesAddedToTab.emit($event)"
+      (createProductRequested)="createProductRequested.emit()"    ></app-item-entry>
+  </div>
 
   <ng-template #noJob>
     <div class="pr-empty-state">Select a job to load its items.</div>

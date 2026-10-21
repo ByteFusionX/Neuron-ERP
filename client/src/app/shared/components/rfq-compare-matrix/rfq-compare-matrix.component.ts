@@ -44,6 +44,8 @@ export class RfqCompareMatrixComponent {
   readonly busy = input(false);
   /** Lets one product be shared between suppliers, each taking part of the quantity (purchase requests). */
   readonly allowSplit = input(false);
+  /** Lets a not fully awarded product be marked short (purchase requests). */
+  readonly allowShort = input(false);
 
   readonly award = output<RfqCompareAward>();
   /** Award every still-open product of a group to one supplier column. */
@@ -53,6 +55,8 @@ export class RfqCompareMatrixComponent {
   /** Award every still-open product to whichever supplier priced it lowest. */
   readonly awardCheapest = output<{ awards: RfqCompareAward[]; skipped: number }>();
   readonly openRfq = output<string>();
+  /** Mark a product short, or clear the mark (`short: false`). */
+  readonly markShort = output<{ row: SalesRfqCompareRow; short: boolean }>();
 
   readonly filter = signal<RowFilter>('all');
   /** Item groups folded away by the user. */
@@ -113,7 +117,7 @@ export class RfqCompareMatrixComponent {
     switch (filter) {
       case 'all': return true;
       case 'awarded': return row.status === 'awarded';
-      case 'open': return row.status === 'open' || row.status === 'waiting' || row.status === 'partial';
+      case 'open': return !row.short && (row.status === 'open' || row.status === 'waiting' || row.status === 'partial');
       case 'unawarded': return row.status === 'open' || row.status === 'waiting';
       case 'noQuote': return row.status === 'waiting';
       case 'partial': return row.status === 'partial';
@@ -271,6 +275,10 @@ export class RfqCompareMatrixComponent {
   }
 
   rowBadge(row: SalesRfqCompareRow): { label: string; classes: string; dot: string } {
+    if (row.short && row.status !== 'awarded') {
+      const got = row.allocatedQty ? `${row.allocatedQty} of ${row.quantity}` : 'None';
+      return { label: `Short · ${got} awarded`, classes: 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300', dot: 'bg-orange-500' };
+    }
     switch (row.status) {
       case 'awarded': {
         const winners = row.cells.filter((c) => c.lineStatus === 'Confirmed');

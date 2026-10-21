@@ -78,7 +78,7 @@ export interface RfqFollowUp {
 export interface RfqTerms {
     paymentTerms?: string;
     deliveryTerms?: string;
-    incoterm?: string;
+    shippingTerms?: string;
     deliveryLocation?: string;
     validityDate?: Date;
     currency?: string;
@@ -98,6 +98,9 @@ export interface RfqSupplierInvite {
     sentVia?: string;
     repliedAt?: Date;
     replyTerms?: RfqTerms;
+    /** Discount on the supplier's whole quote, taken after line discounts. Pro-rated by awarded value on the POs. */
+    totalDiscountType?: 'amount' | 'percent';
+    totalDiscountValue?: number;
     attachments?: RfqAttachment[];
     remarks?: string;
     declineReason?: string;
@@ -149,6 +152,10 @@ export interface RfqQuote {
     selected: boolean;
     /** Set when the line is split between suppliers: the part of the line's quantity this quote won. Blank = the whole line. */
     awardedQty?: number;
+    /** How much the supplier can supply. Blank = the full requested quantity. */
+    availableQty?: number;
+    /** Where the price came from, e.g. email, phone, portal, manual. */
+    source?: string;
     createdBy?: Types.ObjectId;
     createdAt?: Date;
 }
@@ -265,7 +272,7 @@ const rfqAttachmentSchema = new Schema<RfqAttachment>({
 const rfqTermsSchema = new Schema<RfqTerms>({
     paymentTerms: { type: String },
     deliveryTerms: { type: String },
-    incoterm: { type: String },
+    shippingTerms: { type: String },
     deliveryLocation: { type: String },
     validityDate: { type: Date },
     currency: { type: String },
@@ -283,6 +290,8 @@ const rfqSupplierInviteSchema = new Schema<RfqSupplierInvite>({
     sentVia: { type: String },
     repliedAt: { type: Date },
     replyTerms: { type: rfqTermsSchema },
+    totalDiscountType: { type: String, enum: ['amount', 'percent'], default: 'amount' },
+    totalDiscountValue: { type: Number, default: 0, min: 0 },
     attachments: { type: [rfqAttachmentSchema], default: [] },
     remarks: { type: String },
     declineReason: { type: String },
@@ -329,6 +338,8 @@ const rfqQuoteSchema = new Schema<RfqQuote>({
     remarks: { type: String },
     selected: { type: Boolean, default: false },
     awardedQty: { type: Number, min: 0 },
+    availableQty: { type: Number, min: 0 },
+    source: { type: String, trim: true },
     createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     createdAt: { type: Date, default: Date.now }
 }, { _id: true });
