@@ -55,6 +55,7 @@ export interface JobTable {
     total: number;
     totalLpo: number;
     job: getJob[];
+    viewCounts?: Record<string, number>;
 }
 
 export enum JobStatus {

@@ -236,9 +236,18 @@ export class JobListComponent {
     // The grid emits queryChange right after viewChange, which reloads the data and syncs the URL once.
   }
 
-  /** Only the active tab has a known total (rows are server-paged), so the others show no badge. */
+  private viewCounts: Record<string, number> = {};
+  private readonly viewStatus: Record<string, string> = {
+    pending: allocateStatus.Pending, 'open-to-work': allocateStatus.OpenToWork,
+    'in-progress': allocateStatus.WorkInProgress, completed: allocateStatus.Completed, lost: allocateStatus.Lost,
+  };
+
+  /** Every tab shows its count from the server; the active tab uses the live (filtered) total. */
   private refreshViewCounts(): void {
-    this.views = this.views.map((v) => ({ ...v, count: v.id === this.activeViewId ? this.total : undefined, hideCount: v.id !== this.activeViewId }));
+    this.views = this.views.map((v) => {
+      const count = v.id === this.activeViewId ? this.total : this.viewCounts[this.viewStatus[v.id] ?? v.id];
+      return { ...v, count, hideCount: count === undefined };
+    });
   }
 
   onQueryChange(query: DataGridQuery): void {
@@ -332,6 +341,7 @@ export class JobListComponent {
           this.rows = data ? [...data.job] : [];
           this.total = data ? data.total : 0;
           this.totalLpoValue = data ? data.totalLpo : 0;
+          this.viewCounts = data?.viewCounts ?? {};
           this.refreshViewCounts();
           // The grid clamps its page while the total is still 0 (first load from a deep link); restore it now that rows and total arrive together.
           if (this.grid) this.grid.page = Math.min(this.page, Math.max(1, Math.ceil(this.total / this.row)));

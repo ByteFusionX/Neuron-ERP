@@ -12,6 +12,7 @@ import { Invoice } from '../models/invoice.model';
 import { releaseQuoteStockHolds } from './quoteStockHold.controller';
 import { cancelOpenFollowUp } from '../services/enquiryFollowUp.service';
 import { logEnquiryAudit } from '../services/enquiryAudit.service';
+import Rfq, { RfqStage, RfqStatus } from '../models/rfq.model';
 import PurchaseOrder from '../models/purchaseOrder.model';
 import DeliveryNote from '../models/deliveryNote.model';
 import GRN from '../models/grn.model';
@@ -225,7 +226,15 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
             { $match: gridQuery.filter },
         ];
 
-        const [jobData, jobTotal] = await Promise.all([
+        // Tab badges: jobs per allocate status, scoped by access only.
+        const { allocateStatus: _ignored, ...matchWithoutStatus } = matchFilters;
+        const statusCounts = jobModel.aggregate([
+            ...jobBasePipeline(salesPerson, qatarUsdRate),
+            { $match: { ...accessFilter, ...matchWithoutStatus } },
+            { $group: { _id: '$allocateStatus', count: { $sum: 1 } } },
+        ]);
+
+        const [jobData, jobTotal, statusRows] = await Promise.all([
             jobModel.aggregate([
                 ...baseStages,
                 { $sort: gridQuery.sort },
@@ -265,9 +274,13 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                 ...baseStages,
                 { $group: { _id: null, total: { $sum: 1 }, totalLpo: { $sum: { $ifNull: ['$lpoValue', 0] } } } },
             ]),
+            statusCounts,
         ]);
 
-        return res.status(200).json({ total: jobTotal[0]?.total ?? 0, totalLpo: jobTotal[0]?.totalLpo ?? 0, job: jobData });
+        const statusTotals: Record<string, number> = {};
+        (statusRows as { _id: string; count: number }[]).forEach((r) => { statusTotals[r._id] = r.count; });
+        const viewCounts = { all: Object.values(statusTotals).reduce((a, b) => a + b, 0), ...statusTotals };
+        return res.status(200).json({ total: jobTotal[0]?.total ?? 0, totalLpo: jobTotal[0]?.totalLpo ?? 0, job: jobData, statusTotals, viewCounts });
     } catch (error) {
         console.log(error)
         next(error);
@@ -957,14 +970,22 @@ export const markJobLost = async (req: Request, res: Response, next: NextFunctio
         }
 
         // Down the chain: only documents that are still open.
+        // A cancelled PR's RFQs stop too, so suppliers aren't chased for a purchase that won't happen.
+        const openPrIds = (await PurchaseRequest.find({ jobId: job._id, status: { $in: [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress, PurchaseRequestStatus.Pending, PurchaseRequestStatus.Approved] } }).select('_id').lean()).map((p) => p._id);
+        const rfqs = openPrIds.length
+            ? await Rfq.updateMany(
+                { purchaseRequestId: { $in: openPrIds }, status: { $in: [RfqStatus.Draft, RfqStatus.Open, RfqStatus.Quoted] }, isDeleted: { $ne: true } },
+                { $set: { status: RfqStatus.Cancelled, stage: RfqStage.Cancelled, cancelReason: `Job ${job.jobId} marked lost` } })
+            : { modifiedCount: 0 };
         const [prs, pos, dns, invoices] = await Promise.all([
-            PurchaseRequest.updateMany({ jobId: job._id, status: { $in: [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress, PurchaseRequestStatus.Drafted, PurchaseRequestStatus.Pending, PurchaseRequestStatus.ReadyToProcessLPO, PurchaseRequestStatus.Approved] } }, { $set: { status: PurchaseRequestStatus.OnHoldCancelled } }),
+            PurchaseRequest.updateMany({ jobId: job._id, status: { $in: [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress, PurchaseRequestStatus.Pending, PurchaseRequestStatus.Approved] } }, { $set: { status: PurchaseRequestStatus.OnHoldCancelled } }),
             PurchaseOrder.updateMany({ jobId: job._id, poStatus: { $in: ['Draft', 'Pending for Approval', 'Approved'] } }, { $set: { poStatus: 'Rejected' } }),
             DeliveryNote.updateMany({ jobId: job._id, status: { $in: ['Draft', 'Ready for Dispatch'] } }, { $set: { status: 'Cancelled' } }),
             Invoice.updateMany({ jobId: job._id, status: { $in: ['Pending to submit', 'PI Submitted', 'Partial invoicing', 'Hold'] } }, { $set: { status: 'Cancelled' } }),
         ]);
         const cascade = [
             { label: 'Purchase requests cancelled', count: prs.modifiedCount },
+            { label: 'RFQs cancelled', count: rfqs.modifiedCount },
             { label: 'Purchase orders rejected', count: pos.modifiedCount },
             { label: 'Delivery notes cancelled', count: dns.modifiedCount },
             { label: 'Invoices cancelled', count: invoices.modifiedCount },
@@ -1023,8 +1044,9 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
         if (existingJob.isDeleted) {
             return res.status(404).json({ success: false, message: 'Job not found' });
         }
-        if (existingJob.allocateStatus !== allocateStatus.OpenToWork) {
-            return res.status(409).json({ success: false, message: 'Procurement can only be transferred while the job is Open To Work' });
+        // Saving the first PR moves the job to Work In Progress; the PR status below decides if reassignment is still allowed.
+        if (existingJob.allocateStatus !== allocateStatus.OpenToWork && existingJob.allocateStatus !== allocateStatus.WorkInProgress) {
+            return res.status(409).json({ success: false, message: 'Procurement can only be transferred while the job is Open To Work or Work In Progress' });
         }
         if (existingJob.procurementPerson?.toString() === String(procurementPersonId)) {
             return res.status(400).json({ success: false, message: 'That employee is already the procurement person for this job' });
@@ -1034,14 +1056,16 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
             return res.status(400).json({ success: false, message: 'Selected employee cannot be assigned purchase work' });
         }
 
-        const existingPurchaseRequest = await PurchaseRequest.findOne({
+        // Reassignment is allowed only while the job's PRs are New or In Progress, before anything goes for approval.
+        const lockedPurchaseRequest = await PurchaseRequest.findOne({
             jobId: existingJob._id,
-            isDeleted: false
+            isDeleted: false,
+            status: { $nin: [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress] }
         });
-        if (existingPurchaseRequest) {
+        if (lockedPurchaseRequest) {
             return res.status(400).json({
                 success: false,
-                message: 'Cannot reassign procurement person: a purchase requisition has already been started for this job'
+                message: `Cannot reassign procurement person: purchase request ${lockedPurchaseRequest.purchaseNo} is already ${lockedPurchaseRequest.status}`
             });
         }
 
@@ -1063,6 +1087,12 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
                 message: 'Job not found'
             });
         }
+
+        // Open PRs follow the job to the new assignee.
+        await PurchaseRequest.updateMany(
+            { jobId: existingJob._id, isDeleted: false, status: { $in: [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress] } },
+            { $set: { procurementPerson: procurementPersonId, allocatedBy: employee._id, allocatedAt: new Date() } }
+        );
 
         const newProcurementId = procurementPersonId.toString();
         const previousProcurementId = existingJob.procurementPerson?.toString();
@@ -1516,9 +1546,9 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
                 id: `pr-created-${pr._id}`,
                 timestamp: pr.createdAt,
                 pipeline: 'purchaseRequest',
-                eventType: pr.status === 'Drafted' ? 'drafted' : 'created',
-                title: `Purchase Request ${pr.purchaseNo} ${pr.status === 'Drafted' ? 'Drafted' : 'Created'}`,
-                description: `Purchase Request ${pr.purchaseNo} was ${pr.status === 'Drafted' ? 'drafted' : 'created'}`,
+                eventType: 'created',
+                title: `Purchase Request ${pr.purchaseNo} Created`,
+                description: `Purchase Request ${pr.purchaseNo} was created`,
                 performedBy: pr.createdBy ? {
                     _id: (pr.createdBy as any)._id,
                     firstName: (pr.createdBy as any).firstName,
@@ -1528,10 +1558,10 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
                     prNo: pr.purchaseNo,
                     status: pr.status
                 },
-                status: pr.status === 'Drafted' ? 'info' : 'info'
+                status: 'info'
             });
 
-            if (pr.status !== 'Drafted' && pr.approvalStatus && pr.approvalStatus.length > 0) {
+            if (pr.status !== 'New' && pr.approvalStatus && pr.approvalStatus.length > 0) {
                 timeline.push({
                     id: `pr-sent-approval-${pr._id}`,
                     timestamp: pr.createdAt,
