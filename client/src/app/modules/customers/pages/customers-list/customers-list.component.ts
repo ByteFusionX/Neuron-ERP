@@ -250,6 +250,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         next: (data: getFilteredCustomer) => {
           this.rows = data ? [...data.customers] : [];
           this.total = data ? data.total : 0;
+          this.viewCounts = data?.viewCounts ?? {};
           this.details.clear();
           this.refreshViewCounts();
           this.isLoading = false;
@@ -300,8 +301,13 @@ export class CustomersListComponent implements OnInit, OnDestroy {
   }
 
   /** Only the active tab has a known total (rows are server-paged), so the others show no badge. */
+  private viewCounts: Record<string, number> = {};
+
   private refreshViewCounts() {
-    this.views = this.views.map((v) => ({ ...v, count: v.id === this.activeViewId ? this.total : undefined, hideCount: v.id !== this.activeViewId }));
+    this.views = this.views.map((v) => {
+      const count = v.id === this.activeViewId ? this.total : this.viewCounts[v.id];
+      return { ...v, count, hideCount: count === undefined };
+    });
   }
 
   // --- Detail panel -------------------------------------------------------------

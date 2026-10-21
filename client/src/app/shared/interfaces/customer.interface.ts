@@ -81,6 +81,7 @@ export interface getCustomer {
 export interface getFilteredCustomer {
     total:number,
     customers:getCustomer[]
+    viewCounts?: Record<string, number>
 }
 
 export interface getCustomerByID {

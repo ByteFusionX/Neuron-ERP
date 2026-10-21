@@ -420,7 +420,12 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
 
 
         if (!customerData || !total) return res.status(204).json({ err: 'No enquiry data found' })
-        return res.status(200).json({ total: total, customers: customerData })
+        const baseView = { isDeleted: { $ne: true } };
+        const [vAll, vMine] = await Promise.all([
+            Customer.countDocuments({ $and: [baseView, accessFilter] }),
+            ObjectId.isValid(userId) ? Customer.countDocuments({ $and: [baseView, accessFilter, { createdBy: new ObjectId(userId) }] }) : Promise.resolve(0),
+        ]);
+        return res.status(200).json({ total: total, customers: customerData, viewCounts: { all: vAll, mine: vMine } })
 
     } catch (error) {
         console.log(error)
