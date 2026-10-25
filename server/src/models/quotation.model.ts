@@ -138,6 +138,10 @@ interface Deal {
     paymentTerms: string;
     additionalCosts: AdditionalCost[];
     savedDate: Date;
+    approvedDate?: Date;
+    revokedDate?: Date;
+    revokeResubmittedDate?: Date;
+    reapprovedDate?: Date;
     seenByApprover: boolean;
     status: string;
     approvedBy: Types.ObjectId;
@@ -406,6 +410,12 @@ const dealDatas = new Schema<Deal>({
         type: Date,
         required: false,
     },
+    // First approval; never changes once set.
+    approvedDate: { type: Date, required: false },
+    // Latest revoke cycle: overwritten each time the deal is revoked, resubmitted or approved again.
+    revokedDate: { type: Date, required: false },
+    revokeResubmittedDate: { type: Date, required: false },
+    reapprovedDate: { type: Date, required: false },
     attachments: [],
     totalDiscount: {
         type: Number

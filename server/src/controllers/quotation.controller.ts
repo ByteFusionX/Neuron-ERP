@@ -2432,7 +2432,12 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
                 dealId: dealId,
                 paymentTerms,
                 additionalCosts: costs,
-                savedDate: createdDate,
+                // The first created/approved dates stay; only the revoke cycle dates move.
+                savedDate: quote.dealData?.savedDate ?? createdDate,
+                approvedDate: quote.dealData?.approvedDate,
+                revokedDate: quote.dealData?.revokedDate,
+                reapprovedDate: quote.dealData?.reapprovedDate,
+                revokeResubmittedDate: quote.dealData?.revokedDate ? createdDate : quote.dealData?.revokeResubmittedDate,
                 status: 'pending',
                 attachments: files,
                 updatedItems: items,
@@ -2650,7 +2655,7 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
             const quoteUpdate = await Quotation.updateOne(
                 { _id: jobData.quoteId },
                 {
-                    $set: { 'dealData.status': 'approved', 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(String(approverData?._id ?? req.body.userId)), ...(workflowStatus ? { 'dealData.approvalStatus': workflowStatus } : {}) },
+                    $set: { 'dealData.status': 'approved', ...(quote.dealData?.approvedDate ? { 'dealData.reapprovedDate': new Date() } : { 'dealData.approvedDate': new Date() }), 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(String(approverData?._id ?? req.body.userId)), ...(workflowStatus ? { 'dealData.approvalStatus': workflowStatus } : {}) },
                     $push: { editHistory: { editedBy: approverData?._id ?? req.body.userId, editedAt: new Date(), action: 'DealApproved', reason: String(req.body.comment ?? '').trim() || undefined } }
                 }
             )
@@ -2825,6 +2830,14 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
             return res.status(409).json({ message: 'Deal cannot be revoked once the job has started allocation (Open to Work or later)' });
         }
 
+        // Deals approved before approvedDate existed: recover the first approval from history so it isn't lost.
+        if (!deal.dealData.approvedDate) {
+            const firstApproval = (deal.editHistory || []).find((h: any) => h.action === 'DealApproved');
+            deal.dealData.approvedDate = firstApproval?.editedAt;
+        }
+        deal.dealData.revokedDate = new Date();
+        deal.dealData.revokeResubmittedDate = undefined;
+        deal.dealData.reapprovedDate = undefined;
         deal.dealData.status = 'pending';
         deal.dealData.seenByApprover = false;
         // A revoked deal goes through the Deal Sheet workflow again (deals raised before the workflow existed stay as they were).

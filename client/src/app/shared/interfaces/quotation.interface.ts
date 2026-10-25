@@ -320,6 +320,12 @@ export interface dealData {
         type: string; name: string, value: number, supplierId?: string, supplierDetails?: any
     }[];
     savedDate: string;
+    /** First approval; never changes after a revoke/resubmit. */
+    approvedDate?: string;
+    /** Latest revoke cycle, tracked separately from the first dates. */
+    revokedDate?: string;
+    revokeResubmittedDate?: string;
+    reapprovedDate?: string;
     seenByApprover: boolean;
     status: string;
     approvedBy?: any;
