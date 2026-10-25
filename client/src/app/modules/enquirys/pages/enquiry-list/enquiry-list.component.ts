@@ -414,7 +414,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private buildRowActions(): void {
     const actions: (DataGridRowAction<getEnquiry> & { hidden: (row: getEnquiry) => boolean })[] = [
-      { id: 'edit', label: 'Edit', icon: 'edit', hidden: (row) => !this.isCreator(row) || !['new', 'in progress', 'work in progress'].includes(String(row.status || '').toLowerCase()) },
+      { id: 'edit', label: 'Edit', icon: 'edit', hidden: (row) => !this.isCreator(row) || !['new', 'in progress', 'work in progress', 'rejected'].includes(String(row.status || '').toLowerCase()) },
       { id: 'followUp', label: 'Follow-ups', icon: 'chat', hidden: (row) => ['Quoted', 'Lost', 'quoted', 'lost'].includes(row.status) || !this.isCreator(row) },
       { id: 'estimations', label: 'View Estimations', icon: 'eye', quick: true, hidden: (row) => !this.canViewEstimations(row) },
       { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', hidden: (row) => (!row.preSale?.presalePerson && row.status !== 'Sent to Presales') || !!row.preSale?.estimations },
