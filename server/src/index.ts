@@ -8,6 +8,7 @@ import mongoose from 'mongoose';
 import http from 'http';
 import { Server } from 'socket.io';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import router from './routes/user.router';
 import depRouter from './routes/department.router';
 import empRouter from './routes/employee.router';
@@ -92,6 +93,17 @@ export const io = new Server(server, {
 global.io = io;
 app.set('io', io);
 
+app.use(compression());
+// Server-side time per request, visible in the browser Network tab to tell API time from transfer time.
+app.use((_req, res, next) => {
+    const start = process.hrtime.bigint();
+    const originalWriteHead = res.writeHead;
+    res.writeHead = function (this: typeof res, ...args: any[]) {
+        if (!res.headersSent) res.setHeader('X-Response-Time', `${Number(process.hrtime.bigint() - start) / 1e6}ms`);
+        return originalWriteHead.apply(this, args as any);
+    } as typeof res.writeHead;
+    next();
+});
 app.use(morgan("dev"));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
