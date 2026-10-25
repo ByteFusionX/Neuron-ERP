@@ -1,0 +1,34 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.vendor-bill-meta {
+  min-width: 0;
+  padding: 0.625rem 0.75rem;
+}
+
+.vendor-bill-meta-label {
+  margin: 0 0 0.125rem;
+  color: #64748b;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.vendor-bill-meta-value {
+  margin: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:host-context(.dark) .vendor-bill-meta-label {
+  color: #94a3b8;
+}
+
+:host-context(.dark) .vendor-bill-meta-value {
+  color: #e2e8f0;
+}

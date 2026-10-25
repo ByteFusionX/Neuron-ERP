@@ -1,0 +1,57 @@
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-data-grid
+    #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Vendor Bills"
+    subtitle="Approved supplier commitments visible early for payment preparation"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [serverSide]="true"
+    [totalCount]="total"
+    [data]="rows"
+    [columns]="columns"
+    [loading]="isLoading"
+    [pageSize]="pageSize"
+    searchPlaceholder="Search by PO, supplier, customer, or job"
+    emptyMessage="No approved purchase orders are waiting for finance"
+    [views]="views"
+    storageKey="finance-vendor-bills"
+    [detailTabs]="detailTabs"
+    [detailTitle]="title"
+    [detailSubtitle]="subtitle"
+    [rowActions]="rowActions"
+    (rowAction)="onRowAction($event)"
+    exportable
+    exportFileName="vendor-bills.xlsx"
+    (queryChange)="onQueryChange($event)">
+
+    <ng-template #detailMetaTemplate let-row>
+      <div class="vendor-bill-meta">
+        <p class="vendor-bill-meta-label">Supplier</p>
+        <p class="vendor-bill-meta-value">{{ row.supplierId?.supplierName || '-' }}</p>
+      </div>
+      <div class="vendor-bill-meta">
+        <p class="vendor-bill-meta-label">PO Value</p>
+        <p class="vendor-bill-meta-value">{{ amount(row) }}</p>
+      </div>
+      <div class="vendor-bill-meta">
+        <p class="vendor-bill-meta-label">Receipt</p>
+        <p class="vendor-bill-meta-value">{{ row.receiptStatus || 'Not Received' }}</p>
+      </div>
+      <div class="vendor-bill-meta">
+        <p class="vendor-bill-meta-label">Payment Terms</p>
+        <p class="vendor-bill-meta-value">{{ row.paymentTerms || '-' }}</p>
+      </div>
+    </ng-template>
+
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <app-detail-overview *ngSwitchCase="'overview'" [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+        <app-detail-table *ngSwitchCase="'items'" title="Ordered items" [columns]="itemColumns" [rows]="itemRows(row)" [currency]="row.currency || 'QAR'" showTotals></app-detail-table>
+        <app-detail-documents *ngSwitchCase="'documents'" title="PO & GRN documents" emptyMessage="No PO or GRN documents yet."
+          [documents]="documents(row)" [downloadable]="false" (open)="openDocument(row, $event)"></app-detail-documents>
+      </ng-container>
+    </ng-template>
+  </app-data-grid>
+</div>
