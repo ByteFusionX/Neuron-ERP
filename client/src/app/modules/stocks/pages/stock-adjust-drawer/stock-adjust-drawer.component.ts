@@ -7,6 +7,9 @@ import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form'
 import { ProductService } from 'src/app/core/services/product/product.service';
 import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.service';
 import { StockAvailability, StockService } from 'src/app/core/services/stock/stock.service';
+import { ModalService } from 'src/app/shared/components/modal';
+import { QuickAddDialogComponent, QuickAddDialogData } from 'src/app/modules/products/modals/quick-add-dialog/quick-add-dialog.component';
+import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 
 const ADD_REASONS = ['Opening stock', 'Count correction', 'Found', 'Other'];
 const REMOVE_REASONS = ['Count correction', 'Damaged', 'Lost / missing', 'Other'];
@@ -19,7 +22,7 @@ const REMOVE_REASONS = ['Count correction', 'Damaged', 'Lost / missing', 'Other'
   selector: 'app-stock-adjust-drawer',
   standalone: true,
   templateUrl: './stock-adjust-drawer.component.html',
-  imports: [NgIf, ReactiveFormsModule, SmartFormModule, ActionButtonComponent],
+  imports: [NgIf, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ProductFormDrawerComponent],
 })
 export class StockAdjustDrawerComponent implements OnInit, OnChanges {
   @Input() open = false;
@@ -29,8 +32,10 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
   @Output() closed = new EventEmitter<void>();
 
   saving = false;
+  createProductOpen = false;
   productOptions: SfOption[] = [];
   warehouseOptions: SfOption[] = [];
+  private productWarehouse: Record<string, string> = {};
   readonly directionOptions: SfOption[] = [
     { label: 'Add stock', value: 'add' },
     { label: 'Remove stock', value: 'remove' },
@@ -42,6 +47,7 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
   private stockService = inject(StockService);
   private productService = inject(ProductService);
   private warehouseService = inject(WarehouseService);
+  private modal = inject(ModalService);
 
   form = this.fb.group({
     product: ['', Validators.required],
@@ -67,13 +73,14 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
   ngOnInit(): void {
     this.productService.getProducts({ page: 1, row: 1000 }).subscribe({
       next: (res) => {
+        (res.data?.products ?? []).forEach((p: any) => this.rememberWarehouse(p));
         this.productOptions = (res.data?.products ?? []).map((p: any) => ({ label: `${p.partNo || p.itemCode} - ${p.productDescription || p.productName || ''}`, value: p._id }));
       },
       error: () => this.toast.error('Failed to load products'),
     });
     this.warehouseService.getWarehouses().subscribe({
       next: (warehouses) => {
-        this.warehouseOptions = (warehouses ?? []).map((w) => ({ label: w.wareHouseName, value: w._id as string }));
+        this.warehouseOptions = (warehouses ?? []).filter((w: any) => w.isActive !== false).map((w) => ({ label: w.wareHouseName, value: w._id as string }));
         if (this.warehouseOptions.length === 1 && !this.form.controls.warehouse.value) this.form.controls.warehouse.setValue(this.warehouseOptions[0].value);
       },
       error: () => this.toast.error('Failed to load warehouses'),
@@ -87,13 +94,43 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
       remarks.setValidators(this.isOther ? [Validators.required] : []);
       remarks.updateValueAndValidity({ emitEvent: false });
     });
-    this.form.controls.product.valueChanges.subscribe((id) => this.loadCurrent(id));
+    this.form.controls.product.valueChanges.subscribe((id) => {
+      this.loadCurrent(id);
+      // default the warehouse to the one set on the product in Master Data
+      const wh = id ? this.productWarehouse[id] : '';
+      if (wh && this.warehouseOptions.some((o) => o.value === wh)) this.form.controls.warehouse.setValue(wh);
+    });
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!changes['open'] || !this.open) return;
     this.reset();
     if (this.productId) this.form.controls.product.setValue(this.productId);
+  }
+
+  /** A product created here is added to the list and selected. */
+  onProductCreated(product: any): void {
+    if (!product?._id) return;
+    const label = `${product.partNo || product.itemCode} - ${product.productDescription || product.productName || ''}`;
+    this.rememberWarehouse(product);
+    this.productOptions = [{ label, value: product._id }, ...this.productOptions.filter((o) => o.value !== product._id)];
+    this.form.controls.product.setValue(product._id);
+    this.form.controls.product.markAsDirty();
+  }
+
+  /** Quick-add a warehouse (same dialog as the product form) and select it. */
+  createWarehouse(): void {
+    const data: QuickAddDialogData = {
+      title: 'Warehouse',
+      create: (name) => this.warehouseService.createWarehouse({ wareHouseName: name, createdDate: new Date() } as any),
+    };
+    this.modal.open<any, QuickAddDialogData>(QuickAddDialogComponent, { width: '480px', data }).afterClosed().subscribe((warehouse) => {
+      if (!warehouse) return;
+      this.toast.success('Warehouse created successfully');
+      this.warehouseOptions = [...this.warehouseOptions, { label: warehouse.wareHouseName, value: warehouse._id }];
+      this.form.controls.warehouse.setValue(warehouse._id);
+      this.form.controls.warehouse.markAsDirty();
+    });
   }
 
   onDrawerClosed(discarded: boolean): void {
@@ -129,6 +166,11 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
         this.toast.error(err?.error?.message || 'Could not adjust the stock.');
       },
     });
+  }
+
+  private rememberWarehouse(p: any): void {
+    const wh = p?.warehouse?._id ?? p?.warehouse;
+    if (p?._id && wh) this.productWarehouse[p._id] = wh;
   }
 
   private reset(): void {

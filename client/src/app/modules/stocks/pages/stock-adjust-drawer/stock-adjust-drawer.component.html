@@ -10,7 +10,8 @@
                 On hand <strong>{{ current.onHand }}</strong> · Reserved <strong>{{ current.reserved }}</strong> · Available <strong>{{ current.available }}</strong>
             </p>
             <app-sf-field label="Warehouse" [control]="form.controls.warehouse">
-                <app-sf-select formControlName="warehouse" [options]="warehouseOptions" placeholder="Select warehouse"></app-sf-select>
+                <app-sf-combobox formControlName="warehouse" [options]="warehouseOptions" placeholder="Select warehouse"
+                    footerLabel="Add warehouse" (footerAction)="createWarehouse()"></app-sf-combobox>
             </app-sf-field>
         </app-sf-section>
 
@@ -36,9 +37,14 @@
     </form>
 
     <ng-container sfDrawerFooter>
+        <span class="mr-auto">
+            <app-action-button variant="secondary" (click)="createProductOpen = true">+ Add product</app-action-button>
+        </span>
         <app-action-button variant="secondary" (click)="onDrawerClosed(false)">Cancel</app-action-button>
         <app-action-button variant="primary" type="submit" form="stock-adjust-form" [disabled]="saving">
             {{ saving ? 'Saving…' : 'Post adjustment' }}
         </app-action-button>
     </ng-container>
 </app-sf-drawer>
+
+<app-product-form-drawer [open]="createProductOpen" mode="create" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>

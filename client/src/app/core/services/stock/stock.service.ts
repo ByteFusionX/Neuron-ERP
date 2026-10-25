@@ -133,6 +133,7 @@ export interface StockReturnPayload {
   reason: string;
   remarks?: string;
   toQuarantine?: boolean;
+  resolution?: 'Replacement' | 'Credit Note';
   lines: { product: string; quantity: number }[];
 }
 
@@ -200,6 +201,10 @@ export class StockService {
 
   createReturn(payload: StockReturnPayload): Observable<{ success: boolean; message: string }> {
     return this.http.post<{ success: boolean; message: string }>(`${this.api}/returns`, payload, { context: context() });
+  }
+
+  resolveSupplierReturn(grnId: string): Observable<{ success: boolean; message: string }> {
+    return this.http.patch<{ success: boolean; message: string }>(`${this.api}/returns/supplier/${grnId}/resolve`, {}, { context: context() });
   }
 
   getReservations(product?: string): Observable<{ success: boolean; data: StockReservationRow[] }> {

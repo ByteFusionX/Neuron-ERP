@@ -35,6 +35,10 @@ export class StockReturnDrawerComponent implements OnChanges {
     { label: 'Good - back into stock', value: 'good' },
     { label: 'Needs inspection - quarantine', value: 'quarantine' },
   ];
+  readonly resolutionOptions: SfOption[] = [
+    { label: 'Replacement', value: 'Replacement' },
+    { label: 'Credit Note', value: 'Credit Note' },
+  ];
 
   private fb = inject(FormBuilder);
   private toast = inject(ToastrService);
@@ -44,6 +48,7 @@ export class StockReturnDrawerComponent implements OnChanges {
     quantities: this.fb.array([] as FormControl<number | null>[]),
     reason: ['', Validators.required],
     condition: ['good'],
+    resolution: [''],
     remarks: [''],
   });
 
@@ -58,7 +63,7 @@ export class StockReturnDrawerComponent implements OnChanges {
   get subtitle(): string {
     return this.isCustomer
       ? `Goods coming back against delivery note ${this.number}`
-      : `Accepted goods going back to the supplier against GRN ${this.number}`;
+      : `Rejected goods leaving quarantine against GRN ${this.number}`;
   }
 
   get reasonOptions(): SfOption[] {
@@ -80,6 +85,9 @@ export class StockReturnDrawerComponent implements OnChanges {
         this.number = res.data.number;
         this.lines = res.data.lines;
         this.lines.forEach((line) => this.quantities.push(new FormControl<number | null>(null, [Validators.min(0), Validators.max(line.maxQuantity)])));
+        if (!this.isCustomer) this.form.controls.resolution.setValidators(Validators.required);
+        else this.form.controls.resolution.clearValidators();
+        this.form.controls.resolution.updateValueAndValidity({ emitEvent: false });
         if (!this.lines.length) this.toast.info('Nothing is left to return on this document.');
       },
       error: (err) => {
@@ -109,6 +117,7 @@ export class StockReturnDrawerComponent implements OnChanges {
       reason: v.reason as string,
       remarks: v.remarks?.trim() || undefined,
       toQuarantine: this.isCustomer && v.condition === 'quarantine',
+      resolution: this.isCustomer ? undefined : v.resolution as 'Replacement' | 'Credit Note',
       lines: this.lines
         .map((line, i) => ({ product: line.product, quantity: Number(this.quantities.at(i).value) || 0 }))
         .filter((line) => line.quantity > 0),
@@ -131,6 +140,6 @@ export class StockReturnDrawerComponent implements OnChanges {
     this.lines = [];
     this.number = '';
     this.quantities.clear();
-    this.form.reset({ reason: '', condition: 'good', remarks: '' });
+    this.form.reset({ reason: '', condition: 'good', resolution: '', remarks: '' });
   }
 }

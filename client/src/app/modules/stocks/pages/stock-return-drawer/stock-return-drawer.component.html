@@ -2,7 +2,7 @@
 
     <form id="stock-return-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
         <app-sf-section title="Items to return" columns="1"
-            [description]="isCustomer ? 'Enter how many of each item the customer is sending back.' : 'Enter how many of each accepted item you are sending back.'">
+            [description]="isCustomer ? 'Enter how many of each item the customer is sending back.' : 'Enter how many rejected items you are sending back from quarantine.'">
             <p *ngIf="loading" class="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
             <p *ngIf="!loading && !lines.length" class="text-sm text-gray-500 dark:text-gray-400">Nothing is left to return on this document.</p>
 
@@ -25,6 +25,9 @@
             </app-sf-field>
             <app-sf-field *ngIf="isCustomer" label="Condition of returned goods" [control]="form.controls.condition">
                 <app-sf-select formControlName="condition" [options]="conditionOptions"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field *ngIf="!isCustomer" label="Resolution" [control]="form.controls.resolution">
+                <app-sf-select formControlName="resolution" [options]="resolutionOptions" placeholder="Replacement or credit note"></app-sf-select>
             </app-sf-field>
             <app-sf-field label="Remarks" optional [control]="form.controls.remarks">
                 <app-sf-textarea formControlName="remarks" [rows]="3" placeholder="Anything the team should know"></app-sf-textarea>

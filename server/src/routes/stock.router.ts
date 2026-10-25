@@ -7,6 +7,7 @@ import {
     releaseQuarantine,
     getReturnSource,
     createStockReturn,
+    resolveSupplierReturn,
     getStockReservations,
     releaseStockReservation
 } from "../controllers/stock.controller";
@@ -26,6 +27,7 @@ stockRouter.get('/returns/:kind/:id', getReturnSource);
 stockRouter.post('/adjust', adjustStock);
 stockRouter.post('/quarantine', releaseQuarantine);
 stockRouter.post('/returns', createStockReturn);
+stockRouter.patch('/returns/supplier/:id/resolve', resolveSupplierReturn);
 stockRouter.patch('/reservations/:id/release', releaseStockReservation);
 
 export default stockRouter;

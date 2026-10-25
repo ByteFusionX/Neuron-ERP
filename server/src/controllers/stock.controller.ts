@@ -299,7 +299,13 @@ const loadReturnSource = async (kind: ReturnKind, sourceId: string) => {
     const sourceType = isCustomer ? 'DeliveryNote' : 'GRN';
     const returnType = isCustomer ? 'DN Return' : 'GRN Return';
     const [moved, returned, rejected] = await Promise.all([
-        StockMovement.find({ ...notDeleted, referenceType: sourceType, referenceId: asObjectId(sourceId), movementType: isCustomer ? 'Delivery' : 'Receipt', stockStatus: 'Available' }).lean(),
+        StockMovement.find({
+            ...notDeleted,
+            referenceType: sourceType,
+            referenceId: asObjectId(sourceId),
+            movementType: isCustomer ? 'Delivery' : 'Quarantine',
+            stockStatus: isCustomer ? 'Available' : 'Quarantine'
+        }).lean(),
         StockMovement.find({ ...notDeleted, referenceType: returnType, referenceId: asObjectId(sourceId) }).lean(),
         isCustomer ? StockMovement.find({ ...notDeleted, referenceType: 'DnRejection', referenceId: asObjectId(sourceId) }).lean() : Promise.resolve([] as any[]),
     ]);
@@ -347,11 +353,12 @@ export const getReturnSource = async (req: Request, res: Response, next: NextFun
  */
 export const createStockReturn = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { kind, sourceId, lines, reason, remarks, toQuarantine } = req.body || {};
+        const { kind, sourceId, lines, reason, remarks, toQuarantine, resolution } = req.body || {};
         const employee = await getEmployeeData((req as any).user);
         if (!employee) return res.status(401).json({ success: false, message: 'Unauthorized' });
         if (kind !== 'customer' && kind !== 'supplier') throw new StockError('Unknown return type', 400);
         if (!String(reason || '').trim()) throw new StockError('A reason is required', 400);
+        if (kind === 'supplier' && !['Replacement', 'Credit Note'].includes(resolution)) throw new StockError('Choose Replacement or Credit Note', 400);
         const requested = (Array.isArray(lines) ? lines : []).filter((l: any) => Number(l.quantity) > 0);
         if (!requested.length) throw new StockError('Enter a quantity for at least one item', 400);
 
@@ -376,7 +383,7 @@ export const createStockReturn = async (req: Request, res: Response, next: NextF
         // A supplier return needs the goods still in stock: check every line before posting any of them.
         if (!isCustomer) {
             for (const step of plan) {
-                const balance = await balanceOf(step.product, step.warehouse, 'Available');
+                const balance = await balanceOf(step.product, step.warehouse, 'Quarantine');
                 if (step.quantity > balance) throw new StockError('Not enough stock left in the warehouse to send this back', 409);
             }
         }
@@ -387,7 +394,7 @@ export const createStockReturn = async (req: Request, res: Response, next: NextF
                 type: 'Return',
                 direction: isCustomer ? 'in' : 'out',
                 quantity: step.quantity,
-                bucket: isCustomer && toQuarantine ? 'Quarantine' : 'Available',
+                bucket: isCustomer ? (toQuarantine ? 'Quarantine' : 'Available') : 'Quarantine',
                 unitCost: costs.get(step.product)?.unitCost,
                 referenceType: source.returnType,
                 referenceId: sourceId,
@@ -397,7 +404,34 @@ export const createStockReturn = async (req: Request, res: Response, next: NextF
                 createdBy: employee._id,
             });
         }
+        if (!isCustomer) {
+            await GRN.findByIdAndUpdate(sourceId, {
+                $set: {
+                    outcomeStatus: 'Return in Progress',
+                    invoiceStatus: 'Blocked by Return',
+                    returnResolution: resolution,
+                    returnDispatchedAt: new Date(),
+                }
+            });
+        }
         return res.status(201).json({ success: true, message: isCustomer ? 'Customer return recorded' : 'Supplier return recorded' });
+    } catch (error) {
+        return fail(res, next, error);
+    }
+};
+
+export const resolveSupplierReturn = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const employee = await getEmployeeData((req as any).user);
+        if (!employee) return res.status(401).json({ success: false, message: 'Unauthorized' });
+        if (!ObjectId.isValid(req.params.id)) throw new StockError('Invalid GRN', 400);
+        const grn = await GRN.findOneAndUpdate(
+            { _id: req.params.id, ...notDeleted, outcomeStatus: 'Return in Progress' },
+            { $set: { outcomeStatus: 'Resolved', invoiceStatus: 'Ready for Invoice', returnResolvedAt: new Date(), returnResolvedBy: employee._id } },
+            { new: true }
+        );
+        if (!grn) throw new StockError('No return in progress for this GRN', 409);
+        return res.status(200).json({ success: true, message: 'Supplier return resolved; invoice is ready' });
     } catch (error) {
         return fail(res, next, error);
     }
