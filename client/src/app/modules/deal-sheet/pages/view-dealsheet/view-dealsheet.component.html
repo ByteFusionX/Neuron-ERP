@@ -5,7 +5,7 @@
         [empty]="!data"
         emptyTitle="Deal sheet not found"
         emptyMessage="Please open the deal sheet again from the list."
-        [emptyLink]="[returnUrl]"
+        [emptyLink]="[returnPath]"
         emptyLinkLabel="Back to deal sheets"
         [breadcrumbs]="breadcrumbs"
         [avatarText]="headerAvatarText"
@@ -64,6 +64,18 @@
                         <app-detail-field label="Deal ID" stacked>{{ data.quoteData.dealData.dealId || 'N/A' }}</app-detail-field>
                         <app-detail-field label="Quote ID" stacked>{{ data.quoteData.quoteId || 'N/A' }}</app-detail-field>
                         <app-detail-field label="Date" stacked>{{ data.quoteData.dealData.savedDate | date: 'dd MMM yyyy' }}</app-detail-field>
+                        @if (data.quoteData.dealData.approvedDate) {
+                            <app-detail-field label="Approved" stacked>{{ data.quoteData.dealData.approvedDate | date: 'dd MMM yyyy' }}</app-detail-field>
+                        }
+                        @if (data.quoteData.dealData.revokedDate) {
+                            <app-detail-field label="Revoked" stacked>{{ data.quoteData.dealData.revokedDate | date: 'dd MMM yyyy' }}</app-detail-field>
+                        }
+                        @if (data.quoteData.dealData.revokeResubmittedDate) {
+                            <app-detail-field label="Resubmitted After Revoke" stacked>{{ data.quoteData.dealData.revokeResubmittedDate | date: 'dd MMM yyyy' }}</app-detail-field>
+                        }
+                        @if (data.quoteData.dealData.reapprovedDate) {
+                            <app-detail-field label="Re-approved" stacked>{{ data.quoteData.dealData.reapprovedDate | date: 'dd MMM yyyy' }}</app-detail-field>
+                        }
                         <app-detail-field label="Sales Person" stacked>{{ salesPersonName }}</app-detail-field>
                         <app-detail-field label="Payment Terms" stacked>{{ data.quoteData.dealData.paymentTerms || 'N/A' }}</app-detail-field>
                     </div>

@@ -96,6 +96,8 @@ export class ViewDealsheetComponent implements OnInit {
 
   data!: ViewDealsheetNavState;
   returnUrl: string = '/deal-sheet/pendings';
+  /** returnUrl may carry a query string, which router link arrays would encode into the path. */
+  get returnPath(): string { return this.returnUrl.split('?')[0]; }
   tab: 'overview' | 'items' | 'costs' | 'documents' = 'overview';
   tabs: DetailViewTab[] = [
     { id: 'overview', label: 'Overview' },
@@ -159,7 +161,7 @@ export class ViewDealsheetComponent implements OnInit {
     // Opened by URL (bookmark, shared link, reload in a new tab): there is no list row to reuse, so fetch the deal.
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) {
-      this.router.navigate([this.returnUrl]);
+      this.router.navigateByUrl(this.returnUrl);
       return;
     }
     this._employeeService.employeeData$
@@ -177,7 +179,7 @@ export class ViewDealsheetComponent implements OnInit {
         next: (quote) => {
           if (!quote?.dealData) {
             this.toast.error('This quotation has no deal sheet yet.');
-            this.router.navigate([this.returnUrl]);
+            this.router.navigateByUrl(this.returnUrl);
             return;
           }
           const listByStatus: Record<string, string> = {
@@ -204,7 +206,7 @@ export class ViewDealsheetComponent implements OnInit {
               ? 'Deal sheet not found.'
               : 'Could not load the deal sheet. Please try again.',
           );
-          this.router.navigate([this.returnUrl]);
+          this.router.navigateByUrl(this.returnUrl);
         },
       });
   }
@@ -331,7 +333,7 @@ export class ViewDealsheetComponent implements OnInit {
   }
 
   onClose() {
-    this.router.navigate([this.returnUrl]);
+    this.router.navigateByUrl(this.returnUrl);
   }
 
   openAttachments(): void {
@@ -364,7 +366,7 @@ export class ViewDealsheetComponent implements OnInit {
       next: () => {
         this.updateOpen = false;
         this.toast.success('Deal sheet updated');
-        this.router.navigate([this.returnUrl]);
+        this.router.navigateByUrl(this.returnUrl);
       },
       error: (error) => {
         console.error('Error saving deal sheet:', error);
@@ -404,7 +406,7 @@ export class ViewDealsheetComponent implements OnInit {
     const currency = q.currency ? ` ${q.currency}` : '';
     this.breadcrumbs = [
       { label: 'Home', link: ['/home'] },
-      { label: 'Deal Sheets', link: [this.returnUrl] },
+      { label: 'Deal Sheets', link: [this.returnPath] },
       { label: d.dealId || 'Deal Sheet' },
     ];
     this.badges = [
@@ -663,7 +665,7 @@ export class ViewDealsheetComponent implements OnInit {
               this.isApproving = false;
               if (res.success) {
                 this.toast.success(res.awaitingNextApproval ? (res.message || 'Approved at your stage') : 'Deal approved');
-                this.router.navigate([this.returnUrl]);
+                this.router.navigateByUrl(this.returnUrl);
               }
             },
             error: (error) => {
@@ -686,7 +688,7 @@ export class ViewDealsheetComponent implements OnInit {
             next: () => {
               this.isRejecting = false;
               this.toast.success('Deal rejected');
-              this.router.navigate([this.returnUrl]);
+              this.router.navigateByUrl(this.returnUrl);
             },
             error: (error) => {
               this.isRejecting = false;
