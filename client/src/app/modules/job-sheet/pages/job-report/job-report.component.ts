@@ -105,6 +105,7 @@ const STAGE_LABELS: Record<allocateStatus, string> = {
   [allocateStatus.WorkInProgress]: 'In Progress',
   [allocateStatus.Completed]: 'Completed',
   [allocateStatus.Lost]: 'Lost',
+  [allocateStatus.OnHold]: 'On Hold',
 };
 
 /**

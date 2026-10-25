@@ -1,6 +1,7 @@
 import { HttpEventType } from '@angular/common/http';
 import { AsyncPipe, DatePipe, DecimalPipe, NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { Component, ViewChild, inject } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, Router } from '@angular/router';
 import { BehaviorSubject, Observable, Subscription, firstValueFrom, switchMap, take } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
@@ -31,7 +32,9 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 
-import { allocateStatus, filterJob, getJob, JobTable } from 'src/app/shared/interfaces/job.interface';
+import { STATUS_TONE_CLASSES, StatusTone } from 'src/app/shared/components/status-indicator/status-tone';
+import { StatusChangeModalComponent, StatusChangeResult } from 'src/app/shared/components/status-change-modal/status-change-modal.component';
+import { allocateStatus, filterJob, getJob, JobStatus, JobTable } from 'src/app/shared/interfaces/job.interface';
 import { JobWorkflowTimeline, TimelineEvent } from 'src/app/shared/interfaces/job-history.interface';
 import { environment } from 'src/environments/environment';
 
@@ -40,9 +43,26 @@ const ALLOCATE_STATUS_LABELS: Record<string, string> = {
   [allocateStatus.OpenToWork]: 'Open To Work',
   [allocateStatus.WorkInProgress]: 'In Progress',
   [allocateStatus.Completed]: 'Completed',
+  [allocateStatus.OnHold]: 'On Hold',
   [allocateStatus.Lost]: 'Lost',
 };
-const allocateStatusLabel = (v: unknown): string => ALLOCATE_STATUS_LABELS[String(v)] ?? (v ? String(v) : '—');
+const JOB_STATUS_TONES: Record<string, StatusTone> = {
+  [JobStatus.WorkInProgress]: 'progress',
+  [JobStatus.Delivered]: 'info',
+  [JobStatus.partiallyDelivered]: 'warning',
+  [JobStatus.partiallyInvoiced]: 'warning',
+  [JobStatus.invoiced]: 'info',
+  [JobStatus.completed]: 'success',
+  [JobStatus.onHold]: 'warning',
+  [JobStatus.cancelled]: 'danger',
+};
+/** Statuses a user can set by hand; the server maps each to the list tab it moves the job into. */
+const JOB_STATUSES: readonly JobStatus[] = [
+  JobStatus.WorkInProgress, JobStatus.Delivered, JobStatus.partiallyDelivered, JobStatus.partiallyInvoiced, JobStatus.invoiced, JobStatus.completed, JobStatus.onHold,
+];
+/** Stored value stays 'Work In Progress'; only the wording on screen changes. */
+const jobStatusLabel = (v: unknown): string => (v === JobStatus.WorkInProgress ? 'In Progress' : v ? String(v) : '—');
+const allocateStatusLabel =(v: unknown): string => ALLOCATE_STATUS_LABELS[String(v)] ?? (v ? String(v) : '—');
 
 type WorkflowState = { status: 'loading' | 'ready' | 'error'; timeline: JobWorkflowTimeline | null };
 
@@ -72,6 +92,7 @@ export class JobListComponent {
     { id: 'open-to-work', label: 'Open To Work', filters: [{ id: 1, key: 'allocateStatus', op: 'eq', value: allocateStatus.OpenToWork }] },
     { id: 'in-progress', label: 'In Progress', filters: [{ id: 1, key: 'allocateStatus', op: 'eq', value: allocateStatus.WorkInProgress }] },
     { id: 'completed', label: 'Completed', filters: [{ id: 1, key: 'allocateStatus', op: 'eq', value: allocateStatus.Completed }] },
+    { id: 'on-hold', label: 'On Hold', filters: [{ id: 1, key: 'allocateStatus', op: 'eq', value: allocateStatus.OnHold }] },
     { id: 'lost', label: 'Lost', filters: [{ id: 1, key: 'allocateStatus', op: 'eq', value: allocateStatus.Lost }] },
   ];
   bulkActions: DataGridBulkAction[] = [];
@@ -96,6 +117,7 @@ export class JobListComponent {
     [allocateStatus.OpenToWork]: 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900 dark:border-sky-900',
     [allocateStatus.WorkInProgress]: 'bg-violet-50 text-violet-700 ring-violet-200 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900 dark:border-violet-900',
     [allocateStatus.Completed]: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
+    [allocateStatus.OnHold]: 'bg-orange-50 text-orange-700 ring-orange-200 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-900 dark:border-orange-900',
     [allocateStatus.Lost]: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
   };
 
@@ -104,6 +126,7 @@ export class JobListComponent {
   isSuperAdmin = false;
   canAllocateJobs = false;
   canTransferProcurementPerson = false;
+  canUpdateJobStatus = false;
 
   total = 0;
   totalLpoValue = 0;
@@ -121,6 +144,7 @@ export class JobListComponent {
   private confirm = inject(ConfirmDialogService);
   private auditLog = inject(AuditLogService);
   private modal = inject(ModalService);
+  private matDialog = inject(MatDialog);
   private subscriptions = new Subscription();
 
   constructor(
@@ -147,6 +171,7 @@ export class JobListComponent {
         const row = parseInt(params['row'], 10);
         this.row = PAGE_SIZES.includes(row) ? row : DEFAULT_PAGE_SIZE;
         this.searchQuery = params['search'] || '';
+        if (params['open']) this.pendingOpenJobId = params['open'];
         this.selectedEmployee = params['salesPerson'] || params['employee'] || null;
         this.scope = { customer: params['customer'] || null, department: params['department'] || null, fromDate: params['fromDate'] || null, toDate: params['toDate'] || null };
         this.activeViewId = this.views.some((v) => v.id === params['view']) ? params['view'] : 'all';
@@ -180,6 +205,8 @@ export class JobListComponent {
         this.isSuperAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
         this.canAllocateJobs = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.allocateJobs || false;
         this.canTransferProcurementPerson = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.transferProcurementPerson || false;
+        // The server lets everyone through unless the role explicitly sets statusUpdate to false; mirror that.
+        this.canUpdateJobStatus = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.statusUpdate !== false;
       })
     );
   }
@@ -190,14 +217,21 @@ export class JobListComponent {
       { key: 'jobId', label: 'Job Id', sortable: true },
       // Status, owner and value come first so they stay in view without horizontal scrolling at ~1500 px.
       {
-        key: 'allocateStatus', label: 'Allocate Status', type: 'badge', sortable: true,
+        // Hidden for now, and locked so the columns menu can't turn it back on.
+        key: 'allocateStatus', label: 'Allocate Status', type: 'badge', sortable: true, visible: false, locked: true,
         badgeClasses: this.allocateStatusBadgeClasses,
         badgeLabel: allocateStatusLabel,
         filterOptions: Object.entries(ALLOCATE_STATUS_LABELS).map(([value, label]) => ({ value, label })),
       },
+      {
+        key: 'status', label: 'Job Status', type: 'badge', sortable: true, valueGetter: (r) => r.status ?? '',
+        badgeClasses: Object.fromEntries(Object.entries(JOB_STATUS_TONES).map(([s, tone]) => [s, STATUS_TONE_CLASSES[tone].pill + ' border'])),
+        badgeLabel: jobStatusLabel,
+        filterOptions: Object.values(JobStatus).map((s) => ({ value: s, label: jobStatusLabel(s) })),
+      },
       { key: 'customerName', label: 'Customer', sortable: true, valueGetter: (r) => r.clientDetails?.companyName },
       { key: 'description', label: 'Description', sortable: true, valueGetter: (r) => r.quotation?.subject },
-      { key: 'procurementPerson', label: 'Allocated To', sortable: true, valueGetter: (r) => this.fullName(r.procurementPerson) },
+      { key: 'procurementPerson', label: 'Allocated To', sortable: true, visible: false, locked: true, valueGetter: (r) => this.fullName(r.procurementPerson) },
       { key: 'lpoValue', label: 'LPO Value (QAR)', type: 'currency', currencyCode: 'QAR', sortable: true, valueGetter: (r) => r.lpoValue ?? 0 },
       { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (r) => this.fullName(r.salesPersonDetails?.[0]) },
       { key: 'department', label: 'Department', sortable: true, valueGetter: (r) => r.departmentDetails?.[0]?.departmentName ?? '' },
@@ -208,6 +242,10 @@ export class JobListComponent {
 
   private buildRowActions(): void {
     this.rowActions = [
+      {
+        id: 'status', label: 'Update status', icon: 'pencil', quick: true,
+        hidden: (r) => !this.canChangeStatus(r),
+      },
       {
         id: 'allocate', label: 'Allocate', icon: 'refresh', quick: true,
         hidden: (r) => !this.canAllocate(r),
@@ -239,7 +277,7 @@ export class JobListComponent {
   private viewCounts: Record<string, number> = {};
   private readonly viewStatus: Record<string, string> = {
     pending: allocateStatus.Pending, 'open-to-work': allocateStatus.OpenToWork,
-    'in-progress': allocateStatus.WorkInProgress, completed: allocateStatus.Completed, lost: allocateStatus.Lost,
+    'in-progress': allocateStatus.WorkInProgress, completed: allocateStatus.Completed, 'on-hold': allocateStatus.OnHold, lost: allocateStatus.Lost,
   };
 
   /** Every tab shows its count from the server; the active tab uses the live (filtered) total. */
@@ -346,6 +384,7 @@ export class JobListComponent {
           // The grid clamps its page while the total is still 0 (first load from a deep link); restore it now that rows and total arrive together.
           if (this.grid) this.grid.page = Math.min(this.page, Math.max(1, Math.ceil(this.total / this.row)));
           this.isLoading = false;
+          this.openPendingJob();
           // ?page=99 on a 2-page list: jump to the last real page instead of showing an empty table.
           const lastPage = Math.max(1, Math.ceil(this.total / this.row));
           if (!this.rows.length && this.total > 0 && this.page > lastPage) {
@@ -362,6 +401,17 @@ export class JobListComponent {
     });
   }
 
+  /** Job number from `?open=` (e.g. the GRN "View Job Sheet" action); its detail panel opens once the rows arrive. */
+  private pendingOpenJobId = '';
+
+  private openPendingJob(): void {
+    if (!this.pendingOpenJobId) return;
+    const row = this.rows.find((r: any) => r.jobId === this.pendingOpenJobId);
+    this.pendingOpenJobId = '';
+    this._router.navigate([], { relativeTo: this._route, queryParams: { open: null }, queryParamsHandling: 'merge', replaceUrl: true });
+    if (row) setTimeout(() => this.grid?.openRow(row));
+  }
+
   onRowOpen(): void {
     this.detailLoading = true;
     setTimeout(() => (this.detailLoading = false), 250);
@@ -370,6 +420,9 @@ export class JobListComponent {
   onRowAction(event: DataGridRowActionEvent<getJob>): void {
     const { action, row } = event;
     switch (action.id) {
+      case 'status':
+        this.onUpdateStatus(row);
+        break;
       case 'allocate':
         this.openAllocateTypeSelecter(row);
         break;
@@ -380,6 +433,44 @@ export class JobListComponent {
         this.onMarkLost(row);
         break;
     }
+  }
+
+  /** Pending jobs aren't allocated yet and Lost ones are closed, so only the stages in between take a manual status. Once a purchase request exists, operations take over. */
+  canChangeStatus(row: getJob): boolean {
+    return this.canUpdateJobStatus && row.status !== JobStatus.completed;
+  }
+
+  onUpdateStatus(row: getJob): void {
+    if (!this.canChangeStatus(row)) {
+      this.toast.warning('You cannot update the status of this job');
+      return;
+    }
+    // The shared status modal injects MatDialogRef, so it must be opened through MatDialog (as the quotation list does).
+    this.matDialog.open<StatusChangeModalComponent, any, StatusChangeResult<JobStatus> | null>(StatusChangeModalComponent, {
+      width: '480px',
+      data: {
+        currentStatus: row.status,
+        statuses: JOB_STATUSES,
+        formatStatus: jobStatusLabel,
+        requireReasonFor: [JobStatus.onHold],
+        reasonLabels: { [JobStatus.onHold]: { label: 'Reason for holding', placeholder: 'Why is this job being put on hold?' } },
+        warnings: {
+          [JobStatus.completed]: 'The job moves to the Completed tab.',
+          [JobStatus.onHold]: 'The job moves to the On Hold tab. Saving purchase requests will not resume it.',
+        },
+        title: `Update status — ${row.jobId}`,
+        subtitle: 'Choose where this job stands now.',
+      },
+    }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this._jobService.updateJobStatus(row._id, result.status, result.reason).subscribe({
+        next: () => {
+          this.toast.success('Job status updated');
+          this.getJobs(true);
+        },
+        error: (err) => this.toast.error(err?.error?.message || 'Failed to update job status'),
+      });
+    });
   }
 
   /** Only a pending job can be allocated; once allocated it moves on its own. */
@@ -452,8 +543,9 @@ export class JobListComponent {
 
   canTransfer(row: getJob): boolean {
     // Supply jobs have a procurement owner to hand over, or to assign when allocation left it blank.
+    // Work In Progress too: the server still allows it while the job's PRs are New or In Progress, and says why when not.
     return this.canTransferProcurementPerson && (!!row.procurementPerson || this.hasSupply(row)) &&
-      row.allocateStatus === allocateStatus.OpenToWork;
+      (row.allocateStatus === allocateStatus.OpenToWork || row.allocateStatus === allocateStatus.WorkInProgress);
   }
 
   private hasSupply(row: getJob): boolean {
@@ -474,6 +566,7 @@ export class JobListComponent {
         fields: [
           { type: 'field', label: 'Job Id', value: row.jobId, numeric: true },
           { type: 'dg', key: 'allocateStatus' },
+          { type: 'field', label: 'Job Status', value: row.status || '—' },
           { type: 'field', label: 'Allocate Type', value: row.allocateType || '—' },
           { type: 'field', label: 'Customer', value: row.clientDetails?.companyName },
           { type: 'field', label: 'Sales Person', value: this.fullName(row.salesPersonDetails?.[0]) },

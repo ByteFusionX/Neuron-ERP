@@ -28,15 +28,18 @@ export enum jobStatus {
     Completed = 'Completed',
     Cancelled = 'Cancelled',
     OnHold = 'On Hold',
-    Inovoiced = 'Inovoiced',
+    PartiallyInvoiced = 'Partially Invoiced',
+    Invoiced = 'Invoiced',
 }
 
+// Keep new values at the end: callers compare a job's position in this order against OpenToWork.
 export enum allocateStatus {
     Pending = 'Pending',
     WorkInProgress = 'Work In Progress',
     OpenToWork = 'OpenToWork',
     Completed = 'Completed',
-    Lost = 'Lost'
+    Lost = 'Lost',
+    OnHold = 'On Hold',
 }
 
 export enum allocateType {

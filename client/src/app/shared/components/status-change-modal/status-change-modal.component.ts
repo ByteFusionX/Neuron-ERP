@@ -63,7 +63,7 @@ export interface StatusChangeResult<T extends string = string> {
         </div>
 
         <app-sf-field *ngIf="!data.lockStatus" label="New status" required>
-          <app-sf-select [ngModelOptions]="{ standalone: true }" [(ngModel)]="status" [options]="options"></app-sf-select>
+          <app-sf-combobox [ngModelOptions]="{ standalone: true }" [(ngModel)]="status" [options]="options" placeholder="Select status"></app-sf-combobox>
         </app-sf-field>
 
         <app-sf-field [label]="reasonLabel" [required]="reasonRequired" [optional]="!reasonRequired">

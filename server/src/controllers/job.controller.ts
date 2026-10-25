@@ -44,6 +44,7 @@ const JOB_GRID_FIELDS: Record<string, string> = {
     procurementPerson: 'procurementName',
     lpoValue: 'lpoValue',
     allocateStatus: 'allocateStatus',
+    status: 'status',
 };
 
 const JOB_ALLOCATE_STATUSES = Object.values(allocateStatus) as string[];
@@ -118,8 +119,19 @@ const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number): any[] => [
     { $lookup: { from: 'customers', localField: 'quotation.client', foreignField: '_id', as: 'clientDetails' } },
     { $unwind: '$clientDetails' },
     { $lookup: { from: 'departments', localField: 'quotation.department', foreignField: '_id', as: 'departmentDetails' } },
-    { $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' } },
-    { $lookup: { from: 'employees', localField: 'procurementPerson', foreignField: '_id', as: 'procurementPerson' } },
+    // Only the display fields: the list goes to the browser, so password hashes and the rest of the employee record stay out.
+    {
+        $lookup: {
+            from: 'employees', let: { sid: '$quotation.createdBy' }, as: 'salesPersonDetails',
+            pipeline: [{ $match: { $expr: { $eq: ['$_id', '$$sid'] } } }, { $project: { employeeId: 1, firstName: 1, lastName: 1, email: 1, designation: 1 } }],
+        },
+    },
+    {
+        $lookup: {
+            from: 'employees', let: { pid: '$procurementPerson' }, as: 'procurementPerson',
+            pipeline: [{ $match: { $expr: { $eq: ['$_id', '$$pid'] } } }, { $project: { employeeId: 1, firstName: 1, lastName: 1, email: 1, designation: 1 } }],
+        },
+    },
     { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
     {
         $addFields: {
@@ -358,23 +370,52 @@ export const totalJob = async (req: Request, res: Response, next: NextFunction) 
 
 
 
+/** Statuses a user can set by hand, and the list tab each one lands the job in. Cancelled is left to "Mark as lost". */
+const JOB_STATUS_TAB: Record<string, string> = {
+    [jobStatus.WorkInProgress]: allocateStatus.WorkInProgress,
+    [jobStatus.Delivered]: allocateStatus.WorkInProgress,
+    [jobStatus.PartiallyDelivered]: allocateStatus.WorkInProgress,
+    [jobStatus.PartiallyInvoiced]: allocateStatus.WorkInProgress,
+    [jobStatus.Invoiced]: allocateStatus.WorkInProgress,
+    [jobStatus.Completed]: allocateStatus.Completed,
+    [jobStatus.OnHold]: allocateStatus.OnHold,
+};
+
 export const updateJobStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { status } = req.body;
+        const reason = String(req.body.reason ?? '').trim();
         const { jobId } = req.params;
         if (!ObjectId.isValid(jobId)) return res.status(400).json({ success: false, message: 'Invalid job ID' });
-        if (!Object.values(jobStatus).includes(status)) {
-            return res.status(400).json({ success: false, message: `Status must be one of: ${Object.values(jobStatus).join(', ')}` });
+        const targetTab = JOB_STATUS_TAB[status];
+        if (!targetTab) {
+            return res.status(400).json({ success: false, message: `Status must be one of: ${Object.keys(JOB_STATUS_TAB).join(', ')}` });
         }
-        const jobUpdated = await jobModel.findByIdAndUpdate(jobId, { status: status, updatedDate: Date.now() })
+        if (status === jobStatus.OnHold && !reason) {
+            return res.status(400).json({ success: false, message: 'A reason is required to put a job on hold' });
+        }
 
-        if (jobUpdated) {
-            if (jobUpdated.status !== status) {
-                await logAudit(req, { entityType: 'job', entityId: jobUpdated._id, entityLabel: jobUpdated.jobId, action: 'status-changed', summary: `Status changed to ${status}`, changes: [{ label: 'Status', from: jobUpdated.status, to: String(status) }] });
-            }
-            return res.status(200).json(status)
+        const job = await jobModel.findOne({ _id: jobId, isDeleted: { $ne: true } });
+        if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+        if (job.status === jobStatus.Completed) {
+            return res.status(409).json({ success: false, message: `Status can't be changed while the job is ${job.status}` });
         }
-        return res.status(502).json()
+        if (job.status === status && job.allocateStatus === targetTab) {
+            return res.status(200).json({ success: true, status, allocateStatus: targetTab });
+        }
+
+        await jobModel.updateOne({ _id: job._id }, { $set: { status, allocateStatus: targetTab, updatedDate: new Date() } });
+
+        await logAudit(req, {
+            entityType: 'job', entityId: job._id, entityLabel: job.jobId, action: 'status-changed',
+            summary: `Status changed to ${status}${reason ? ` — ${reason}` : ''}`,
+            changes: [
+                { label: 'Status', from: String(job.status), to: String(status) },
+                ...(job.allocateStatus !== targetTab ? [{ label: 'Allocation status', from: String(job.allocateStatus), to: targetTab }] : []),
+                ...(reason ? [{ label: 'Reason', to: reason }] : []),
+            ],
+        });
+        return res.status(200).json({ success: true, status, allocateStatus: targetTab });
     } catch (error) {
         console.log(error)
         next(error)
@@ -754,6 +795,8 @@ export const oneJobSheet = async (req: Request, res: Response, next: NextFunctio
             {
                 $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' }
             },
+            // The employee record goes to the browser; keep the password hash out.
+            { $project: { 'salesPersonDetails.password': 0 } },
             {
                 $addFields: {
                     attention: {
@@ -1284,6 +1327,8 @@ export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response
             {
                 $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' }
             },
+            // The employee record goes to the browser; keep the password hash out.
+            { $project: { 'salesPersonDetails.password': 0 } },
             {
                 $addFields: {
                     attention: {
@@ -1414,13 +1459,14 @@ export const checkAndUpdateJobCompletionStatus = async (jobId: string) => {
             return;
         }
 
-        if (job.allocateStatus === allocateStatus.Completed || job.allocateStatus === allocateStatus.Lost) {
+        if (job.allocateStatus === allocateStatus.Completed || job.allocateStatus === allocateStatus.Lost || job.allocateStatus === allocateStatus.OnHold) {
             return;
         }
 
         await jobModel.findByIdAndUpdate(jobId, {
             $set: {
                 allocateStatus: allocateStatus.Completed,
+                status: jobStatus.Completed,
                 updatedDate: new Date()
             }
         });

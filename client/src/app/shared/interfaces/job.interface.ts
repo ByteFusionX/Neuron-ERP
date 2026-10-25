@@ -65,6 +65,7 @@ export enum JobStatus {
     completed = 'Completed',
     cancelled = 'Cancelled',
     onHold = 'On Hold',
+    partiallyInvoiced = 'Partially Invoiced',
     invoiced = 'Invoiced'
 }
 
@@ -88,5 +89,6 @@ export enum allocateStatus {
     WorkInProgress = 'Work In Progress',
     OpenToWork = 'OpenToWork',
     Completed = 'Completed',
-    Lost = 'Lost'
+    Lost = 'Lost',
+    OnHold = 'On Hold',
 }

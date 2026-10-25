@@ -65,6 +65,7 @@
 
         <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row let-tab="tab">
+            <app-action-button *ngIf="canChangeStatus(row)" variant="outline" (click)="onUpdateStatus(row)">Update status</app-action-button>
             <app-action-button *ngIf="canAllocate(row)" variant="primary" (click)="openAllocateTypeSelecter(row)">Allocate</app-action-button>
             <app-action-button *ngIf="canMarkLost(row)" variant="outline" (click)="onMarkLost(row)">Mark as lost</app-action-button>
         </ng-template>
