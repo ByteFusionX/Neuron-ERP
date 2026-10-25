@@ -62,7 +62,7 @@ export interface LpoUploadModalResult {
         </div>
         <p class="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Files</p>
         <p class="mb-3 text-xs text-gray-500">After the upload, the Convert to Deal Sheet form opens so you can continue.</p>
-        <app-sf-file [(ngModel)]="files" [accept]="data?.acceptedFiles || ''" [maxSizeMb]="5" [disabled]="uploading"></app-sf-file>
+        <app-sf-file [(ngModel)]="files" [maxSizeMb]="5" [disabled]="uploading"></app-sf-file>
       </div>
 
       <footer class="flex flex-wrap items-center gap-3 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">

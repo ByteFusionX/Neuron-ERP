@@ -1,3 +1,4 @@
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -117,7 +118,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   ];
 
   isUploadingFiles = false;
-  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+  readonly acceptedFiles = ALLOWED_UPLOAD_TYPES;
 
   readonly itemColumns: DetailTableColumn[] = [
     { key: 'item', label: 'Item' },

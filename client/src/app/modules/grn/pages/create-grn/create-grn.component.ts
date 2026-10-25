@@ -1,3 +1,4 @@
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, EventEmitter, HostBinding, inject, Input, OnInit, Output, signal } from '@angular/core';
 import {
@@ -106,7 +107,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
     return ref ? `${ref} · ${hint}` : hint;
   }
 
-  readonly fileAccept = '.pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx';
+  readonly fileAccept = ALLOWED_UPLOAD_TYPES;
 
   /** The items step's header: the receipt's paperwork at a glance. */
   get banner(): { label: string; value: string }[] {

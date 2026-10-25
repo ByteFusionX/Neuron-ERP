@@ -15,6 +15,15 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({ storage: storage });
+// Keep in sync with client/src/app/shared/constants/upload-types.ts. Images also cover product/logo uploads (webp).
+const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.xlsx', '.png', '.jpg', '.jpeg', '.webp', '.csv', '.tsv', '.txt'];
+
+const upload = multer({
+    storage: storage,
+    fileFilter: function (req, file, cb) {
+        if (ALLOWED_EXTENSIONS.includes(path.extname(file.originalname).toLowerCase())) return cb(null, true);
+        cb(new Error(`File type not allowed: ${file.originalname}`));
+    }
+});
 
 module.exports = upload;

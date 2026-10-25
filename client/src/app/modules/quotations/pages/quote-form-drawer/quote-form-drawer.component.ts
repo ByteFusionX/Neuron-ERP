@@ -1,5 +1,5 @@
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild, inject } from '@angular/core';
-import { DatePipe, DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
+import { DatePipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { AbstractControl, FormArray, FormBuilder, FormsModule, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
@@ -40,7 +40,7 @@ const UNSENT_STATUSES: string[] = [QuoteStatus.Draft, QuoteStatus.WorkInProgress
   standalone: true,
   templateUrl: './quote-form-drawer.component.html',
   providers: [DatePipe, CatalogueSuggestionSource, { provide: ITEM_SUGGESTION_SOURCE, useExisting: CatalogueSuggestionSource }],
-  imports: [ProductFormDrawerComponent, SupplierFormDrawerComponent,NgIf, NgFor, NgClass, NgIcon, DatePipe, DecimalPipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent],
+  imports: [ProductFormDrawerComponent, SupplierFormDrawerComponent,NgIf, NgFor, NgClass, NgIcon, DatePipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent],
 })
 export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() open = false;

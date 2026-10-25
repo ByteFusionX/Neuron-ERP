@@ -109,7 +109,7 @@
                 </ul>
                 <app-sf-field label="Upload Documents">
                     <app-sf-file [(ngModel)]="newDocuments" [ngModelOptions]="{ standalone: true }"
-                        accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx" [maxSizeMb]="10"></app-sf-file>
+ [maxSizeMb]="5"></app-sf-file>
                 </app-sf-field>
             </div>
         </app-sf-section>
@@ -133,7 +133,7 @@
             </app-collapsible-card>
             <app-sf-field label="Banking Documents">
                 <app-sf-file [(ngModel)]="newBankDocuments" [ngModelOptions]="{ standalone: true }"
-                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx" [maxSizeMb]="10"></app-sf-file>
+ [maxSizeMb]="5"></app-sf-file>
             </app-sf-field>
         </app-sf-section>
     </form>

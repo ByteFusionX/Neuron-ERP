@@ -1,3 +1,4 @@
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -85,7 +86,7 @@ export class ViewLpoComponent implements OnInit {
   }
 
   isUploadingFiles = false;
-  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+  readonly acceptedFiles = ALLOWED_UPLOAD_TYPES;
 
   get documents(): DetailDocument[] {
     return (this.lpo?.documents ?? []).map((file: any) => ({

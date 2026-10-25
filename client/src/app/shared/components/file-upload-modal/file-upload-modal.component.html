@@ -33,10 +33,10 @@
                                 your device
                             </p>
                             <p class="text-sm text-gray-500">
-                                <span>File type: {{ data.acceptedTypes }}</span>
+                                <span>Allowed types: {{ acceptedLabel }}</span>
                             </p>
                             <p *ngIf="data.maxFileSize" class="text-xs text-gray-400">
-                                Max file size: {{ formatFileSize(data.maxFileSize) }}
+                                Max {{ formatFileSize(data.maxFileSize) }}
                             </p>
                         </div>
                         <input 

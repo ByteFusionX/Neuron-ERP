@@ -1,3 +1,4 @@
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnDestroy, Output, SimpleChanges, inject } from '@angular/core';
 import { NgClass, NgFor, NgIf } from '@angular/common';
 import { FormArray, FormBuilder, FormControl, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -71,7 +72,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   /** Files picked in step 3; uploaded only after the customer is saved. */
   readonly pendingFilesCtrl = new FormControl<File[]>([], { nonNullable: true });
   get pendingFiles(): File[] { return this.pendingFilesCtrl.value; }
-  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+  readonly acceptedFiles = ALLOWED_UPLOAD_TYPES;
 
   departmentOptions: SfOption[] = [];
   customerDepartmentOptions: SfOption[] = [];

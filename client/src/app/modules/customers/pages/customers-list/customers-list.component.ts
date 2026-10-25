@@ -1,3 +1,4 @@
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, forkJoin, of } from 'rxjs';
@@ -614,7 +615,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
   // --- Documents (detail-panel tab) ------------------------------------------------
 
   isUploadingFiles = false;
-  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+  readonly acceptedFiles = ALLOWED_UPLOAD_TYPES;
 
   customerDocuments(row: getCustomer): DetailDocument[] {
     return (this.detail(row).attachments ?? []).map((file: CustomerAttachment) => ({

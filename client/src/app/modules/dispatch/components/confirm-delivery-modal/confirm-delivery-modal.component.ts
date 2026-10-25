@@ -37,7 +37,7 @@ export interface ConfirmDeliveryData {
           <app-sf-textarea formControlName="remarks" [rows]="2" placeholder="Delivery note (optional)"></app-sf-textarea>
         </app-sf-field>
         <app-sf-field label="Proof of delivery" optional full hint="Signed DN, photos or any other documents.">
-          <app-sf-file formControlName="files" accept=".pdf,image/*,.doc,.docx"></app-sf-file>
+          <app-sf-file formControlName="files"></app-sf-file>
         </app-sf-field>
         <button type="submit" class="hidden" aria-hidden="true" tabindex="-1"></button>
       </form>

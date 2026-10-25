@@ -1,7 +1,8 @@
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { AfterViewInit, Component, Injector, ViewChild, inject } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { Router, ActivatedRoute, RouterLink } from '@angular/router';
+import { Router, ActivatedRoute, } from '@angular/router';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.interface';
@@ -23,7 +24,7 @@ import { LoadingBarService } from '@ngx-loading-bar/core';
 import { DealFormComponent } from '../deal-form/deal-form.component';
 import { ExcelExportService } from 'src/app/core/services/export/excel-export.service';
 import * as FileSaver from 'file-saver';
-import { AsyncPipe, DatePipe, DecimalPipe, NgClass, NgComponentOutlet, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
+import { AsyncPipe, DatePipe, DecimalPipe, NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { ToastrService } from 'ngx-toastr';
 import { EventsListComponent } from 'src/app/shared/components/events-list/events-list.component';
@@ -33,12 +34,12 @@ import { ModalService } from 'src/app/shared/components/modal';
 import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/event-create-modal.component';
 import { LpoUploadModalComponent, LpoUploadModalResult } from './lpo-upload-modal.component';
 import { Events } from 'src/app/shared/interfaces/evets.interface';
-import { NgIcon } from '@ng-icons/core';
+import { } from '@ng-icons/core';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridCellEditEvent, DataGridColumn, DataGridDetailTab, DataGridFilter, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
-import { DataGridFieldComponent } from 'src/app/shared/components/data-grid/data-grid-field.component';
-import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
-import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
+import { } from 'src/app/shared/components/data-grid/data-grid-field.component';
+import { } from 'src/app/shared/components/detail-panel/detail-field.component';
+import { } from 'src/app/shared/components/detail-panel/detail-section.component';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
@@ -70,7 +71,7 @@ const PDF_STATUSES: QuoteStatus[] = [
     templateUrl: './quotation-list.component.html',
     styleUrls: ['./quotation-list.component.css'],
     providers: [NumberFormatterPipe, DatePipe],
-    imports: [ViewToggleComponent, NgIcon, NgIf, NgClass, NgSwitch, NgSwitchCase, NgComponentOutlet, DatePipe, AsyncPipe, RouterLink, DataGridComponent, DataGridFieldComponent, DetailFieldComponent, DetailSectionComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent, FollowUpPanelComponent]
+    imports: [ViewToggleComponent, NgIf, NgClass, NgSwitch, NgSwitchCase, DatePipe, AsyncPipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent, FollowUpPanelComponent]
 })
 export class QuotationListComponent implements AfterViewInit {
   @ViewChild('grid') grid!: DataGridComponent<Quotatation>;
@@ -217,7 +218,7 @@ export class QuotationListComponent implements AfterViewInit {
     this.customers$ = this._employeeService.employeeData$.pipe(
       filter((e) => !!e?._id),
       take(1),
-      switchMap((e) => this._customerService.getAllCustomers(e!._id as string)),
+      switchMap((e) => this._customerService.getAllCustomers(e!._id as string, true)),
       shareReplay(1)
     );
     this.loadFilterOptions();
@@ -983,7 +984,7 @@ export class QuotationListComponent implements AfterViewInit {
   }
 
   isUploadingFiles = false;
-  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+  readonly acceptedFiles = ALLOWED_UPLOAD_TYPES;
 
   startLpoUpload(row: Quotatation): void {
     if (!this.canUploadLpo(row)) return;

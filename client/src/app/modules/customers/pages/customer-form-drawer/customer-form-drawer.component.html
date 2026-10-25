@@ -88,7 +88,7 @@
                 (remove)="onAttachmentRemove($event)"></app-detail-documents>
 
             <div [class.mt-4]="isEdit && attachmentDocuments().length">
-                <app-sf-file [formControl]="pendingFilesCtrl" [accept]="acceptedFiles" listAbove></app-sf-file>
+                <app-sf-file [formControl]="pendingFilesCtrl" listAbove></app-sf-file>
                 <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     Files are uploaded only when you {{ isEdit ? 'save the changes' : 'create the customer' }}; cancelling discards them.
                 </p>

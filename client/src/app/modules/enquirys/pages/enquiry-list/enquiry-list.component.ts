@@ -1,3 +1,4 @@
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { AfterViewInit, Component, OnDestroy, OnInit, ViewChild, effect, inject } from '@angular/core';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { EnquiryFormDrawerComponent } from '../enquiry-form-drawer/enquiry-form-drawer.component';
@@ -20,8 +21,8 @@ import {
   Presale,
 } from 'src/app/shared/interfaces/enquiry.interface';
 import { MatTableDataSource } from '@angular/material/table';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { NgIcon } from '@ng-icons/core';
+import { ActivatedRoute, Router, } from '@angular/router';
+import { } from '@ng-icons/core';
 import { ToastrService } from 'ngx-toastr';
 import { EnquiryEstimationViewComponent } from '../enquiry-estimation-view/enquiry-estimation-view.component';
 import { HttpEventType } from '@angular/common/http';
@@ -126,8 +127,6 @@ import { QuoteFormDrawerComponent } from 'src/app/modules/quotations/pages/quote
     EnquiryFormDrawerComponent,
     EnquiryEstimationViewComponent,
     QuoteFormDrawerComponent,
-    RouterLink,
-    NgIcon,
   ],
 })
 export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -269,7 +268,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this.buildRowActions();
     this.subscriptions.add(
       this._employeeService.employeeData$.subscribe((employee) => {
-        this.customers$ = this._customerService.getAllCustomers(employee?._id);
+        this.customers$ = this._customerService.getAllCustomers(employee?._id, true);
         this.subscriptions.add(this.customers$.subscribe((customers) => {
           this.setColumnOptions('customer', customers.map((customer) => ({ label: customer.companyName, value: customer._id })));
         }));
@@ -1312,7 +1311,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   isUploadingFiles = false;
-  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+  readonly acceptedFiles = ALLOWED_UPLOAD_TYPES;
 
   /** Opens the upload modal over the row's documents tab. */
   startAttachmentUpload(row: getEnquiry): void {

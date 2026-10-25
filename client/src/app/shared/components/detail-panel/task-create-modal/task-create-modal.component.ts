@@ -105,7 +105,7 @@ const isoDay = (offsetDays: number): string => {
             <app-sf-tags formControlName="tags" placeholder="e.g. site-visit, procurement" [max]="8"></app-sf-tags>
           </app-sf-field>
           <app-sf-field label="Attachments" optional>
-            <app-sf-file formControlName="attachments" accept=".pdf,.docx,.xlsx,.png,.jpg" [maxSizeMb]="10"></app-sf-file>
+            <app-sf-file formControlName="attachments" [maxSizeMb]="5"></app-sf-file>
           </app-sf-field>
         </app-sf-section>
       </form>

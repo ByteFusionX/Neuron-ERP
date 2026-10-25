@@ -1,3 +1,4 @@
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import {
   Component,
   EventEmitter,
@@ -84,7 +85,7 @@ export class UpdateDealsheetComponent implements OnInit, OnChanges {
   supplierOptions: SfOption<string>[] = [];
   discountSupplierOptions: SfOption<string>[] = [];
   readonly costTypes: CostType[] = ['Additional Cost', 'Supplier Discount', 'Customer Discount'];
-  readonly fileAccept = '.jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.msg,.dwg';
+  readonly fileAccept = ALLOWED_UPLOAD_TYPES;
 
   /** Adjustments folded into the item-entry summary: net extra cost, and customer discount. */
   costAdjustment = 0;

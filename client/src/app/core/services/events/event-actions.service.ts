@@ -1,6 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpEventType } from '@angular/common/http';
 import { MatDialog } from '@angular/material/dialog';
+import { saveAs } from 'file-saver';
+import { PREVIEWABLE_EXTENSIONS } from 'src/app/shared/constants/upload-types';
 import { Observable, of } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { ToastrService } from 'ngx-toastr';
@@ -171,6 +173,7 @@ export class EventActionsService {
     this.enquiries.downloadFile(file.id).subscribe({
       next: (event) => {
         if (event.type === HttpEventType.Response) {
+          if (!PREVIEWABLE_EXTENSIONS.test(file.name)) { saveAs(new Blob([event.body]), file.name); return; }
           const fileURL = URL.createObjectURL(new Blob([event.body], { type: event.body.type || 'application/octet-stream' }));
           window.open(fileURL, '_blank');
           setTimeout(() => URL.revokeObjectURL(fileURL), 10000);

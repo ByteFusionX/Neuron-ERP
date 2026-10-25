@@ -1,3 +1,4 @@
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { Component, Input, booleanAttribute, forwardRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NG_VALUE_ACCESSOR } from '@angular/forms';
@@ -22,7 +23,7 @@ import { SF_STYLES } from './sf.model';
         <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
       </svg>
       <span class="text-[13px] text-gray-700 dark:text-gray-300"><span class="font-medium text-violet-700 dark:text-violet-400">Click to upload</span> or drag and drop</span>
-      <span class="text-xs text-gray-500 dark:text-gray-500">{{ accept || 'Any file' }}{{ maxSizeMb ? ' · up to ' + maxSizeMb + ' MB' : '' }}</span>
+      <span class="text-xs text-gray-500 dark:text-gray-500">{{ acceptLabel }}{{ maxSizeMb ? ' · Max ' + maxSizeMb + ' MB per file' : '' }}</span>
       <input #picker type="file" class="sr-only" [id]="inputId" [accept]="accept" [multiple]="multiple" [disabled]="disabled"
         (change)="add(picker.files); picker.value = ''" />
     </label>
@@ -49,14 +50,20 @@ import { SF_STYLES } from './sf.model';
   styles: [SF_STYLES],
 })
 export class SfFileComponent extends SfControl<File[]> {
-  @Input() accept = '';
-  @Input() maxSizeMb: number | null = null;
+  @Input() accept = ALLOWED_UPLOAD_TYPES;
+  @Input() maxSizeMb: number | null = 5;
   @Input({ transform: booleanAttribute }) multiple = true;
   /** Render the selected-files list above the drop zone instead of below. */
   @Input({ transform: booleanAttribute }) listAbove = false;
 
   dragging = false;
   rejected: string[] = [];
+
+  /** Human-readable type list for the hint, e.g. ".pdf,.docx" -> "PDF, DOCX". */
+  get acceptLabel(): string {
+    const tokens = (this.accept || '').split(',').map((t) => t.trim()).filter(Boolean);
+    return tokens.length ? 'Allowed: ' + tokens.map((t) => t.replace(/^\./, '').toUpperCase()).join(', ') : 'Any file type';
+  }
 
   get files(): File[] {
     return this.value ?? [];

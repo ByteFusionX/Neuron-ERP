@@ -1,3 +1,4 @@
+import { ALLOWED_UPLOAD_TYPES, PREVIEWABLE_EXTENSIONS } from 'src/app/shared/constants/upload-types';
 import { Component, ElementRef, Inject, OnInit, ViewChild } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { CommonModule } from '@angular/common';
@@ -52,8 +53,8 @@ export class FileUploadModalComponent implements OnInit {
   defaultConfig: FileUploadModalData = {
     title: 'File Manager',
     allowMultiple: true,
-    acceptedTypes: '.pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx,.msg,.dwg',
-    maxFileSize: 10 * 1024 * 1024, // 10MB
+    acceptedTypes: ALLOWED_UPLOAD_TYPES,
+    maxFileSize: 5 * 1024 * 1024, // 5MB
     showActions: {
       upload: true,
       download: true,
@@ -77,6 +78,11 @@ export class FileUploadModalComponent implements OnInit {
     }
   }
 
+  get acceptedLabel(): string {
+    const tokens = (this.data.acceptedTypes || '').split(',').map(t => t.trim()).filter(Boolean);
+    return tokens.length ? tokens.map(t => t.replace(/^\./, '').toUpperCase()).join(', ') : 'Any';
+  }
+
   onClose() {
     this.dialogRef.close();
   }
@@ -98,6 +104,12 @@ export class FileUploadModalComponent implements OnInit {
       // Check file size
       if (this.data.maxFileSize && file.size > this.data.maxFileSize) {
         this.toast.warning(`File "${file.name}" exceeds maximum size limit of ${this.formatFileSize(this.data.maxFileSize)}`);
+        continue;
+      }
+
+      const allowed = (this.data.acceptedTypes || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      if (allowed.length && !allowed.some(t => file.name.toLowerCase().endsWith(t))) {
+        this.toast.warning(`File "${file.name}" is not an allowed file type`);
         continue;
       }
 
@@ -200,8 +212,8 @@ export class FileUploadModalComponent implements OnInit {
   onView(file: FileItem) {
     // Local file that hasn't been uploaded to the server/cloud yet - preview it directly from the browser.
     if (!file.isUploaded && file.file) {
-      if (!this.isPDF(file.originalname) && !this.isImage(file.originalname)) {
-        this.toast.warning('This file type is not supported for viewing. Please download and view the file.');
+      if (!PREVIEWABLE_EXTENSIONS.test(file.originalname)) {
+        saveAs(file.file, file.originalname);
         return;
       }
       const fileURL = URL.createObjectURL(file.file);
@@ -217,16 +229,19 @@ export class FileUploadModalComponent implements OnInit {
       return;
     }
 
-    // Check if file is viewable (PDF)
-    if (!file.originalname.toLowerCase().endsWith('.pdf')) {
-      this.toast.warning('This file type is not supported for viewing. Please download and view the file.');
-      return;
-    }
+    // PDF and images open in a tab; docx/xlsx can't be rendered by browsers, so they download.
+    const previewable = PREVIEWABLE_EXTENSIONS.test(file.originalname);
 
     this.enquiryService.downloadFile(file.fileName).subscribe({
       next: (event) => {
         if (event.type === HttpEventType.Response) {
-          const fileContent: Blob = new Blob([event.body], { type: 'application/pdf' });
+          if (!previewable) {
+            saveAs(new Blob([event.body]), file.originalname);
+            return;
+          }
+          const ext = file.originalname.split('.').pop()!.toLowerCase();
+          const mime = ext === 'pdf' ? 'application/pdf' : ext === 'png' ? 'image/png' : 'image/jpeg';
+          const fileContent: Blob = new Blob([event.body], { type: mime });
           const fileURL = URL.createObjectURL(fileContent);
           window.open(fileURL, '_blank');
           

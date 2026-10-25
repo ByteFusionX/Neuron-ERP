@@ -105,7 +105,7 @@
                 </app-sf-field>
                 <app-sf-field label="Invoice date" [control]="f['supplierInvoiceDate']"><app-sf-date formControlName="supplierInvoiceDate" typeable displayFormat="dd/MM/yyyy"></app-sf-date></app-sf-field>
                 <app-sf-field full label="Upload DN and invoice" [hint]="existingDeliveryNotes.length ? existingDeliveryNotes.length + ' already on file; new files are added to them' : ''">
-                    <app-sf-file [(ngModel)]="deliveryNoteFiles" [ngModelOptions]="{ standalone: true }" [accept]="fileAccept" [maxSizeMb]="10" [disabled]="!lpo"></app-sf-file>
+                    <app-sf-file [(ngModel)]="deliveryNoteFiles" [ngModelOptions]="{ standalone: true }" [maxSizeMb]="5" [disabled]="!lpo"></app-sf-file>
                 </app-sf-field>
             </app-sf-section>
         </ng-container>

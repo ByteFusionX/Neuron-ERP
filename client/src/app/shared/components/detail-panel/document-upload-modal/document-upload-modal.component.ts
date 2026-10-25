@@ -35,7 +35,7 @@ export interface DocumentUploadModalResult {
       (closed)="close()">
       <form id="document-upload-form" (ngSubmit)="submit()" novalidate>
         <app-sf-section title="Files" columns="1">
-          <app-sf-file [(ngModel)]="files" name="files" [accept]="data?.acceptedFiles || ''" [maxSizeMb]="data?.maxSizeMb || 5"></app-sf-file>
+          <app-sf-file [(ngModel)]="files" name="files" [maxSizeMb]="data?.maxSizeMb || 5"></app-sf-file>
         </app-sf-section>
       </form>
     </app-form-modal-shell>

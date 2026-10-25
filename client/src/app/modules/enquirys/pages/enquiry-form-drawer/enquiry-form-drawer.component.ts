@@ -1,3 +1,4 @@
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild, inject } from '@angular/core';
 import { DatePipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -52,7 +53,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     1: ['client', 'contact', 'department', 'title', 'priority', 'source', 'estimatedCost', 'date', 'nextFollowUpDate'],
     2: ['requirement', 'attachments'],
   };
-  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+  readonly acceptedFiles = ALLOWED_UPLOAD_TYPES;
 
   customerOptions: SfOption[] = [];
   contactOptions: SfOption[] = [];

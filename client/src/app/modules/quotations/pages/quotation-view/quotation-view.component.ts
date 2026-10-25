@@ -1,3 +1,4 @@
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule, formatDate } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -42,8 +43,8 @@ import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/det
 import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
-import { DetailMetricsComponent } from 'src/app/shared/components/detail-panel/detail-metrics.component';
-import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
+import { } from 'src/app/shared/components/detail-panel/detail-metrics.component';
+import { } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailClauseListComponent } from 'src/app/shared/components/detail-panel/detail-clause-list.component';
 import { DetailClause, DetailDocument, DetailSummaryRow, DetailTableColumn, DetailTaskItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
@@ -141,8 +142,6 @@ export interface QvHistoryEntry {
     DetailDocumentsComponent,
     DetailTaskListComponent,
     DetailClauseListComponent,
-    DetailMetricsComponent,
-    DetailOverviewComponent,
     DetailRevisionChipComponent,
     RevisionHistoryComponent,
     ActionMenuComponent,
@@ -342,7 +341,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   /** Quotation whose deal sheet is being built; the deal drawer is open while this is set. */
   dealQuote: any = null;
   isUploadingLpo = false;
-  readonly acceptedLpoFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+  readonly acceptedLpoFiles = ALLOWED_UPLOAD_TYPES;
 
   get canUploadLpo(): boolean {
     return this.quoteData?.status === QuoteStatus.Won && !this.quoteData?.lpoFiles?.length;
