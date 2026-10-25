@@ -56,8 +56,8 @@ export class CustomerService {
     return this.http.get<any>(`${this.apiUrl}/customer/duplicatesReport`);
   }
 
-  getAllCustomers(userId?:string | undefined): Observable<getCustomer[]> {
-    return this.http.get<getCustomer[]>(`${this.apiUrl}/customer/${userId}`)
+  getAllCustomers(userId?:string | undefined, slim = false): Observable<getCustomer[]> {
+    return this.http.get<getCustomer[]>(`${this.apiUrl}/customer/${userId}`, slim ? { params: { slim: 'true' } } : {})
   }
 
   editCustomer(data: getCustomer): Observable<getCustomer> {

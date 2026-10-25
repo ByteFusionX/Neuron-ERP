@@ -111,6 +111,18 @@ export const getAllCustomers = async (req: Request, res: Response, next: NextFun
         // Combine Filters
         const filters = accessFilter;
 
+        // Filter dropdowns only need id + name; skip the joins and the heavy contact/address data.
+        if (req.query.slim === 'true') {
+            const slimCustomers = await Customer.find({ $and: [filters, { isDeleted: { $ne: true } }] })
+                .select('companyName clientRef status')
+                .sort({ createdDate: -1 })
+                .lean();
+            if (slimCustomers.length === 0) {
+                return res.status(204).json({ message: 'No customers found' });
+            }
+            return res.status(200).json(slimCustomers);
+        }
+
         // Fetch Customers
         const customers = await Customer.aggregate([
             { $match: filters },
