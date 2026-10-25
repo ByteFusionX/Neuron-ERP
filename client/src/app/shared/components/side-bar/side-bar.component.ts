@@ -421,13 +421,17 @@ export class SideBarComponent
 
   private openActiveGroup(url: string) {
     const path = url.split('?')[0];
-    const category = this.menuCategories.find((c) =>
+    const matches = this.menuCategories.filter((c) =>
       c.items.some(
         (item) =>
           (item.route && path.startsWith(item.route)) ||
           item.children?.some((child) => this.subItemContainsPath(child, path)),
       ),
     );
+    // Routes like /products and /suppliers sit in more than one group; keep
+    // the group the user clicked from open instead of jumping to the first.
+    const category =
+      matches.find((c) => c.group && this.collapsedGroups[c.group] === false) ?? matches[0];
     if (!category?.group) return;
     Object.keys(this.groupIcons).forEach((g) => (this.collapsedGroups[g] = true));
     this.collapsedGroups[category.group] = false;

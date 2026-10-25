@@ -44,6 +44,8 @@ export interface DataGridRowAction<T = any> {
   hidden?: (row: T) => boolean;
   /** Also show as an icon button on row hover, so common actions skip the menu */
   quick?: boolean;
+  /** Keep the quick button visible without hovering the row (and on touch devices) */
+  persistent?: boolean;
   /** Include this action in the overflow menu. Defaults to true. */
   menu?: boolean;
   /** app-dp-icon name used by the quick button */

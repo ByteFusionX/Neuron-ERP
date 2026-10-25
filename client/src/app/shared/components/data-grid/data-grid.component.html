@@ -215,7 +215,8 @@
     </div>
 
     <!-- Applied search & filter pills -->
-    <div *ngIf="isFiltered || scopedView" class="shrink-0 flex items-center gap-2 flex-wrap px-5 py-2.5 border-b border-gray-100 dark:border-erp-border-dark">
+    <!-- The view is already shown by its tab, so its pill only appears next to other filters. -->
+    <div *ngIf="isFiltered" class="shrink-0 flex items-center gap-2 flex-wrap px-5 py-2.5 border-b border-gray-100 dark:border-erp-border-dark">
       <span *ngIf="scopedView as v" class="inline-flex items-center gap-1 h-7 pl-2.5 pr-1 text-xs rounded-full bg-violet-50 dark:bg-violet-950/40 text-violet-800 dark:text-violet-300 ring-1 ring-inset ring-violet-200 dark:ring-violet-900">
         <span class="text-violet-500 dark:text-violet-400">View</span>
         <span class="font-medium max-w-40 truncate">{{ v.label }}</span>
@@ -385,7 +386,8 @@
 
               <!-- Row actions -->
               <td *ngIf="rowActions.length" class="dg-td dg-sticky-right !pr-5 text-right whitespace-nowrap" (click)="$event.stopPropagation()">
-                <span *ngIf="visibleQuickActionSlots(row).length" class="dg-quick inline-flex items-center gap-0.5 mr-0.5 align-middle">
+                <span *ngIf="visibleQuickActionSlots(row).length" class="dg-quick inline-flex items-center gap-0.5 mr-0.5 align-middle"
+                  [class.dg-quick-persistent]="hasPersistentQuick(row)">
                   <button *ngFor="let a of visibleQuickActionSlots(row)" type="button" class="dg-icon-btn relative"
                     [class.dg-icon-danger]="a.variant === 'danger'" [matTooltip]="a.label" [attr.aria-label]="a.label"
                     (click)="runQuickAction(a, row)">

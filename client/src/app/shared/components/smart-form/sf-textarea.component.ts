@@ -13,7 +13,7 @@ import { SF_STYLES } from './sf.model';
     <textarea #ta class="sf-input block py-2 leading-5" [style.resize]="autoresize ? 'none' : 'vertical'"
       [id]="inputId" [rows]="rows" [value]="value ?? ''" [placeholder]="placeholder" [disabled]="disabled" [readOnly]="readonly"
       [attr.maxlength]="maxlength" (input)="update(ta.value); resize(ta); fit(ta)" (focus)="fit(ta)" (blur)="touch(); collapse(ta)"
-      (keydown.enter)="noEnter && $event.preventDefault(); bullets && onBulletEnter($event, ta)"></textarea>
+      (keydown.enter)="onEnter($event, ta)"></textarea>
     <p *ngIf="maxlength" class="mt-1 text-right text-[11px] tabular-nums"
       [ngClass]="(value?.length || 0) >= maxlength ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'">{{ value?.length || 0 }} / {{ maxlength }}</p>
   `,
@@ -24,9 +24,37 @@ export class SfTextareaComponent extends SfControl<string> {
   @Input() maxlength: number | null = null;
   @Input({ transform: booleanAttribute }) autoresize = false;
   @Input({ transform: booleanAttribute }) noEnter = false;
+  @Input({ transform: booleanAttribute }) commaOnEnter = false;
 
   /** Enter continues the list with a "*   " bullet; Enter on an empty bullet ends it. */
   @Input({ transform: booleanAttribute }) bullets = false;
+
+  onEnter(event: Event, ta: HTMLTextAreaElement): void {
+    if (this.commaOnEnter) {
+      this.onCommaEnter(event, ta);
+      return;
+    }
+    if (this.noEnter) event.preventDefault();
+    if (this.bullets) this.onBulletEnter(event, ta);
+  }
+
+  private onCommaEnter(event: Event, ta: HTMLTextAreaElement): void {
+    event.preventDefault();
+    const value = ta.value;
+    const start = ta.selectionStart ?? value.length;
+    const end = ta.selectionEnd ?? value.length;
+    const before = value.substring(0, start).trimEnd();
+    const after = value.substring(end).trimStart();
+
+    if (!before || /[,;]\s*$/.test(before)) return;
+
+    const next = `${before}, ${after}`;
+    const position = before.length + 2;
+    ta.value = next;
+    ta.selectionStart = ta.selectionEnd = position;
+    this.update(next);
+    this.fit(ta);
+  }
 
   onBulletEnter(event: Event, ta: HTMLTextAreaElement): void {
     event.preventDefault();

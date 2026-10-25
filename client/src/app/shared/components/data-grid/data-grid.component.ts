@@ -216,7 +216,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
         // filters/searches/sorts must also reload the data, otherwise the tab and chips describe a different list than the rows.
         Promise.resolve().then(() => {
           this.viewChange.emit(view);
-          if (view.filters?.length || view.searchTerm || view.sort) this.emitQuery();
+          // Server-side hosts filter by viewId, so any restored view other than the first needs a reload too.
+          if (view.filters?.length || view.searchTerm || view.sort || (this.serverSide && view !== this.allViews[0])) this.emitQuery();
         });
       }
     }
@@ -259,7 +260,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   showAllColumns(): void {
-    this.columns.forEach((c) => (c.visible = true));
+    this.columns.forEach((c) => { if (!c.locked) c.visible = true; });
     this.savePrefs();
   }
 
@@ -395,6 +396,9 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   selectView(view: DataGridView<T>): void {
     if (view.id === this.activeViewId) return;
+    // A clicked tab replaces the view that came in on the URL; otherwise the next `views` change (e.g. counts
+    // loading) re-applies the old URL view and bounces the user back to it.
+    if (this.pendingRouteViewId) this.pendingRouteViewId = view.id;
     this.applyView(view);
     this.selectedKeys.clear();
     this.emitSelection();
@@ -1094,6 +1098,10 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   visibleRowActions(row: T): DataGridRowAction<T>[] {
     return this.rowActions.filter((a) => a.menu !== false && !a.hidden?.(row));
+  }
+
+  hasPersistentQuick(row: T): boolean {
+    return this.visibleQuickActionSlots(row).some((a) => a.persistent);
   }
 
   get quickActionSlots(): DataGridRowAction<T>[] {

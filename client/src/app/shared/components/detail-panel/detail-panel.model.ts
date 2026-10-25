@@ -75,7 +75,7 @@ export interface DetailTableColumn {
   key: string;
   label: string;
   /** 'stack' renders `key` as a bold title with `subKey` as a muted second line. */
-  type?: 'text' | 'number' | 'currency' | 'date' | 'badge' | 'html' | 'stack' | 'image';
+  type?: 'text' | 'number' | 'currency' | 'date' | 'badge' | 'html' | 'stack' | 'image' | 'textarea';
   /** type 'image' only: shows a View action that opens a larger modal preview. */
   imagePreview?: boolean;
   align?: 'left' | 'right' | 'center';

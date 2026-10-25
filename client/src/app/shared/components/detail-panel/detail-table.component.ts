@@ -110,6 +110,9 @@ interface DetailTableLine {
                     <div *ngIf="c.subKey && line.row[c.subKey]" [class.dt-clamp]="c.clamp"
                       class="mt-0.5 text-[12px] leading-snug text-gray-500 dark:text-gray-400">{{ line.row[c.subKey] }}</div>
                   </ng-container>
+                  <textarea *ngSwitchCase="'textarea'" readonly rows="1" [value]="line.row[c.key] || ''"
+                    (focus)="expandTextarea($event)" (blur)="collapseTextarea($event)"
+                    class="min-h-[2.25rem] w-full min-w-52 resize-none rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 text-[12px] leading-5 text-gray-700 outline-none transition focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-500/10 dark:border-erp-border-dark dark:bg-white/[0.04] dark:text-gray-200 dark:focus:border-violet-500 dark:focus:bg-erp-surface-dark"></textarea>
                   <ng-container *ngSwitchDefault>{{ line.row[c.key] ?? '—' }}</ng-container>
                 </ng-container>
               </td>
@@ -204,6 +207,16 @@ export class DetailTableComponent {
   closeImage(): void {
     this.previewImageUrl = '';
     this.previewImageAlt = '';
+  }
+
+  expandTextarea(event: Event): void {
+    const textarea = event.target as HTMLTextAreaElement;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight + 2}px`;
+  }
+
+  collapseTextarea(event: Event): void {
+    (event.target as HTMLTextAreaElement).style.height = '';
   }
 
   @HostListener('document:keydown.escape')

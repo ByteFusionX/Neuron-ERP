@@ -7,6 +7,7 @@ import { AlertService } from 'src/app/core/services/alert.service';
 import { Subject, Subscription, debounceTime, distinctUntilChanged, of, switchMap, tap } from 'rxjs';
 import { LoadMoreOnScrollDirective } from '../../directives/load-more-on-scroll.directive';
 import type { SalesRfqPastQuote } from 'src/app/shared/interfaces/sales-rfq.interface';
+import type { SupplierLastPrice } from 'src/app/shared/interfaces/purchase.interface';
 
 /** Catalogue palette page size: rows fetched first, and per scroll to the end. */
 const PALETTE_PAGE = 10;
@@ -65,6 +66,8 @@ export interface LineSupplierOffer {
   pastOnly?: boolean;
   /** Awarded offers only: the part of the line's quantity this supplier won (blank = all of it). */
   qty?: number;
+  /** The supplier's last price for the product (last PO, else last comparison); seeds an empty price. */
+  last?: SupplierLastPrice;
 }
 
 /** What one supplier won of a purchase line. */
@@ -96,6 +99,10 @@ export interface LineShare {
       .ie-strip.ie-strip-rfq { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
       .ie-strip.ie-strip-rfq.ie-strip-rfq-priced { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr); }
     }
+    .ie-short { display: grid; gap: 0.375rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    @media (min-width: 900px) { .ie-short { grid-template-columns: minmax(0, 6fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.6fr) minmax(0, 1.6fr); } }
+    .ie-num { justify-content: flex-end; font-variant-numeric: tabular-nums; }
+    .ie-short.ie-labels > span:nth-child(2), .ie-short.ie-labels > span:nth-child(4), .ie-short.ie-labels > span:nth-child(5) { text-align: right; }
     .ie-labels { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.03em; color: #9ca3af; }
     .ie-labels > span:nth-child(n+3):nth-child(-n+7), .ie-labels > span:nth-child(n+10) { text-align: right; }
     .ie-labels.ie-strip-purchase > span:nth-child(n+3):nth-child(-n+6), .ie-labels.ie-strip-purchase > span:nth-child(n+9) { text-align: right; }
@@ -202,23 +209,109 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     return won.length ? won.some((s) => s.supplierId === supplierId) : String(d.get('supplierId')?.value || '') === supplierId;
   }
 
-  /** The pill's text: the supplier, plus its share once the line is split between suppliers. */
+  /** The pill's tooltip: the supplier and its last price, with the change to the price it has on this line. */
+  pillTitle(i: number, j: number, k: number, pill: { id: string; name: string }): string {
+    const d = this.detailsAt(i, j)?.at(k);
+    const last = d ? this.lastOffer(d, pill.id) : undefined;
+    if (!d || !last) return pill.name;
+    // The line's own supplier is priced by the line's cost; another by its tab or offer.
+    const ownCost = String(d.get('supplierId')?.value || '') === pill.id && !this.sharesOf(d).length ? Number(d.get('unitCost')?.value) : 0;
+    const now = ownCost > 0 ? ownCost : this.supplierCost(d, pill.id);
+    const diff = now != null ? this.priceChange(now, last.lastPrice) : null;
+    return `${pill.name} · last ${last.source} ${last.sourceNo || ''} ${last.lastPrice.toFixed(2)} ${last.currency}`.replace(/\s+/g, ' ')
+      + (diff != null ? ` · now ${diff > 0 ? '+' : ''}${diff.toFixed(1)}%` : '');
+  }
+
+  private lastOffer(d: AbstractControl, supplierId: string | null): SupplierLastPrice | undefined {
+    if (!supplierId) return undefined;
+    return this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === supplierId)?.last;
+  }
+
+  /** Percent change from the last price, or null when unchanged or unknown. */
+  private priceChange(now: number, last: number): number | null {
+    if (!(last > 0) || !(now > 0) || Math.abs(now - last) < 0.005) return null;
+    return ((now - last) / last) * 100;
+  }
+
+  /** Supplier tab: this supplier's last price for the product, and the change to the price typed here. */
+  lastPrice(i: number, j: number, k: number): { last: SupplierLastPrice; diff: number | null } | null {
+    const d = this.detailsAt(i, j)?.at(k);
+    const last = d ? this.lastOffer(d, this.supplierScope ?? String(d.get('supplierId')?.value || '')) : undefined;
+    if (!d || !last) return null;
+    return { last, diff: this.priceChange(this.shownUnitCost(i, j, k), last.lastPrice) };
+  }
+
+  /** What each supplier supplies of a line, once chosen in this form (null = unchanged since it was loaded). */
+  lineShares(lineKey: string): LineShare[] | null {
+    return this.shares.get(lineKey) ?? null;
+  }
+
+  /** The price shown for a supplier on a line under its tab (typed, offered or suggested), or null. */
+  scopePrice(lineKey: string, supplierId: string): number | null {
+    const v = this.scopeCosts.get(`${lineKey}|${supplierId}`)?.value;
+    return v != null && Number(v) > 0 ? Number(v) : null;
+  }
+
+  /** The pill's text: the supplier, plus its share once the line is split or only partly awarded. */
   pillLabel(i: number, j: number, k: number, pill: { id: string; name: string }): string {
     const d = this.detailsAt(i, j)?.at(k);
     const won = d ? this.sharesOf(d) : [];
-    const mine = won.length > 1 ? won.find((s) => s.supplierId === pill.id) : undefined;
-    return mine ? `${pill.name} · ${mine.qty}` : pill.name;
+    const partial = d ? this.pillQtyLeft(d) > 0 : false;
+    const mine = won.length > 1 || partial ? won.find((s) => s.supplierId === pill.id) : undefined;
+    if (!mine) return pill.name;
+    return partial ? `${pill.name} · ${mine.qty}/${Number(d!.get('quantity')?.value) || 0}` : `${pill.name} · ${mine.qty}`;
+  }
+
+  private pillQtyLeft(d: AbstractControl): number {
+    const total = Number(d.get('quantity')?.value) || 0;
+    return total - this.sharesOf(d).reduce((n, s) => n + s.qty, 0);
+  }
+
+  /** A pill of a supplier that holds nothing is closed once the whole quantity is awarded. */
+  pillBlocked(i: number, j: number, k: number, supplierId: string): boolean {
+    const d = this.detailsAt(i, j)?.at(k);
+    if (!d || !this.sharesOf(d).length || this.pillAwarded(i, j, k, supplierId)) return false;
+    return !(this.pillQtyLeft(d) > 0) && supplierId !== (this.baseSuppliers.get(d) ?? '');
   }
 
   pickPill(i: number, j: number, k: number, supplierId: string): void {
     const d = this.detailsAt(i, j)?.at(k);
     if (!d || this.lineLocked?.(i, j, k)) return;
-    const offer = this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === supplierId);
-    const price = offer?.price != null ? Number(offer.price) : null;
-    this.dealCost(d);
-    // A pill hands the whole line to that supplier, replacing any split.
-    this.applyShares(d, [{ supplierId, qty: Number(d.get('quantity')?.value) || 0, cost: price ?? (Number(d.get('unitCost')?.value) || 0) }]);
+    const price = this.supplierCost(d, supplierId);
+    const base = this.baseSuppliers.get(d) ?? '';
+    const awarded = this.sharesOf(d).length > 0;
+    // Nothing awarded: the deal supplier is already the active pill.
+    if (!awarded && supplierId === base) return;
+    // The active pill, or the job's own supplier once the whole line is awarded elsewhere, takes the award back: the line returns to the deal supplier and cost.
+    const held = this.sharesOf(d);
+    // On a split line, the active pill releases only that supplier's share.
+    if (held.length > 1 && held.some((s) => s.supplierId === supplierId)) {
+      this.applyShares(d, held.filter((s) => s.supplierId !== supplierId));
+      this.refillScopeQtys(d, '');
+      d.markAsDirty();
+      this.pillClicked.emit({ lineKey: d.get('lineKey')?.value, supplierId, price: null });
+      return;
+    }
+    if (awarded && (this.pillAwarded(i, j, k, supplierId) || (supplierId === base && !(this.pillQtyLeft(d) > 0)))) {
+      this.shares.set(d.get('lineKey')?.value, []);
+      const deal = this.dealCost(d);
+      d.patchValue({ supplierId: base || null, ...(deal != null ? { unitCost: deal } : {}) });
+      this.refillScopeQtys(d, '');
+      d.markAsDirty();
+      this.pillClicked.emit({ lineKey: d.get('lineKey')?.value, supplierId: base, price: deal });
+      return;
+    }
+    // Once some quantity is awarded, another supplier only takes what is still unawarded.
+    const left = this.pillQtyLeft(d);
+    if (awarded && !(left > 0)) return;
+    const cost = price ?? (Number(d.get('unitCost')?.value) || 0);
+    // A quantity typed on the supplier's own tab is what it gets, capped at what is still free.
+    const typed = this.scopeQtys.get(`${d.get('lineKey')?.value}|${supplierId}`);
+    const free = awarded ? left : Number(d.get('quantity')?.value) || 0;
+    const qty = typed?.dirty && Number(typed.value) > 0 ? Math.min(Number(typed.value), free) : free;
+    this.applyShares(d, [...(awarded ? this.sharesOf(d) : []), { supplierId, qty, cost }]);
     this.refillScopeQtys(d, supplierId);
+    d.markAsDirty();
     this.pillClicked.emit({ lineKey: d.get('lineKey')?.value, supplierId, price });
   }
 
@@ -267,9 +360,56 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   /** The cost a purchase line started with (the deal's), so another supplier's tab is not seeded with a cost that was awarded elsewhere. */
   private baseCosts = new WeakMap<AbstractControl, number | null>();
 
+  /** The supplier the line started with (the deal's), whose cost is the deal cost. */
+  private baseSuppliers = new WeakMap<AbstractControl, string>();
+
+  /** Purchase: the deal sheet's cost and supplier for a line, so the baseline survives an award being saved over the line. */
+  @Input() lineDeal: ((itemName: string, line: any) => { cost: number | null; supplierId: string | null } | null) | null = null;
+
+  private dealOf(d: AbstractControl): { cost: number | null; supplierId: string | null } | null {
+    if (!this.lineDeal) return null;
+    const itemName = String(d.parent?.parent?.get('itemName')?.value || '');
+    return this.lineDeal(itemName, d.value);
+  }
+
   private dealCost(d: AbstractControl): number | null {
-    if (!this.baseCosts.has(d)) this.baseCosts.set(d, Number(d.get('unitCost')?.value) || null);
+    const deal = this.dealOf(d);
+    if (deal?.cost != null) {
+      this.baseCosts.set(d, deal.cost);
+      this.baseSuppliers.set(d, deal.supplierId || this.baseSuppliers.get(d) || String(d.get('supplierId')?.value || ''));
+      return deal.cost;
+    }
+    if (!this.baseCosts.has(d)) {
+      this.baseCosts.set(d, Number(d.get('dealUnitCost')?.value) || Number(d.get('unitCost')?.value) || null);
+      this.baseSuppliers.set(d, String(d.get('supplierId')?.value || ''));
+    }
     return this.baseCosts.get(d) ?? null;
+  }
+
+  /** The deal's cost, but only for the deal's supplier: it is not another supplier's price. */
+  private dealCostFor(d: AbstractControl, supplierId: string): number | null {
+    const deal = this.dealCost(d);
+    const base = this.baseSuppliers.get(d) ?? '';
+    return !base || base === supplierId ? deal : null;
+  }
+
+  /** A supplier's unit cost for the line: typed on its tab, else its quote, else the deal cost when it is the deal's supplier. */
+  private supplierCost(d: AbstractControl, supplierId: string): number | null {
+    const deal = this.dealCost(d);
+    const typed = this.scopeCosts.get(`${d.get('lineKey')?.value}|${supplierId}`)?.value;
+    if (typed != null && Number(typed) > 0) return Number(typed);
+    const offer = this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === supplierId);
+    if (offer?.price != null && Number(offer.price) > 0) return Number(offer.price);
+    return this.baseSuppliers.get(d) === supplierId ? deal : null;
+  }
+
+  /** Purchase: the line's unit cost minus the deal's (negative = saving), or null while unchanged. */
+  unitCostDiff(i: number, j: number, k: number): number | null {
+    const d = this.detailsAt(i, j)?.at(k);
+    const base = d ? this.baseCosts.get(d) : null;
+    if (!d || base == null) return null;
+    const diff = this.shownUnitCost(i, j, k) - base;
+    return Math.abs(diff) < 0.005 ? null : diff;
   }
 
   /** Supplier tab: quantity still to award (positive) or over-awarded (negative) for the line, counting this tab's typed quantity; 0 when settled. */
@@ -277,6 +417,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     const d = this.detailsAt(i, j)?.at(k);
     const total = Number(d?.get('quantity')?.value) || 0;
     if (!d || !total || !this.usesScopeQty(i, j, k)) return 0;
+    // An untouched tab still carries the default quantity; it only counts once typed or awarded here.
+    const ctl = this.scopeQtyControl(i, j, k);
+    const mine = this.sharesOf(d).some((s) => s.supplierId === this.supplierScope);
+    if (!ctl.dirty && !mine && this.shownQty(i, j, k) === total) return 0;
     const left = total - this.claimedElsewhere(d, this.supplierScope!) - this.shownQty(i, j, k);
     return Math.abs(left) < 0.0001 ? 0 : Math.round(left * 10000) / 10000;
   }
@@ -296,6 +440,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     const d = this.detailsAt(i, j)?.at(k);
     return d ? this.linePills(d.getRawValue()) : [];
   }
+
+  /** Pills are rebuilt on every check; tracking by supplier keeps the button (and its click) alive. */
+  trackPill = (_: number, p: { id: string }): string => p.id;
   /** Purchase mode: a supplier pill was clicked on a line. */
   @Output() offerPicked = new EventEmitter<{ lineKey: string; offer: LineSupplierOffer }>();
 
@@ -637,10 +784,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     let c = this.scopeCosts.get(key);
     if (!c) {
       const offer = this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === this.supplierScope);
-      // A cost awarded to another supplier is not this supplier's: fall back to the deal's cost only while nobody has won the line.
+      // A cost awarded to another supplier is not this supplier's: fall back to the deal's cost only while nobody has won the line,
+      // and only for the deal's own supplier; any other supplier starts empty until its price is typed.
       const won = this.sharesOf(d);
       const mine = won.find((s) => s.supplierId === this.supplierScope)?.cost || null;
-      c = new FormControl<number | null>(mine ?? offer?.price ?? (won.length ? null : this.dealCost(d)));
+      c = new FormControl<number | null>(mine ?? offer?.price ?? (won.length ? null : this.dealCostFor(d, this.supplierScope ?? '')));
       this.scopeCosts.set(key, c);
       this.scopeCostSeeds.set(key, c.value);
     }
@@ -700,8 +848,12 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     let c = this.scopeQtys.get(key);
     if (!c) {
       const raw = d.get('quantity')?.value;
-      const seed = this.dealQty(d) ?? (raw == null || raw === '' ? null : Number(raw));
-      c = new FormControl<number | null>(seed);
+      const full = this.dealQty(d) ?? (raw == null || raw === '' ? null : Number(raw));
+      // A split line shows this supplier's awarded share, or what is still open, rather than the whole quantity.
+      const scope = this.supplierScope ?? '';
+      const own = this.sharesOf(d).find((s) => s.supplierId === scope)?.qty;
+      const open = full == null ? null : Math.max(0, (Number(raw) || full) - this.claimedElsewhere(d, scope));
+      c = new FormControl<number | null>(own ?? (this.sharesOf(d).length ? open : full));
       this.scopeQtys.set(key, c);
     }
     return c;
@@ -742,7 +894,12 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     const now = this.lineMargin(i, j, k);
     if (!d || now === null) return null;
     let base = this.baseMargins.get(d);
-    if (base === undefined) {
+    const deal = this.dealOf(d)?.cost;
+    const price = Number(d.get('unitSellingPrice')?.value) || 0;
+    if (deal != null && price > 0) {
+      base = ((price - deal) / price) * 100;
+      this.baseMargins.set(d, base);
+    } else if (base === undefined) {
       const seeded = d.get('profit')?.value;
       base = seeded != null && seeded !== '' && Number.isFinite(Number(seeded)) ? Number(seeded) : now;
       this.baseMargins.set(d, base);
@@ -856,7 +1013,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       uom: ['', deal || purchase ? [] : Validators.required],
       image: [null],
     });
-    if (purchase) (group as FormGroup).addControl('lineKey', this._fb.control(null as string | null));
+    if (purchase) {
+      (group as FormGroup).addControl('lineKey', this._fb.control(null as string | null));
+      (group as FormGroup).addControl('dealUnitCost', this._fb.control(null as number | null));
+    }
     if (deal) {
       (group as FormGroup).addControl('dealSelected', this._fb.control(false));
       // Every line is listed read-only; ticking it unlocks just that row for editing.
@@ -1097,9 +1257,14 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   private writeDetail(group: FormGroup, d: ItemEntryLineValue): void {
     const cost = d.unitCost != null ? Number(d.unitCost) : null;
     const price = d.unitSellingPrice != null ? Number(d.unitSellingPrice) : null;
-    const profit = d.profit != null && (d.profit as any) !== ''
-      ? Number(d.profit)
-      : cost && price ? Number((((price - cost) / price) * 100).toFixed(2)) : null;
+    // Purchase: the deal's cost is remembered on the line, so awarding a supplier never moves the baseline the diffs are measured from.
+    const dealRaw = (d as any).dealUnitCost;
+    const dealUnitCost = this.isPurchase ? (Number(dealRaw) > 0 ? Number(dealRaw) : cost) : null;
+    const profit = this.isPurchase && dealUnitCost && price
+      ? Number((((price - dealUnitCost) / price) * 100).toFixed(2))
+      : d.profit != null && (d.profit as any) !== ''
+        ? Number(d.profit)
+        : cost && price ? Number((((price - cost) / price) * 100).toFixed(2)) : null;
 
     if (this.isDeal && !this.originals.has(group)) this.originals.set(group, { ...d });
     this.keepAvailability(d.availability);
@@ -1119,7 +1284,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       supplierId: (typeof d.supplierId === 'object' ? d.supplierId?._id : d.supplierId) || null,
       uom: this.canonicalUnit(d.uom),
       image: d.image ?? null,
-      ...(this.isPurchase ? { lineKey: d.lineKey ?? null } : {}),
+      ...(this.isPurchase ? { lineKey: d.lineKey ?? null, dealUnitCost } : {}),
       // An RFQ line keeps the key it was created with unless the record already has one.
       ...(this.isRfq && d.lineKey ? { lineKey: d.lineKey } : {}),
     }, { emitEvent: false });
@@ -1527,7 +1692,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       // Margin first, so a catalogue cost derives a price from it; a catalogue price, set after, wins.
       if (k !== null) this.seedMargin(i, j, k);
       // The product link plus its snapshot identifiers always come from the picked row.
-      detail.get('productId')?.setValue(s._id, { emitEvent: false });
+      // The link emits, so a parent watching the lines (e.g. last supplier prices) sees the product change.
+      detail.get('productId')?.setValue(s._id);
       this.fillIfEmpty(detail, 'itemCode', s.itemCode);
       this.fillIfEmpty(detail, 'partNo', s.partNo);
       this.keepUnit(s.uom);
@@ -1857,9 +2023,12 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
         const ctrl = this.detailsAt(this.selectedOption, j)?.at(k);
         const qty = (ctrl && this.dealQty(ctrl)) ?? (Number(d.quantity) || 0);
         const lineSelling = qty * (Number(d.unitSellingPrice) || 0);
+        selling += lineSelling;
+        // The deal's unit cost when known (exact); otherwise back out of the stored margin, which is rounded.
+        const deal = ctrl ? this.dealCost(ctrl) : null;
+        if (deal != null) { cost += qty * deal; return; }
         const m = ctrl ? this.baseMargins.get(ctrl) : undefined;
         const margin = m ?? (d.profit != null && d.profit !== '' ? Number(d.profit) : null);
-        selling += lineSelling;
         cost += margin != null && Number.isFinite(margin) ? lineSelling * (1 - margin / 100) : qty * (Number(d.unitCost) || 0);
       });
     });
@@ -1993,22 +2162,6 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     try { localStorage.setItem('ie-density', this.compact ? 'compact' : 'comfortable'); } catch { /* storage unavailable */ }
   }
 
-  /** Short view: a purchase line shows only description, qty, UoM, price and supplier. */
-  shortView = this.readShortView();
-
-  get short(): boolean {
-    return this.isPurchase && this.shortView;
-  }
-
-  toggleShortView(): void {
-    this.shortView = !this.shortView;
-    try { localStorage.setItem('ie-short-view', this.shortView ? '1' : '0'); } catch { /* storage unavailable */ }
-  }
-
-  private readShortView(): boolean {
-    try { return localStorage.getItem('ie-short-view') === '1'; } catch { return false; }
-  }
-
   private readDensity(): boolean {
     try { return localStorage.getItem('ie-density') === 'compact'; } catch { return false; }
   }
@@ -2024,7 +2177,6 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   readonly filterChips: { key: LineFilter; label: string; hint: string }[] = [
     { key: 'missingPrice', label: 'Missing price', hint: 'Lines with no selling price yet' },
     { key: 'notInCatalogue', label: 'Not in products', hint: 'Lines typed by hand that are not linked to a product in the catalogue' },
-    { key: 'notAwarded', label: 'Not awarded', hint: 'Lines no supplier has been awarded yet. Award them through the RFQ button' },
     { key: 'errors', label: 'Errors', hint: 'Filled-in lines that fail validation or (purchase requests) have no supplier. Blank lines are not counted until you start typing in them' },
   ];
   /** The item "Jump to" just scrolled to, highlighted briefly. */
@@ -2036,7 +2188,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   visibleChips(): { key: LineFilter; label: string; hint: string }[] {
     return this.filterChips.filter((c) =>
-      (c.key !== 'missingPrice' || !(this.isRfq && !this.rfqPriced)) && (c.key !== 'notAwarded' || !!this.lineAwarded));
+      (c.key !== 'missingPrice' || !(this.isRfq && !this.rfqPriced)));
   }
 
   toggleFilter(key: LineFilter): void {
@@ -2094,17 +2246,64 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   /** The line's only supplier (its default from the deal, or awarded) cannot be taken out of the tab; with several suppliers any of them can. */
   private scopeProtected(v: any): boolean {
-    const mine = v.supplierId === this.supplierScope
-      || !!this.lineOffers?.(v)?.some((o) => o.supplierId === this.supplierScope && o.state === 'awarded');
+    if (this.awardedHere(v)) return true;
+    const mine = v.supplierId === this.supplierScope;
     const listed = this.linePills ? this.linePills(v).length : 1;
     return listed <= 1 && (mine || !!v.supplierId);
   }
 
-  private inSupplierScope(v: any): boolean {
-    if (v.lineKey && this.scopeExcludedKeys.includes(v.lineKey)) return false;
-    return v.supplierId === this.supplierScope || !!this.lineOffers?.(v)?.some((o) => o.supplierId === this.supplierScope && !o.pastOnly)
-      || (!!v.lineKey && this.scopeLineKeys.includes(v.lineKey))
-      || (!!v.lineKey && !!this.shares.get(v.lineKey)?.some((s) => s.supplierId === this.supplierScope));
+  /** The line is awarded (a share or an awarded offer) to the scoped supplier. */
+  private awardedHere(v: any): boolean {
+    return !!this.lineOffers?.(v)?.some((o) => o.supplierId === this.supplierScope && o.state === 'awarded')
+      || (!!v.lineKey && !!this.shares.get(v.lineKey)?.some((s) => s.supplierId === this.supplierScope && s.qty > 0));
+  }
+
+  /** Why Unlist is off, for the tooltip. */
+  unlistBlockedReason(): string {
+    const lines = this.selectedActiveLines().map((l) => l.getRawValue());
+    if (lines.some((v) => this.awardedHere(v))) return 'Assigned to this supplier. Release it to unlist.';
+    return 'The only supplier on a ticked line cannot be unlisted.';
+  }
+
+  /** Why Assign is off, for the tooltip. */
+  awardBlockedReason(): string {
+    if (this.selectedFullCount() > 0) return 'A ticked line has its whole quantity assigned to other suppliers. Release one first.';
+    return 'A ticked line has more quantity assigned than the line needs.';
+  }
+
+  /** Why Apply is off, for the tooltip. */
+  applyBlockedReason(): string {
+    return 'Some ticked lines are not listed for this supplier. List them first.';
+  }
+
+  private inSupplierScope(v: any, scope = this.supplierScope, listed = this.scopeLineKeys, excluded = this.scopeExcludedKeys): boolean {
+    if (v.lineKey && excluded.includes(v.lineKey)) return false;
+    return v.supplierId === scope || !!this.lineOffers?.(v)?.some((o) => o.supplierId === scope && !o.pastOnly)
+      || (!!v.lineKey && listed.includes(v.lineKey))
+      || (!!v.lineKey && !!this.shares.get(v.lineKey)?.some((s) => s.supplierId === scope));
+  }
+
+  /**
+   * Lines on a supplier tab and how many have a price there. The tab is passed in, and the price is worked out the way its
+   * cost box would seed it, so a parent can ask before this view has rendered the tab.
+   */
+  scopePriceStatus(scope: string, listed: string[], excluded: string[]): { lines: number; priced: number } {
+    let lines = 0;
+    let priced = 0;
+    this.optionalItems.controls.forEach((_, i) => this.itemsAt(i).controls.forEach((_, j) =>
+      (this.detailsAt(i, j)?.controls ?? []).forEach((d) => {
+        const v = d.getRawValue();
+        if (!v.lineKey || !this.inSupplierScope(v, scope, listed, excluded)) return;
+        lines++;
+        const typed = this.scopeCosts.get(`${v.lineKey}|${scope}`)?.value;
+        const won = this.sharesOf(d);
+        const seed = won.find((s) => s.supplierId === scope)?.cost
+          || this.lineOffers?.(v)?.find((o) => o.supplierId === scope)?.price
+          || (v.supplierId === scope ? Number(v.unitCost) : null)
+          || (won.length ? null : this.dealCostFor(d, scope));
+        if (Number(typed ?? seed) > 0) priced++;
+      })));
+    return { lines, priced };
   }
 
   /** Ticked lines of the active supplier tab (what Remove and Award act on). */
@@ -2142,16 +2341,57 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   /** Lines awarded straight to the scoped supplier, with the cost shown in the tab. */
   @Output() awardToTab = new EventEmitter<{ lineKey: string; price: number; qty: number; total: number }[]>();
 
-  /** Awards this tab's quantity of each ticked line to the supplier. A line can be awarded to several suppliers while quantity is left; the line's own quantity stays the full amount. */
+  /** Ticked lines of this tab whose whole quantity is already assigned to other suppliers. */
+  selectedFullCount(): number {
+    const scope = this.supplierScope ?? '';
+    return this.selectedActiveLines().filter((d) => {
+      const total = Number(d.get('quantity')?.value) || 0;
+      return this.sharesOf(d).length > 0 && !(total - this.claimedElsewhere(d, scope) > 0);
+    }).length;
+  }
+
+  /** Ticked lines of this tab that are assigned to the scoped supplier. */
+  selectedHeldCount(): number {
+    return this.selectedActiveLines().filter((l) => this.awardedHere(l.getRawValue())).length;
+  }
+
+  /** Gives the ticked lines back from this supplier: its share is released, and a line left with no supplier returns to the job's supplier and cost. */
+  bulkReleaseFromTab(): void {
+    const scope = this.supplierScope;
+    if (!scope) return;
+    let changed = false;
+    this.selectedActiveLines().forEach((d) => {
+      if (!this.awardedHere(d.getRawValue())) return;
+      const rest = this.sharesOf(d).filter((s) => s.supplierId !== scope);
+      const key = d.get('lineKey')?.value;
+      if (rest.length) {
+        this.applyShares(d, rest);
+      } else {
+        const base = this.baseSuppliers.get(d) ?? '';
+        const deal = this.dealCost(d);
+        this.shares.set(key, []);
+        d.patchValue({ supplierId: base || null, ...(deal != null ? { unitCost: deal } : {}) });
+      }
+      this.refillScopeQtys(d, '');
+      this.pillClicked.emit({ lineKey: key, supplierId: String(d.get('supplierId')?.value || ''), price: null });
+      changed = true;
+    });
+    if (changed) this.clearSelection();
+  }
+
+  /** Assigns this tab's quantity of each ticked line to the supplier. A line can be split between suppliers while quantity is left; the line's own quantity stays the full amount. */
   bulkAwardToTab(): void {
     const scope = this.supplierScope;
-    if (!scope || this.selectedExceedCount()) return;
+    if (!scope || this.selectedExceedCount() || this.selectedFullCount()) return;
     const ticked = this.selectedActiveLines();
     const out: { lineKey: string; price: number; qty: number; total: number }[] = [];
     this.itemsAt(0).controls.forEach((_, j) => (this.detailsAt(0, j)?.controls || []).forEach((d, k) => {
       const lineKey = d.get('lineKey')?.value;
       if (!lineKey || !ticked.includes(d as FormGroup)) return;
-      const qty = this.shownQty(0, j, k);
+      // An untouched tab holds the full quantity; it only takes what the other suppliers have left.
+      const open = (Number(d.get('quantity')?.value) || 0) - this.claimedElsewhere(d, scope);
+      const typed = this.shownQty(0, j, k);
+      const qty = this.scopeQtyControl(0, j, k).dirty ? typed : Math.min(typed, open);
       const price = this.shownUnitCost(0, j, k);
       this.dealCost(d);
       this.applyShares(d, [...this.sharesOf(d).filter((s) => s.supplierId !== scope), { supplierId: scope, qty, cost: price }]);
