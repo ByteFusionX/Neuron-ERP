@@ -1,12 +1,12 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { NgIf } from '@angular/common';
+import { } from '@angular/common';
 import { SettingsNavService } from './settings-nav.service';
 
 @Component({
   selector: 'app-settings-shell',
   standalone: true,
-  imports: [NgIf, RouterOutlet],
+  imports: [RouterOutlet],
   template: `
     <div class="h-full bg-gray-50 dark:bg-erp-surface-dark-alt">
       <div class="h-full p-6">

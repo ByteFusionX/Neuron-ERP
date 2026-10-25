@@ -3,7 +3,7 @@ import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core
 import { FormArray, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { NgIcon } from '@ng-icons/core';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
-import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
+import { } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { CatalogueSuggestionSource, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
 import { LineSupplierOffer } from 'src/app/shared/components/item-entry/item-entry.component';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
@@ -16,7 +16,6 @@ import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form'
     ReactiveFormsModule,
     FormsModule,
     SmartFormModule,
-    DetailBadgeComponent,
     ActionButtonComponent,
     ItemEntryComponent,
     NgIcon,

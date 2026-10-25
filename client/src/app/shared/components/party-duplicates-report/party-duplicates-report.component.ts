@@ -29,7 +29,7 @@ const SECTIONS: Record<PartyKind, { key: string; title: string }[]> = {
         @if (error) { <p class="text-red-600">{{ error }}</p> }
         @if (report) {
           @for (s of sections; track s.key) {
-            <h3 class="font-semibold">{{ s.title }} ({{ report[s.key]?.length ?? 0 }})</h3>
+            <h3 class="font-semibold">{{ s.title }} ({{ report[s.key].length }})</h3>
             @for (g of report[s.key]; track g.key) {
               <div class="rounded-md border border-gray-100 p-2 dark:border-erp-border-dark">
                 <p class="text-xs font-medium">{{ g.key }}</p>

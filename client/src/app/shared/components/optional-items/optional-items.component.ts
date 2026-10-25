@@ -18,7 +18,7 @@ import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 import { NgFor, NgIf } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { NgSelectComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
-import { RouterLink } from '@angular/router';
+import { } from '@angular/router';
 import {
   DragDropModule,
   CdkDragDrop,
@@ -54,7 +54,6 @@ interface ProductSuggestion {
     NgIcon,
     NgSelectComponent,
     NgFooterTemplateDirective,
-    RouterLink,
     appNoNegativeNumber,
     DragDropModule,
   ],

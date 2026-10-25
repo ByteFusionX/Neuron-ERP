@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { AsyncPipe, DatePipe, DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
+import { DatePipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
 import { ApexAxisChartSeries, ApexChart, ApexDataLabels, ApexFill, ApexGrid, ApexLegend, ApexNonAxisChartSeries, ApexPlotOptions, ApexStroke, ApexTooltip, ApexXAxis, ApexYAxis, ChartComponent } from 'ng-apexcharts';
 import { Observable, Subscription, filter, shareReplay, switchMap, take } from 'rxjs';
@@ -120,7 +120,7 @@ const STAGE_LABELS: Record<allocateStatus, string> = {
   styleUrls: ['./job-report.component.css'],
   providers: [NumberFormatterPipe, DatePipe],
   imports: [
-    ViewToggleComponent, NgIf, NgFor, NgClass, AsyncPipe, DecimalPipe, DatePipe, RouterLink, FormsModule, NgIcon,
+    ViewToggleComponent, NgIf, NgFor, NgClass, FormsModule, NgIcon,
     ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, NumberFormatterPipe, ReportFiltersComponent,
   ],
 })
@@ -226,7 +226,7 @@ export class JobReportComponent implements OnInit, OnDestroy {
     const customers$: Observable<getCustomer[]> = this._employeeService.employeeData$.pipe(
       filter((e) => !!e?._id),
       take(1),
-      switchMap((e) => this._customerService.getAllCustomers(e!._id as string)),
+      switchMap((e) => this._customerService.getAllCustomers(e!._id as string, true)),
       shareReplay(1)
     );
     this.subscriptions.add(

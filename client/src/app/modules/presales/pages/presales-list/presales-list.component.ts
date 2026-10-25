@@ -1,7 +1,7 @@
 import { AfterViewInit, Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { AsyncPipe, DatePipe, NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
+import { ActivatedRoute, Router, } from '@angular/router';
+import { AsyncPipe, NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { EnquiryService, PresaleTabCounts } from 'src/app/core/services/enquiry/enquiry.service';
 import { EstimationHistoryEntry, Estimations, feedback, getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
@@ -50,7 +50,7 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
   selector: 'app-presales-list',
   templateUrl: './presales-list.component.html',
   styleUrls: ['./presales-list.component.css'],
-  imports: [ViewToggleComponent, RouterLink, NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, DatePipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTimelineComponent, ApprovalJourneyComponent, ViewEstimationComponent, EstimationFormDrawerComponent, ActionButtonComponent, FollowUpPanelComponent]
+  imports: [ViewToggleComponent, NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTimelineComponent, ApprovalJourneyComponent, ViewEstimationComponent, EstimationFormDrawerComponent, ActionButtonComponent, FollowUpPanelComponent]
 })
 export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('grid') grid!: DataGridComponent<any>;

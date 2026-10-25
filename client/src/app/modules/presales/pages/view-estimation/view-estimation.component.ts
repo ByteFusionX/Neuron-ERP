@@ -1,5 +1,5 @@
 import { Component, EventEmitter, booleanAttribute, Input, OnChanges, Output, SimpleChanges, inject } from '@angular/core';
-import { DatePipe, DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
+import { DatePipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { NavigationExtras, Router } from '@angular/router';
 import { DomSanitizer } from '@angular/platform-browser';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
@@ -22,9 +22,8 @@ import { EstimationHistoryEntry, Estimations } from 'src/app/shared/interfaces/e
   selector: 'app-view-estimation',
   standalone: true,
   templateUrl: './view-estimation.component.html',
-  imports: [NgIf, NgFor, NgClass, DatePipe, DecimalPipe, SmartFormModule, ActionButtonComponent,
-    DetailTableComponent, DetailSectionComponent, DetailFieldComponent, DetailClauseListComponent,
-    ParseBoldTextPipe, ParseBracketsTextPipe, NumberFormatterPipe],
+  imports: [NgIf, NgFor, NgClass, DatePipe, SmartFormModule, ActionButtonComponent,
+    DetailTableComponent, DetailSectionComponent, DetailFieldComponent, DetailClauseListComponent, NumberFormatterPipe],
 })
 export class ViewEstimationComponent implements OnChanges {
   @Input() open = false;

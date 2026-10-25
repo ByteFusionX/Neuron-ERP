@@ -5,7 +5,7 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
 import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
-import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
+import { } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { DetailProgressComponent } from 'src/app/shared/components/detail-panel/detail-progress.component';
 import { DetailCalloutComponent } from 'src/app/shared/components/detail-panel/detail-callout.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
@@ -45,7 +45,7 @@ const FX: Record<string, number> = { QAR: 1, USD: 0.2747, EUR: 0.2531 };
   standalone: true,
   imports: [
     CommonModule, DetailViewShellComponent, ActionButtonComponent,
-    DetailSectionComponent, DetailFieldComponent, DetailBadgeComponent, DetailProgressComponent,
+    DetailSectionComponent, DetailFieldComponent, DetailProgressComponent,
     DetailCalloutComponent, DetailTableComponent, DetailDocumentsComponent, DetailTimelineComponent,
     DetailMilestonesComponent, DetailSelectComponent, DetailFilterChipsComponent, DetailRelatedListComponent,
     DetailCommentsComponent, DetailCommentComposerComponent, DetailClauseListComponent,

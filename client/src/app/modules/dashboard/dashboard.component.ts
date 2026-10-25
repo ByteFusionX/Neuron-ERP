@@ -16,22 +16,16 @@ import { ToastrService } from 'ngx-toastr';
 import { HttpClient } from '@angular/common/http';
 import { Style, Workbook } from 'exceljs';
 import * as fs from 'file-saver';
-import { MatDrawerContainer, MatDrawer } from '@angular/material/sidenav';
-import { NgIcon } from '@ng-icons/core';
-import { dateFutureDirective } from 'src/app/shared/directives/date-future.directive';
-import { NgSelectComponent, NgOptionComponent, NgLoadingSpinnerTemplateDirective } from '@ng-select/ng-select';
-import { NgFor, NgIf, NgClass, AsyncPipe } from '@angular/common';
-import { SkeltonLoadingComponent } from 'src/app/shared/components/skelton-loading/skelton-loading.component';
-import { GaugeChartComponent } from 'src/app/shared/components/charts/gauge-chart/gauge-chart.component';
-import { DoughnutChartComponent } from 'src/app/shared/components/charts/doughnut-chart/doughnut-chart.component';
-import { LineChartComponent } from 'src/app/shared/components/charts/line-chart/line-chart.component';
-import { HalfDoughnutChartComponent } from 'src/app/shared/components/charts/half-doughnut-chart/half-doughnut-chart.component';
+import { } from '@angular/material/sidenav';
+import { } from '@ng-icons/core';
+import { } from '@ng-select/ng-select';
+import { } from 'src/app/shared/components/skelton-loading/skelton-loading.component';
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css'],
   animations: [opacityState],
-  imports: [MatDrawerContainer, MatDrawer, FormsModule, ReactiveFormsModule, NgIcon, dateFutureDirective, NgSelectComponent, NgFor, NgOptionComponent, NgIf, NgLoadingSpinnerTemplateDirective, NgClass, SkeltonLoadingComponent, GaugeChartComponent, DoughnutChartComponent, LineChartComponent, HalfDoughnutChartComponent, AsyncPipe]
+  imports: [FormsModule, ReactiveFormsModule]
 })
 
 export class DashboardComponent implements OnInit, OnDestroy {

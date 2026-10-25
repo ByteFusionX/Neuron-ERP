@@ -181,7 +181,7 @@
                       (mousedown)="selectItemSuggestion(optionIndex, itemIndex, suggestion)"
                       class="px-4 py-2 text-sm cursor-pointer hover:bg-gray-100"
                     >
-                      <div class="font-medium text-gray-800">{{ suggestion.productCategory?.categoryName }}</div>
+                      <div class="font-medium text-gray-800">{{ suggestion.productCategory.categoryName }}</div>
                       <div class="text-gray-500 truncate">{{ suggestion.productDescription }}</div>
                     </li>
                   </ul>
@@ -266,7 +266,7 @@
                         class="px-4 py-2 text-sm cursor-pointer hover:bg-gray-100"
                       >
                         <div class="font-medium text-gray-800 truncate">{{ suggestion.productDescription }}</div>
-                        <div class="text-gray-500 text-xs">{{ suggestion.productCategory?.categoryName }}</div>
+                        <div class="text-gray-500 text-xs">{{ suggestion.productCategory.categoryName }}</div>
                       </li>
                       <li
                         (mousedown)="onAddProductFromItemDetail(optionIndex, itemIndex, itemDetailIndex)"

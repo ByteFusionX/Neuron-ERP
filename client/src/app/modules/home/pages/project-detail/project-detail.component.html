@@ -9,7 +9,7 @@
     emptyLinkLabel="Back to projects"
     [breadcrumbs]="breadcrumbs"
     [avatarText]="project ? initials(project.name) : ''"
-    [title]="project?.name || ''"
+    [title]="project.name || ''"
     [badges]="badges"
     [subtitle]="project ? (project.priority + ' priority · ' + project.id + ' · Managed by ' + project.manager) : ''"
     [stats]="stats"

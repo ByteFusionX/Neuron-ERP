@@ -57,7 +57,7 @@
 
       <app-detail-section title="Stock held" *ngIf="heldLines.length">
         <app-detail-field label="Released on" [tone]="null">
-          {{ stockHold?.expiresAt ? (stockHold?.expiresAt | date: 'dd MMM yyyy, HH:mm') : '-' }}
+          {{ stockHold?.expiresAt ? (stockHold!.expiresAt | date: 'dd MMM yyyy, HH:mm') : '-' }}
         </app-detail-field>
         <app-detail-field *ngFor="let l of heldLines" [label]="l.partNo || l.detail" [numeric]="true"
           [tone]="l.held < l.requested ? 'warn' : null">{{ l.held }}/{{ l.requested }}{{ l.uom ? ' ' + l.uom : '' }}</app-detail-field>

@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { DecimalPipe, NgFor, NgIf } from '@angular/common';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, } from '@angular/router';
 import { Subscription } from 'rxjs';
 
 import { ExcelExportService, ExcelSheet } from 'src/app/core/services/export/excel-export.service';
@@ -31,7 +31,7 @@ type BreakdownRow = SupplierReportRow;
   styleUrls: ['./supplier-report.component.css'],
   providers: [NumberFormatterPipe],
   imports: [
-    NgIf, NgFor, DecimalPipe, RouterLink,
+    NgIf, NgFor, DecimalPipe,
     ActionButtonComponent, KpiCardComponent, ReportFiltersComponent, ViewToggleComponent, DataGridComponent,
   ],
 })

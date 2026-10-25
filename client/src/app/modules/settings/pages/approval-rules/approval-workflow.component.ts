@@ -11,7 +11,7 @@ import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
 import { departmentPrivileges } from 'src/app/shared/utils/privilege-fallback';
 import { ApprovalStep, ConditionDefaults, ConditionFlags, Workflow, WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
-import { SettingsSectionHeaderComponent } from '../settings-section-header.component';
+import { } from '../settings-section-header.component';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridRowAction, DataGridRowActionEvent } from 'src/app/shared/components/data-grid/data-grid.model';
@@ -78,7 +78,7 @@ const WORKFLOW_FEATURE_ORDER: WorkflowFeature[] = [
 @Component({
   selector: 'app-approval-workflow',
   standalone: true,
-  imports: [NgIf, NgFor, NgClass, NgStyle,FormsModule, DragDropModule,SettingsSectionHeaderComponent, DataGridComponent, ActionButtonComponent, ApprovalJourneyComponent, SfSelectComponent, SfNumberComponent, SfCheckboxComponent, SfSwitchComponent, SfInputComponent, SfDateComponent, SfFieldComponent, DetailSectionComponent],
+  imports: [NgIf, NgFor, NgClass, NgStyle,FormsModule, DragDropModule, DataGridComponent, ActionButtonComponent, ApprovalJourneyComponent, SfSelectComponent, SfNumberComponent, SfCheckboxComponent, SfSwitchComponent, SfInputComponent, SfDateComponent, SfFieldComponent, DetailSectionComponent],
   templateUrl: './approval-workflow.component.html',
   styleUrl: './approval-workflow.component.css',
 })

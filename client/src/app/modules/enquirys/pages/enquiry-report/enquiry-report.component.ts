@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { DatePipe, NgClass, NgFor, NgIf } from '@angular/common';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
 import { ApexAxisChartSeries, ApexChart, ApexDataLabels, ApexFill, ApexGrid, ApexLegend, ApexNonAxisChartSeries, ApexPlotOptions, ApexStroke, ApexTooltip, ApexXAxis, ApexYAxis, ChartComponent } from 'ng-apexcharts';
 import { Observable, Subscription, filter, shareReplay, switchMap, take } from 'rxjs';
@@ -83,7 +83,7 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
   templateUrl: './enquiry-report.component.html',
   styleUrls: ['./enquiry-report.component.css'],
   imports: [ViewToggleComponent,
-    NgIf, NgFor, NgClass, DatePipe, RouterLink, NgIcon,
+    NgIf, NgFor, NgClass, DatePipe, NgIcon,
     ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, ReportFiltersComponent,
   ],
 })
@@ -210,7 +210,7 @@ export class EnquiryReportComponent implements OnInit, OnDestroy {
     const customers$: Observable<getCustomer[]> = this._employeeService.employeeData$.pipe(
       filter((e) => !!e?._id),
       take(1),
-      switchMap((e) => this._customerService.getAllCustomers(e!._id as string)),
+      switchMap((e) => this._customerService.getAllCustomers(e!._id as string, true)),
       shareReplay(1)
     );
     this.subscriptions.add(

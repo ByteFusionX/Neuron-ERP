@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { AsyncPipe, DatePipe, DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
+import { DatePipe, DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
 import { ApexAxisChartSeries, ApexChart, ApexDataLabels, ApexFill, ApexGrid, ApexLegend, ApexNonAxisChartSeries, ApexPlotOptions, ApexStroke, ApexTooltip, ApexXAxis, ApexYAxis, ChartComponent } from 'ng-apexcharts';
 import { Observable, Subscription, filter, of, shareReplay, switchMap, take } from 'rxjs';
@@ -78,7 +78,7 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
   styleUrls: ['./quotation-report.component.css'],
   providers: [NumberFormatterPipe, DatePipe],
   imports: [ViewToggleComponent, 
-    NgIf, NgFor, NgClass, AsyncPipe, DecimalPipe, DatePipe, RouterLink, FormsModule, NgIcon,
+    NgIf, NgFor, NgClass, DecimalPipe, DatePipe, FormsModule, NgIcon,
     ChartComponent, SmartFormModule, ActionButtonComponent, DataGridComponent, NumberFormatterPipe, KpiCardComponent, ReportFiltersComponent,
   ],
 })
@@ -188,7 +188,7 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
     const customers$: Observable<getCustomer[]> = this._employeeService.employeeData$.pipe(
       filter((e) => !!e?._id),
       take(1),
-      switchMap((e) => this._customerService.getAllCustomers(e!._id as string)),
+      switchMap((e) => this._customerService.getAllCustomers(e!._id as string, true)),
       shareReplay(1)
     );
     this.subscriptions.add(

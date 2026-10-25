@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { DatePipe, DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
 import { ApexAxisChartSeries, ApexChart, ApexDataLabels, ApexFill, ApexGrid, ApexLegend, ApexPlotOptions, ApexStroke, ApexTooltip, ApexXAxis, ApexYAxis, ChartComponent } from 'ng-apexcharts';
 import { Subscription, filter, take } from 'rxjs';
@@ -34,7 +34,7 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
   selector: 'app-presale-report',
   templateUrl: './presale-report.component.html',
   styleUrls: ['./presale-report.component.css'],
-  imports: [ViewToggleComponent, NgIf, NgFor, NgClass, DecimalPipe, DatePipe, RouterLink, NgIcon, ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, ReportFiltersComponent],
+  imports: [ViewToggleComponent, NgIf, NgFor, NgClass, DecimalPipe, DatePipe, NgIcon, ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, ReportFiltersComponent],
 })
 export class PresaleReportComponent implements OnInit, OnDestroy {
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }];
