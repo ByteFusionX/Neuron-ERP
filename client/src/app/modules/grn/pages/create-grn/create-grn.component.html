@@ -1,276 +1,182 @@
-<div class="grn-page">
-    <div class="grn-shell">
-    <div class="grn-header">
-        <div>
-            <p class="grn-kicker">Goods Receipt</p>
-            <h3 class="grn-title">
-                Create GRN
-                <span *ngIf="f['grnNo'].value" class="grn-number">{{ f['grnNo'].value }}</span>
-            </h3>
-            <p class="grn-subtitle">Record what physically arrived against an approved LPO.</p>
+<!-- The items step needs room for the entry table, so the drawer widens for that step only. -->
+@if (drawer) {
+<app-sf-drawer
+    [title]="isEdit ? 'Edit GRN' : 'Create GRN'"
+    [subtitle]="subtitle"
+    [width]="step === 2 ? (fullView ? '100vw' : 'min(1400px, 96vw)') : '860px'"
+    [open]="drawerShown"
+    [dirty]="isDrawerDirty()"
+    (closed)="closeDrawer()">
+    <button sfDrawerHeader *ngIf="step === 2" type="button"
+        class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+        [attr.aria-label]="fullView ? 'Exit full view' : 'Expand to full view'" [title]="fullView ? 'Exit full view' : 'Expand to full view'"
+        (click)="fullView = !fullView">
+        <ng-icon [name]="fullView ? 'heroArrowsPointingIn' : 'heroArrowsPointingOut'" class="h-4 w-4"></ng-icon>
+    </button>
+    <ng-container *ngTemplateOutlet="grnContent"></ng-container>
+    <ng-container sfDrawerFooter>
+        <ng-container *ngTemplateOutlet="grnFooter"></ng-container>
+    </ng-container>
+</app-sf-drawer>
+} @else {
+<div class="min-h-full bg-gray-50 p-6 dark:bg-erp-surface-dark-alt">
+    <div class="rounded-xl border border-gray-200 bg-white dark:border-erp-border-dark dark:bg-erp-surface-dark">
+        <div class="border-b border-gray-200 px-6 py-4 dark:border-erp-border-dark">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Create GRN</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">{{ subtitle }}</p>
         </div>
-        <div class="grn-header-actions">
-            <button type="button" class="grn-icon-action" (click)="openInvoiceUpload()" [disabled]="!lpo" [matTooltip]="invoiceFiles.length ? invoiceFiles.length + ' invoice file(s)' : 'Upload supplier invoice'">
-                <ng-icon name="heroDocumentText"></ng-icon>
-                <span>{{ invoiceFiles.length || 0 }}</span>
-            </button>
-            <button type="button" class="grn-icon-action" (click)="openDeliveryNoteUpload()" [disabled]="!lpo" [matTooltip]="deliveryNoteFiles.length ? deliveryNoteFiles.length + ' delivery note file(s)' : 'Upload delivery note'">
-                <ng-icon name="heroDocumentArrowUp"></ng-icon>
-                <span>{{ deliveryNoteFiles.length || 0 }}</span>
-            </button>
+        <div class="px-6 py-5"><ng-container *ngTemplateOutlet="grnContent"></ng-container></div>
+        <div class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 px-6 py-3 dark:border-erp-border-dark">
+            <ng-container *ngTemplateOutlet="grnFooter"></ng-container>
         </div>
-    </div>
-    <form [formGroup]="grnForm">
-        <div class="grn-body">
-            @if(isLoading() && isLpoPreselected()) {
-                <div class="text-center py-8">
-                    <p>Loading LPO details...</p>
-                </div>
-            } @else {
-                <div class="grn-panel">
-                    <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                        @if(!isLpoPreselected()) {
-                            <app-sf-field class="w-full" label="LPO number" [control]="f['selectedLpo']"><app-sf-combobox formControlName="selectedLpo" [options]="lpoSelectOptions" [placeholder]="isLpoOptionsLoading() ? 'Loading LPOs...' : 'Select LPO to create GRN against'"></app-sf-combobox></app-sf-field>
-                        }
-                        <app-sf-field class="w-full" label="GRN number" [control]="f['grnNo']"><app-sf-input formControlName="grnNo" readonly></app-sf-input></app-sf-field>
-                        <app-sf-field class="w-full" label="GRN date" required [control]="f['grnDate']"><app-sf-date formControlName="grnDate" displayFormat="dd/MM/yyyy"></app-sf-date></app-sf-field>
-                    </div>
-
-                    @if(isLoading()) {
-                        <div class="animate-pulse space-y-4">
-                            <div class="flex gap-3">
-                                <div class="h-11 w-full bg-gray-100 rounded"></div>
-                                <div class="h-11 w-full bg-gray-100 rounded"></div>
-                                <div class="h-11 w-full bg-gray-100 rounded"></div>
-                            </div>
-                            <div class="flex gap-3">
-                                <div class="h-11 w-full bg-gray-100 rounded"></div>
-                                <div class="h-11 w-full bg-gray-100 rounded"></div>
-                                <div class="h-11 w-full bg-gray-100 rounded"></div>
-                            </div>
-                            <div class="flex gap-3">
-                                <div class="h-11 w-full bg-gray-100 rounded"></div>
-                                <div class="h-11 w-full bg-gray-100 rounded"></div>
-                                <div class="h-11 w-full bg-gray-100 rounded"></div>
-                            </div>
-                        </div>
-                    } @else if(lpo) {
-                        <div class="grn-summary-strip">
-                            <div>
-                                <span>Ordered</span>
-                                <strong>{{ getItemsTotal('orderedQty') }}</strong>
-                            </div>
-                            <div>
-                                <span>Balance</span>
-                                <strong>{{ getItemsTotal('balanceQty') }}</strong>
-                            </div>
-                            <div>
-                                <span>Accepted</span>
-                                <strong>{{ getItemsTotal('acceptedQty') }}</strong>
-                            </div>
-                            <div>
-                                <span>Rejected</span>
-                                <strong [class.text-red-600]="getItemsTotal('rejectedQty') > 0">{{ getItemsTotal('rejectedQty') }}</strong>
-                            </div>
-                        </div>
-                        <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                            <app-sf-field class="w-full" label="Supplier name" [control]="f['supplierName']"><app-sf-input formControlName="supplierName" readonly></app-sf-input></app-sf-field>
-                            <app-sf-field class="w-full" label="Linked LPO number" [control]="f['linkedLpoNo']"><app-sf-input formControlName="linkedLpoNo" readonly></app-sf-input></app-sf-field>
-                            <app-sf-field *ngIf="!isJobLess" class="w-full" label="Job ID" [control]="f['jobId']"><app-sf-input formControlName="jobId" readonly></app-sf-input></app-sf-field>
-                        </div>
-
-                        <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                            <app-sf-field class="w-full" label="Supplier invoice date" required [control]="f['supplierInvoiceDate']"><app-sf-date formControlName="supplierInvoiceDate" displayFormat="dd/MM/yyyy"></app-sf-date></app-sf-field>
-
-                            <div class="mb-1 w-full">
-                                <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="supplierInvoiceNo">
-                                    Supplier Invoice No.
-                                </label>
-                                <div class="flex items-stretch gap-2">
-                                    <app-sf-input id="supplierInvoiceNo" formControlName="supplierInvoiceNo"></app-sf-input>
-                                    <button type="button"
-                                        (click)="openInvoiceUpload()"
-                                        class="cursor-pointer flex justify-center items-center px-3 rounded border border-violet-500 hover:border-violet-600 text-violet-500 hover:text-violet-600 shrink-0"
-                                        [matTooltip]="invoiceFiles.length ? invoiceFiles.length + ' file(s) selected' : 'Upload Supplier Invoice'">
-                                        <ng-icon name="heroDocumentText" class="text-xl"></ng-icon>
-                                    </button>
-                                </div>
-                                <span *ngIf="invoiceFiles.length" class="text-xs text-gray-500">
-                                    {{ invoiceFiles.length }} file(s) attached
-                                </span>
-                            </div>
-
-                            <div class="mb-1 w-full">
-                                <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="supplierDeliveryNoteNo">
-                                    Supplier Delivery Note No.
-                                </label>
-                                <div class="flex items-stretch gap-2">
-                                    <app-sf-input id="supplierDeliveryNoteNo" formControlName="supplierDeliveryNoteNo"></app-sf-input>
-                                    <button type="button"
-                                        (click)="openDeliveryNoteUpload()"
-                                        class="cursor-pointer flex justify-center items-center px-3 rounded border border-orange-500 hover:border-orange-600 text-orange-500 hover:text-orange-600 shrink-0"
-                                        [matTooltip]="deliveryNoteFiles.length ? deliveryNoteFiles.length + ' file(s) selected' : 'Upload Supplier DN'">
-                                        <ng-icon name="heroDocumentArrowUp" class="text-xl"></ng-icon>
-                                    </button>
-                                </div>
-                                <span *ngIf="deliveryNoteFiles.length" class="text-xs text-gray-500">
-                                    {{ deliveryNoteFiles.length }} file(s) attached
-                                </span>
-                            </div>
-                        </div>
-
-                        <div class="flex flex-col md:flex-row gap-3">
-                            <div class="mb-1 w-full">
-                                <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="receivedByDisplay">
-                                    Received By
-                                </label>
-                                <app-sf-input id="receivedByDisplay" [ngModel]="receivedByName" [ngModelOptions]="{ standalone: true }" readonly></app-sf-input>
-                            </div>
-                            <app-sf-field class="w-full" label="Location / warehouse" required [control]="f['warehouse']">
-                                <div class="flex gap-2">
-                                    <app-sf-select class="flex-1" formControlName="warehouse" [options]="warehouseOptions" placeholder="Select warehouse"></app-sf-select>
-                                    <app-action-button variant="tool" icon="plus" (click)="onAddWarehouse()">Add</app-action-button>
-                                </div>
-                            </app-sf-field>
-                        </div>
-                    }
-                </div>
-
-                @if(isLoading()) {
-                    <div class="animate-pulse">
-                        <div class="h-4 w-28 bg-gray-100 rounded mb-3"></div>
-                        <div class="h-56 bg-gray-100 rounded"></div>
-                    </div>
-                } @else if(!lpo) {
-                    <div class="border border-dashed border-gray-300 rounded-lg py-16 flex flex-col items-center justify-center text-center">
-                        <ng-icon name="heroDocumentText" class="text-3xl text-gray-300"></ng-icon>
-                        <p class="mt-3 text-sm font-medium text-gray-600">No LPO selected</p>
-                        <p class="mt-1 text-xs text-gray-400">
-                            Choose an LPO number above to load its supplier, job and item details.
-                        </p>
-                    </div>
-                } @else {
-                    <div class="flex justify-between items-center gap-3 mb-3">
-                        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold">
-                            Items <span class="text-gray-400 font-normal">({{ items.controls.length }})</span>
-                        </label>
-                        <span *ngIf="isFormDisabled()" class="text-xs font-medium text-red-600">
-                            Fully received - no new GRN can be created
-                        </span>
-                    </div>
-
-                    <div class="grn-table-wrap">
-                        <table class="grn-entry-table">
-                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                <tr>
-                                    <th class="px-4 py-2 border text-center">SL.NO</th>
-                                    <th class="px-4 py-2 border text-center">Part No.</th>
-                                    <th class="px-4 py-2 border text-center">Item Description</th>
-                                    <th class="px-4 py-2 border text-center">UOM</th>
-                                    <th class="px-4 py-2 border text-center">Ordered Qty</th>
-                                    <th class="px-4 py-2 border text-center">Balance Qty to be Received</th>
-                                    <th class="px-4 py-2 border text-center">Received Qty</th>
-                                    <th class="px-4 py-2 border text-center">Accepted Qty</th>
-                                    <th class="px-4 py-2 border text-center">Rejected Qty</th>
-                                    <th class="px-4 py-2 border text-center">Rejection Reason</th>
-                                    <th class="px-4 py-2 border text-center">Remarks</th>
-                                    <th class="px-4 py-2 border text-center">Date</th>
-                                </tr>
-                            </thead>
-                            <tbody formArrayName="items">
-                                <ng-container *ngFor="let item of items.controls; let i = index" [formGroupName]="i">
-                                    <tr class="border-b hover:bg-gray-50"
-                                        [class.bg-gray-50]="(item.get('balanceQty')?.value || 0) === 0"
-                                        [class.text-gray-400]="(item.get('balanceQty')?.value || 0) === 0">
-                                        <td class="px-4 py-2 border text-center">
-                                            {{ item.get('slNo')?.value || i + 1 }}
-                                        </td>
-                                        <td class="px-4 py-2 border text-center">
-                                            {{ item.get('partNo')?.value || '-' }}
-                                        </td>
-                                        <td class="px-4 py-2 border">
-                                            {{ item.get('itemDescription')?.value || '-' }}
-                                        </td>
-                                        <td class="px-4 py-2 border text-center">
-                                            <app-sf-input formControlName="uom" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="Enter UOM"></app-sf-input>
-                                        </td>
-                                        <td class="px-4 py-2 border text-center">
-                                            {{ item.get('orderedQty')?.value || 0 }}
-                                        </td>
-                                        <td class="px-4 py-2 border text-center">
-                                            <span [class.text-red-600]="(item.get('balanceQty')?.value || 0) === 0" [class.font-semibold]="(item.get('balanceQty')?.value || 0) === 0">
-                                                {{ item.get('balanceQty')?.value || 0 }}
-                                            </span>
-                                        </td>
-                                        <td class="px-4 py-2 border text-center">
-                                            <app-sf-number formControlName="receivedQty" [min]="0" [stepper]="false" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="0"></app-sf-number>
-                                            @if(item.get('receivedQty')?.errors?.['max']) {
-                                                <span class="text-xs text-red-600">Cannot exceed balance</span>
-                                            }
-                                        </td>
-                                        <td class="px-4 py-2 border text-center">
-                                            {{ item.get('acceptedQty')?.value || 0 }}
-                                        </td>
-                                        <td class="px-4 py-2 border text-center"
-                                            [class.text-red-600]="(item.get('rejectedQty')?.value || 0) > 0"
-                                            [class.font-medium]="(item.get('rejectedQty')?.value || 0) > 0">
-                                            <app-sf-number formControlName="rejectedQty" [min]="0" [stepper]="false" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="0"></app-sf-number>
-                                            @if(item.get('rejectedQty')?.errors?.['max']) {
-                                                <span class="text-xs text-red-600">Cannot exceed balance</span>
-                                            }
-                                        </td>
-                                        <td class="px-4 py-2 border text-center">
-                                            @if((item.get('rejectedQty')?.value || 0) > 0) {
-                                                <app-sf-input formControlName="rejectionReason" [readonly]="isFormDisabled()" placeholder="Enter rejection reason"></app-sf-input>
-                                                @if(item.get('rejectionReason')?.errors?.['required']) {
-                                                    <span class="text-xs text-red-600">Required</span>
-                                                }
-                                            } @else {
-                                                <span>-</span>
-                                            }
-                                        </td>
-                                        <td class="px-4 py-2 border text-center">
-                                            <app-sf-input formControlName="remarks" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="Enter remarks"></app-sf-input>
-                                        </td>
-                                        <td class="px-4 py-2 border text-center">
-                                            <app-sf-date formControlName="date" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0"></app-sf-date>
-                                        </td>
-                                    </tr>
-                                </ng-container>
-                                <tr *ngIf="!items.controls.length">
-                                    <td colspan="12" class="px-4 py-6 border text-center text-sm text-gray-500">
-                                        No items on this LPO
-                                    </td>
-                                </tr>
-                            </tbody>
-                            <tfoot *ngIf="items.controls.length">
-                                <tr class="bg-gray-50 font-semibold text-xs uppercase text-gray-700">
-                                    <td class="px-4 py-2 border" colspan="4">Total</td>
-                                    <td class="px-4 py-2 border text-center">{{ getItemsTotal('orderedQty') }}</td>
-                                    <td class="px-4 py-2 border text-center">{{ getItemsTotal('balanceQty') }}</td>
-                                    <td class="px-4 py-2 border text-center">{{ getItemsTotal('receivedQty') }}</td>
-                                    <td class="px-4 py-2 border text-center">{{ getItemsTotal('acceptedQty') }}</td>
-                                    <td class="px-4 py-2 border text-center" [class.text-red-600]="getItemsTotal('rejectedQty') > 0">
-                                        {{ getItemsTotal('rejectedQty') }}
-                                    </td>
-                                    <td class="px-4 py-2 border"></td>
-                                    <td class="px-4 py-2 border"></td>
-                                    <td class="px-4 py-2 border"></td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                }
-            }
-        </div>
-        <div class="grn-footer">
-            <div class="md:flex gap-3">
-                <button class="grn-action grn-action-secondary" type="button" (click)="onDiscard()">Discard</button>
-                <button class="grn-action grn-action-primary" type="button" [disabled]="isSubmitting() || isFormDisabled() || !lpo" (click)="onSave()">
-                    {{ isSubmitting() ? 'Saving...' : 'Save & Exit' }}
-                </button>
-            </div>
-        </div>
-    </form>
     </div>
 </div>
+}
+
+<ng-template #grnContent>
+    <!-- Stepper -->
+    <ol class="mb-5 flex items-center gap-2">
+        <li *ngFor="let s of steps" class="flex flex-1 items-center gap-2">
+            <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
+                [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
+                (click)="goToStep(s.n)">
+                <span class="grid h-6 w-6 shrink-0 place-content-center rounded-full text-[11px] font-semibold"
+                    [ngClass]="s.n === step
+                        ? 'bg-violet-600 text-white'
+                        : (s.n < step && isStepValid(s.n))
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">
+                    <ng-icon *ngIf="s.n < step && isStepValid(s.n); else stepNumber" name="heroCheck" class="h-3.5 w-3.5"></ng-icon>
+                    <ng-template #stepNumber>{{ s.n }}</ng-template>
+                </span>
+                <span class="truncate text-xs font-medium"
+                    [ngClass]="s.n === step ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'">{{ s.label }}</span>
+            </button>
+            <span *ngIf="s.n < 3" class="h-px w-4 shrink-0 bg-gray-200 dark:bg-erp-border-dark"></span>
+        </li>
+    </ol>
+
+    <div *ngIf="isFormDisabled()" class="mb-5 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+        <ng-icon name="heroInformationCircle" class="mt-0.5 h-4 w-4 shrink-0"></ng-icon>
+        <span>This LPO is fully received. No new GRN can be created against it.</span>
+    </div>
+
+    <div *ngIf="isEdit" class="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+        <ng-icon name="heroInformationCircle" class="mt-0.5 h-4 w-4 shrink-0"></ng-icon>
+        <span>Stock was already posted from this GRN, so quantities, warehouse, destination and batch / serial numbers can't be changed here.</span>
+    </div>
+
+    <form id="grn-form" [formGroup]="grnForm" novalidate>
+        <!-- Step 1 — LPO & supplier documents ------------------------------------------- -->
+        <ng-container *ngIf="step === 1">
+            <app-sf-section title="Purchase order" columns="2">
+                @if (!isLpoPreselected()) {
+                    <app-sf-field full label="LPO number" required [control]="f['selectedLpo']"
+                        [messages]="{ required: 'Choose the LPO the goods arrived against' }">
+                        <app-sf-combobox formControlName="selectedLpo" [options]="lpoSelectOptions"
+                            [placeholder]="isLpoOptionsLoading() ? 'Loading LPOs…' : 'Select LPO to create GRN against'"></app-sf-combobox>
+                    </app-sf-field>
+                }
+                @if (isLoading()) {
+                    <div class="col-span-full animate-pulse space-y-3">
+                        <div class="h-10 rounded bg-gray-100 dark:bg-gray-800"></div>
+                        <div class="h-10 rounded bg-gray-100 dark:bg-gray-800"></div>
+                    </div>
+                } @else if (lpo) {
+                    <app-sf-field label="Supplier" [control]="f['supplierName']"><app-sf-input formControlName="supplierName" readonly></app-sf-input></app-sf-field>
+                    <app-sf-field label="Linked LPO number" [control]="f['linkedLpoNo']"><app-sf-input formControlName="linkedLpoNo" readonly></app-sf-input></app-sf-field>
+                    <app-sf-field *ngIf="!isJobLess" label="Job ID" [control]="f['jobId']"><app-sf-input formControlName="jobId" readonly></app-sf-input></app-sf-field>
+                } @else if (!isLpoPreselected()) {
+                    <p class="col-span-full text-xs text-gray-500 dark:text-gray-400">Choose an LPO to load its supplier, job and items.</p>
+                }
+            </app-sf-section>
+
+            <app-sf-section title="GRN" columns="2">
+                <app-sf-field label="GRN number" [hint]="isEdit ? '' : 'Assigned when the GRN is saved'" [control]="f['grnNo']"><app-sf-input formControlName="grnNo" readonly></app-sf-input></app-sf-field>
+                <app-sf-field label="GRN date" required [control]="f['grnDate']"><app-sf-date formControlName="grnDate" typeable displayFormat="dd/MM/yyyy"></app-sf-date></app-sf-field>
+            </app-sf-section>
+
+            <app-sf-section title="Supplier documents" columns="2">
+                <app-sf-field label="Delivery note no." required [control]="f['supplierDeliveryNoteNo']">
+                    <app-sf-input formControlName="supplierDeliveryNoteNo" placeholder="As printed on the delivery note"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Invoice no." [control]="f['supplierInvoiceNo']" hint="Optional. Can be added later">
+                    <app-sf-input formControlName="supplierInvoiceNo"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Invoice date" [control]="f['supplierInvoiceDate']"><app-sf-date formControlName="supplierInvoiceDate" typeable displayFormat="dd/MM/yyyy"></app-sf-date></app-sf-field>
+                <app-sf-field full label="Upload DN and invoice" [hint]="existingDeliveryNotes.length ? existingDeliveryNotes.length + ' already on file; new files are added to them' : ''">
+                    <app-sf-file [(ngModel)]="deliveryNoteFiles" [ngModelOptions]="{ standalone: true }" [accept]="fileAccept" [maxSizeMb]="10" [disabled]="!lpo"></app-sf-file>
+                </app-sf-field>
+            </app-sf-section>
+        </ng-container>
+
+        <!-- Step 3 — where it goes & inspection --------------------------------------------- -->
+        <ng-container *ngIf="step === 3">
+            <app-sf-section title="Receiving" columns="2">
+                <app-sf-field label="Received by">
+                    <app-sf-input [ngModel]="receivedByName" [ngModelOptions]="{ standalone: true }" readonly></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Destination" required [control]="f['destinationType']"><app-sf-select formControlName="destinationType" [options]="destinationOptions" [readonly]="isEdit"></app-sf-select></app-sf-field>
+                @if (isEdit) {
+                    <app-sf-field label="Receiving warehouse" required [control]="f['warehouse']">
+                        <app-sf-select formControlName="warehouse" [options]="warehouseOptions" readonly
+                            placeholder="Select warehouse"></app-sf-select>
+                    </app-sf-field>
+                }
+                @if (f['destinationType'].value === 'site') {
+                    <app-sf-field label="Project / site" required [control]="f['siteName']"><app-sf-input formControlName="siteName" placeholder="Enter project or site"></app-sf-input></app-sf-field>
+                }
+            </app-sf-section>
+
+            <app-sf-section title="Inspection" columns="2">
+                <app-sf-field label="Result" required [control]="f['inspectionResult']"><app-sf-select formControlName="inspectionResult" [options]="inspectionOptions"></app-sf-select></app-sf-field>
+                <app-sf-field label="Inspected by" [control]="f['inspectedBy']"><app-sf-combobox formControlName="inspectedBy" [options]="employeeOptions" placeholder="Search inspector" clearable></app-sf-combobox></app-sf-field>
+                <app-sf-field label="Inspection date" [control]="f['inspectionDate']"><app-sf-date formControlName="inspectionDate" typeable displayFormat="dd/MM/yyyy"></app-sf-date></app-sf-field>
+                <app-sf-field full label="Notes" [control]="f['inspectionNotes']"><app-sf-textarea formControlName="inspectionNotes" [rows]="3" placeholder="Optional notes"></app-sf-textarea></app-sf-field>
+            </app-sf-section>
+        </ng-container>
+
+        <!-- Step 2 — items ------------------------------------------------------------------ -->
+        <ng-container *ngIf="step === 2">
+            @if (!lpo) {
+                <div class="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 py-16 text-center dark:border-erp-border-dark">
+                    <ng-icon name="heroDocumentText" class="text-3xl text-gray-300"></ng-icon>
+                    <p class="mt-3 text-sm font-medium text-gray-600 dark:text-gray-300">No LPO selected</p>
+                    <p class="mt-1 text-xs text-gray-400">Go back to step 1 and choose an LPO.</p>
+                </div>
+            } @else {
+                <!-- banner: the receipt at a glance -->
+                <section class="mb-4 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-erp-border-dark dark:bg-erp-surface-dark">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <p class="text-[11px] font-medium uppercase tracking-wide text-gray-400">GRN details</p>
+                        <span class="rounded-full px-2.5 py-0.5 text-xs font-medium ring-1"
+                            [ngClass]="getItemsTotal('rejectedQty') > 0
+                                ? 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900'
+                                : 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900'">
+                            {{ getItemsTotal('rejectedQty') > 0 ? 'Return required' : 'No rejections' }}
+                        </span>
+                    </div>
+                    <dl class="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+                        <div *ngFor="let b of banner" class="min-w-0">
+                            <dt class="text-[11px] text-gray-500 dark:text-gray-400">{{ b.label }}</dt>
+                            <dd class="mt-0.5 break-words text-sm font-medium text-gray-900 dark:text-gray-100">{{ b.value }}</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <app-grn-item-entry [items]="items" [locked]="isEdit" [disabled]="isFormDisabled()"
+                    [title]="lpo?.poNo ? 'LPO ' + lpo.poNo : 'Items received'"></app-grn-item-entry>
+            }
+        </ng-container>
+    </form>
+</ng-template>
+
+<ng-template #grnFooter>
+    <span *ngIf="stepAttempted && !isStepValid(step)" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+    <app-action-button *ngIf="step === 1" variant="secondary" (click)="onDiscard()">Cancel</app-action-button>
+    <app-action-button *ngIf="step > 1" variant="secondary" (click)="previousStep()">Back</app-action-button>
+    <app-action-button *ngIf="step < 3" variant="primary" (click)="nextStep()">Next: {{ steps[step].label }}</app-action-button>
+    <app-action-button *ngIf="step === 3" variant="primary" [disabled]="isSubmitting() || isFormDisabled() || !lpo" (click)="onSave()">
+        {{ isSubmitting() ? 'Saving…' : (isEdit ? 'Save changes' : 'Create GRN') }}
+    </app-action-button>
+</ng-template>

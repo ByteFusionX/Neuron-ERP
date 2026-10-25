@@ -1,4 +1,4 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-data-grid
     #grid
     class="flex-1 min-h-0"
@@ -14,10 +14,11 @@
     [loading]="isLoading"
     [pageSize]="row"
     searchPlaceholder="Search by GRN, LPO, supplier, or job"
-    emptyMessage="No GRNs found"
+    [emptyMessage]="isArrivingView ? 'Nothing on the way. LPOs show here once they are placed with an expected delivery date.' : 'No GRNs found'"
     createLabel="Create GRN"
     [rowActions]="rowActions"
     [views]="views"
+    [rowAccent]="rowAccent"
     (viewChange)="onViewChange($event)"
     storageKey="grn-list"
     [density]="density"
@@ -32,75 +33,82 @@
 
     <ng-template #detailAsideTemplate let-row>
       <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900">
-        Received
+        {{ isArrivingView ? dueLabel(row) : (row.outcomeStatus || (totalRejectedQty(row) > 0 ? 'Return Required' : 'Completed')) }}
       </span>
     </ng-template>
 
     <ng-template #detailMetaTemplate let-row>
-      <div class="grn-meta">
-        <p class="grn-meta-label">Supplier</p>
-        <p class="grn-meta-value">{{ row.purchaseOrderId?.supplierId?.supplierName || 'N/A' }}</p>
-      </div>
-      <div class="grn-meta">
-        <p class="grn-meta-label">LPO</p>
-        <p class="grn-meta-value">{{ row.purchaseOrderId?.poNo || 'N/A' }}</p>
-      </div>
-      <div class="grn-meta">
-        <p class="grn-meta-label">Warehouse</p>
-        <p class="grn-meta-value">{{ row.warehouse?.wareHouseName || 'N/A' }}</p>
-      </div>
-      <div class="grn-meta">
-        <p class="grn-meta-label">Accepted Qty</p>
-        <p class="grn-meta-value">{{ totalAcceptedQty(row) }}</p>
-      </div>
+      <ng-container *ngIf="isArrivingView; else grnMeta">
+        <div class="grn-meta">
+          <p class="grn-meta-label">Supplier</p>
+          <p class="grn-meta-value">{{ row.supplierId?.supplierName || 'N/A' }}</p>
+        </div>
+        <div class="grn-meta">
+          <p class="grn-meta-label">Expected</p>
+          <p class="grn-meta-value">{{ formatDate(row.expectedDeliveryDate) }}</p>
+        </div>
+        <div class="grn-meta">
+          <p class="grn-meta-label">Ordered Qty</p>
+          <p class="grn-meta-value">{{ row.orderedQty }}</p>
+        </div>
+        <div class="grn-meta">
+          <p class="grn-meta-label">Received Qty</p>
+          <p class="grn-meta-value">{{ row.receivedQty }}</p>
+        </div>
+      </ng-container>
+      <ng-template #grnMeta>
+        <div class="grn-meta">
+          <p class="grn-meta-label">Supplier</p>
+          <p class="grn-meta-value">{{ row.purchaseOrderId?.supplierId?.supplierName || 'N/A' }}</p>
+        </div>
+        <div class="grn-meta">
+          <p class="grn-meta-label">LPO</p>
+          <p class="grn-meta-value">{{ row.purchaseOrderId?.poNo || 'N/A' }}</p>
+        </div>
+        <div class="grn-meta">
+          <p class="grn-meta-label">Warehouse</p>
+          <p class="grn-meta-value">{{ row.warehouse?.wareHouseName || 'N/A' }}</p>
+        </div>
+        <div class="grn-meta">
+          <p class="grn-meta-label">Accepted Qty</p>
+          <p class="grn-meta-value">{{ totalAcceptedQty(row) }}</p>
+        </div>
+      </ng-template>
     </ng-template>
 
-    <!-- left: optional, per-tab (outline) -->
-    <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
-      <app-action-button *ngIf="tab === 'overview' && row.purchaseOrderId?.purchaseId" variant="outline" (click)="viewPurchaseRequestDetails(row)" icon="view">
-        View PR
-      </app-action-button>
-      <app-action-button *ngIf="tab === 'overview' && row.purchaseOrderId" variant="outline" (click)="viewLpoDetails(row)" icon="view">
-        View LPO
-      </app-action-button>
-    </ng-template>
-
-    <!-- right: permanent, every tab (filled) -->
     <ng-template #detailFooterTemplate let-row let-tab="tab">
-      <app-action-button variant="primary" (click)="viewDetails(row)" icon="view">Open full GRN</app-action-button>
+      <app-action-button *ngIf="isArrivingView" variant="primary" (click)="onCreateGRN(row._id)" icon="plus">Create GRN</app-action-button>
+      <app-action-button *ngIf="!isArrivingView" variant="primary" (click)="viewDetails(row)" icon="view">Open full GRN</app-action-button>
     </ng-template>
 
     <ng-template #detailTemplate let-row let-tab="tab">
       <ng-container [ngSwitch]="tab">
         <ng-container *ngSwitchCase="'overview'">
-          <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+          <app-detail-overview [grid]="grid" [row]="row" [sections]="isArrivingView ? arrivingSections(row) : overviewSections(row)"></app-detail-overview>
         </ng-container>
 
         <ng-container *ngSwitchCase="'items'">
           <app-detail-table
-            title="Received items"
-            [columns]="itemColumns"
-            [rows]="itemRows(row)"
+            [title]="isArrivingView ? 'Ordered items' : 'Received items'"
+            [columns]="isArrivingView ? arrivingItemColumns : itemColumns"
+            [rows]="isArrivingView ? arrivingItemRows(row) : itemRows(row)"
             showTotals>
           </app-detail-table>
         </ng-container>
 
-        <ng-container *ngSwitchCase="'documents'">
-          <app-detail-table
-            title="Linked documents"
-            [columns]="documentColumns"
-            [rows]="documentRows(row)">
-          </app-detail-table>
-          <div class="grn-document-actions">
-            <button type="button" (click)="viewPurchaseRequestDetails(row)" [disabled]="!row.purchaseOrderId?.purchaseId">View purchase request</button>
-            <button type="button" (click)="viewLpoDetails(row)" [disabled]="!row.purchaseOrderId">View LPO</button>
-            <button type="button" (click)="viewDetails(row)">Open supplier files</button>
-          </div>
-        </ng-container>
+        <app-detail-documents *ngSwitchCase="'documents'"
+          title="PO files"
+          [documents]="poDocuments(row)"
+          [removable]="false"
+          (open)="onDocumentOpen($event)"
+          (download)="onDocumentDownload($event)"></app-detail-documents>
       </ng-container>
     </ng-template>
   </app-data-grid>
 
-  <app-stock-return-drawer kind="supplier" [open]="returnOpen" [sourceId]="returnGrnId"
+  <app-stock-return-drawer class="contents" kind="supplier" [open]="returnOpen" [sourceId]="returnGrnId"
     (saved)="getGRNs()" (closed)="returnOpen = false"></app-stock-return-drawer>
+
+  <app-create-grn class="contents" *ngIf="createDrawerOpen" [drawer]="true" [initialLpoId]="createLpoId" [grnId]="editGrnId"
+    (saved)="onCreateDrawerSaved()" (closed)="onCreateDrawerClosed()"></app-create-grn>
 </div>

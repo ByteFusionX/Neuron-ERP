@@ -6,7 +6,7 @@ export type ProductType = typeof PRODUCT_TYPES[number];
 export const PRODUCT_APPROVAL_STATUSES = ['Draft', 'Pending', 'Approved'] as const;
 export type ProductApprovalStatus = typeof PRODUCT_APPROVAL_STATUSES[number];
 
-export const PRODUCT_SOURCES = ['Manual', 'RFQ', 'Import'] as const;
+export const PRODUCT_SOURCES = ['Manual', 'RFQ', 'Import', 'GRN'] as const;
 export type ProductSource = typeof PRODUCT_SOURCES[number];
 
 export const PRODUCT_ALIAS_TYPES = ['Superseded', 'Supplier SKU', 'Customer Ref', 'Old Code'] as const;

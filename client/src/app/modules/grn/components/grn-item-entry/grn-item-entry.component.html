@@ -1,0 +1,139 @@
+<div class="flex flex-col gap-4">
+
+  <!-- Work toolbar: search, filters, collapse, density ------------------------------------ -->
+  <div class="sticky top-0 z-20 -mx-1 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm dark:border-erp-border-dark dark:bg-erp-surface-dark">
+    <div class="flex flex-wrap items-center gap-2">
+      <app-sf-input class="block w-full sm:w-56" type="search" placeholder="Search lines…" clearable
+        [ngModel]="lineSearch" (ngModelChange)="lineSearch = $event ?? ''"></app-sf-input>
+      <button *ngFor="let chip of chips" type="button" (click)="toggleFilter(chip.key)" [disabled]="!count(chip.key) && lineFilter !== chip.key"
+        [attr.title]="chip.hint" class="inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors disabled:cursor-default disabled:opacity-40"
+        [ngClass]="lineFilter === chip.key
+          ? 'border-violet-600 bg-violet-600 text-white'
+          : 'border-gray-200 text-gray-600 hover:bg-gray-100 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-gray-800'">
+        {{ chip.label }}
+        <span class="rounded-full px-1.5 tabular-nums" [ngClass]="lineFilter === chip.key ? 'bg-white/20' : count(chip.key) && chip.key === 'errors' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-gray-100 dark:bg-gray-800'">{{ count(chip.key) }}</span>
+      </button>
+      <button *ngIf="filterActive" type="button" (click)="clearFilters()" class="text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-400">Clear</button>
+
+      <div class="ml-auto flex items-center gap-1">
+        <button type="button" title="Collapse item" aria-label="Collapse item" (click)="collapsed = true"
+          class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><ng-icon name="heroChevronUp" class="h-4 w-4"></ng-icon></button>
+        <button type="button" title="Expand item" aria-label="Expand item" (click)="collapsed = false"
+          class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><ng-icon name="heroChevronDown" class="h-4 w-4"></ng-icon></button>
+        <button type="button" [title]="compact ? 'Comfortable rows' : 'Compact rows'" (click)="compact = !compact"
+          class="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+          [ngClass]="compact ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300' : ''">
+          <ng-icon [name]="compact ? 'heroTableCells' : 'heroListBullet'" class="h-4 w-4"></ng-icon> {{ compact ? 'Compact' : 'Comfortable' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <p *ngIf="!lines.length" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-erp-border-dark">No items on this LPO.</p>
+  <p *ngIf="lines.length && filterActive && !visibleCount" class="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-xs text-gray-500 dark:border-erp-border-dark">
+    No lines match. <button type="button" (click)="clearFilters()" class="font-medium text-violet-700 hover:underline dark:text-violet-400">Clear filters</button>
+  </p>
+
+  <!-- The LPO's card ------------------------------------------------------------------------ -->
+  <div *ngIf="lines.length" class="rounded-xl border border-gray-200 bg-white dark:border-erp-border-dark dark:bg-erp-surface-dark">
+    <div class="flex flex-wrap items-center gap-2 border-gray-100 px-3 py-2 dark:border-erp-border-dark" [class.border-b]="!collapsed">
+      <button type="button" (click)="collapsed = !collapsed" [attr.aria-label]="collapsed ? 'Expand item' : 'Collapse item'" [attr.aria-expanded]="!collapsed"
+        class="grid h-6 w-6 shrink-0 place-content-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+        <ng-icon [name]="collapsed ? 'heroChevronRight' : 'heroChevronDown'" class="h-4 w-4"></ng-icon>
+      </button>
+      <span class="min-w-0 flex-1 truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{{ title }}</span>
+      <span class="hidden shrink-0 text-[11px] tabular-nums text-gray-500 md:inline">{{ lines.length }} line{{ lines.length === 1 ? '' : 's' }}</span>
+      <span *ngIf="errorCount" class="inline-flex shrink-0 items-center gap-1 rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300"
+        [title]="errorCount + ' line(s) need attention'">
+        <ng-icon name="heroExclamationTriangle" class="h-3 w-3"></ng-icon>{{ errorCount }}
+      </span>
+    </div>
+
+    <ng-container *ngIf="!collapsed">
+      <!-- Column labels: standing headers for the numeric strip, hidden below the width where it wraps. -->
+      <div class="hidden items-start gap-2 px-3 pt-2 min-[900px]:flex">
+        <span class="w-6 shrink-0"></span>
+        <div class="ge-strip ge-labels min-w-0 flex-1">
+          <span>Item</span><span class="text-right">Ordered</span><span class="text-right">Balance</span>
+          <span>Received</span><span class="text-right">Accepted</span><span>Rejected</span><span>UoM</span><span>Remarks</span><span>Serial No.</span>
+        </div>
+      </div>
+
+      <div class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+        <ng-container *ngFor="let line of lines; let i = index">
+          <div *ngIf="visible(line)" [formGroup]="line" class="flex items-start gap-2 px-3 dark:bg-erp-surface-dark"
+            [ngClass]="[compact ? 'py-1.5' : 'py-2.5', hasError(line) ? 'bg-red-50/50 dark:!bg-red-950/20' : 'bg-white']" [class.opacity-50]="isDone(line)">
+            <span class="mt-2 grid h-6 w-6 shrink-0 place-content-center rounded-md bg-gray-100 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ line.get('slNo')?.value || i + 1 }}</span>
+            <div class="min-w-0 flex-1 space-y-2">
+              <div class="ge-strip">
+                <div class="col-span-3 min-w-0 py-1.5 min-[900px]:col-span-1">
+                  <p [title]="text(line, 'itemDescription')" class="line-clamp-2 whitespace-pre-line text-xs font-normal text-gray-900 dark:text-gray-100">{{ text(line, 'itemDescription') || '-' }}</p>
+                  <p *ngIf="text(line, 'partNo') && text(line, 'partNo') !== '-'" class="text-xs text-gray-500">{{ text(line, 'partNo') }}</p>
+                  <span *ngIf="isDone(line)" class="text-xs font-semibold text-orange-600">Fully received</span>
+                </div>
+                <div class="ge-cell ge-num" title="Ordered">{{ num(line, 'orderedQty') }}</div>
+                <div class="ge-cell ge-num font-medium" title="Balance" [class.!text-red-600]="num(line, 'balanceQty') === 0">{{ num(line, 'balanceQty') }}</div>
+                <div>
+                  <app-sf-number formControlName="receivedQty" [min]="0" [stepper]="false" [readonly]="qtyReadonly(line)" placeholder="0"
+                    [attr.aria-label]="'Received qty for ' + text(line, 'itemDescription')"></app-sf-number>
+                  <p *ngIf="variance(line) !== 0" class="mt-1 text-[11px] text-amber-600">{{ variance(line) > 0 ? 'Over' : 'Short' }} by {{ variance(line) > 0 ? variance(line) : -variance(line) }}</p>
+                </div>
+                <div class="ge-cell ge-num font-medium" title="Accepted">{{ num(line, 'acceptedQty') }}</div>
+                <div>
+                  <app-sf-number formControlName="rejectedQty" [min]="0" [stepper]="false" [readonly]="qtyReadonly(line)" placeholder="0"
+                    [attr.aria-label]="'Rejected qty for ' + text(line, 'itemDescription')"></app-sf-number>
+                  <p *ngIf="line.get('rejectedQty')?.errors?.['max']" class="mt-1 text-[11px] text-red-600">Cannot exceed received</p>
+                </div>
+                <app-sf-input formControlName="uom" [readonly]="disabled || (!locked && isDone(line))" placeholder="UoM"
+                  [attr.aria-label]="'UoM for ' + text(line, 'itemDescription')"></app-sf-input>
+                <app-sf-input formControlName="remarks" [readonly]="disabled || (!locked && isDone(line))" placeholder="Remarks"
+                  [attr.aria-label]="'Remarks for ' + text(line, 'itemDescription')"></app-sf-input>
+                <app-sf-textarea formControlName="serialNos" [readonly]="locked || disabled" [rows]="1"
+                  expandOnFocus commaOnEnter placeholder="Scan or enter serial numbers"
+                  [attr.aria-label]="'Serial numbers for ' + text(line, 'itemDescription')"></app-sf-textarea>
+              </div>
+
+              <!-- Batch tracking remains below the main item row when applicable. -->
+              <div *ngIf="text(line, 'trackingType') === 'Batch'" class="ge-sub">
+                  <app-sf-input formControlName="batchNo" [readonly]="locked || disabled" placeholder="Batch / lot no."></app-sf-input>
+                  <app-sf-date formControlName="expiryDate" [readonly]="disabled" placeholder="Expiry date"></app-sf-date>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+    </ng-container>
+  </div>
+
+  <!-- Totals ------------------------------------------------------------------------------- -->
+  <div *ngIf="lines.length" class="sticky bottom-0 z-20 rounded-xl border border-gray-200 bg-gray-50/95 px-4 py-3 backdrop-blur dark:border-erp-border-dark dark:bg-gray-900/85">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div class="flex flex-wrap items-end gap-5">
+        <div>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Lines</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ lines.length }}</p>
+        </div>
+        <div>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Ordered</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ total('orderedQty') }}</p>
+        </div>
+        <div>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Balance</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ total('balanceQty') }}</p>
+        </div>
+        <div>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Received</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ total('receivedQty') }}</p>
+        </div>
+        <div>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Rejected</p>
+          <p class="text-sm font-semibold tabular-nums" [ngClass]="total('rejectedQty') > 0 ? 'text-red-600' : 'text-gray-900 dark:text-gray-100'">{{ total('rejectedQty') }}</p>
+        </div>
+      </div>
+      <div class="text-right">
+        <p class="text-[11px] uppercase tracking-wide text-gray-500">Accepted into stock</p>
+        <p class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ total('acceptedQty') }}</p>
+      </div>
+    </div>
+  </div>
+</div>

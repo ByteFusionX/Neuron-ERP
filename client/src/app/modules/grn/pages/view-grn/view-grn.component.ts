@@ -10,6 +10,14 @@ import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-p
 import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DetailViewBadge, DetailViewShellComponent, DetailViewStat, DetailViewTab } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
+import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
+import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
+import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DetailDocument } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
+
+type Fact = { label: string; value: string; tone?: DetailTone | null };
 
 @Component({
   selector: 'app-view-grn',
@@ -19,7 +27,11 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
     IconsModule,
     FormsModule,
     SmartFormModule,
-    ActionButtonComponent
+    ActionButtonComponent,
+    DetailViewShellComponent,
+    DetailSectionComponent,
+    DetailFieldComponent,
+    DetailDocumentsComponent,
   ],
   templateUrl: './view-grn.component.html',
   styleUrl: './view-grn.component.css'
@@ -35,11 +47,25 @@ export class ViewGrnComponent implements OnInit {
   grn: any = null;
   isLoading = signal<boolean>(true);
   purchaseId: string = '';
-  selectedItems = new Set<number>();
   isGenerating = signal<boolean>(false);
 
+  readonly tabs: DetailViewTab[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'items', label: 'Items' },
+    { id: 'documents', label: 'Documents' },
+  ];
+  tab = 'overview';
+
+  headerTitle = '';
   headerSubtitle = '';
-  detailFields: { label: string; value: string }[] = [];
+  avatarText = 'GRN';
+  badges: DetailViewBadge[] = [];
+  stats: DetailViewStat[] = [];
+  overviewSections: { title: string; facts: Fact[] }[] = [];
+  orderFacts: Fact[] = [];
+  receiptFacts: Fact[] = [];
+  docList: DetailDocument[] = [];
+  private docFiles = new Map<string, any>();
 
   /** Where "Back" should land, when the caller passed one (e.g. the GRN list). */
   private returnUrl = '';
@@ -85,27 +111,92 @@ export class ViewGrnComponent implements OnInit {
     });
   }
 
+  /** The shell takes new-array inputs, so everything it shows is built once per load. */
   private buildDetails(): void {
-    const supplier = this.grn?.purchaseOrderId?.supplierId?.supplierName;
-    const grnDate = this.formatDate(this.grn?.grnDate);
-    const lpoNo = this.grn?.purchaseOrderId?.poNo;
+    const g = this.grn;
+    const po = g?.purchaseOrderId;
+    const supplier = po?.supplierId?.supplierName;
+    const grnDate = this.formatDate(g?.grnDate);
+    const rejected = this.getTotalRejectedQty();
+    const outcome = g?.outcomeStatus || (rejected > 0 ? 'Return Required' : 'Completed');
+    const invoice = g?.invoiceStatus || (rejected > 0 ? 'Blocked by Return' : 'Ready for Invoice');
 
-    this.headerSubtitle = [supplier, lpoNo ? 'LPO ' + lpoNo : '', grnDate]
-      .filter(Boolean)
-      .join('  •  ');
-
-    this.detailFields = [
-      { label: 'GRN Date', value: grnDate },
-      { label: 'Supplier Name', value: supplier || 'N/A' },
-      { label: 'Linked LPO Number', value: lpoNo || 'N/A' },
-      { label: 'Job ID', value: this.grn?.jobId?.jobId || this.grn?.purchaseOrderId?.purchaseId?.jobId?.jobId || 'N/A' },
-      { label: 'Location / Warehouse', value: this.grn?.warehouse?.wareHouseName || 'N/A' },
-      { label: 'Received By', value: this.formatEmployeeName(this.grn?.receivedBy) || 'N/A' },
-      { label: 'Supplier Invoice No.', value: this.grn?.supplierInvoiceNo || 'N/A' },
-      { label: 'Supplier Invoice Date', value: this.formatDate(this.grn?.supplierInvoiceDate) },
-      { label: 'Supplier Delivery Note No.', value: this.grn?.supplierDeliveryNoteNo || 'N/A' },
-      { label: 'Created By', value: this.formatEmployeeName(this.grn?.createdBy) || 'N/A' },
+    this.headerTitle = g?.grnNo || 'GRN';
+    this.headerSubtitle = [supplier, po?.poNo ? 'LPO ' + po.poNo : '', grnDate].filter(Boolean).join('  •  ');
+    this.badges = [
+      { label: outcome, tone: rejected > 0 ? 'warn' : 'good' },
+      { label: invoice, tone: rejected > 0 ? 'bad' : 'info' },
     ];
+    this.stats = [
+      { label: 'Ordered', value: String(this.getTotalOrderedQty()) },
+      { label: 'Received', value: String(this.getTotalReceivedQty()) },
+      { label: 'Accepted', value: String(this.getTotalAcceptedQty()) },
+      { label: 'Rejected', value: String(rejected), danger: rejected > 0 },
+    ];
+
+    this.overviewSections = [
+      {
+        title: 'GRN details',
+        facts: [
+          { label: 'GRN No', value: g?.grnNo || 'N/A' },
+          { label: 'GRN Date', value: grnDate },
+          { label: 'Location / Warehouse', value: g?.warehouse?.wareHouseName || 'N/A' },
+          { label: 'Received By', value: this.formatEmployeeName(g?.receivedBy) || 'N/A' },
+          { label: 'Created By', value: this.formatEmployeeName(g?.createdBy) || 'N/A' },
+          { label: 'Items', value: String(g?.items?.length || 0) },
+        ],
+      },
+      {
+        title: 'Supplier documents',
+        facts: [
+          { label: 'Supplier Invoice No.', value: g?.supplierInvoiceNo || 'N/A' },
+          { label: 'Supplier Invoice Date', value: this.formatDate(g?.supplierInvoiceDate) },
+          { label: 'Supplier Delivery Note No.', value: g?.supplierDeliveryNoteNo || 'N/A' },
+        ],
+      },
+      {
+        title: 'Outcome',
+        facts: [
+          { label: 'Outcome', value: outcome, tone: rejected > 0 ? 'warn' : 'good' },
+          { label: 'Invoice', value: invoice, tone: rejected > 0 ? 'bad' : null },
+          { label: 'Return Resolution', value: g?.returnResolution || 'N/A' },
+        ],
+      },
+    ];
+
+    this.orderFacts = [
+      { label: 'LPO No', value: po?.poNo || 'N/A' },
+      { label: 'Supplier', value: supplier || 'N/A' },
+      { label: 'Job ID', value: g?.jobId?.jobId || po?.purchaseId?.jobId?.jobId || 'N/A' },
+      { label: 'Customer', value: this.getCompanyName() || 'N/A' },
+    ];
+    this.receiptFacts = [
+      { label: 'GRN Date', value: grnDate },
+      { label: 'Warehouse', value: g?.warehouse?.wareHouseName || 'N/A' },
+      { label: 'Received By', value: this.formatEmployeeName(g?.receivedBy) || 'N/A' },
+    ];
+
+    this.docList = [];
+    this.docFiles.clear();
+    const addDocs = (files: any[] | undefined, source: string) => (files || []).forEach((f: any, i: number) => {
+      const id = `${source}-${i}`;
+      this.docFiles.set(id, f);
+      this.docList.push({ id, name: f.originalname || f.fileName || f.name || 'File', uploadedBy: source });
+    });
+    addDocs(g?.supplierInvoices, 'Supplier invoice');
+    addDocs(g?.supplierDeliveryNotes, 'Delivery note');
+  }
+
+  openDocument(doc: DetailDocument): void {
+    const file = this.docFiles.get(doc.id);
+    if (!file) return;
+    const modalData: FileUploadModalData = {
+      title: `${doc.uploadedBy} - ${doc.name}`,
+      existingFiles: [file],
+      allowMultiple: true,
+      showActions: { upload: false, download: true, view: true, delete: false },
+    };
+    this.dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
   }
 
   private navigateAway(): void {
@@ -120,38 +211,6 @@ export class ViewGrnComponent implements OnInit {
 
   onBack(): void {
     this.navigateAway();
-  }
-
-  viewInvoices(): void {
-    if (!this.grn?.supplierInvoices?.length) {
-      this.toastr.info('No invoices uploaded for this GRN');
-      return;
-    }
-
-    const modalData: FileUploadModalData = {
-      title: `Supplier Invoices - ${this.grn.grnNo}`,
-      existingFiles: this.grn.supplierInvoices,
-      allowMultiple: true,
-      showActions: { upload: false, download: true, view: true, delete: false }
-    };
-
-    this.dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
-  }
-
-  viewDeliveryNotes(): void {
-    if (!this.grn?.supplierDeliveryNotes?.length) {
-      this.toastr.info('No delivery notes uploaded for this GRN');
-      return;
-    }
-
-    const modalData: FileUploadModalData = {
-      title: `Supplier Delivery Notes - ${this.grn.grnNo}`,
-      existingFiles: this.grn.supplierDeliveryNotes,
-      allowMultiple: true,
-      showActions: { upload: false, download: true, view: true, delete: false }
-    };
-
-    this.dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
   }
 
   formatPartNumber(partNo: any): string {
@@ -206,45 +265,15 @@ export class ViewGrnComponent implements OnInit {
     return this.sumItems(item => this.getRejectedQty(item));
   }
 
-  toggleItemSelection(index: number): void {
-    if (this.selectedItems.has(index)) {
-      this.selectedItems.delete(index);
-    } else {
-      this.selectedItems.add(index);
-    }
-  }
-
-  isItemSelected(index: number): boolean {
-    return this.selectedItems.has(index);
-  }
-
-  areAllItemsSelected(): boolean {
-    const count = this.grn?.items?.length || 0;
-    return count > 0 && this.selectedItems.size === count;
-  }
-
-  toggleAllItems(): void {
-    if (this.areAllItemsSelected()) {
-      this.selectedItems.clear();
-      return;
-    }
-    this.selectedItems = new Set((this.grn?.items || []).map((_: any, index: number) => index));
-  }
-
-  hasSelectedItems(): boolean {
-    return this.selectedItems.size > 0;
-  }
-
-  onGenerateReceipt(): void {
-    if (!this.hasSelectedItems()) {
-      this.toastr.warning('Please select items to generate receipt');
+  onViewReceipt(): void {
+    const items = this.grn?.items || [];
+    if (!items.length) {
+      this.toastr.warning('No items recorded on this GRN');
       return;
     }
 
     this.isGenerating.set(true);
-    const selectedItemsData = Array.from(this.selectedItems).map(index => this.grn.items[index]);
-
-    this.grnService.generateGRNReceiptPDF(this.grn, selectedItemsData).then((pdf) => {
+    this.grnService.generateGRNReceiptPDF(this.grn, items).then((pdf) => {
       pdf.getBlob((blob: Blob) => {
         const url = window.URL.createObjectURL(blob);
         this.isGenerating.set(false);
@@ -254,7 +283,7 @@ export class ViewGrnComponent implements OnInit {
       });
     }).catch((error) => {
       console.error('Error generating PDF:', error);
-      this.toastr.error('Failed to generate GRN receipt');
+      this.toastr.error('Failed to load GRN receipt');
       this.isGenerating.set(false);
     });
   }

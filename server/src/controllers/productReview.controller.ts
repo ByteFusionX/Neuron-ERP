@@ -28,7 +28,7 @@ export const checkDuplicate = async (req: Request, res: Response, next: NextFunc
  * kept out of the pickers until a reviewer approves it. If the part number already exists, nothing is
  * created and the existing product is reported instead.
  */
-const createPendingProduct = async (row: any, source: 'RFQ' | 'Import', employeeId: any) => {
+export const createPendingProduct = async (row: any, source: 'RFQ' | 'Import' | 'GRN', employeeId: any) => {
     const partNo = String(row?.partNo ?? '').trim();
     const brand = String(row?.brand ?? '').trim();
     const description = String(row?.productDescription ?? row?.productName ?? '').trim();

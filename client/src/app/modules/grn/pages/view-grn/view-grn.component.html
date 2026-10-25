@@ -1,130 +1,106 @@
-<div class="grn-view-page">
-<div class="grn-view-shell">
-  <div class="grn-view-header">
-    <div>
-      <p class="grn-view-kicker">Goods Receipt Note</p>
-      <h3 class="grn-view-title">GRN <span>{{ grn?.grnNo }}</span></h3>
-      <p class="grn-view-subtitle">{{ headerSubtitle || 'Receipt details' }}</p>
-    </div>
-    <div class="flex gap-3">
-      <app-action-button variant="secondary" (click)="onBack()">Back</app-action-button>
-    </div>
-  </div>
+<div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-detail-view-shell
+    class="min-h-0 flex-1"
+    [loading]="isLoading()"
+    [empty]="!isLoading() && !grn"
+    emptyTitle="GRN not found"
+    emptyMessage="It may have been deleted, or you may not have access to it."
+    [emptyLink]="['/grn']"
+    emptyLinkLabel="Back to GRN"
+    [breadcrumbs]="[]"
+    [avatarText]="avatarText"
+    [title]="headerTitle"
+    [badges]="badges"
+    [subtitle]="headerSubtitle"
+    [stats]="stats"
+    [tabs]="tabs"
+    [activeTab]="tab"
+    (activeTabChange)="tab = $event"
+    [hasSidebar]="true"
+  >
+    <ng-container headerActions>
+      <app-action-button variant="outline" (click)="onBack()">Back</app-action-button>
+      <app-action-button (click)="onViewReceipt()" [disabled]="isGenerating()">View receipt</app-action-button>
+    </ng-container>
 
-  <div *ngIf="isLoading()" class="flex justify-center items-center h-64">
-    <svg class="animate-spin h-8 w-8 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-    </svg>
-  </div>
+    <ng-container sidebar>
+      <app-detail-section title="Purchase order">
+        <app-detail-field *ngFor="let f of orderFacts" [label]="f.label">{{ f.value }}</app-detail-field>
+      </app-detail-section>
+      <app-detail-section title="Receipt">
+        <app-detail-field *ngFor="let f of receiptFacts" [label]="f.label">{{ f.value }}</app-detail-field>
+      </app-detail-section>
+    </ng-container>
 
-  <div *ngIf="!isLoading() && grn" class="grn-view-body">
-    <div class="grn-view-stats">
-      <div><span>Ordered</span><strong>{{ getTotalOrderedQty() }}</strong></div>
-      <div><span>Received</span><strong>{{ getTotalReceivedQty() }}</strong></div>
-      <div><span>Accepted</span><strong>{{ getTotalAcceptedQty() }}</strong></div>
-      <div><span>Rejected</span><strong [class.text-red-600]="getTotalRejectedQty() > 0">{{ getTotalRejectedQty() }}</strong></div>
-    </div>
-
-    <!-- GRN details -->
-    <section class="grn-view-card">
-      <div class="grn-view-card-header">
-        <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">GRN Details</h4>
-        <div class="flex items-center gap-2">
-          <button type="button" (click)="viewInvoices()"
-            class="inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50">
-            <ng-icon name="heroDocumentText" class="text-sm"></ng-icon>
-            Invoices
-            <span class="rounded-full bg-gray-100 px-1.5 text-[11px] text-gray-600">{{ grn?.supplierInvoices?.length || 0 }}</span>
-          </button>
-          <button type="button" (click)="viewDeliveryNotes()"
-            class="inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50">
-            <ng-icon name="heroTruck" class="text-sm"></ng-icon>
-            Delivery Notes
-            <span class="rounded-full bg-gray-100 px-1.5 text-[11px] text-gray-600">{{ grn?.supplierDeliveryNotes?.length || 0 }}</span>
-          </button>
-        </div>
-      </div>
-      <dl class="grn-view-fields">
-        @for (field of detailFields; track field.label) {
-          <div class="min-w-0">
-            <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">{{ field.label }}</dt>
-            <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ field.value }}</dd>
+    <div tabBody *ngIf="grn" [ngSwitch]="tab">
+      <!-- overview -->
+      <div *ngSwitchCase="'overview'" class="grid gap-4 xl:grid-cols-2">
+        <section *ngFor="let sec of overviewSections; let first = first" class="rounded-lg border border-gray-200 p-4 dark:border-erp-border-dark" [class.xl:col-span-2]="first">
+          <h3 class="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{{ sec.title }}</h3>
+          <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2" [class.xl:grid-cols-3]="first">
+            <app-detail-field *ngFor="let f of sec.facts" [label]="f.label" [tone]="f.tone ?? null" stacked>{{ f.value }}</app-detail-field>
           </div>
-        }
-      </dl>
-    </section>
-
-    <!-- Items -->
-    <div class="w-full mb-8">
-      <div class="flex justify-between items-center gap-3 mb-3">
-        <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold">
-          Items <span class="text-gray-400 font-normal">({{ grn.items?.length || 0 }})</span>
-        </label>
-        <span class="text-xs text-gray-500">{{ selectedItems.size }} selected for receipt</span>
+        </section>
       </div>
-      <div class="grn-view-table-wrap">
+
+      <!-- items: a hand-built table because rows are selectable for the receipt -->
+      <div *ngSwitchCase="'items'" class="grn-view-table-wrap">
         <table class="grn-view-table">
-          <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+          <thead>
             <tr>
-              <th class="px-4 py-2 border text-center">
-                <app-sf-checkbox aria-label="Select all items" [ngModel]="areAllItemsSelected()" (ngModelChange)="toggleAllItems()" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
-              </th>
-              <th class="px-4 py-2 border text-center">SL.NO</th>
-              <th class="px-4 py-2 border">Part No.</th>
-              <th class="px-4 py-2 border">Item Description</th>
-              <th class="px-4 py-2 border text-center">UOM</th>
-              <th class="px-4 py-2 border text-center">Ordered Qty</th>
-              <th class="px-4 py-2 border text-center">Received Qty</th>
-              <th class="px-4 py-2 border text-center">Accepted Qty</th>
-              <th class="px-4 py-2 border text-center">Rejected Qty</th>
-              <th class="px-4 py-2 border">Rejection Reason</th>
-              <th class="px-4 py-2 border">Remarks</th>
-              <th class="px-4 py-2 border">Date</th>
+              <th class="text-center">#</th>
+              <th>Part No.</th>
+              <th>Item Description</th>
+              <th class="text-center">UOM</th>
+              <th class="text-right">Ordered</th>
+              <th class="text-right">Received</th>
+              <th class="text-right">Accepted</th>
+              <th class="text-right">Rejected</th>
+              <th>Rejection Reason</th>
+              <th>Remarks</th>
+              <th>Date</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let item of grn.items; let i = index" class="border-b hover:bg-gray-50" [class.bg-purple-50]="isItemSelected(i)">
-              <td class="px-4 py-2 border text-center">
-                <app-sf-checkbox [attr.aria-label]="'Select ' + (item.itemDescription || 'item')" [ngModel]="isItemSelected(i)" (ngModelChange)="toggleItemSelection(i)" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
-              </td>
-              <td class="px-4 py-2 border text-center">{{ i + 1 }}</td>
-              <td class="px-4 py-2 border">{{ formatPartNumber(item.partNo) }}</td>
-              <td class="px-4 py-2 border">{{ item.itemDescription || '-' }}</td>
-              <td class="px-4 py-2 border text-center">{{ item.uom || '-' }}</td>
-              <td class="px-4 py-2 border text-center">{{ item.orderedQty || 0 }}</td>
-              <td class="px-4 py-2 border text-center">{{ item.receivedQty || 0 }}</td>
-              <td class="px-4 py-2 border text-center">{{ item.acceptedQty || 0 }}</td>
-              <td class="px-4 py-2 border text-center"
-                [class.text-red-600]="getRejectedQty(item) > 0"
-                [class.font-medium]="getRejectedQty(item) > 0">{{ getRejectedQty(item) }}</td>
-              <td class="px-4 py-2 border">{{ item.rejectionReason || '-' }}</td>
-              <td class="px-4 py-2 border">{{ item.remarks || '-' }}</td>
-              <td class="px-4 py-2 border">{{ formatDate(item.date) }}</td>
+            <tr *ngFor="let item of grn.items; let i = index">
+              <td class="text-center text-gray-400">{{ i + 1 }}</td>
+              <td>{{ formatPartNumber(item.partNo) }}</td>
+              <td class="whitespace-normal">{{ item.itemDescription || '-' }}</td>
+              <td class="text-center">{{ item.uom || '-' }}</td>
+              <td class="text-right tabular-nums">{{ item.orderedQty || 0 }}</td>
+              <td class="text-right tabular-nums">{{ item.receivedQty || 0 }}</td>
+              <td class="text-right tabular-nums">{{ item.acceptedQty || 0 }}</td>
+              <td class="text-right tabular-nums" [class.is-bad]="getRejectedQty(item) > 0">{{ getRejectedQty(item) }}</td>
+              <td>{{ item.rejectionReason || '-' }}</td>
+              <td>{{ item.remarks || '-' }}</td>
+              <td>{{ formatDate(item.date) }}</td>
             </tr>
             <tr *ngIf="!grn.items?.length">
-              <td colspan="11" class="px-4 py-6 border text-center text-sm text-gray-500">No items recorded on this GRN</td>
+              <td colspan="11" class="py-6 text-center text-gray-500">No items recorded on this GRN</td>
             </tr>
           </tbody>
           <tfoot *ngIf="grn.items?.length">
-            <tr class="bg-gray-50 font-semibold">
-              <td class="px-4 py-2 border" colspan="5">Total</td>
-              <td class="px-4 py-2 border text-center">{{ getTotalOrderedQty() }}</td>
-              <td class="px-4 py-2 border text-center">{{ getTotalReceivedQty() }}</td>
-              <td class="px-4 py-2 border text-center">{{ getTotalAcceptedQty() }}</td>
-              <td class="px-4 py-2 border text-center" [class.text-red-600]="getTotalRejectedQty() > 0">{{ getTotalRejectedQty() }}</td>
-              <td class="px-4 py-2 border"></td>
-              <td class="px-4 py-2 border"></td>
-              <td class="px-4 py-2 border"></td>
+            <tr>
+              <td colspan="4">Total</td>
+              <td class="text-right tabular-nums">{{ getTotalOrderedQty() }}</td>
+              <td class="text-right tabular-nums">{{ getTotalReceivedQty() }}</td>
+              <td class="text-right tabular-nums">{{ getTotalAcceptedQty() }}</td>
+              <td class="text-right tabular-nums" [class.is-bad]="getTotalRejectedQty() > 0">{{ getTotalRejectedQty() }}</td>
+              <td colspan="3"></td>
             </tr>
           </tfoot>
         </table>
       </div>
-      <div class="flex justify-end items-center gap-3 mt-4 pt-4 border-t border-gray-200">
-        <span *ngIf="!hasSelectedItems()" class="text-xs text-gray-400">Select items to generate a receipt</span>
-        <app-action-button variant="primary" [disabled]="!hasSelectedItems() || isGenerating()" (click)="onGenerateReceipt()">{{ isGenerating() ? 'Generating...' : 'Generate receipt' }}</app-action-button>
+
+      <!-- documents -->
+      <div *ngSwitchCase="'documents'">
+        <app-detail-documents
+          [documents]="docList"
+          [downloadable]="false"
+          emptyMessage="No supplier invoices or delivery notes on this GRN."
+          (open)="openDocument($event)"
+        ></app-detail-documents>
       </div>
     </div>
-  </div>
-</div>
+  </app-detail-view-shell>
 </div>

@@ -3,6 +3,7 @@ import GRN from "../models/grn.model";
 import PurchaseOrder from "../models/purchaseOrder.model";
 import { post as postStock } from "../services/stock.service";
 import Product from "../models/products.model";
+import { createPendingProduct } from "./productReview.controller";
 import PurchaseRequest from "../models/purchaseRequest.model";
 import mongoose from "mongoose";
 import { getEmployeeData } from "../common/utils/util";
@@ -27,31 +28,23 @@ const seedGRNSequence = (prefix: string) => async (): Promise<number> => {
   return 0;
 };
 
+const nextGRNNo = async () => {
+  const now = new Date();
+  const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+  const yy = now.getFullYear().toString().slice(-2);
+  const prefix = `GRN-${mm}-${yy}`;
+  const sequence = await getNextSequence(`grnNo-${mm}-${yy}`, seedGRNSequence(prefix));
+  return `${prefix}-${sequence.toString().padStart(4, '0')}`;
+};
+
+// Preview only: the number is taken when the GRN is saved, so opening the form no longer uses one up.
 export const generateGRNNumber = async (req: Request, res: Response) => {
-  try {
-    const now = new Date();
-    const mm = (now.getMonth() + 1).toString().padStart(2, '0');
-    const yy = now.getFullYear().toString().slice(-2);
-    const prefix = `GRN-${mm}-${yy}`;
-
-    const sequence = await getNextSequence(`grnNo-${mm}-${yy}`, seedGRNSequence(prefix));
-    const grn = `${prefix}-${sequence.toString().padStart(4, '0')}`;
-
-    return res.status(200).json({ grn });
-  } catch (error: any) {
-    console.error("Generate GRN Number error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to generate GRN number",
-      error: error.message,
-    });
-  }
+  return res.status(200).json({ grn: null, message: "Assigned on save" });
 };
 
 export const createGRN = async (req: Request, res: Response) => {
   try {
     const {
-      grnNo,
       grnDate,
       purchaseOrderId,
       supplierInvoiceNo,
@@ -59,6 +52,8 @@ export const createGRN = async (req: Request, res: Response) => {
       supplierDeliveryNoteNo,
       receivedBy,
       warehouse,
+      destinationType = 'warehouse', siteName, quarantineWarehouse,
+      inspectionResult = 'Passed', inspectionDate, inspectionNotes, inspectedBy,
       items
     } = req.body;
 
@@ -93,35 +88,62 @@ export const createGRN = async (req: Request, res: Response) => {
       });
     }
 
-    if (!grnNo || !grnDate || !warehouse || !items || !Array.isArray(items) || items.length === 0) {
+    if (!grnDate || !warehouse || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields: grnNo, grnDate, warehouse, and items are required"
+        message: "Missing required fields: grnDate, warehouse, and items are required"
       });
+    }
+
+    if (!String(supplierDeliveryNoteNo ?? '').trim()) {
+      return res.status(400).json({ success: false, message: "Supplier delivery note no. is required" });
+    }
+
+    if (!['warehouse', 'site'].includes(destinationType) || (destinationType === 'site' && !siteName)) {
+      return res.status(400).json({ success: false, message: "A valid destination and project / site are required" });
+    }
+    if (!['Pending', 'Passed', 'Partial', 'Failed'].includes(inspectionResult)) {
+      return res.status(400).json({ success: false, message: "Invalid inspection result" });
     }
 
     for (const item of items) {
       const orderedQty = Number(item.orderedQty);
       const receivedQty = Number(item.receivedQty);
+      const acceptedQty = Number(item.acceptedQty);
       const rejectedQty = Number(item.rejectedQty) || 0;
 
-      if (!item.itemDescription || isNaN(orderedQty) || isNaN(receivedQty) ||
-          orderedQty < 0 || receivedQty < 0 || rejectedQty < 0) {
+      if (!item.itemDescription || isNaN(orderedQty) || isNaN(receivedQty) || isNaN(acceptedQty) ||
+          orderedQty < 0 || receivedQty < 0 || acceptedQty < 0 || rejectedQty < 0) {
         return res.status(400).json({
           success: false,
           message: "Invalid item structure. Each item must have itemDescription, and valid numeric values for orderedQty, receivedQty, and rejectedQty"
         });
       }
 
-      if (rejectedQty > 0 && !item.rejectionReason) {
-        return res.status(400).json({
-          success: false,
-          message: `Item "${item.itemDescription}" has a rejected quantity of ${rejectedQty} but no rejectionReason was provided`
-        });
+      if (Math.abs((acceptedQty + rejectedQty) - receivedQty) > 0.000001) {
+        return res.status(400).json({ success: false, message: `Item "${item.itemDescription}" must satisfy Accepted Qty + Rejected Qty = Received Qty` });
+      }
+
+      const quantityVariance = Number(item.quantityVariance) || 0;
+      if (rejectedQty > 0 || quantityVariance !== 0) {
+        item.discrepancyType = quantityVariance < 0 ? 'Shortage' : quantityVariance > 0 ? 'Excess' : 'Damaged';
+        item.rejectionReason = quantityVariance !== 0
+          ? `Quantity variance: ${quantityVariance}`
+          : `${rejectedQty} unit(s) rejected`;
       }
 
       item.rejectedQty = rejectedQty;
-      item.acceptedQty = receivedQty;
+      item.acceptedQty = acceptedQty;
+      item.quantityVariance = quantityVariance;
+      item.serialNos = Array.isArray(item.serialNos)
+        ? item.serialNos.map((serial: any) => String(serial).trim()).filter(Boolean)
+        : String(item.serialNos || '').split(/[\n,;]+/).map((serial: string) => serial.trim()).filter(Boolean);
+      if (item.trackingType === 'Batch' && acceptedQty > 0 && !item.batchNo) {
+        return res.status(400).json({ success: false, message: `Item "${item.itemDescription}" requires a batch / lot number` });
+      }
+      if (item.trackingType === 'Serial' && acceptedQty > 0 && new Set(item.serialNos).size !== acceptedQty) {
+        return res.status(400).json({ success: false, message: `Item "${item.itemDescription}" requires ${acceptedQty} unique serial number(s)` });
+      }
     }
 
     const existingGRNs = await GRN.find({
@@ -129,17 +151,44 @@ export const createGRN = async (req: Request, res: Response) => {
       isDeleted: { $ne: true }
     });
 
+    // Accepted stock can't go past what is still open on the line; any extra must be booked as rejected.
+    const sameLine = (a: any, b: any) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+    for (const item of items) {
+      const lpoLine: any = (purchaseOrder.items || []).find((line: any) => sameLine(line.detail, item.itemDescription));
+      if (!lpoLine) continue;
+      const alreadyAccepted = existingGRNs.reduce((sum, g: any) => sum + (g.items || [])
+        .filter((gi: any) => sameLine(gi.itemDescription, item.itemDescription))
+        .reduce((s: number, gi: any) => s + (Number(gi.acceptedQty) || 0), 0), 0);
+      const open = Math.max(0, (Number(lpoLine.quantity) || 0) - alreadyAccepted);
+      if (Number(item.acceptedQty) > open + 0.000001) {
+        return res.status(400).json({
+          success: false,
+          message: `"${item.itemDescription}": only ${open} still open on the LPO, but ${item.acceptedQty} accepted. Book the extra as rejected (Excess) so it is returned.`
+        });
+      }
+    }
+
     let derivedJobId = purchaseOrder.jobId;
     if (!derivedJobId && purchaseOrder.purchaseId) {
       const linkedPurchase = await PurchaseRequest.findById(purchaseOrder.purchaseId);
       derivedJobId = linkedPurchase?.jobId;
     }
 
+    const grnNo = await nextGRNNo();
     const grnData: any = {
       grnNo,
       grnDate: new Date(grnDate),
       purchaseOrderId,
       warehouse,
+      destinationType,
+      siteName: destinationType === 'site' ? siteName : undefined,
+      quarantineWarehouse: quarantineWarehouse || undefined,
+      inspectionResult,
+      inspectionDate: inspectionDate ? new Date(inspectionDate) : undefined,
+      inspectionNotes: inspectionNotes || undefined,
+      inspectedBy: inspectedBy || undefined,
+      outcomeStatus: items.some((item: any) => Number(item.rejectedQty) > 0) ? 'Return Required' : 'Completed',
+      invoiceStatus: items.some((item: any) => Number(item.rejectedQty) > 0) ? 'Blocked by Return' : 'Ready for Invoice',
       items,
       createdBy: employee._id
     };
@@ -167,7 +216,7 @@ export const createGRN = async (req: Request, res: Response) => {
     const populatedGrn = await GRN.findById(grn._id)
       .populate('warehouse')
       .populate('jobId')
-      .populate('receivedBy')
+      .populate('receivedBy', '-password')
       .populate({
         path: 'purchaseOrderId',
         populate: [
@@ -182,7 +231,7 @@ export const createGRN = async (req: Request, res: Response) => {
           { path: 'quoteId', populate: { path: 'client' } }
         ]
       })
-      .populate('createdBy');
+      .populate('createdBy', '-password');
 
     const warnings: string[] = [];
     const populatedPurchaseOrder = populatedGrn.purchaseOrderId as any;
@@ -190,61 +239,53 @@ export const createGRN = async (req: Request, res: Response) => {
     for (let i = 0; i < items.length; i++) {
       const grnItem = items[i];
       const acceptedQty = Number(grnItem.acceptedQty);
-      
-      if (acceptedQty <= 0) {
+      const rejectedQty = Number(grnItem.rejectedQty) || 0;
+
+      if (acceptedQty <= 0 && rejectedQty <= 0) {
         continue;
       }
 
-      let product: any = null;
-      if (grnItem.partNo) {
-        const partNoStr = typeof grnItem.partNo === 'string' 
-          ? grnItem.partNo 
-          : (grnItem.partNo?.partNo || grnItem.partNo?._id || '');
-        
-        if (partNoStr && partNoStr !== '-') {
-          product = await Product.findOne({ 
-            partNo: new RegExp(`^${partNoStr}$`, 'i'),
-            isDeleted: { $ne: true }
-          });
-        }
-      }
+      const description = String(grnItem.itemDescription || '').trim();
+      const partNoStr = String(typeof grnItem.partNo === 'string' ? grnItem.partNo : (grnItem.partNo?.partNo || '')).trim();
+      const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-      if (!product) {
-        warnings.push(`Item "${grnItem.itemDescription}" (index ${i + 1}) skipped: Product not found for part number "${grnItem.partNo || 'N/A'}"`);
-        continue;
-      }
-
-      let matchingLpoItem: any = null;
-      if (populatedPurchaseOrder?.items && Array.isArray(populatedPurchaseOrder.items)) {
-        matchingLpoItem = purchaseOrder.items.find((lpoItem: any) => {
-          let partNoMatch = false;
-          if (lpoItem.partNo && product._id) {
-            if (typeof lpoItem.partNo === 'object' && lpoItem.partNo._id) {
-              partNoMatch = lpoItem.partNo._id.toString() === product._id.toString();
-            } else {
-              partNoMatch = lpoItem.partNo.toString() === product._id.toString();
-            }
-          }
-          const descriptionMatch = lpoItem.detail && grnItem.itemDescription && 
-            lpoItem.detail.trim().toLowerCase() === grnItem.itemDescription.trim().toLowerCase();
-          return partNoMatch || descriptionMatch;
-        });
-      }
+      const matchingLpoItem: any = (purchaseOrder.items || []).find((lpoItem: any) =>
+        lpoItem.detail && description && lpoItem.detail.trim().toLowerCase() === description.toLowerCase());
 
       if (!matchingLpoItem) {
-        warnings.push(`Item "${grnItem.itemDescription}" (index ${i + 1}) skipped: No matching PurchaseOrder item found`);
+        warnings.push(`"${description}" was not added to stock: it does not match any line on the LPO`);
         continue;
+      }
+
+      // Product: the LPO line's link, then the part number, then an exact description match. Job/PR lines
+      // often have no product, so a pending product is created and linked to the LPO line for next time.
+      let product: any = matchingLpoItem.partNo ? await Product.findOne({ _id: matchingLpoItem.partNo, isDeleted: { $ne: true } }) : null;
+      if (!product && partNoStr && partNoStr !== '-') {
+        product = await Product.findOne({ partNo: new RegExp(`^${escape(partNoStr)}$`, 'i'), isDeleted: { $ne: true } });
+      }
+      if (!product && description) {
+        product = await Product.findOne({ productDescription: new RegExp(`^${escape(description)}$`, 'i'), isDeleted: { $ne: true } });
+      }
+      if (!product) {
+        const created = await createPendingProduct({ partNo: partNoStr === '-' ? '' : partNoStr, productDescription: description, isGeneric: !partNoStr || partNoStr === '-' }, 'GRN', employee._id);
+        product = created.status === 'created' ? created.product
+          : created.status === 'duplicate' && created.existing?._id ? await Product.findById(created.existing._id) : null;
+        if (product) warnings.push(`"${description}" was added to stock as a new product waiting for review`);
+      }
+      if (!product) {
+        warnings.push(`"${description}" was not added to stock: no product could be found or created`);
+        continue;
+      }
+      if (!matchingLpoItem.partNo) {
+        const lineIndex = purchaseOrder.items.indexOf(matchingLpoItem);
+        await PurchaseOrder.updateOne({ _id: purchaseOrderId }, { $set: { [`items.${lineIndex}.partNo`]: product._id } });
+        matchingLpoItem.partNo = product._id;
       }
 
       const unitCost = Number(matchingLpoItem.unitCost) || 0;
 
-      // Accepted quantity goes into stock as a Receipt in the GRN's warehouse. The cost is the LPO unit cost.
-      await postStock({
+      const commonStockData = {
         product: product._id,
-        warehouse,
-        type: 'Receipt',
-        direction: 'in',
-        quantity: acceptedQty,
         unitCost,
         referenceType: 'GRN',
         referenceId: grn._id,
@@ -252,9 +293,24 @@ export const createGRN = async (req: Request, res: Response) => {
         supplier: populatedPurchaseOrder?.supplierId?._id || populatedPurchaseOrder?.supplierId,
         lpoNo: populatedPurchaseOrder?.poNo || undefined,
         remarks: grnItem.remarks,
-        movementDate: supplierInvoiceDate ? new Date(supplierInvoiceDate) : new Date(grnDate),
+        movementDate: new Date(grnDate),
         createdBy: employee._id,
-      });
+      };
+
+      if (acceptedQty > 0) {
+        await postStock({ ...commonStockData, warehouse, type: 'Receipt', direction: 'in', quantity: acceptedQty });
+      }
+      if (rejectedQty > 0) {
+        await postStock({
+          ...commonStockData,
+          warehouse: quarantineWarehouse || warehouse,
+          type: 'Quarantine',
+          direction: 'in',
+          quantity: rejectedQty,
+          bucket: 'Quarantine',
+          reason: grnItem.rejectionReason || grnItem.discrepancyType,
+        });
+      }
     }
 
     const allGRNs = await GRN.find({ 
@@ -308,7 +364,9 @@ export const createGRN = async (req: Request, res: Response) => {
                 lpoItem.detail.trim().toLowerCase() === grnItem.itemDescription.trim().toLowerCase();
               
               if (partNoMatch || descriptionMatch) {
-                totalAcceptedQty += Number(grnItem.acceptedQty) || 0;
+                if (!grn.inspectionResult || ['Passed', 'Partial'].includes(grn.inspectionResult)) {
+                  totalAcceptedQty += Number(grnItem.acceptedQty) || 0;
+                }
               }
             }
           }
@@ -393,7 +451,7 @@ export const getGRNByLpoId = async (req: Request, res: Response) => {
     })
       .populate('warehouse')
       .populate('jobId')
-      .populate('receivedBy')
+      .populate('receivedBy', '-password')
       .populate({
         path: 'purchaseOrderId',
         populate: [
@@ -408,7 +466,7 @@ export const getGRNByLpoId = async (req: Request, res: Response) => {
           { path: 'quoteId', populate: { path: 'client' } }
         ]
       })
-      .populate('createdBy')
+      .populate('createdBy', '-password')
       .sort({ createdAt: -1 });
 
     if (!grn) {
@@ -449,7 +507,7 @@ export const getAllGRNsByLpoId = async (req: Request, res: Response) => {
     })
       .populate('warehouse')
       .populate('jobId')
-      .populate('receivedBy')
+      .populate('receivedBy', '-password')
       .populate({
         path: 'purchaseOrderId',
         populate: [
@@ -464,7 +522,7 @@ export const getAllGRNsByLpoId = async (req: Request, res: Response) => {
           { path: 'quoteId', populate: { path: 'client' } }
         ]
       })
-      .populate('createdBy')
+      .populate('createdBy', '-password')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -499,12 +557,12 @@ export const getGRNRejections = async (req: Request, res: Response) => {
 
     let grnQuery = GRN.find(filter)
       .populate('warehouse')
-      .populate('receivedBy')
+      .populate('receivedBy', '-password')
       .populate({
         path: 'purchaseOrderId',
         populate: [{ path: 'supplierId' }]
       })
-      .populate('createdBy')
+      .populate('createdBy', '-password')
       .sort({ createdAt: -1 });
 
     let grns = await grnQuery;
@@ -584,7 +642,7 @@ export const getGRNById = async (req: Request, res: Response) => {
     const grn = await GRN.findById(id)
       .populate('warehouse')
       .populate('jobId')
-      .populate('receivedBy')
+      .populate('receivedBy', '-password')
       .populate({
         path: 'purchaseOrderId',
         populate: [
@@ -599,7 +657,7 @@ export const getGRNById = async (req: Request, res: Response) => {
           { path: 'quoteId', populate: { path: 'client' } }
         ]
       })
-      .populate('createdBy');
+      .populate('createdBy', '-password');
 
     if (!grn || grn.isDeleted) {
       return res.status(404).json({
@@ -622,12 +680,79 @@ export const getGRNById = async (req: Request, res: Response) => {
   }
 };
 
+/** Placed LPOs still waiting on goods, soonest expected first: the GRN Arriving tab. */
+export const getArrivingPurchaseOrders = async (req: Request, res: Response) => {
+  try {
+    const pageNumber = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.max(1, Number(req.query.row) || 15);
+    const search = String(req.query.search || '').trim();
+    const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const stage = String(req.query.stage || '');
+    const startOfTomorrow = new Date();
+    startOfTomorrow.setHours(0, 0, 0, 0);
+    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+
+    const result = await PurchaseOrder.aggregate([
+      { $match: { poStatus: 'Placed' } },
+      { $lookup: { from: "grns", let: { po: "$_id" }, pipeline: [{ $match: { $expr: { $eq: ["$purchaseOrderId", "$$po"] }, isDeleted: { $ne: true } } }, { $project: { items: 1 } }], as: "grns" } },
+      {
+        $addFields: {
+          orderedQty: { $sum: "$items.quantity" },
+          receivedQty: { $sum: { $map: { input: "$grns", as: "g", in: { $sum: "$$g.items.receivedQty" } } } },
+          // Rejected goods still owe a replacement, so the LPO stays here until everything ordered is accepted.
+          acceptedQty: { $sum: { $map: { input: "$grns", as: "g", in: { $sum: "$$g.items.acceptedQty" } } } },
+          grnCount: { $size: "$grns" },
+        }
+      },
+      { $match: { $expr: { $lt: ["$acceptedQty", "$orderedQty"] } } },
+      // Upcoming: expected after today and no GRN yet; once any GRN exists it is tracked in the other tabs.
+      // Arriving: due today, overdue, or no date given.
+      ...(stage === 'upcoming' ? [{ $match: { expectedDeliveryDate: { $gte: startOfTomorrow }, grnCount: 0 } }] : []),
+      ...(stage === 'arriving' ? [{ $match: { $or: [{ expectedDeliveryDate: { $lt: startOfTomorrow } }, { expectedDeliveryDate: null }, { expectedDeliveryDate: { $exists: false } }] } }] : []),
+      { $lookup: { from: "suppliers", localField: "supplierId", foreignField: "_id", as: "supplierId", pipeline: [{ $project: { supplierName: 1 } }] } },
+      { $unwind: { path: "$supplierId", preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: "purchases", localField: "purchaseId", foreignField: "_id", as: "purchaseId", pipeline: [{ $project: { purchaseNo: 1, jobId: 1 } }] } },
+      { $unwind: { path: "$purchaseId", preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: "jobs", localField: "jobId", foreignField: "_id", as: "jobId", pipeline: [{ $project: { jobId: 1 } }] } },
+      { $unwind: { path: "$jobId", preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: "employees", localField: "placedBy", foreignField: "_id", as: "placedBy", pipeline: [{ $project: { firstName: 1, lastName: 1 } }] } },
+      { $unwind: { path: "$placedBy", preserveNullAndEmptyArrays: true } },
+      ...(search ? [{
+        $match: {
+          $or: [
+            { poNo: { $regex: escaped, $options: "i" } },
+            { "purchaseId.purchaseNo": { $regex: escaped, $options: "i" } },
+            { "supplierId.supplierName": { $regex: escaped, $options: "i" } },
+            { "jobId.jobId": { $regex: escaped, $options: "i" } },
+          ]
+        }
+      }] : []),
+      { $project: { grns: 0, approvalStatus: 0, approvedHistory: 0, rejectedHistory: 0, termsAndCondition: 0 } },
+      // No date yet (placed before the date was asked for) sorts last.
+      { $addFields: { sortDate: { $ifNull: ["$expectedDeliveryDate", new Date(8640000000000000)] } } },
+      { $sort: { sortDate: 1, placedAt: 1 } },
+      { $facet: { data: [{ $skip: (pageNumber - 1) * pageSize }, { $limit: pageSize }], totalCount: [{ $count: "count" }] } },
+    ]);
+
+    const total = result[0]?.totalCount[0]?.count || 0;
+    return res.status(200).json({
+      success: true,
+      data: result[0]?.data || [],
+      pagination: { total, page: pageNumber, pageSize, totalPages: Math.ceil(total / pageSize) },
+    });
+  } catch (error: any) {
+    console.error("Get arriving purchase orders error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load arriving LPOs", error: error.message });
+  }
+};
+
 export const getAllGRNs = async (req: Request, res: Response) => {
   try {
-    const { page = 1, row = 10, search = "" } = req.query;
+    const { page = 1, row = 10, search = "", status = "" } = req.query;
     const pageNumber = Number(page);
     const pageSize = Number(row);
     const skip = (pageNumber - 1) * pageSize;
+    const receiptStatus = String(status);
 
     const pipeline: any[] = [
       { $match: { isDeleted: { $ne: true } } },
@@ -658,6 +783,8 @@ export const getAllGRNs = async (req: Request, res: Response) => {
         }
       },
       { $unwind: { path: "$purchaseOrderId.purchaseId", preserveNullAndEmptyArrays: true } },
+      // Older GRNs have no jobId of their own; fall back to the LPO's, then its purchase request's.
+      { $addFields: { jobId: { $ifNull: ["$jobId", "$purchaseOrderId.jobId", "$purchaseOrderId.purchaseId.jobId"] } } },
       {
         $lookup: {
           from: "jobs",
@@ -681,7 +808,8 @@ export const getAllGRNs = async (req: Request, res: Response) => {
           from: "employees",
           localField: "createdBy",
           foreignField: "_id",
-          as: "createdBy"
+          as: "createdBy",
+          pipeline: [{ $project: { password: 0 } }]
         }
       },
       { $unwind: { path: "$createdBy", preserveNullAndEmptyArrays: true } },
@@ -690,7 +818,8 @@ export const getAllGRNs = async (req: Request, res: Response) => {
           from: "employees",
           localField: "receivedBy",
           foreignField: "_id",
-          as: "receivedBy"
+          as: "receivedBy",
+          pipeline: [{ $project: { password: 0 } }]
         }
       },
       { $unwind: { path: "$receivedBy", preserveNullAndEmptyArrays: true } },
@@ -705,6 +834,47 @@ export const getAllGRNs = async (req: Request, res: Response) => {
           ]
         }
       }] : []),
+      {
+        $addFields: {
+          receiptStatus: {
+            $let: {
+              vars: {
+                received: { $sum: { $map: { input: { $ifNull: ["$items", []] }, as: "item", in: { $ifNull: ["$$item.receivedQty", 0] } } } }
+              },
+              in: {
+                $switch: {
+                  branches: [
+                    { case: { $lte: ["$$received", 0] }, then: "pending" },
+                    // Judged on the whole LPO: a split delivery is fully received once the LPO closes.
+                    { case: { $ne: ["$purchaseOrderId.poStatus", "Closed"] }, then: "partial" }
+                  ],
+                  default: "arrived"
+                }
+              }
+            }
+          }
+        }
+      },
+      ...(["pending", "partial", "arrived"].includes(receiptStatus)
+        ? [{ $match: { receiptStatus } }]
+        : []),
+      ...(receiptStatus === "returns"
+        ? [{
+            $match: {
+              $or: [
+                { outcomeStatus: { $in: ["Return Required", "Return in Progress", "Resolved"] } },
+                {
+                  $expr: {
+                    $gt: [
+                      { $sum: { $map: { input: { $ifNull: ["$items", []] }, as: "item", in: { $ifNull: ["$$item.rejectedQty", 0] } } } },
+                      0
+                    ]
+                  }
+                }
+              ]
+            }
+          }]
+        : []),
       { $sort: { createdAt: -1 } },
       {
         $facet: {
@@ -740,6 +910,69 @@ export const getAllGRNs = async (req: Request, res: Response) => {
       message: "Failed to fetch GRNs",
       error: error.message,
     });
+  }
+};
+
+// Stock was already posted from the quantities, warehouse and batch/serial numbers at create time, so an edit
+// only touches the paperwork and inspection fields plus the per-line notes; those other fields are ignored here.
+export const updateGRN = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid GRN ID" });
+    }
+
+    const grn: any = await GRN.findOne({ _id: id, isDeleted: { $ne: true } });
+    if (!grn) {
+      return res.status(404).json({ success: false, message: "GRN not found" });
+    }
+
+    const {
+      grnDate, supplierInvoiceNo, supplierInvoiceDate, supplierDeliveryNoteNo, receivedBy,
+      siteName, quarantineWarehouse, inspectionResult, inspectionDate, inspectionNotes, inspectedBy, items
+    } = req.body;
+
+    if (!grnDate || !String(supplierDeliveryNoteNo ?? '').trim()) {
+      return res.status(400).json({ success: false, message: "GRN date and supplier delivery note no. are required" });
+    }
+    if (inspectionResult && !['Pending', 'Passed', 'Partial', 'Failed'].includes(inspectionResult)) {
+      return res.status(400).json({ success: false, message: "Invalid inspection result" });
+    }
+    if (grn.destinationType === 'site' && !siteName) {
+      return res.status(400).json({ success: false, message: "Project / site is required" });
+    }
+
+    grn.grnDate = new Date(grnDate);
+    grn.supplierInvoiceNo = supplierInvoiceNo || undefined;
+    grn.supplierInvoiceDate = supplierInvoiceDate ? new Date(supplierInvoiceDate) : undefined;
+    grn.supplierDeliveryNoteNo = supplierDeliveryNoteNo;
+    if (receivedBy) grn.receivedBy = receivedBy;
+    if (grn.destinationType === 'site') grn.siteName = siteName;
+    grn.quarantineWarehouse = quarantineWarehouse || undefined;
+    if (inspectionResult) grn.inspectionResult = inspectionResult;
+    grn.inspectionDate = inspectionDate ? new Date(inspectionDate) : undefined;
+    grn.inspectionNotes = inspectionNotes || undefined;
+    grn.inspectedBy = inspectedBy || undefined;
+
+    if (Array.isArray(items)) {
+      for (let i = 0; i < grn.items.length; i++) {
+        const line = grn.items[i];
+        const incoming = items[i];
+        if (!incoming) continue;
+        const hasDiscrepancy = (Number(line.rejectedQty) || 0) > 0 || (Number(line.quantityVariance) || 0) !== 0;
+        line.discrepancyType = hasDiscrepancy ? (incoming.discrepancyType || line.discrepancyType) : undefined;
+        line.rejectionReason = hasDiscrepancy ? (incoming.rejectionReason || line.rejectionReason) : undefined;
+        line.expiryDate = incoming.expiryDate ? new Date(incoming.expiryDate) : undefined;
+        line.remarks = incoming.remarks || undefined;
+        if (incoming.uom) line.uom = incoming.uom;
+      }
+    }
+
+    await grn.save();
+    return res.status(200).json({ success: true, message: "GRN updated", data: grn });
+  } catch (error: any) {
+    console.error("Update GRN error:", error);
+    return res.status(500).json({ success: false, message: "Failed to update GRN", error: error.message });
   }
 };
 
@@ -878,4 +1111,3 @@ export const updateGRNSupplierDeliveryNotes = async (req: any, res: Response) =>
     });
   }
 };
-

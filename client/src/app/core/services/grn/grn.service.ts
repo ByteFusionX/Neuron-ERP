@@ -34,6 +34,10 @@ export class GrnService {
     return this.http.get<any>(`${this.baseUrl}/purchase-order/${lpoId}/all`);
   }
 
+  updateGRN(id: string, grnData: any): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${id}`, grnData, { context: context() });
+  }
+
   getGRNById(id: string): Observable<any> {
     return this.http.get<any>(`${this.baseUrl}/${id}`, { context: context() });
   }
@@ -42,8 +46,14 @@ export class GrnService {
     page?: number;
     row?: number;
     search?: string;
+    status?: 'pending' | 'partial' | 'arrived' | 'returns';
   }): Observable<any> {
     return this.http.get<any>(this.baseUrl, { params: params as any, context: context() });
+  }
+
+  /** Placed LPOs still waiting on goods, soonest expected delivery first. */
+  getArrivingPurchaseOrders(params?: { page?: number; row?: number; search?: string; stage?: 'upcoming' | 'arriving' }): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/arriving`, { params: params as any, context: context() });
   }
 
   updateSupplierInvoices(grnId: string, formData: FormData): Observable<any> {
@@ -59,9 +69,9 @@ export class GrnService {
   }
 
 
-  async generateGRNReceiptPDF(grnData: any, selectedItems: any[]) {
+  async generateGRNReceiptPDF(grnData: any, items: any[]) {
     pdfMake.vfs = pdfFonts.vfs;
-    
+
     (pdfMake as any).fonts = {
       EBGaramond: {
         normal: `${window.location.origin}/assets/font/EBGaramond-Regular.ttf`,
@@ -70,165 +80,169 @@ export class GrnService {
       }
     };
 
-    const companyName = grnData.purchaseOrderId?.quoteId?.quoteCompany ||
-                       grnData.purchaseOrderId?.purchaseId?.jobId?.quoteId?.quoteCompany ||
-                       '';
-
-    const itemTableHeader = [
-      { text: 'Sl.\nNo', style: 'tableSlNo' },
-      { text: 'Part No.', style: 'tableHeader' },
-      { text: 'Item Description', style: 'tableHeader' },
-      { text: 'UOM', style: 'tableHeader' },
-      { text: 'Ordered Qty', style: 'tableHeader' },
-      { text: 'Received Qty', style: 'tableHeader' },
-      { text: 'Accepted Qty', style: 'tableHeader' },
-      { text: 'Rejected Qty', style: 'tableHeader' },
-      { text: 'Remark', style: 'tableHeader' },
-      { text: 'Date', style: 'tableHeader' },
-    ];
+    const po = grnData.purchaseOrderId || {};
+    const supplier = po.supplierId || {};
+    const formatDate = (date: any) => date ? new Date(date).toLocaleDateString('en-GB') : '';
+    const footerImage = await this.getBase64ImageFromURL("../../assets/images/pdfFooter.png");
 
     const tableBody: any[] = [];
     let serialNumber = 1;
+    let totalOrdered = 0, totalReceived = 0, totalAccepted = 0, totalRejected = 0;
 
-    selectedItems.forEach((item: any) => {
-      const rejectedQty = item.rejectedQty !== undefined && item.rejectedQty !== null
-        ? item.rejectedQty
-        : (item.receivedQty || 0) - (item.acceptedQty || 0);
+    items.forEach((item: any) => {
+      const rejectedQty = item.rejectedQty ?? ((item.receivedQty || 0) - (item.acceptedQty || 0));
       const partNo = typeof item.partNo === 'string' ? item.partNo : (item.partNo?.partNo || '-');
-      const itemDate = item.date ? new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A';
-      const remarksText = item.remarks || '-';
-      
+      totalOrdered += item.orderedQty || 0;
+      totalReceived += item.receivedQty || 0;
+      totalAccepted += item.acceptedQty || 0;
+      totalRejected += rejectedQty || 0;
       tableBody.push([
         { text: serialNumber++, style: 'tableText', alignment: 'center' },
-        { text: partNo, style: 'tableText', alignment: 'center' },
+        { text: partNo, style: 'tableText' },
         { text: item.itemDescription || '-', style: 'tableText' },
         { text: item.uom || '-', style: 'tableText', alignment: 'center' },
-        { text: (item.orderedQty || 0).toString(), style: 'tableText', alignment: 'center' },
-        { text: (item.receivedQty || 0).toString(), style: 'tableText', alignment: 'center' },
-        { text: (item.acceptedQty || 0).toString(), style: 'tableText', alignment: 'center' },
-        { text: rejectedQty.toString(), style: 'tableText', alignment: 'center' },
-        { text: remarksText, style: 'tableText', alignment: 'center' },
-        { text: itemDate, style: 'tableText', alignment: 'center' },
+        { text: String(item.orderedQty || 0), style: 'tableText', alignment: 'center' },
+        { text: String(item.receivedQty || 0), style: 'tableText', alignment: 'center' },
+        { text: String(item.acceptedQty || 0), style: 'tableText', alignment: 'center' },
+        { text: String(rejectedQty || 0), style: 'tableText', alignment: 'center' },
+        { text: [item.rejectionReason, item.remarks].filter(Boolean).join(' / ') || '-', style: 'tableText' },
       ]);
     });
 
-    const formatDateForPDF = (date: any): string => {
-      if (!date) return 'N/A';
-      const d = new Date(date);
-      const day = d.getDate().toString().padStart(2, '0');
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const month = months[d.getMonth()];
-      const year = d.getFullYear();
-      return `${day}-${month}-${year}`;
+    const itemsTable = {
+      table: {
+        headerRows: 1,
+        widths: [28, 55, '*', 35, 42, 45, 45, 45, 70],
+        body: [
+          [
+            { text: 'Sl. No.', style: 'tableHeader' },
+            { text: 'Part No.', style: 'tableHeader' },
+            { text: 'Description', style: 'tableHeader' },
+            { text: 'UOM', style: 'tableHeader' },
+            { text: 'Ordered', style: 'tableHeader' },
+            { text: 'Received', style: 'tableHeader' },
+            { text: 'Accepted', style: 'tableHeader' },
+            { text: 'Rejected', style: 'tableHeader' },
+            { text: 'Remarks', style: 'tableHeader' },
+          ],
+          ...tableBody,
+          [
+            { text: 'TOTAL', style: 'tableFooter', colSpan: 4 }, '', '', '',
+            { text: String(totalOrdered), style: 'tableFooter', alignment: 'center' },
+            { text: String(totalReceived), style: 'tableFooter', alignment: 'center' },
+            { text: String(totalAccepted), style: 'tableFooter', alignment: 'center' },
+            { text: String(totalRejected), style: 'tableFooter', alignment: 'center' },
+            { text: '', style: 'tableFooter' },
+          ]
+        ]
+      }
     };
 
-    const grnDate = formatDateForPDF(grnData.grnDate);
-    const invoiceDate = formatDateForPDF(grnData.supplierInvoiceDate);
+    const infoRow = (l1: string, v1: any, l2: string, v2: any) => [
+      { style: 'tableHead', text: l1 },
+      { style: 'tableBody', text: v1 || '' },
+      { style: 'tableHead', text: l2 },
+      { style: 'tableBody', text: v2 || '' },
+    ];
+
+    const signature = (label: string, name: string) => ({
+      stack: [
+        { text: label, fontSize: 10, bold: true },
+        { text: name || ' ', fontSize: 10, margin: [0, 4, 0, 0] },
+        { text: '______________________', fontSize: 10, margin: [0, 18, 0, 0] },
+        { text: 'Signature', fontSize: 9, color: '#666' },
+      ],
+    });
 
     const documentDefinition: any = {
       defaultStyle: {
         font: 'EBGaramond'
       },
-      pageMargins: [45, 45, 45, 45],
+      header: {
+        image: await this.getBase64ImageFromURL(
+          po.purchaseCompany === "Neuron Security System"
+            ? "../../assets/images/pdfheader-security.jpg"
+            : "../../assets/images/pdfheader.jpg"
+        ),
+        width: 550,
+        alignment: 'center',
+        margin: [0, 25, 0, 0]
+      },
+      footer: (currentPage: number) => ({
+        stack: [
+          { text: `Page | ${currentPage}`, fontSize: 9, color: '#888', alignment: 'right', margin: [0, 0, 45, 2] },
+          { image: footerImage, width: 600, alignment: 'center' },
+        ],
+      }),
+      pageMargins: [45, 115, 45, 110],
       content: [
         {
-          text: 'GRN Receipt',
-          style: 'mainHeading',
-          margin: [0, 0, 0, 10]
-        },
-        {
-          text: companyName || 'N/A',
-          style: 'companyHeading',
-          margin: [0, 0, 0, 20]
-        },
-        {
-          style: 'infoTable',
           table: {
-            widths: ['*', '*'],
-            body: [
-              [{ style: 'infoLabel', text: 'GRN No:' }, { style: 'infoValue', text: grnData.grnNo || 'N/A' }],
-              [{ style: 'infoLabel', text: 'GRN Receipt Date:' }, { style: 'infoValue', text: grnDate }],
-              [{ style: 'infoLabel', text: 'Supplier Name:' }, { style: 'infoValue', text: grnData.purchaseOrderId?.supplierId?.supplierName || 'N/A' }],
-              [{ style: 'infoLabel', text: 'Supplier Invoice No.:' }, { style: 'infoValue', text: grnData.supplierInvoiceNo || 'N/A' }],
-              [{ style: 'infoLabel', text: 'Invoice Date:' }, { style: 'infoValue', text: invoiceDate }],
-              [{ style: 'infoLabel', text: 'Linked LPO No.:' }, { style: 'infoValue', text: grnData.purchaseOrderId?.poNo || 'N/A' }],
-              [{ style: 'infoLabel', text: 'Job ID:' }, { style: 'infoValue', text: grnData.purchaseOrderId?.purchaseId?.jobId?.jobId || 'N/A' }],
-              [{ style: 'infoLabel', text: 'Delivery Note No.:' }, { style: 'infoValue', text: grnData.supplierDeliveryNoteNo || 'N/A' }],
-              [{ style: 'infoLabel', text: 'Received By:' }, { style: 'infoValue', text: this.formatEmployeeName(grnData.receivedBy) || 'N/A' }],
-              [{ style: 'infoLabel', text: 'Warehouse / Location:' }, { style: 'infoValue', text: grnData.warehouse?.wareHouseName || 'N/A' }],
+            widths: '*',
+            body: [[
+              {
+                style: 'mainHead',
+                border: [false, false, false, false],
+                fillColor: '#f4b083',
+                text: 'GOODS RECEIPT NOTE',
+                alignment: 'center',
+                margin: [0, 3, 0, 3]
+              }]
             ]
-          },
-          margin: [0, 0, 0, 20]
+          }
         },
         {
+          margin: [0, 10, 0, 15],
           table: {
-            headerRows: 1,
-            widths: [25, 40, '*', 40, 35, 40, 40, 45, 45, 50],
+            widths: [95, '*', 95, '*'],
             body: [
-              itemTableHeader,
-              ...tableBody
+              infoRow('Supplier:', supplier.supplierName, 'GRN No:', grnData.grnNo),
+              infoRow('Supplier Invoice No:', grnData.supplierInvoiceNo, 'GRN Date:', formatDate(grnData.grnDate)),
+              infoRow('Invoice Date:', formatDate(grnData.supplierInvoiceDate), 'PO No:', po.poNo),
+              infoRow('Delivery Note No:', grnData.supplierDeliveryNoteNo, 'Job No:', po.jobId?.jobId || po.purchaseId?.jobId?.jobId),
+              infoRow('Warehouse:', grnData.warehouse?.wareHouseName, 'Status:', grnData.status),
             ]
-          },
-          margin: [0, 0, 0, 0]
-        }
+          }
+        },
+        itemsTable,
+        {
+          unbreakable: true,
+          margin: [0, 30, 0, 0],
+          columnGap: 20,
+          columns: [
+            signature('Received By', this.formatEmployeeName(grnData.receivedBy)),
+            signature('Checked By', ''),
+            signature('Store In-charge', ''),
+          ],
+        },
       ],
       styles: {
-        tableHead: {
-          color: 'black',
-          fontSize: 10
-        },
-        infoLabel: {
-          color: 'black',
-          fontSize: 10,
-          bold: true,
-          margin: [0, 3, 0, 3]
-        },
-        infoValue: {
-          color: 'black',
-          fontSize: 10,
-          margin: [0, 3, 0, 3]
-        },
-        tableHeader: {
-          fontSize: 10,
-          alignment: 'center',
-          margin: [0, 5],
-          fillColor: "#1E4E79",
-          color: 'white',
-          bold: true
-        },
-        tableSlNo: {
-          bold: true,
-          fontSize: 10,
-          alignment: 'center',
-          margin: [0, 5],
-          fillColor: "#1E4E79",
-          color: 'white'
-        },
-        tableText: {
-          fontSize: 9
-        },
-        mainHeading: {
-          fontSize: 18,
-          bold: true,
-          alignment: 'center',
-          color: '#1E3964',
-          margin: [0, 0, 0, 10]
-        },
-        companyHeading: {
-          fontSize: 14,
-          bold: false,
-          alignment: 'center',
-          color: '#444',
-          margin: [0, 0, 0, 20]
-        },
-        infoTable: {
-          margin: [0, 5, 0, 5]
-        }
+        mainHead: { fontSize: 13, color: 'white', bold: true },
+        tableHead: { color: 'black', fontSize: 10, bold: true },
+        tableBody: { fontSize: 10, color: 'black' },
+        tableHeader: { fontSize: 10, alignment: 'center', margin: [0, 5], bold: true, color: 'black' },
+        tableFooter: { bold: true, fontSize: 10, margin: [0, 4, 0, 4] },
+        tableText: { fontSize: 9, margin: [0, 2] },
       }
     };
 
-    const pdfDoc = pdfMake.createPdf(documentDefinition);
-    return pdfDoc;
+    return pdfMake.createPdf(documentDefinition);
+  }
+
+  private getBase64ImageFromURL(url: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.setAttribute("crossOrigin", "anonymous");
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = error => reject(error);
+      img.src = url;
+    });
   }
 
   formatNumber(value: any, minimumFractionDigits: number = 2, maximumFractionDigits: number = 2): string {
