@@ -1,0 +1,120 @@
+<div class="flex flex-col gap-4">
+
+  <!-- Work toolbar: search, filters, collapse, density ------------------------------------ -->
+  <div class="sticky top-0 z-20 -mx-1 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm dark:border-erp-border-dark dark:bg-erp-surface-dark">
+    <div class="flex flex-wrap items-center gap-2">
+      <app-sf-input class="block w-full sm:w-56" type="search" placeholder="Search lines…" clearable
+        [ngModel]="lineSearch" (ngModelChange)="lineSearch = $event ?? ''"></app-sf-input>
+      <button *ngFor="let chip of chips" type="button" (click)="toggleFilter(chip.key)" [disabled]="!count(chip.key) && lineFilter !== chip.key"
+        [attr.title]="chip.hint" class="inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors disabled:cursor-default disabled:opacity-40"
+        [ngClass]="lineFilter === chip.key
+          ? 'border-violet-600 bg-violet-600 text-white'
+          : 'border-gray-200 text-gray-600 hover:bg-gray-100 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-gray-800'">
+        {{ chip.label }}
+        <span class="rounded-full px-1.5 tabular-nums" [ngClass]="lineFilter === chip.key ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ count(chip.key) }}</span>
+      </button>
+      <button *ngIf="filterActive" type="button" (click)="clearFilters()" class="text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-400">Clear</button>
+
+      <div class="ml-auto flex items-center gap-1">
+        <button type="button" title="Collapse item" aria-label="Collapse item" (click)="collapsed = true"
+          class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><ng-icon name="heroChevronUp" class="h-4 w-4"></ng-icon></button>
+        <button type="button" title="Expand item" aria-label="Expand item" (click)="collapsed = false"
+          class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><ng-icon name="heroChevronDown" class="h-4 w-4"></ng-icon></button>
+        <button type="button" [title]="compact ? 'Comfortable rows' : 'Compact rows'" (click)="compact = !compact"
+          class="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+          [ngClass]="compact ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300' : ''">
+          <ng-icon [name]="compact ? 'heroTableCells' : 'heroListBullet'" class="h-4 w-4"></ng-icon> {{ compact ? 'Compact' : 'Comfortable' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <p *ngIf="!lines.length" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-erp-border-dark">No materials found. Go back to step 1 and select a Job ID.</p>
+  <p *ngIf="lines.length && filterActive && !visibleCount" class="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-xs text-gray-500 dark:border-erp-border-dark">
+    No lines match. <button type="button" (click)="clearFilters()" class="font-medium text-violet-700 hover:underline dark:text-violet-400">Clear filters</button>
+  </p>
+
+  <!-- The job's card ----------------------------------------------------------------------- -->
+  <div *ngIf="lines.length" class="rounded-xl border border-gray-200 bg-white dark:border-erp-border-dark dark:bg-erp-surface-dark">
+    <div class="flex flex-wrap items-center gap-2 border-gray-100 px-3 py-2 dark:border-erp-border-dark" [class.border-b]="!collapsed">
+      <button type="button" (click)="collapsed = !collapsed" [attr.aria-label]="collapsed ? 'Expand item' : 'Collapse item'" [attr.aria-expanded]="!collapsed"
+        class="grid h-6 w-6 shrink-0 place-content-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+        <ng-icon [name]="collapsed ? 'heroChevronRight' : 'heroChevronDown'" class="h-4 w-4"></ng-icon>
+      </button>
+      <span class="min-w-0 flex-1 truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{{ title }}</span>
+      <span class="hidden shrink-0 text-[11px] tabular-nums text-gray-500 md:inline">{{ selectedCount }} of {{ lines.length }} line{{ lines.length === 1 ? '' : 's' }} selected</span>
+    </div>
+
+    <ng-container *ngIf="!collapsed">
+      <!-- Column labels: standing headers for the numeric strip, hidden below the width where it wraps. -->
+      <div class="hidden items-start gap-2 px-3 pt-2 min-[900px]:flex">
+        <span class="w-5 shrink-0"></span>
+        <span class="w-6 shrink-0"></span>
+        <div class="de-strip de-labels min-w-0 flex-1">
+          <span>Item</span><span class="text-right">Ordered</span><span class="text-right">Delivered</span><span class="text-right">Balance</span>
+          <span>This DN</span><span>Serial No.</span>
+        </div>
+      </div>
+
+      <div class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+        <ng-container *ngFor="let line of lines; let i = index">
+          <div *ngIf="visible(line, i)" [formGroup]="line" class="flex items-start gap-2 px-3 dark:bg-erp-surface-dark"
+            [ngClass]="[compact ? 'py-1.5' : 'py-2.5', hasError(line) ? 'bg-red-50/50 dark:!bg-red-950/20' : 'bg-white']">
+            <div class="mt-2 w-5 shrink-0" [attr.title]="lockReason(line) || null">
+              <app-sf-checkbox [ngModelOptions]="{ standalone: true }" [ngModel]="isSelected(i)" (ngModelChange)="toggle.emit(i)" [disabled]="locked(line)"
+                [attr.aria-label]="'Include ' + text(line, 'description')"></app-sf-checkbox>
+            </div>
+            <span class="mt-2 grid h-6 w-6 shrink-0 place-content-center rounded-md bg-gray-100 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ line.get('slNo')?.value || i + 1 }}</span>
+            <div class="min-w-0 flex-1 space-y-2" [class.opacity-50]="locked(line) || !isSelected(i)" [attr.title]="lockReason(line) || null">
+              <div class="de-strip">
+                <div class="col-span-3 min-w-0 py-1.5 min-[900px]:col-span-1">
+                  <p [title]="text(line, 'description')" class="line-clamp-2 whitespace-pre-line text-xs font-normal text-gray-900 dark:text-gray-100">{{ text(line, 'description') || '-' }}</p>
+                  <p *ngIf="text(line, 'partNo')" class="text-xs text-gray-500">{{ text(line, 'partNo') }}</p>
+                </div>
+                <div class="de-cell de-num" title="Ordered">{{ num(line, 'orderedQty') }}</div>
+                <div class="de-cell de-num" title="Delivered">{{ num(line, 'deliveredQty') }}</div>
+                <div class="de-cell de-num font-medium" title="Balance" [class.!text-red-600]="balance(line) === 0">{{ balance(line) }}</div>
+                <div>
+                  <app-sf-number formControlName="currentDeliveryQty" [min]="0" [max]="balance(line)" [stepper]="false" placeholder="0"
+                    [attr.aria-label]="'Delivery qty for ' + text(line, 'description')"></app-sf-number>
+                  <p *ngIf="hasError(line)" class="mt-1 text-[11px] text-red-600">Enter 1 to {{ balance(line) }}</p>
+                </div>
+                <app-sf-textarea formControlName="serialNos" [readonly]="locked(line) || !isSelected(i)" [rows]="1"
+                  expandOnFocus placeholder="Serial no., one per line or comma-separated"
+                  [attr.aria-label]="'Serial numbers for ' + text(line, 'description')"></app-sf-textarea>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+    </ng-container>
+  </div>
+
+  <!-- Totals ------------------------------------------------------------------------------- -->
+  <div *ngIf="lines.length" class="sticky bottom-0 z-20 rounded-xl border border-gray-200 bg-gray-50/95 px-4 py-3 backdrop-blur dark:border-erp-border-dark dark:bg-gray-900/85">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div class="flex flex-wrap items-end gap-5">
+        <div>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Lines</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ selectedCount }} / {{ lines.length }}</p>
+        </div>
+        <div>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Ordered</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ total('orderedQty') }}</p>
+        </div>
+        <div>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Delivered</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ total('deliveredQty') }}</p>
+        </div>
+        <div>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Balance</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ totalBalance }}</p>
+        </div>
+      </div>
+      <div class="text-right">
+        <p class="text-[11px] uppercase tracking-wide text-gray-500">This DN</p>
+        <p class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ thisDnTotal }}</p>
+      </div>
+    </div>
+  </div>
+</div>

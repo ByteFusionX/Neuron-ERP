@@ -196,14 +196,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         notificationKey: 'lpoApprovalCount',
       },
       {
-        id: 'purchaseRfqs',
-        label: 'RFQ',
-        icon: 'heroEnvelope',
-        route: '/purchase/rfq',
-        privilegeKey: 'purchase',
-        privilegeValue: 'none',
-      },
-      {
         id: 'generalPurchase',
         label: 'General',
         icon: 'heroShoppingCart',
@@ -227,14 +219,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         privilegeKey: 'grn',
         privilegeValue: 'none',
       },
-      {
-        id: 'grnReturns',
-        label: 'Returns',
-        icon: 'heroArrowUturnLeft',
-        route: '/grn/returns',
-        privilegeKey: 'grn',
-        privilegeValue: 'none',
-      },
     ],
   },
   {
@@ -253,7 +237,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       },
       {
         id: 'stockLedger',
-        label: 'Stock Ledger',
+        label: 'Stock Entries',
         icon: 'heroCube',
         route: '/stock/ledger',
         privilegeKey: 'inventory',
@@ -271,7 +255,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         id: 'dispatch',
         label: 'Dispatch',
         icon: 'heroTruck',
-        route: '/dispatch/delivery-note-register',
+        route: '/dispatch',
         privilegeKey: 'dispatch',
         privilegeValue: 'none',
       },
@@ -283,15 +267,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     group: 'Operations',
     items: [
       {
-        id: 'suppliers',
-        label: 'Suppliers',
-        icon: 'heroBuildingOffice',
-        route: '/suppliers',
-        privilegeKey: 'supplier',
-        privilegeValue: 'none',
-        notificationKey: 'supplierCount',
-      },
-      {
         id: 'purchaseProducts',
         label: 'Products',
         icon: 'heroCube',
@@ -299,6 +274,15 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         privilegeKey: 'inventory',
         privilegeValue: 'none',
         inventorySubKey: 'products',
+      },
+      {
+        id: 'suppliers',
+        label: 'Suppliers',
+        icon: 'heroBuildingOffice',
+        route: '/suppliers',
+        privilegeKey: 'supplier',
+        privilegeValue: 'none',
+        notificationKey: 'supplierCount',
       },
     ],
   },
@@ -350,6 +334,14 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     label: 'Invoices',
     group: 'Finance',
     items: [
+      {
+        id: 'vendor-bills',
+        label: 'Vendor Bills',
+        icon: 'heroClipboardDocumentList',
+        route: '/finance/vendor-bills',
+        privilegeKey: 'invoice',
+        privilegeValue: 'none',
+      },
       {
         id: 'payables',
         label: 'Payable',

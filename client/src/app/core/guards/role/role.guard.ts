@@ -199,21 +199,11 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 } else if (url.startsWith('/dispatch')) {
                     if (url.includes('/create') || url.includes('/edit')) {
                         if (!privileges?.dispatch?.createDeliveryNote) {
-                            router.navigate(['/dispatch/delivery-note-register']);
+                            router.navigate(['/dispatch']);
                             return false;
                         }
                     } else if (url.includes('/pending-delivery-reports')) {
                         if (!privileges?.dispatch?.viewPendingDelivery) {
-                            router.navigate(['/home']);
-                            return false;
-                        }
-                    } else if (url.includes('/invoice-linking-report')) {
-                        if (!privileges?.dispatch?.viewInvoiceLinking) {
-                            router.navigate(['/home']);
-                            return false;
-                        }
-                    } else if (url.includes('/inventory-deduction-report')) {
-                        if (!privileges?.dispatch?.viewInventoryDeduction) {
                             router.navigate(['/home']);
                             return false;
                         }

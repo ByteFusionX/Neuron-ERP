@@ -21,8 +21,6 @@
   </app-data-grid>
 
   <div *ngIf="canSwitchDispatchView()" class="flex flex-wrap items-center gap-2">
-    <app-action-button variant="secondary" routerLink="/dispatch/delivery-note-register">Delivery note register</app-action-button>
-    <app-action-button *ngIf="canViewInvoiceLinking()" variant="secondary" routerLink="/dispatch/invoice-linking-report">Invoice linking</app-action-button>
-    <app-action-button *ngIf="canViewInventoryDeduction()" variant="secondary" routerLink="/dispatch/inventory-deduction-report">Inventory deduction</app-action-button>
+    <app-action-button variant="secondary" routerLink="/dispatch">Delivery note register</app-action-button>
   </div>
 </div>

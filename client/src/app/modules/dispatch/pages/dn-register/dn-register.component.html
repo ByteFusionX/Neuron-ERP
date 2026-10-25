@@ -12,18 +12,19 @@
     [columns]="tableColumns"
     [loading]="isLoading()"
     [pageSize]="paginationService.paginationState().row"
-    searchPlaceholder="Search by DN number"
-    emptyMessage="No delivery notes found"
+    [searchPlaceholder]="activeViewId === 'ready' ? 'Search by GRN, Job, or PO number' : 'Search by DN number'"
+    [emptyMessage]="activeViewId === 'ready' ? 'No accepted GRNs are ready for DN' : 'No delivery notes found'"
     [createLabel]="canCreateDn() ? 'Create DN' : ''"
     [rowActions]="rowActions"
+    [rowOpenable]="dnRowOpenable"
     [views]="views"
     storageKey="dispatch-dn-register"
     exportable
     exportFileName="delivery-notes.xlsx"
     [detailTitle]="dnTitle"
     [detailSubtitle]="dnSubtitle"
+    [detailTabs]="activeViewId === 'ready' ? [] : detailTabs"
     (queryChange)="onQueryChange($event)"
-    (rowOpen)="onRowClick($event)"
     (rowAction)="onRowAction($event)"
     (create)="openCreateDrawer()">
 
@@ -57,22 +58,44 @@
       </div>
     </ng-template>
 
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <div *ngSwitchCase="'details'" class="space-y-5">
+          <app-detail-section title="Delivery Note">
+            <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <app-detail-field label="DN No" stacked>{{ row.dnNo || '-' }}</app-detail-field>
+              <app-detail-field label="DN Date" stacked>{{ row.dnDate | date:'dd MMM yyyy' }}</app-detail-field>
+              <app-detail-field label="Customer" stacked>{{ row.clientName || '-' }}</app-detail-field>
+              <app-detail-field label="Job ID" stacked>{{ row.job?.jobId || '-' }}</app-detail-field>
+              <app-detail-field label="Customer PO" stacked>{{ row.customerLpoNumber || '-' }}</app-detail-field>
+              <app-detail-field label="Delivery Type" stacked>{{ row.deliveryType || 'Customer Delivery' }}</app-detail-field>
+            </div>
+          </app-detail-section>
+          <app-detail-section title="Delivery">
+            <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <app-detail-field label="Ship To" stacked>{{ row.shipToName || row.clientName || '-' }}</app-detail-field>
+              <app-detail-field label="Contact" stacked>{{ row.contactPerson || '-' }}</app-detail-field>
+              <app-detail-field label="Contact No" stacked>{{ row.contactNo || '-' }}</app-detail-field>
+              <app-detail-field label="Address" stacked>{{ row.shipToAddress || '-' }}</app-detail-field>
+              <app-detail-field label="Instructions" stacked>{{ row.deliveryInstructions || '-' }}</app-detail-field>
+            </div>
+          </app-detail-section>
+        </div>
+        <app-detail-documents *ngSwitchCase="'documents'" [documents]="detailDocuments(row)"
+          [downloadable]="false" [viewable]="false" emptyMessage="No proof-of-delivery documents attached."></app-detail-documents>
+        <app-detail-timeline *ngSwitchCase="'history'" [entries]="detailHistory(row)"
+          emptyMessage="No delivery note history available."></app-detail-timeline>
+      </ng-container>
+    </ng-template>
+
     <!-- right: permanent, every tab (filled) -->
     <ng-template #detailFooterTemplate let-row>
-      <app-action-button *ngIf="row.status === 'Draft'" variant="primary" (click)="openCreateDrawer(row._id)" icon="edit">Edit draft</app-action-button>
+      <app-action-button *ngIf="canReject(row)" variant="secondary" (click)="openReject(row)">Reject</app-action-button>
+      <app-action-button *ngIf="row.status === 'Dispatched'" variant="primary" (click)="openConfirmDelivery(row)">Confirm delivery</app-action-button>
       <app-action-button variant="primary" (click)="viewDnDetails(row)" icon="view">Open full DN</app-action-button>
     </ng-template>
   </app-data-grid>
 
-  <div *ngIf="canSwitchDispatchView()" class="flex flex-wrap items-center gap-2">
-    <app-action-button *ngIf="canViewPendingDelivery()" variant="secondary" routerLink="/dispatch/pending-delivery-reports">Pending delivery</app-action-button>
-    <app-action-button *ngIf="canViewInvoiceLinking()" variant="secondary" routerLink="/dispatch/invoice-linking-report">Invoice linking</app-action-button>
-    <app-action-button *ngIf="canViewInventoryDeduction()" variant="secondary" routerLink="/dispatch/inventory-deduction-report">Inventory deduction</app-action-button>
-  </div>
-
-  <app-stock-return-drawer kind="customer" [open]="returnOpen" [sourceId]="returnDnId"
-    (saved)="loadData()" (closed)="returnOpen = false"></app-stock-return-drawer>
-
-  <app-create-dn [drawerMode]="true" [open]="formOpen" [editId]="formEditId"
+  <app-create-dn [drawerMode]="true" [open]="formOpen" [editId]="formEditId" [defaultJobId]="formJobId"
     (saved)="onCreateSaved()" (closed)="closeCreateDrawer()"></app-create-dn>
 </div>

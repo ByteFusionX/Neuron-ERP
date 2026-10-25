@@ -56,7 +56,7 @@ export class PendingDeliveryDetailComponent implements OnInit {
   }
 
   onViewDn(dnId: string): void {
-    this.router.navigate(['/dispatch/delivery-note-register/view', dnId]);
+    this.router.navigate(['/dispatch/view', dnId]);
   }
 }
 

@@ -1,6 +1,8 @@
 import express from 'express';
-import { generateDnNumber, createDn, getDnsByJobId, getAllDeliveryNotes, getDnById, cancelDn, completeDnPod, rejectDnItems, getInventoryDeductionReport, getDraftDnByJobId, updateDn, getPendingDeliveriesSummary, getPendingDeliveryDetails, getDnItemsForJob, getInvoiceLinkingSummary } from '../controllers/deliveryNote.controller';
+import { generateDnNumber, createDn, getDnsByJobId, getAllDeliveryNotes, getReadyForDnReceipts, getDnById, getDnInvoice, cancelDn, completeDnPod, dispatchDn, rejectDnItems, getInventoryDeductionReport, getDraftDnByJobId, updateDn, getPendingDeliveriesSummary, getPendingDeliveryDetails, getDnItemsForJob, getInvoiceLinkingSummary } from '../controllers/deliveryNote.controller';
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+
+const upload = require("../common/multer.storage");
 
 const deliveryNoteRouter = express.Router();
 
@@ -13,11 +15,14 @@ deliveryNoteRouter.get('/draft/:jobId', getDraftDnByJobId);
 deliveryNoteRouter.post('/pending', requirePrivilege("dispatch", "viewPendingDelivery"), getPendingDeliveriesSummary);
 deliveryNoteRouter.get('/pending/:jobId', requirePrivilege("dispatch", "viewPendingDelivery"), getPendingDeliveryDetails);
 deliveryNoteRouter.get('/items-for-job/:jobId', getDnItemsForJob);
+deliveryNoteRouter.get('/ready-for-dn', getReadyForDnReceipts);
 deliveryNoteRouter.put('/:id', updateDn);
 deliveryNoteRouter.post('/get', getAllDeliveryNotes);
+deliveryNoteRouter.get('/:id/invoice', getDnInvoice);
 deliveryNoteRouter.get('/:id', getDnById);
 deliveryNoteRouter.patch('/:id/cancel', cancelDn);
-deliveryNoteRouter.patch('/:id/pod', completeDnPod);
+deliveryNoteRouter.patch('/:id/dispatch', dispatchDn);
+deliveryNoteRouter.patch('/:id/pod', upload.array('files'), completeDnPod);
 deliveryNoteRouter.patch('/:id/reject', rejectDnItems);
 deliveryNoteRouter.post('/inventory-deduction-report', requirePrivilege("dispatch", "viewInventoryDeduction"), getInventoryDeductionReport);
 deliveryNoteRouter.post('/invoice-linking', requirePrivilege("dispatch", "viewInvoiceLinking"), getInvoiceLinkingSummary);

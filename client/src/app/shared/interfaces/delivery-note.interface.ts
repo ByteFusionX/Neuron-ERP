@@ -13,7 +13,6 @@ export interface DeliveryNote {
     shipToAddress?: string;
     contactPerson?: string;
     contactNo?: string;
-    promisedDate?: string;
     deliveryInstructions?: string;
     pod?: {
         receivedBy?: string;
@@ -21,6 +20,8 @@ export interface DeliveryNote {
         receivedDate?: string;
         remarks?: string;
         signatureName?: string;
+        deliveredBy?: any;
+        attachments?: { fileName: string; originalname: string }[];
     };
     items: {
         slNo: number;
@@ -49,6 +50,23 @@ export interface DeliveryNote {
     };
     createdDate: string;
     updatedDate: string;
+    linkedRecords?: {
+        purchaseOrders: {
+            _id: string;
+            poNo: string;
+            poStatus: string;
+            poDate: string;
+            supplierId?: { supplierName?: string };
+        }[];
+        grns: {
+            _id: string;
+            grnNo: string;
+            grnDate: string;
+            inspectionResult: string;
+            outcomeStatus: string;
+            purchaseOrderId: string;
+        }[];
+    };
     // Helper fields for UI if needed
     job?: { _id: string, jobId: string, projectName: string }; // If populated in 'job' field
 }

@@ -18,7 +18,6 @@ import { JobListComponent } from './modules/job-sheet/pages/job-list/job-list.co
 import { ProfileInfoComponent } from './modules/profile/pages/profile-info/profile-info.component';
 import { PurchaseRequestListComponent } from './modules/purchase/pages/purchase-request-list/purchase-request-list.component';
 import { GeneralPurchaseListComponent } from './modules/purchase/pages/general-purchase-list/general-purchase-list.component';
-import { RfqListComponent } from './modules/purchase/pages/rfq-list/rfq-list.component';
 import { CreatePurchaseComponent } from './modules/purchase/pages/create-purchase/create-purchase.component';
 import { SupplierOffersComponent } from './modules/purchase/pages/supplier-offers/supplier-offers.component';
 import { ViewPurchaseComponent } from './modules/purchase/pages/view-purchase/view-purchase.component';
@@ -48,8 +47,6 @@ import { StockLedgerComponent } from './modules/stocks/pages/stock-ledger/stock-
 import { DnRegisterComponent } from './modules/dispatch/pages/dn-register/dn-register.component';
 import { CreateDnComponent } from './modules/dispatch/pages/create-dn/create-dn.component';
 import { PendingDeliveryComponent } from './modules/dispatch/pages/pending-delivery/pending-delivery.component';
-import { InvoiceLinkingComponent } from './modules/dispatch/pages/invoice-linking/invoice-linking.component';
-import { InventoryDeductionComponent } from './modules/dispatch/pages/inventory-deduction/inventory-deduction.component';
 import { DeliveryNoteViewComponent } from './modules/dispatch/pages/delivery-note-view/delivery-note-view.component';
 import { CreateInvoiceComponent } from './modules/invoice/pages/create-invoice/create-invoice.component';
 
@@ -267,6 +264,7 @@ export const routes: Routes = [
     children: [
       { path: '', redirectTo: 'receivables', pathMatch: 'full' },
       { path: 'receivables', loadComponent: () => import('./modules/finance/pages/receivables/receivables.component').then((c) => c.ReceivablesComponent) },
+      { path: 'vendor-bills', loadComponent: () => import('./modules/finance/pages/vendor-bills/vendor-bills.component').then((c) => c.VendorBillsComponent) },
       {
         path: 'payables',
         loadComponent: () => import('./modules/finance/pages/payables/payables.component').then((c) => c.PayablesComponent),
@@ -310,7 +308,6 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/purchase/purchase.component').then((c) => c.PurchaseComponent),
     children: [
       { path: 'pr', component: PurchaseRequestListComponent },
-      { path: 'rfq', component: RfqListComponent },
       { path: 'general', component: GeneralPurchaseListComponent },
       { path: 'returns', redirectTo: '/grn/returns', pathMatch: 'full' },
       { path: 'general-purchase', redirectTo: 'general', pathMatch: 'full' },
@@ -349,8 +346,8 @@ export const routes: Routes = [
       { path: 'create-grn/:lpoId', component: CreateGrnComponent },
       { path: 'view-grn/:id', component: ViewGrnComponent },
       { path: 'grn-list', component: GrnListComponent },
-      { path: 'returns', component: GrnStockHoldsComponent },
-      { path: 'resolved', redirectTo: 'returns', pathMatch: 'full' },
+      { path: 'returns', redirectTo: () => inject(Router).parseUrl('/grn/grn-list?view=returns'), pathMatch: 'full' },
+      { path: 'resolved', redirectTo: () => inject(Router).parseUrl('/grn/grn-list?view=returns'), pathMatch: 'full' },
       { path: 'stock-holds', component: GrnStockHoldsComponent }
     ]
   },
@@ -420,12 +417,11 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/dispatch/dispatch.component').then((c) => c.DispatchComponent),
     children: [
-      { path: 'delivery-note-register', component: DnRegisterComponent },
-      { path: 'delivery-note-register/create', component: CreateDnComponent },
-      { path: 'delivery-note-register/view/:id', component: DeliveryNoteViewComponent },
+      { path: '', component: DnRegisterComponent, pathMatch: 'full' },
+      { path: 'delivery-note-register', redirectTo: '', pathMatch: 'full' },
+      { path: 'create', component: CreateDnComponent },
+      { path: 'view/:id', component: DeliveryNoteViewComponent },
       { path: 'pending-delivery-reports', component: PendingDeliveryComponent },
-      { path: 'invoice-linking-report', component: InvoiceLinkingComponent },
-      { path: 'inventory-deduction-report', component: InventoryDeductionComponent },
     ]
   },
   {

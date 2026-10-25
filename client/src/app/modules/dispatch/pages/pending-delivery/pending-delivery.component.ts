@@ -45,8 +45,6 @@ export class PendingDeliveryComponent implements OnInit, OnDestroy {
   isLoading = signal<boolean>(true);
   totalItems = signal<number>(0);
 
-  canViewInvoiceLinking = signal<boolean>(false);
-  canViewInventoryDeduction = signal<boolean>(false);
   canSwitchDispatchView = signal<boolean>(false);
 
   statusOptions: string[] = ['Not Delivered', 'Partially Delivered'];
@@ -56,11 +54,7 @@ export class PendingDeliveryComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.employeeService.employeeData$.subscribe(emp => {
         const privileges = emp?.category?.privileges?.dispatch;
-        this.canViewInvoiceLinking.set(!!privileges?.viewInvoiceLinking);
-        this.canViewInventoryDeduction.set(!!privileges?.viewInventoryDeduction);
-        this.canSwitchDispatchView.set(
-          !!(privileges?.viewPendingDelivery || privileges?.viewInvoiceLinking || privileges?.viewInventoryDeduction)
-        );
+        this.canSwitchDispatchView.set(!!privileges?.viewPendingDelivery);
       })
     );
     this.setupTableColumns();

@@ -12,7 +12,6 @@ export interface IDeliveryNote extends Document {
     shipToAddress?: string;
     contactPerson?: string;
     contactNo?: string;
-    promisedDate?: Date;
     deliveryInstructions?: string;
     pod?: {
         receivedBy?: string;
@@ -20,6 +19,8 @@ export interface IDeliveryNote extends Document {
         receivedDate?: Date;
         remarks?: string;
         signatureName?: string;
+        deliveredBy?: mongoose.Types.ObjectId;
+        attachments?: { fileName: string; originalname: string }[];
     };
     items: {
         slNo: number;
@@ -59,14 +60,16 @@ const DeliveryNoteSchema: Schema = new Schema({
     shipToAddress: { type: String },
     contactPerson: { type: String },
     contactNo: { type: String },
-    promisedDate: { type: Date },
     deliveryInstructions: { type: String },
     pod: {
         receivedBy: String,
         receivedContactNo: String,
         receivedDate: Date,
         remarks: String,
-        signatureName: String
+        signatureName: String,
+        // Employee who handed the goods over; receivedBy is the customer-side person.
+        deliveredBy: { type: Schema.Types.ObjectId, ref: "Employee" },
+        attachments: [{ fileName: String, originalname: String }]
     },
     items: [{
         slNo: Number,

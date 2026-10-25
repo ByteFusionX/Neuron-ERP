@@ -8,16 +8,17 @@ import { DeliveryNoteService } from 'src/app/core/services/delivery-note/deliver
 import { DeliveryNote } from 'src/app/shared/interfaces/delivery-note.interface';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
-import { RejectDnItemsModalComponent, RejectDnItemsModalResult } from 'src/app/shared/components/reject-dn-items-modal/reject-dn-items-modal.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
-import { DetailViewBadge, DetailViewBreadcrumb, DetailViewShellComponent, DetailViewStat } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
+import { DetailViewBadge, DetailViewBreadcrumb, DetailViewShellComponent, DetailViewStat, DetailViewTab } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
 import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
 import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
 import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocument, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
 
 @Component({
@@ -35,6 +36,8 @@ import { SmartFormModule } from 'src/app/shared/components/smart-form';
     DetailFieldComponent,
     DetailBadgeComponent,
     DetailTableComponent,
+    DetailDocumentsComponent,
+    DetailTimelineComponent,
     SmartFormModule
   ],
   templateUrl: './delivery-note-view.component.html',
@@ -54,19 +57,24 @@ export class DeliveryNoteViewComponent implements OnInit {
   badges: DetailViewBadge[] = [];
   stats: DetailViewStat[] = [];
   itemRows: Record<string, any>[] = [];
+  readonly tabs: DetailViewTab[] = [
+    { id: 'details', label: 'Details' },
+    { id: 'items', label: 'Items' },
+    { id: 'documents', label: 'Documents' },
+    { id: 'history', label: 'History' },
+  ];
+  tab = 'details';
+  documents: DetailDocument[] = [];
+  history: DetailTimelineEntry[] = [];
   readonly itemCols: DetailTableColumn[] = [
-    { key: 'partNo', label: 'Part No' },
-    { key: 'description', label: 'Description', wrap: true },
+    { key: 'partNo', label: 'Item', type: 'stack', subKey: 'description', wrap: true },
     { key: 'orderedQty', label: 'Ordered', type: 'number' },
     { key: 'deliveredQty', label: 'Previous', type: 'number' },
     { key: 'currentDeliveryQty', label: 'This DN', type: 'number' },
-    { key: 'serialNos', label: 'Serial No(s)', wrap: true },
-    { key: 'rejectedQty', label: 'Rejected', type: 'number' },
-    { key: 'rejectionReason', label: 'Reason', wrap: true },
+    { key: 'serialNos', label: 'Serial No(s)', type: 'textarea', width: '18rem' },
   ];
   isLoading = true;
-  isCancelling = false;
-  isRejecting = false;
+  isDispatching = false;
   isSavingPod = false;
 
   podForm = this.fb.group({
@@ -88,7 +96,7 @@ export class DeliveryNoteViewComponent implements OnInit {
     const dnId = this.route.snapshot.paramMap.get('id');
     if (!dnId) {
       this.notificationService.error('Invalid Delivery Note ID');
-      this.router.navigate(['/dispatch/delivery-note-register']);
+      this.router.navigate(['/dispatch']);
       return;
     }
 
@@ -110,89 +118,31 @@ export class DeliveryNoteViewComponent implements OnInit {
         this.notificationService.error('Failed to load delivery note details');
         console.error('Error loading delivery note:', error);
         this.isLoading = false;
-        this.router.navigate(['/dispatch/delivery-note-register']);
+        this.router.navigate(['/dispatch']);
       }
     });
   }
 
   onEdit() {
     if (!this.deliveryNote) return;
-    this.router.navigate(['/dispatch/delivery-note-register/create'], { 
+    this.router.navigate(['/dispatch/create'], {
       queryParams: { id: this.deliveryNote._id } 
     });
   }
 
-  onCancel() {
-    if (!this.deliveryNote) return;
-
-
-
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: 'Cancel Delivery Note',
-        description: 'Are you sure you want to cancel this delivery note? This action cannot be undone.',
-        icon: 'heroExclamationCircle',
-        IconColor: 'orange'
+  onDispatch(): void {
+    if (!this.deliveryNote?._id || this.deliveryNote.status !== 'Ready for Dispatch') return;
+    this.isDispatching = true;
+    this.dnService.dispatchDn(this.deliveryNote._id).subscribe({
+      next: () => {
+        this.notificationService.success('Delivery dispatched and stock deducted');
+        this.isDispatching = false;
+        this.loadDeliveryNote();
+      },
+      error: (error) => {
+        this.notificationService.error(error.error?.message || 'Failed to dispatch delivery');
+        this.isDispatching = false;
       }
-    });
-
-    dialogRef.afterClosed().subscribe((result: boolean) => {
-      if (result && this.deliveryNote?._id) {
-        this.isCancelling = true;
-        this.dnService.cancelDn(this.deliveryNote._id).subscribe({
-          next: () => {
-            this.notificationService.success('Delivery Note cancelled successfully');
-            this.router.navigate(['/dispatch/delivery-note-register']);
-          },
-          error: (error) => {
-            this.notificationService.error(error.error?.message || 'Failed to cancel delivery note');
-            this.isCancelling = false;
-          }
-        });
-      }
-    });
-  }
-
-  canReject(): boolean {
-    if (!this.deliveryNote) return false;
-    return ['Ready for Dispatch', 'Dispatched', 'Delivered', 'Partially Rejected'].includes(this.deliveryNote.status);
-  }
-
-  onReject() {
-    if (!this.deliveryNote?._id) return;
-
-    const modalItems = this.deliveryItems.map((item: any) => ({
-      itemId: item.itemId,
-      description: item.description,
-      partNo: item.partNo,
-      deliveredQty: item.currentDeliveryQty || item.deliveredQty || 0,
-      rejectedQty: item.rejectedQty || 0
-    }));
-
-    const dialogRef = this.dialog.open(RejectDnItemsModalComponent, {
-      width: '900px',
-      maxHeight: '90vh',
-      data: { items: modalItems }
-    });
-
-    dialogRef.afterClosed().subscribe((result: RejectDnItemsModalResult | null) => {
-      if (!result || !this.deliveryNote?._id) return;
-
-      this.isRejecting = true;
-      this.dnService.rejectDnItems(this.deliveryNote._id, result).subscribe({
-        next: (response) => {
-          this.notificationService.success('Delivery Note items rejected successfully');
-          if (response?.warnings?.length) {
-            response.warnings.forEach((warning: string) => this.notificationService.warning(warning, '', { timeOut: 6000 }));
-          }
-          this.isRejecting = false;
-          this.loadDeliveryNote();
-        },
-        error: (error) => {
-          this.notificationService.error(error.error?.message || 'Failed to reject delivery note items');
-          this.isRejecting = false;
-        }
-      });
     });
   }
 
@@ -229,11 +179,31 @@ export class DeliveryNoteViewComponent implements OnInit {
   }
 
   onBack() {
-    this.router.navigate(['/dispatch/delivery-note-register']);
+    this.router.navigate(['/dispatch']);
+  }
+
+  onTabChange(tab: string): void {
+    this.tab = tab;
+  }
+
+  closedPurchaseOrders(dn: DeliveryNote): any[] {
+    return this.latestLinkedRecords(
+      dn.linkedRecords?.purchaseOrders?.filter((po: any) => po.poStatus === 'Closed') || [],
+      'poDate'
+    );
+  }
+
+  passedGrns(dn: DeliveryNote): any[] {
+    return this.latestLinkedRecords(
+      dn.linkedRecords?.grns?.filter((grn: any) =>
+        [grn.inspectionResult, grn.outcomeStatus].some((status) => String(status || '').toLowerCase() === 'passed')
+      ) || [],
+      'grnDate'
+    );
   }
 
   canCompletePod(): boolean {
-    return !!this.deliveryNote && !['Draft', 'Cancelled', 'Rejected', 'Delivered'].includes(this.deliveryNote.status);
+    return this.deliveryNote?.status === 'Dispatched';
   }
 
   onCompletePod(): void {
@@ -284,7 +254,7 @@ export class DeliveryNoteViewComponent implements OnInit {
     if (!dn) return;
     this.breadcrumbs = [
       { label: 'Home', link: ['/home'] },
-      { label: 'Dispatch', link: ['/dispatch/delivery-note-register'] },
+      { label: 'Dispatch', link: ['/dispatch'] },
       { label: dn.dnNo || 'Delivery Note' }
     ];
     this.badges = [{ label: dn.status, tone: dn.status === 'Cancelled' || dn.status === 'Rejected' ? 'bad' : dn.status === 'Draft' ? 'neutral' : 'good' }];
@@ -293,14 +263,28 @@ export class DeliveryNoteViewComponent implements OnInit {
       { label: 'Items', value: String(this.deliveryItems.length) },
       { label: 'Quantity', value: String(qty) },
       { label: 'Type', value: dn.deliveryType || 'Customer Delivery' },
-      { label: 'Promised', value: dn.promisedDate ? new Date(dn.promisedDate).toLocaleDateString('en-GB') : '-' }
     ];
     this.itemRows = this.deliveryItems.map((item: any) => ({
       ...item,
-      serialNos: Array.isArray(item.serialNos) && item.serialNos.length ? item.serialNos.join(', ') : '-',
-      rejectedQty: item.rejectedQty || 0,
-      rejectionReason: item.rejectionReason || '-'
+      serialNos: Array.isArray(item.serialNos) ? item.serialNos.join('\n') : (item.serialNos || ''),
     }));
+    this.documents = (dn.pod?.attachments || []).map((file, index) => ({
+      id: `${file.fileName || file.originalname}-${index}`,
+      name: file.originalname || file.fileName,
+      date: dn.pod?.receivedDate || dn.updatedDate || dn.createdDate,
+      uploadedBy: 'Proof of Delivery',
+    }));
+    const creator = dn.createdBy ? `${dn.createdBy.firstName || ''} ${dn.createdBy.lastName || ''}`.trim() : '';
+    this.history = [
+      { text: 'Delivery note created', meta: [creator, this.formatDateTime(dn.createdDate)].filter(Boolean).join(' · '), tone: 'info' as const },
+      ...(dn.status !== 'Draft' ? [{ text: `Status: ${dn.status}`, meta: this.formatDateTime(dn.updatedDate || dn.createdDate), tone: dn.status === 'Cancelled' ? 'bad' as const : 'good' as const }] : []),
+      ...(dn.rejectedHistory || []).map((entry) => ({
+        text: entry.reason ? `Delivery rejected: ${entry.reason}` : 'Delivery rejected',
+        meta: this.formatDateTime(entry.date),
+        tone: 'bad' as const,
+      })),
+      ...(dn.pod?.receivedBy ? [{ text: `Proof of delivery captured by ${dn.pod.receivedBy}`, meta: this.formatDateTime(dn.pod.receivedDate || dn.updatedDate), tone: 'good' as const }] : []),
+    ].filter((entry) => !!entry.meta);
     if (dn.pod) {
       this.podForm.patchValue({
         receivedBy: dn.pod.receivedBy || '',
@@ -310,5 +294,16 @@ export class DeliveryNoteViewComponent implements OnInit {
         signatureName: dn.pod.signatureName || ''
       });
     }
+  }
+
+  private formatDateTime(value?: string): string {
+    if (!value) return '';
+    return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+  }
+
+  private latestLinkedRecords(records: any[], dateKey: string): any[] {
+    return [...records]
+      .sort((left, right) => new Date(right?.[dateKey] || 0).getTime() - new Date(left?.[dateKey] || 0).getTime())
+      .slice(0, 3);
   }
 }

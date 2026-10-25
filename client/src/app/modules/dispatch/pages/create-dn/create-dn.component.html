@@ -1,27 +1,21 @@
-<app-sf-drawer *ngIf="drawerMode; else pageMode" [open]="open" width="1180px"
-  [title]="isEditMode ? 'Edit Draft DN' : 'Create Delivery Note'"
+<app-sf-drawer *ngIf="drawerMode; else pageMode" [open]="open" [width]="step === 2 ? '1180px' : '860px'"
+  title="Create Delivery Note"
   [subtitle]="dnForm.get('dnNo')?.value || 'New DN'" (closed)="onDrawerClosed()">
   <ng-container *ngTemplateOutlet="dnBody"></ng-container>
   <ng-container sfDrawerFooter>
-    <app-action-button variant="secondary" (click)="onCancel()">Cancel</app-action-button>
-    <app-action-button variant="tool" [disabled]="isSavingDraft()" (click)="onSaveDraft()">{{ isSavingDraft() ? 'Saving...' : 'Save as Draft' }}</app-action-button>
-    <app-action-button variant="secondary" [disabled]="isAllDelivered()" (click)="onPreview()">Preview DN</app-action-button>
-    <app-action-button variant="primary" [disabled]="isAllDelivered() || isSubmitting()" (click)="onPostDn()">{{ isSubmitting() ? 'Posting...' : 'Post DN' }}</app-action-button>
+    <ng-container *ngTemplateOutlet="dnActions"></ng-container>
   </ng-container>
 </app-sf-drawer>
 
 <ng-template #pageMode>
 <div class="flex h-full flex-col bg-gray-50 p-6 dark:bg-erp-surface-dark-alt">
   <div class="min-h-0 flex-1 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-erp-border-dark dark:bg-erp-surface-dark">
-    <form [formGroup]="dnForm" class="flex h-full flex-col">
+    <div class="flex h-full flex-col">
       <header class="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200 px-6 py-4 dark:border-erp-border-dark">
         <div>
           <p class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Delivery Note</p>
-          <h1 class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ isEditMode ? 'Edit Draft DN' : 'Create Delivery Note' }}</h1>
+          <h1 class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">Create Delivery Note</h1>
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ dnForm.get('dnNo')?.value || 'New DN' }}</p>
-        </div>
-        <div *ngIf="draftLoaded()" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-          Draft loaded<span *ngIf="loadedDraftNo()"> - {{ loadedDraftNo() }}</span>
         </div>
       </header>
 
@@ -34,27 +28,53 @@
           <ng-icon name="heroArrowLeft" class="h-4 w-4"></ng-icon> Back
         </app-action-button>
         <div class="flex flex-wrap items-center gap-2">
-          <app-action-button variant="secondary" (click)="onCancel()">Cancel</app-action-button>
-          <app-action-button variant="tool" [disabled]="isSavingDraft()" (click)="onSaveDraft()">{{ isSavingDraft() ? 'Saving...' : 'Save as Draft' }}</app-action-button>
-          <app-action-button variant="secondary" [disabled]="isAllDelivered()" (click)="onPreview()">Preview DN</app-action-button>
-          <app-action-button variant="primary" [disabled]="isAllDelivered() || isSubmitting()" (click)="onPostDn()">{{ isSubmitting() ? 'Posting...' : 'Post DN' }}</app-action-button>
+          <ng-container *ngTemplateOutlet="dnActions"></ng-container>
         </div>
       </footer>
-    </form>
+    </div>
   </div>
 </div>
 </ng-template>
 
+<ng-template #dnActions>
+  <span *ngIf="stepAttempted && !isDetailsValid()" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+  <app-action-button *ngIf="step === 1" variant="secondary" (click)="onCancel()">Cancel</app-action-button>
+  <app-action-button *ngIf="step === 2" variant="secondary" (click)="goToStep(1)">Back</app-action-button>
+  <app-action-button *ngIf="step === 1" variant="primary" (click)="goToStep(2)">Next: Items</app-action-button>
+  <ng-container *ngIf="step === 2">
+    <app-action-button variant="secondary" [disabled]="isAllDelivered()" (click)="onPreview()">Preview DN</app-action-button>
+    <app-action-button variant="primary" [disabled]="isAllDelivered() || isSubmitting()" (click)="onPostDn()">{{ isSubmitting() ? 'Saving...' : 'Place Order' }}</app-action-button>
+  </ng-container>
+</ng-template>
+
 <ng-template #dnBody>
-  <form *ngIf="drawerMode; else pageBody" [formGroup]="dnForm" class="space-y-5">
-    <ng-container *ngTemplateOutlet="bodyContent"></ng-container>
-  </form>
-  <ng-template #pageBody>
-    <ng-container *ngTemplateOutlet="bodyContent"></ng-container>
-  </ng-template>
+  <!-- Stepper -->
+  <ol class="mb-5 flex items-center gap-2">
+    <li *ngFor="let s of steps" class="flex flex-1 items-center gap-2">
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
+        [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
+        (click)="goToStep(s.n)">
+        <span class="grid h-6 w-6 shrink-0 place-content-center rounded-full text-[11px] font-semibold"
+          [ngClass]="s.n === step
+            ? 'bg-violet-600 text-white'
+            : (s.n < step && isDetailsValid())
+              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+              : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">
+          <ng-icon *ngIf="s.n < step && isDetailsValid(); else stepNumber" name="heroCheck" class="h-3.5 w-3.5"></ng-icon>
+          <ng-template #stepNumber>{{ s.n }}</ng-template>
+        </span>
+        <span class="truncate text-xs font-medium"
+          [ngClass]="s.n === step ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'">{{ s.label }}</span>
+      </button>
+      <span *ngIf="s.n < steps.length" class="h-px w-4 shrink-0 bg-gray-200 dark:bg-erp-border-dark"></span>
+    </li>
+  </ol>
+  <ng-container *ngTemplateOutlet="bodyContent"></ng-container>
 </ng-template>
 
 <ng-template #bodyContent>
+<form [formGroup]="dnForm" class="space-y-5">
+      <ng-container *ngIf="step === 1">
         <app-sf-section title="Source" columns="3">
           <app-sf-field label="Job ID" [control]="dnForm.get('jobId')">
             <app-sf-select formControlName="jobId" [options]="jobOptions" placeholder="Choose from the list"></app-sf-select>
@@ -80,9 +100,6 @@
           <app-sf-field label="Delivery Type" [control]="dnForm.get('deliveryType')">
             <app-sf-select formControlName="deliveryType" [options]="deliveryTypeOptions"></app-sf-select>
           </app-sf-field>
-          <app-sf-field label="Promised Date" [control]="dnForm.get('promisedDate')">
-            <app-sf-date formControlName="promisedDate" displayFormat="dd/MM/yy"></app-sf-date>
-          </app-sf-field>
           <app-sf-field label="Contact No" [control]="dnForm.get('contactNo')">
             <app-sf-input formControlName="contactNo" placeholder="Receiver contact"></app-sf-input>
           </app-sf-field>
@@ -100,76 +117,11 @@
           </app-sf-field>
         </app-sf-section>
 
-        <app-sf-section title="Materials" description="Select only the quantities going in this delivery. Balance stays available for a later DN.">
-          <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-erp-border-dark">
-            <table class="w-full min-w-[1180px] text-left text-sm">
-              <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-white/[0.03] dark:text-gray-400">
-                <tr>
-                  <th class="w-12 px-3 py-2 text-center"></th>
-                  <th class="w-14 px-3 py-2 text-center">Sl</th>
-                  <th class="px-3 py-2">Part No</th>
-                  <th class="px-3 py-2">Description</th>
-                  <th class="w-20 px-3 py-2 text-center">Ord</th>
-                  <th class="w-24 px-3 py-2 text-center">Delivered</th>
-                  <th class="w-24 px-3 py-2 text-center">Balance</th>
-                  <th class="w-32 px-3 py-2 text-center">This DN</th>
-                  <th class="min-w-[220px] px-3 py-2">Serial No(s)</th>
-                  <th class="w-40 px-3 py-2 text-center">Status</th>
-                  <th class="w-24 px-3 py-2 text-center">Scan</th>
-                </tr>
-              </thead>
-              <tbody formArrayName="items" class="divide-y divide-gray-100 dark:divide-erp-border-dark">
-                <ng-container *ngFor="let item of items.controls; let i = index" [formGroupName]="i">
-                  <tr [ngClass]="{'bg-gray-50 text-gray-400 dark:bg-white/[0.02]': item.get('status')?.value === 'Delivered' || item.get('status')?.value === 'No PO / Not in Inventory' || !isItemSelected(i)}">
-                    <td class="px-3 py-2 text-center">
-                      <app-sf-checkbox [ngModelOptions]="{ standalone: true }" [ngModel]="isItemSelected(i)" (ngModelChange)="toggleItemSelection(i)"
-                        [disabled]="item.get('status')?.value === 'Delivered' || item.get('status')?.value === 'No PO / Not in Inventory'"></app-sf-checkbox>
-                    </td>
-                    <td class="px-3 py-2 text-center tabular-nums">{{ item.get('slNo')?.value }}</td>
-                    <td class="px-3 py-2 font-medium text-gray-700 dark:text-gray-200">{{ item.get('partNo')?.value || '-' }}</td>
-                    <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ item.get('description')?.value || '-' }}</td>
-                    <td class="px-3 py-2 text-center tabular-nums">{{ item.get('orderedQty')?.value }}</td>
-                    <td class="px-3 py-2 text-center tabular-nums">{{ item.get('deliveredQty')?.value }}</td>
-                    <td class="px-3 py-2 text-center tabular-nums">{{ getBalanceQty(item) }}</td>
-                    <td class="px-3 py-2">
-                      <app-sf-number [formControl]="$any(item.get('currentDeliveryQty'))" [min]="0" [max]="getBalanceQty(item)" [stepper]="false"></app-sf-number>
-                    </td>
-                    <td class="px-3 py-2">
-                      <div class="flex flex-col gap-2">
-                        <div class="flex items-center gap-2">
-                          <app-sf-input class="min-w-0 flex-1" [ngModelOptions]="{ standalone: true }" [ngModel]="getSerialNoInput(i)"
-                            (ngModelChange)="setSerialNoInput(i, $event)" (keydown)="onSerialNoKeydown($event, i)" [disabled]="!isItemSelected(i)"
-                            placeholder="Enter S/N"></app-sf-input>
-                          <app-action-button variant="secondary" [disabled]="!isItemSelected(i)" (click)="addSerialNo(i)">Add</app-action-button>
-                        </div>
-                        <div *ngIf="getSerialNos(i).length > 0" class="flex flex-wrap gap-1">
-                          <span *ngFor="let sn of getSerialNos(i)" class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs dark:border-erp-border-dark dark:bg-white/[0.04]">
-                            {{ sn }}
-                            <button type="button" class="text-gray-400 hover:text-red-500" [disabled]="!isItemSelected(i)" (click)="removeSerialNo(i, sn)">x</button>
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td class="px-3 py-2 text-center">
-                      <span class="rounded-full px-2 py-1 text-xs font-semibold"
-                        [ngClass]="{
-                          'bg-emerald-100 text-emerald-800': item.get('status')?.value === 'Delivered',
-                          'bg-amber-100 text-amber-800': item.get('status')?.value === 'Pending' || item.get('status')?.value === 'Partially Delivered',
-                          'bg-red-100 text-red-800': item.get('status')?.value === 'No PO / Not in Inventory'
-                        }">{{ item.get('status')?.value }}</span>
-                    </td>
-                    <td class="px-3 py-2 text-center">
-                      <app-scan-cell [rowKey]="scanRowKey(i)" [supplier]="dnForm.get('clientName')?.value"
-                        [product]="item.get('description')?.value" [reference]="item.get('partNo')?.value"
-                        [disabled]="!isItemSelected(i)" (scanReceived)="onScanReceived(i, $event)"></app-scan-cell>
-                    </td>
-                  </tr>
-                </ng-container>
-                <tr *ngIf="items.length === 0">
-                  <td colspan="11" class="px-4 py-10 text-center text-sm text-gray-500">No materials found. Select a Job ID.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </app-sf-section>
+      </ng-container>
+
+      <!-- Step 2: what goes on this DN. Balance stays available for a later DN. -->
+      <app-dn-item-entry *ngIf="step === 2" [items]="items" [isSelected]="isSelectedFn"
+        [title]="selectedJob?.jobId ? 'Job ' + selectedJob.jobId : 'Items to deliver'"
+        (toggle)="toggleItemSelection($event)"></app-dn-item-entry>
+</form>
 </ng-template>

@@ -6,7 +6,7 @@ import { ToastrService } from 'ngx-toastr';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { NgIcon } from '@ng-icons/core';
 import { forkJoin, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, switchMap } from 'rxjs/operators';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -15,9 +15,9 @@ import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
-import { ScanCellComponent } from 'src/app/shared/components/scan-cell/scan-cell.component';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DnItemEntryComponent } from '../../components/dn-item-entry/dn-item-entry.component';
 
 @Component({
   selector: 'app-create-dn',
@@ -31,9 +31,9 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
     ButtonComponent,
     IconsModule,
     MatDialogModule,
-    ScanCellComponent,
     SmartFormModule,
     ActionButtonComponent,
+    DnItemEntryComponent,
     NgIcon
   ],
   templateUrl: './create-dn.component.html',
@@ -43,6 +43,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
   @Input() open = true;
   @Input() drawerMode = false;
   @Input() editId: string | null = null;
+  @Input() defaultJobId: string | null = null;
   @Output() saved = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
 
@@ -58,7 +59,6 @@ export class CreateDnComponent implements OnInit, OnChanges {
   jobIds: any[] = [];
   isLoading = signal<boolean>(false);
   isSubmitting = signal<boolean>(false);
-  isSavingDraft = signal<boolean>(false);
   draftLoaded = signal<boolean>(false);
   loadedDraftNo = signal<string | null>(null);
   selectedJob: any = null;
@@ -89,13 +89,20 @@ export class CreateDnComponent implements OnInit, OnChanges {
     shipToAddress: [''],
     contactPerson: [''],
     contactNo: [''],
-    promisedDate: [''],
     deliveryInstructions: [''],
     items: this.fb.array([])
   });
 
-  serialNoInputs: Map<number, string> = new Map();
-  itemSerialNos: Map<number, string[]> = new Map();
+  step: 1 | 2 = 1;
+  /** True after a failed attempt to leave step 1; reset once the step changes. */
+  stepAttempted = false;
+  readonly steps = [
+    { n: 1 as const, label: 'Delivery details' },
+    { n: 2 as const, label: 'Items' },
+  ];
+  private readonly detailControls = ['jobId', 'clientName', 'customerLpoNumber', 'dnNo', 'dnDate', 'subject', 'deliveryType',
+    'shipToName', 'shipToAddress', 'contactPerson', 'contactNo', 'deliveryInstructions'];
+
   selectedItems: Set<number> = new Set();
 
   ngOnInit(): void {
@@ -103,7 +110,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
       if (emp && emp.category && emp.category.privileges) {
         if (!emp.category.privileges.dispatch?.createDeliveryNote) {
           this.toastr.error('You do not have permission to create or edit Delivery Notes');
-          this.router.navigate(['/dispatch/delivery-note-register']);
+          this.router.navigate(['/dispatch']);
           return;
         }
       }
@@ -140,17 +147,32 @@ export class CreateDnComponent implements OnInit, OnChanges {
       this.loadDraftForEdit(this.editId);
     } else {
       this.generateDnNumber();
+      if (this.defaultJobId) this.dnForm.patchValue({ jobId: this.defaultJobId });
     }
   }
 
+  isDetailsValid(): boolean {
+    return this.detailControls.every((name) => !this.dnForm.get(name)?.invalid);
+  }
+
+  goToStep(step: 1 | 2): void {
+    if (step === 2 && !this.isDetailsValid()) {
+      this.detailControls.forEach((name) => this.dnForm.get(name)?.markAsTouched());
+      this.stepAttempted = true;
+      return;
+    }
+    this.step = step;
+    this.stepAttempted = false;
+  }
+
   private resetFormState(): void {
+    this.step = 1;
+    this.stepAttempted = false;
     this.isEditMode = false;
     this.draftDnId = null;
     this.selectedJob = null;
     this.previousDns = [];
     this.selectedItems.clear();
-    this.itemSerialNos.clear();
-    this.serialNoInputs.clear();
     this.clearDraftLoaded();
     this.items.clear();
     this.dnForm.reset({
@@ -165,7 +187,6 @@ export class CreateDnComponent implements OnInit, OnChanges {
       shipToAddress: '',
       contactPerson: '',
       contactNo: '',
-      promisedDate: '',
       deliveryInstructions: ''
     });
   }
@@ -176,7 +197,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
       next: (dn) => {
         if (dn.status !== 'Draft') {
           this.toastr.error('Only draft DNs can be edited');
-          this.router.navigate(['/dispatch/delivery-note-register']);
+          this.router.navigate(['/dispatch']);
           this.isLoading.set(false);
           return;
         }
@@ -188,7 +209,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
       },
       error: () => {
         this.toastr.error('Failed to load draft DN');
-        this.router.navigate(['/dispatch/delivery-note-register']);
+        this.router.navigate(['/dispatch']);
         this.isLoading.set(false);
       }
     });
@@ -222,7 +243,6 @@ export class CreateDnComponent implements OnInit, OnChanges {
       shipToAddress: dn.shipToAddress || '',
       contactPerson: dn.contactPerson || '',
       contactNo: dn.contactNo || '',
-      promisedDate: dn.promisedDate ? new Date(dn.promisedDate).toISOString().split('T')[0] : '',
       deliveryInstructions: dn.deliveryInstructions || ''
     });
 
@@ -251,8 +271,6 @@ export class CreateDnComponent implements OnInit, OnChanges {
     const itemsArray = this.items;
     itemsArray.clear();
     this.selectedItems.clear();
-    this.itemSerialNos.clear();
-    this.serialNoInputs.clear();
 
     const jobId = job._id || dn.jobId?._id || dn.jobId;
 
@@ -275,7 +293,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
 
       const draftItem = dn.items?.find((di: any) => di.itemId === item._id);
       const currentDeliveryQty = draftItem?.currentDeliveryQty || 0;
-      const serialNos = draftItem?.serialNos || [];
+      const serialNos = draftItem ? (draftItem.serialNos || []) : (item.receivedSerialNos || []);
 
       const group = this.fb.group({
         slNo: [index + 1],
@@ -285,8 +303,9 @@ export class CreateDnComponent implements OnInit, OnChanges {
             orderedQty: [item.orderedQty || 0],
         deliveredQty: [prevDelivered],
             currentDeliveryQty: [{ value: currentDeliveryQty, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
-            serialNos: [''],
+            serialNos: [this.formatSerialNos(serialNos)],
             status: [initialStatus],
+            unavailableReason: [item.unavailableReason || ''],
             itemId: [item._id],
             unitSellingPrice: [item.unitSellingPrice || 0],
             isInventoryItem: [draftItem?.isInventoryItem ?? isAvailable]
@@ -303,9 +322,6 @@ export class CreateDnComponent implements OnInit, OnChanges {
         currentDeliveryControl?.updateValueAndValidity();
       }
 
-      if (serialNos.length > 0) {
-        this.itemSerialNos.set(index, Array.isArray(serialNos) ? serialNos : [serialNos]);
-          }
         });
       },
       error: () => {
@@ -380,23 +396,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
     this.draftDnId = null;
     this.clearDraftLoaded();
 
-    // Check for existing draft
-    this.deliveryNoteService.getDraftDnByJobId(jobId).subscribe({
-      next: (draftDn) => {
-        if (draftDn) {
-          this.isEditMode = true;
-          this.draftDnId = draftDn._id;
-          this.setDraftLoaded(draftDn);
-          this.loadDraftData(draftDn);
-          this.isLoading.set(false);
-        } else {
-          this.loadJobData(jobId);
-        }
-      },
-      error: () => {
-        this.loadJobData(jobId);
-      }
-    });
+    this.loadJobData(jobId);
   }
 
   loadJobData(jobId: string): void {
@@ -410,8 +410,10 @@ export class CreateDnComponent implements OnInit, OnChanges {
           customerLpoNumber: job.purchaseNo || job.lpoNumber || '',
           subject: job.quotation?.subject || '',
           shipToName: job.clientDetails?.companyName || job.client?.companyName || '',
-          shipToAddress: job.projectName || job.quotation?.deliveryLocation || '',
-          promisedDate: ''
+          shipToAddress: job.projectName || job.quotation?.deliveryLocation || job.clientDetails?.companyAddress || '',
+          // the quotation's attention contact is who receives the goods unless the user says otherwise
+          contactPerson: [job.attention?.firstName, job.attention?.lastName].map((n: string) => n?.trim()).filter(Boolean).join(' '),
+          contactNo: job.attention?.phoneNo ? String(job.attention.phoneNo) : '',
         });
 
         if (!this.dnForm.get('dnNo')?.value) {
@@ -443,8 +445,6 @@ export class CreateDnComponent implements OnInit, OnChanges {
     const itemsArray = this.items;
     itemsArray.clear();
     this.selectedItems.clear();
-    this.itemSerialNos.clear();
-    this.serialNoInputs.clear();
 
     this.deliveryNoteService.getDnItemsForJob(jobId).subscribe({
       next: (response: any) => {
@@ -471,8 +471,9 @@ export class CreateDnComponent implements OnInit, OnChanges {
             orderedQty: [item.orderedQty || 0],
         deliveredQty: [prevDelivered],
             currentDeliveryQty: [{ value: 0, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
-            serialNos: [''],
+            serialNos: [this.formatSerialNos(item.receivedSerialNos || [])],
             status: [initialStatus],
+            unavailableReason: [item.unavailableReason || ''],
             itemId: [item._id],
             unitSellingPrice: [item.unitSellingPrice || 0],
             isInventoryItem: [isAvailable]
@@ -503,12 +504,6 @@ export class CreateDnComponent implements OnInit, OnChanges {
     return this.dnForm.get('items') as FormArray;
   }
 
-  scanRowKey(index: number): string {
-    const itemControl = this.items.at(index);
-    const itemId = itemControl?.get('itemId')?.value;
-    return `${this.dnForm.get('dnNo')?.value || 'dn'}-${itemId || index}`;
-  }
-
   getBalanceQty(itemControl: AbstractControl): number {
     const orderedQty = itemControl.get('orderedQty')?.value || 0;
     const deliveredQty = itemControl.get('deliveredQty')?.value || 0;
@@ -516,57 +511,15 @@ export class CreateDnComponent implements OnInit, OnChanges {
     return balance > 0 ? balance : 0;
   }
 
-  getSerialNos(index: number): string[] {
-    return this.itemSerialNos.get(index) || [];
+  readonly isSelectedFn = (index: number) => this.isItemSelected(index);
+
+  private parseSerialNos(value: unknown): string[] {
+    const serials = Array.isArray(value) ? value : String(value || '').split(/[\n,;]+/);
+    return [...new Set(serials.map(serial => String(serial).trim()).filter(Boolean))];
   }
 
-  getSerialNoInput(index: number): string {
-    return this.serialNoInputs.get(index) || '';
-  }
-
-  setSerialNoInput(index: number, value: string): void {
-    this.serialNoInputs.set(index, value);
-  }
-
-  addSerialNo(index: number): void {
-    const input = this.serialNoInputs.get(index)?.trim();
-    if (!input) return;
-
-    const currentList = this.itemSerialNos.get(index) || [];
-    if (currentList.includes(input)) {
-      this.toastr.warning('Serial number already added');
-      return;
-    }
-    currentList.push(input);
-    this.itemSerialNos.set(index, currentList);
-    this.serialNoInputs.set(index, '');
-  }
-
-  removeSerialNo(index: number, serialNo: string): void {
-    const currentList = this.itemSerialNos.get(index) || [];
-    const filtered = currentList.filter(s => s !== serialNo);
-    this.itemSerialNos.set(index, filtered);
-  }
-
-  onScanReceived(index: number, code: string): void {
-    const trimmed = code?.trim();
-    if (!trimmed) return;
-
-    const currentList = this.itemSerialNos.get(index) || [];
-    if (currentList.includes(trimmed)) {
-      this.toastr.warning(`Serial number ${trimmed} already added`);
-      return;
-    }
-    currentList.push(trimmed);
-    this.itemSerialNos.set(index, currentList);
-    this.toastr.success(`Scanned: ${trimmed}`);
-  }
-
-  onSerialNoKeydown(event: KeyboardEvent, index: number): void {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      this.addSerialNo(index);
-    }
+  private formatSerialNos(value: unknown): string {
+    return this.parseSerialNos(value).join('\n');
   }
 
   isItemSelected(index: number): boolean {
@@ -620,6 +573,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
           this.isSubmitting.set(false);
         }
       }, 100);
+      if (!this.isDetailsValid()) this.step = 1;
       this.toastr.warning('Please fill all required fields correctly');
       return;
     }
@@ -649,7 +603,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
       return {
         ...item,
         currentDeliveryQty: currentDeliveryQty,
-        serialNos: this.itemSerialNos.get(index) || []
+        serialNos: this.parseSerialNos(item.serialNos)
       };
     }).filter(item => item !== null);
 
@@ -685,66 +639,6 @@ export class CreateDnComponent implements OnInit, OnChanges {
     }
   }
 
-  onSaveDraft(): void {
-    const formValue = this.dnForm.getRawValue();
-    const selectedIndices = Array.from(this.selectedItems);
-
-    const selectedItemsData = selectedIndices.map(index => {
-      const item = formValue.items[index];
-      const itemControl = this.items.at(index);
-
-      if (!itemControl) {
-        return null;
-      }
-
-      const currentDeliveryQty = itemControl.get('currentDeliveryQty')?.value || 0;
-
-      if (currentDeliveryQty <= 0) {
-        return null;
-      }
-
-      return {
-        ...item,
-        currentDeliveryQty: currentDeliveryQty,
-        serialNos: this.itemSerialNos.get(index) || []
-      };
-    }).filter(item => item !== null);
-
-    const payload = {
-      ...formValue,
-      items: selectedItemsData,
-      status: 'Draft'
-    };
-
-    this.isSavingDraft.set(true);
-
-    if (this.isEditMode && this.draftDnId) {
-      this.deliveryNoteService.updateDn(this.draftDnId, payload).subscribe({
-        next: () => {
-          this.toastr.success('Draft saved successfully');
-          this.isSavingDraft.set(false);
-          this.afterSaved();
-        },
-        error: (err) => {
-          this.toastr.error(err.error?.message || 'Failed to save draft');
-          this.isSavingDraft.set(false);
-        }
-      });
-    } else {
-      this.deliveryNoteService.createDn(payload).subscribe({
-        next: () => {
-          this.toastr.success('Draft saved successfully');
-          this.isSavingDraft.set(false);
-          this.afterSaved();
-        },
-        error: (err) => {
-          this.toastr.error(err.error?.message || 'Failed to save draft');
-          this.isSavingDraft.set(false);
-        }
-      });
-    }
-  }
-
   onPostDn(): void {
     if (this.dnForm.invalid) {
       this.dnForm.markAllAsTouched();
@@ -754,6 +648,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
           this.isSubmitting.set(false);
         }
       }, 100);
+      if (!this.isDetailsValid()) this.step = 1;
       this.toastr.warning('Please fill all required fields correctly');
       return;
     }
@@ -789,7 +684,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
       return {
         ...item,
         currentDeliveryQty: currentDeliveryQty,
-        serialNos: this.itemSerialNos.get(index) || []
+        serialNos: this.parseSerialNos(item.serialNos)
       };
     }).filter(item => item !== null);
 
@@ -813,37 +708,31 @@ export class CreateDnComponent implements OnInit, OnChanges {
 
     const payload = {
       ...formValue,
-      items: selectedItemsData
+      items: selectedItemsData,
+      status: 'Ready for Dispatch'
     };
 
     console.log('DN Payload:', JSON.stringify(payload, null, 2));
-    console.log('Serial Numbers by Item:', Array.from(this.itemSerialNos.entries()));
 
     this.isSubmitting.set(true);
 
-    if (this.isEditMode && this.draftDnId) {
-      this.deliveryNoteService.updateDn(this.draftDnId, payload).subscribe({
-        next: () => {
-          this.toastr.success('DN Posted Successfully');
-          this.afterSaved();
-        },
-        error: (err) => {
-          this.toastr.error(err.error?.message || 'Failed to post DN');
-          this.isSubmitting.set(false);
-        }
-      });
-    } else {
-      this.deliveryNoteService.createDn(payload).subscribe({
-        next: () => {
-          this.toastr.success('DN Posted Successfully');
-          this.afterSaved();
-        },
-        error: (err) => {
-          this.toastr.error(err.error?.message || 'Failed to post DN');
-          this.isSubmitting.set(false);
-        }
-      });
-    }
+    // Marking ready also sends the DN out, so it lands in Out for Delivery; delivery is confirmed from there.
+    const save$ = this.isEditMode && this.draftDnId
+      ? this.deliveryNoteService.updateDn(this.draftDnId, payload).pipe(map(res => res?.data?._id || res?._id || this.draftDnId))
+      : this.deliveryNoteService.createDn(payload).pipe(map(res => res?.data?._id || res?._id));
+
+    save$.pipe(switchMap(id => this.deliveryNoteService.dispatchDn(id))).subscribe({
+      next: () => {
+        this.toastr.success('DN is out for delivery');
+        this.afterSaved();
+      },
+      error: (err) => {
+        this.toastr.error(err.error?.message || 'Failed to mark DN ready');
+        this.isSubmitting.set(false);
+        // The DN may already be saved as ready; refresh so it still shows up in the list.
+        this.saved.emit();
+      }
+    });
   }
 
   onCancel(): void {
@@ -851,7 +740,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
       this.closed.emit();
       return;
     }
-    this.router.navigate(['/dispatch/delivery-note-register']);
+    this.router.navigate(['/dispatch']);
   }
 
   onDrawerClosed(): void {
@@ -864,7 +753,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
       this.closed.emit();
       return;
     }
-    this.router.navigate(['/dispatch/delivery-note-register']);
+    this.router.navigate(['/dispatch']);
   }
 
   close() {

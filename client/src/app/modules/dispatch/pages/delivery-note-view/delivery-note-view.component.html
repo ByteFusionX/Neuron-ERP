@@ -5,7 +5,7 @@
     [empty]="!isLoading && !deliveryNote"
     emptyTitle="Delivery note not found"
     emptyMessage="It may have been deleted, or you may not have access to it."
-    [emptyLink]="['/dispatch/delivery-note-register']"
+    [emptyLink]="['/dispatch']"
     emptyLinkLabel="Back to DN register"
     [breadcrumbs]="breadcrumbs"
     [avatarText]="deliveryNote?.dnNo?.slice(-2) || 'DN'"
@@ -13,23 +13,56 @@
     [subtitle]="deliveryNote ? (deliveryNote.clientName || 'Delivery note') : ''"
     [badges]="badges"
     [stats]="stats"
+    [tabs]="tabs"
+    [activeTab]="tab"
+    (activeTabChange)="onTabChange($event)"
+    [hasSidebar]="true"
     *ngIf="deliveryNote as dn"
   >
-    <ng-container footerLeft>
-      <app-action-button *ngIf="dn.status !== 'Cancelled'" variant="outline" [disabled]="isCancelling" (click)="onCancel()">
-        {{ isCancelling ? 'Cancelling...' : 'Cancel DN' }}
-      </app-action-button>
-      <app-action-button *ngIf="canReject()" variant="outline" [disabled]="isRejecting" (click)="onReject()">
-        {{ isRejecting ? 'Rejecting...' : 'Reject Items' }}
-      </app-action-button>
-    </ng-container>
     <ng-container footerRight>
       <app-action-button variant="secondary" (click)="onBack()">Back</app-action-button>
       <app-action-button variant="primary" (click)="onPreview()" icon="view">Preview</app-action-button>
       <app-action-button *ngIf="dn.status === 'Draft'" variant="primary" (click)="onEdit()" icon="edit">Edit</app-action-button>
+      <app-action-button *ngIf="dn.status === 'Ready for Dispatch'" variant="primary" [disabled]="isDispatching" (click)="onDispatch()">
+        {{ isDispatching ? 'Dispatching...' : 'Dispatch' }}
+      </app-action-button>
     </ng-container>
 
-    <div class="space-y-6">
+    <ng-container sidebar>
+      <app-detail-section title="Job">
+        <app-detail-field label="Job ID">{{ dn.jobId?.jobId || '-' }}</app-detail-field>
+        <app-detail-field label="Project">{{ dn.jobId?.projectName || dn.subject || '-' }}</app-detail-field>
+        <app-detail-field label="Customer PO">{{ dn.customerLpoNumber || '-' }}</app-detail-field>
+      </app-detail-section>
+
+      <app-detail-section title="Closed Purchase Orders">
+        <ng-container *ngIf="closedPurchaseOrders(dn) as purchaseOrders">
+          <ng-container *ngIf="purchaseOrders.length; else noPo">
+          <div *ngFor="let po of purchaseOrders" class="border-b border-gray-100 py-2 last:border-0 dark:border-white/5">
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ po.poNo || '-' }}</p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ po.supplierId?.supplierName || 'Supplier not set' }}</p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ po.poDate | date:'dd MMM yyyy' }}</p>
+          </div>
+          </ng-container>
+        </ng-container>
+        <ng-template #noPo><p class="text-sm text-gray-500 dark:text-gray-400">No closed purchase orders.</p></ng-template>
+      </app-detail-section>
+
+      <app-detail-section title="Passed GRNs">
+        <ng-container *ngIf="passedGrns(dn) as grns">
+          <ng-container *ngIf="grns.length; else noGrn">
+          <div *ngFor="let grn of grns" class="border-b border-gray-100 py-2 last:border-0 dark:border-white/5">
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ grn.grnNo || '-' }}</p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ grn.grnDate | date:'dd MMM yyyy' }}</p>
+          </div>
+          </ng-container>
+        </ng-container>
+        <ng-template #noGrn><p class="text-sm text-gray-500 dark:text-gray-400">No passed GRNs.</p></ng-template>
+      </app-detail-section>
+    </ng-container>
+
+    <div tabBody [ngSwitch]="tab">
+      <div *ngSwitchCase="'details'" class="space-y-6">
       <app-detail-section title="Delivery Note">
         <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
           <app-detail-field label="DN No" stacked>{{ dn.dnNo }}</app-detail-field>
@@ -44,7 +77,6 @@
       <app-detail-section title="Delivery Details">
         <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
           <app-detail-field label="Delivery Type" stacked>{{ dn.deliveryType || 'Customer Delivery' }}</app-detail-field>
-          <app-detail-field label="Promised Date" stacked>{{ dn.promisedDate ? (dn.promisedDate | date:'dd/MM/yyyy') : '-' }}</app-detail-field>
           <app-detail-field label="Ship To" stacked>{{ dn.shipToName || dn.clientName || '-' }}</app-detail-field>
           <app-detail-field label="Contact Person" stacked>{{ dn.contactPerson || '-' }}</app-detail-field>
           <app-detail-field label="Contact No" stacked>{{ dn.contactNo || '-' }}</app-detail-field>
@@ -86,12 +118,10 @@
             </div>
           </form>
           <ng-template #noPodAction>
-            <p class="text-sm text-gray-500 dark:text-gray-400">POD can be captured after the DN is posted and before it is cancelled or rejected.</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">POD can be captured after the delivery is dispatched.</p>
           </ng-template>
         </ng-template>
       </app-detail-section>
-
-      <app-detail-table title="Delivery Items" [columns]="itemCols" [rows]="itemRows" emptyMessage="No items in this delivery note."></app-detail-table>
 
       <app-detail-section title="Record" *ngIf="dn.createdBy">
         <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -100,6 +130,19 @@
           <app-detail-field label="Last Updated" stacked>{{ dn.updatedDate ? (dn.updatedDate | date:'dd/MM/yyyy HH:mm') : '-' }}</app-detail-field>
         </div>
       </app-detail-section>
+      </div>
+
+      <div *ngSwitchCase="'items'">
+        <app-detail-table [columns]="itemCols" [rows]="itemRows" numbered large spread emptyMessage="No items in this delivery note."></app-detail-table>
+      </div>
+
+      <div *ngSwitchCase="'documents'">
+        <app-detail-documents [documents]="documents" [downloadable]="false" [viewable]="false" emptyMessage="No proof-of-delivery documents attached."></app-detail-documents>
+      </div>
+
+      <div *ngSwitchCase="'history'">
+        <app-detail-timeline [entries]="history" emptyMessage="No delivery note history available."></app-detail-timeline>
+      </div>
     </div>
   </app-detail-view-shell>
 </div>
