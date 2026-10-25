@@ -8,8 +8,8 @@
     [emptyLink]="['/dispatch']"
     emptyLinkLabel="Back to DN register"
     [breadcrumbs]="breadcrumbs"
-    [avatarText]="deliveryNote?.dnNo?.slice(-2) || 'DN'"
-    [title]="deliveryNote?.dnNo || ''"
+    [avatarText]="dn.dnNo.slice(-2) || 'DN'"
+    [title]="dn.dnNo"
     [subtitle]="deliveryNote ? (deliveryNote.clientName || 'Delivery note') : ''"
     [badges]="badges"
     [stats]="stats"
@@ -87,11 +87,11 @@
 
       <app-detail-section title="Proof of Delivery">
         <div *ngIf="dn.pod?.receivedBy; else podFormBlock" class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-          <app-detail-field label="Received By" stacked>{{ dn.pod?.receivedBy }}</app-detail-field>
-          <app-detail-field label="Contact No" stacked>{{ dn.pod?.receivedContactNo || '-' }}</app-detail-field>
-          <app-detail-field label="Received Date" stacked>{{ dn.pod?.receivedDate ? (dn.pod?.receivedDate | date:'dd/MM/yyyy') : '-' }}</app-detail-field>
-          <app-detail-field label="Signature Name" stacked>{{ dn.pod?.signatureName || '-' }}</app-detail-field>
-          <app-detail-field label="Remarks" stacked>{{ dn.pod?.remarks || '-' }}</app-detail-field>
+          <app-detail-field label="Received By" stacked>{{ dn.pod!.receivedBy }}</app-detail-field>
+          <app-detail-field label="Contact No" stacked>{{ dn.pod!.receivedContactNo || '-' }}</app-detail-field>
+          <app-detail-field label="Received Date" stacked>{{ dn.pod!.receivedDate ? (dn.pod!.receivedDate | date:'dd/MM/yyyy') : '-' }}</app-detail-field>
+          <app-detail-field label="Signature Name" stacked>{{ dn.pod!.signatureName || '-' }}</app-detail-field>
+          <app-detail-field label="Remarks" stacked>{{ dn.pod!.remarks || '-' }}</app-detail-field>
         </div>
 
         <ng-template #podFormBlock>

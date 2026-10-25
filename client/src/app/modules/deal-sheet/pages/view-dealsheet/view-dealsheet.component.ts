@@ -47,7 +47,7 @@ import {
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
 import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
-import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
+import { } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import {
@@ -80,7 +80,6 @@ interface ViewDealsheetNavState {
     ActionButtonComponent,
     DetailSectionComponent,
     DetailFieldComponent,
-    DetailBadgeComponent,
     DetailTableComponent,
     DetailDocumentsComponent,
     RouterLink,

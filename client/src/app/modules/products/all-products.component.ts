@@ -126,6 +126,8 @@ export class AllProductsComponent implements OnInit, AfterViewInit, OnDestroy {
   private sort: { sortBy?: string; sortDir?: 'asc' | 'desc' } = {};
   private readonly serverFilterKeys = ['productCategory', 'productSegment', 'warehouse', 'itemCode', 'partNo', 'productName', 'productDescription', 'type', 'brand', 'unitOfMeasure'];
 
+  private listRequest?: Subscription;
+
   ngOnInit(): void {
     this.buildColumns();
     this.buildRowActions();
@@ -248,21 +250,22 @@ export class AllProductsComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isLoading = true;
     const params: ProductQueryParams = { page: this.page, row: this.row, ...this.queryParams() };
 
-    this.subscriptions.add(
-      this.productService.getProducts(params).subscribe({
-        next: (response) => {
-          const products = response.data?.products ?? [];
-          this.rows = products;
-          this.total = response.data?.pagination?.total ?? products.length;
-          this.refreshViewCounts();
-          this.isLoading = false;
-        },
-        error: () => {
-          this.toastr.error('Failed to load products');
-          this.isLoading = false;
-        },
-      })
-    );
+    // A restored view fires onViewChange and onQueryChange back to back; cancel the superseded request.
+    this.listRequest?.unsubscribe();
+    this.listRequest = this.productService.getProducts(params).subscribe({
+      next: (response) => {
+        const products = response.data?.products ?? [];
+        this.rows = products;
+        this.total = response.data?.pagination?.total ?? products.length;
+        this.refreshViewCounts();
+        this.isLoading = false;
+      },
+      error: () => {
+        this.toastr.error('Failed to load products');
+        this.isLoading = false;
+      },
+    });
+    this.subscriptions.add(this.listRequest);
   }
 
   onQueryChange(query: DataGridQuery): void {

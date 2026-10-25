@@ -7,13 +7,13 @@ import { ToastrService } from 'ngx-toastr';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { DeliveryNote } from 'src/app/shared/interfaces/delivery-note.interface';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { } from 'src/app/shared/components/button/button.component';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailViewBadge, DetailViewBreadcrumb, DetailViewShellComponent, DetailViewStat, DetailViewTab } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
 import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
 import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
-import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
+import { } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailDocument, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
@@ -29,12 +29,10 @@ import { SmartFormModule } from 'src/app/shared/components/smart-form';
     FormsModule,
     ReactiveFormsModule,
     IconsModule,
-    ButtonComponent,
     ActionButtonComponent,
     DetailViewShellComponent,
     DetailSectionComponent,
     DetailFieldComponent,
-    DetailBadgeComponent,
     DetailTableComponent,
     DetailDocumentsComponent,
     DetailTimelineComponent,

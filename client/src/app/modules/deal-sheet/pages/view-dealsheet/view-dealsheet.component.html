@@ -42,7 +42,7 @@
                 </app-detail-field>
                 <app-detail-field label="Revision" numeric>{{ data.quoteData.revision ?? 0 }}</app-detail-field>
                 <app-detail-field label="Sales person">{{ salesPersonName }}</app-detail-field>
-                <app-detail-field label="Department">{{ data.quoteData.department?.departmentName || 'N/A' }}</app-detail-field>
+                <app-detail-field label="Department">{{ data.quoteData.department.departmentName || 'N/A' }}</app-detail-field>
             </app-detail-section>
 
             <app-detail-section title="Customer">
@@ -50,8 +50,8 @@
                     <a *ngIf="customerRef; else noRef" [routerLink]="['/customers/view', customerRef]" class="font-medium text-violet-600 hover:underline dark:text-violet-400">{{ customerRef }}</a>
                     <ng-template #noRef>N/A</ng-template>
                 </app-detail-field>
-                <app-detail-field label="Company">{{ data.quoteData.client?.companyName || 'N/A' }}</app-detail-field>
-                <app-detail-field label="LPO">{{ data.quoteData.lpoFiles?.length ? data.quoteData.lpoFiles.length + ' file(s)' : 'Not uploaded' }}</app-detail-field>
+                <app-detail-field label="Company">{{ data.quoteData.client.companyName || 'N/A' }}</app-detail-field>
+                <app-detail-field label="LPO">{{ data.quoteData.lpoFiles.length ? data.quoteData.lpoFiles.length + ' file(s)' : 'Not uploaded' }}</app-detail-field>
                 <app-detail-field label="Currency">{{ data.quoteData.currency || 'N/A' }}</app-detail-field>
             </app-detail-section>
         </ng-container>
@@ -60,7 +60,7 @@
             <div *ngSwitchCase="'overview'" class="space-y-6">
                 <app-detail-section title="Deal Details">
                     <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-                        <app-detail-field label="Customer" stacked>{{ data.quoteData.client?.companyName || 'N/A' }}</app-detail-field>
+                        <app-detail-field label="Customer" stacked>{{ data.quoteData.client.companyName || 'N/A' }}</app-detail-field>
                         <app-detail-field label="Deal ID" stacked>{{ data.quoteData.dealData.dealId || 'N/A' }}</app-detail-field>
                         <app-detail-field label="Quote ID" stacked>{{ data.quoteData.quoteId || 'N/A' }}</app-detail-field>
                         <app-detail-field label="Date" stacked>{{ data.quoteData.dealData.savedDate | date: 'dd MMM yyyy' }}</app-detail-field>
