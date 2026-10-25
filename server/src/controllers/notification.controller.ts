@@ -178,6 +178,12 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                     case 'ClaimRejected':
                     case 'ClaimPaid':
                         return privileges.claims?.viewReport !== 'none';
+                    case 'GrnItemsRejected':
+                    case 'LpoPlaced':
+                    case 'LpoDeliveryDue':
+                        return !!privileges.grn?.viewReport && privileges.grn.viewReport !== 'none';
+                    case 'LpoPlacedBilling':
+                        return !!privileges.invoice?.viewReport && privileges.invoice.viewReport !== 'none';
                     case 'Event':
                         return true;
                     case 'BugReportAssigned':
@@ -499,10 +505,19 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
         case 'BugReportResolved':
             return { routePath: '/bug-reports' };
 
+        // placing requires a future date, so a fresh LPO sits in Upcoming until its delivery day
+        case 'LpoPlaced':
+            return { routePath: '/grn/grn-list', routeData: { view: 'upcoming' } };
+        case 'LpoDeliveryDue':
+            return { routePath: '/grn/grn-list', routeData: { view: 'arriving' } };
+
+        case 'LpoPlacedBilling':
+            return { routePath: '/finance/vendor-bills', routeData: { view: 'upcoming' } };
+
         case 'GrnItemsRejected': {
             const grnId = additionalData?.grnId || referenceId?._id?.toString?.() || referenceId?.toString?.();
             return {
-                routePath: '/grn/rejections',
+                routePath: '/grn/view-grn',
                 routeData: { grnId }
             };
         }

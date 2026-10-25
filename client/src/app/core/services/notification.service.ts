@@ -198,6 +198,14 @@ export class NotificationService {
                     routePath: '/purchase/view-purchase',
                     routeData: { purchaseId: rejectedPurchaseId }
                 };
+            case 'LpoPlaced':
+                return { routePath: '/grn/grn-list', routeData: { view: 'upcoming' } };
+            case 'LpoDeliveryDue':
+                return { routePath: '/grn/grn-list', routeData: { view: 'arriving' } };
+            case 'LpoPlacedBilling':
+                return { routePath: '/finance/vendor-bills', routeData: { view: 'upcoming' } };
+            case 'GrnItemsRejected':
+                return { routePath: '/grn/view-grn', routeData: { grnId: additionalData?.grnId || referenceId?._id?.toString?.() || referenceId?.toString?.() } };
             case 'LpoApprovalRequest':
                 return {
                     routePath: '/purchase/po',
@@ -427,6 +435,12 @@ export class NotificationService {
             return { commands: [routePath, routeData.purchaseId] };
         }
         if (routePath === '/purchase/po') {
+            return { commands: [routePath], extras: routeData?.view ? { queryParams: { view: routeData.view } } : undefined };
+        }
+        if ((routePath === '/grn/view-grn' || routePath === '/grn/rejections') && routeData?.grnId) {
+            return { commands: ['/grn/view-grn', routeData.grnId] };
+        }
+        if (routePath === '/grn/grn-list') {
             return { commands: [routePath], extras: routeData?.view ? { queryParams: { view: routeData.view } } : undefined };
         }
         if (routePath === '/purchase-order/pending-approval') {
