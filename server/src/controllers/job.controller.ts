@@ -112,7 +112,9 @@ const buildJobGridQuery = (search: unknown, filters: unknown, sortKey: unknown, 
 };
 
 /** Lookups + LPO value shared by the page query and the totals query, so "of N" always matches the rows. */
-const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number): any[] => [
+const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number, jobOwnMatch: Record<string, any> = {}): any[] => [
+    // Conditions on the job's own fields run before the joins so they only join the jobs that can match.
+    ...(Object.keys(jobOwnMatch).length ? [{ $match: jobOwnMatch }] : []),
     { $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' } },
     { $unwind: '$quotation' },
     ...(salesPerson && ObjectId.isValid(String(salesPerson)) ? [{ $match: { 'quotation.createdBy': new ObjectId(String(salesPerson)) } }] : []),
@@ -186,24 +188,26 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                 { $or: [{ 'quotation.dealData.dealId': { $exists: true } }, { 'quotation.dealData': { $exists: true } }] },
             ],
         };
-        if (status != null) matchFilters.$and.push({ status });
+        const jobOwnClauses: any[] = [];
+        if (status != null) { matchFilters.$and.push({ status }); jobOwnClauses.push({ status }); }
         if (allocateStatusFilter) matchFilters.allocateStatus = allocateStatusFilter;
         if (customer && ObjectId.isValid(String(customer))) matchFilters['quotation.client'] = new ObjectId(String(customer));
         if (department && ObjectId.isValid(String(department))) matchFilters['quotation.department'] = new ObjectId(String(department));
         // Created-date window (the report's From / To); both ends inclusive.
         const from = fromDate ? new Date(String(fromDate)) : null;
         const to = toDate ? new Date(String(toDate)) : null;
-        if (from && !isNaN(from.getTime())) matchFilters.$and.push({ createdDate: { $gte: from } });
-        if (to && !isNaN(to.getTime())) matchFilters.$and.push({ createdDate: { $lt: new Date(to.getTime() + 24 * 60 * 60 * 1000) } });
+        const pushOwn = (clause: any) => { matchFilters.$and.push(clause); jobOwnClauses.push(clause); };
+        if (from && !isNaN(from.getTime())) pushOwn({ createdDate: { $gte: from } });
+        if (to && !isNaN(to.getTime())) pushOwn({ createdDate: { $lt: new Date(to.getTime() + 24 * 60 * 60 * 1000) } });
 
         if (selectedMonth && selectedYear) {
             const startDate = new Date(selectedYear, selectedMonth - 1, 1);
             const endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59);
-            matchFilters.$and.push({ createdDate: { $gte: startDate, $lte: endDate } });
+            pushOwn({ createdDate: { $gte: startDate, $lte: endDate } });
         } else if (selectedYear) {
             const startDate = new Date(selectedYear, 0, 1);
             const endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
-            matchFilters.$and.push({ createdDate: { $gte: startDate, $lte: endDate } });
+            pushOwn({ createdDate: { $gte: startDate, $lte: endDate } });
         }
 
         let accessFilter: any = {};
@@ -232,8 +236,13 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
 
         const qatarUsdRate = await getUSDRated();
         const gridQuery = buildJobGridQuery(search, gridFilters, sortKey, sortDir);
+        const ownMatch = (withAllocate: boolean) => ({
+            isDeleted: { $ne: true },
+            ...(jobOwnClauses.length ? { $and: jobOwnClauses } : {}),
+            ...(withAllocate && allocateStatusFilter ? { allocateStatus: allocateStatusFilter } : {}),
+        });
         const baseStages = [
-            ...jobBasePipeline(salesPerson, qatarUsdRate),
+            ...jobBasePipeline(salesPerson, qatarUsdRate, ownMatch(true)),
             { $match: { ...accessFilter, ...matchFilters } },
             { $match: gridQuery.filter },
         ];
@@ -241,7 +250,7 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
         // Tab badges: jobs per allocate status, scoped by access only.
         const { allocateStatus: _ignored, ...matchWithoutStatus } = matchFilters;
         const statusCounts = jobModel.aggregate([
-            ...jobBasePipeline(salesPerson, qatarUsdRate),
+            ...jobBasePipeline(salesPerson, qatarUsdRate, ownMatch(false)),
             { $match: { ...accessFilter, ...matchWithoutStatus } },
             { $group: { _id: '$allocateStatus', count: { $sum: 1 } } },
         ]);

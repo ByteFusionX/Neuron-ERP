@@ -80,7 +80,8 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
             .populate('referenceId')
             .populate('recipients.objectId', 'firstName lastName')
             .populate('sentBy', 'firstName lastName avatar')
-            .sort({ 'date': -1 }),
+            .sort({ 'date': -1 })
+            .limit(200),
             Notification.find({
                 'recipients': { $elemMatch: { objectId: employee._id, status: 'read' } }
             })
@@ -91,33 +92,17 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
             .limit(50),
         ]);
         
-        const unReadNotifications = await Promise.all(
-            unReadNotificationsRaw.map(async (notification) => {
-                if (notification.type === 'Event' && notification.referenceId) {
-                    await notification.populate({
-                        path: 'referenceId',
-                        populate: {
-                            path: 'collectionId',
-                        },
-                    });
-                }
-                return notification;
-            })
-        );
-        
-        const viewedNotifications = await Promise.all(
-            viewedNotificationsRaw.map(async (notification) => {
-                if (notification.type === 'Event' && notification.referenceId) {
-                    await notification.populate({
-                        path: 'referenceId',
-                        populate: {
-                            path: 'collectionId',
-                        },
-                    });
-                }
-                return notification;
-            })
-        );
+        // One batched populate for all Event notifications instead of one query round-trip per notification.
+        const eventNotifications = [...unReadNotificationsRaw, ...viewedNotificationsRaw]
+            .filter((n) => n.type === 'Event' && n.referenceId);
+        if (eventNotifications.length) {
+            await Notification.populate(eventNotifications, {
+                path: 'referenceId',
+                populate: { path: 'collectionId' },
+            });
+        }
+        const unReadNotifications = unReadNotificationsRaw;
+        const viewedNotifications = viewedNotificationsRaw;
 
         const filterByPrivileges = (notifications: any[]) => {
             return notifications.filter(notification => {

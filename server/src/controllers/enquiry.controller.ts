@@ -887,7 +887,8 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             // Picking a status in the filter is explicit, so Quoted must be reachable from any tab.
             : { status: { $nin: status ? ['Sent by Presale Engineer', 'Sended by Presale Engineer'] : hiddenStatuses } };
 
-        const enquiryTotal: { total: number }[] = await enquiryModel.aggregate([
+        // The three queries below are independent, so they start together and are awaited once after the data query.
+        const enquiryTotalQuery = enquiryModel.aggregate([
             { $match: listFilters },
             { $match: listStatusFilter },
             { $group: { _id: null, total: { $sum: 1 } } },
@@ -895,7 +896,7 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
         ]).exec()
 
         // Tab badges describe each view as a whole, so only access scope applies, not the grid's active filters.
-        const viewCounts = await enquiryModel.aggregate([
+        const viewCountsQuery = enquiryModel.aggregate([
             { $match: { $and: [{ isDeleted: { $ne: true } }, accessFilter] } },
             {
                 $facet: {
@@ -972,7 +973,7 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             }
         ] : [];
 
-        const enquiryData = await enquiryModel.aggregate([
+        const enquiryDataQuery = enquiryModel.aggregate([
             { $match: listFilters },
             { $match: listStatusFilter },
             ...sortPrep,
@@ -1096,6 +1097,8 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
                 }
             }
         ]);
+
+        const [enquiryTotal, viewCounts, enquiryData] = await Promise.all([enquiryTotalQuery, viewCountsQuery, enquiryDataQuery]) as [{ total: number }[], any[], any[]];
 
         return res.status(200).json({
             total: enquiryTotal[0]?.total ?? 0,

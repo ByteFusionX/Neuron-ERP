@@ -108,6 +108,7 @@ const notificationSchema = new Schema<Notification>({
     },
 });
 
+notificationSchema.index({ 'recipients.objectId': 1, 'recipients.status': 1, date: -1 });
 notificationSchema.index({ dedupeKey: 1 }, { unique: true, partialFilterExpression: { dedupeKey: { $type: 'string' } } });
 
 export default model<Notification>('Notification', notificationSchema);

@@ -585,25 +585,13 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
 
         const filters = { $and: [matchFilters, accessFilter] }
 
-        let total: number = 0;
-        await Quotation.aggregate([
-            {
-                $match: filters
-            },
-            {
-                $group: { _id: null, total: { $sum: 1 } }
-            },
-            {
-                $project: { total: 1, _id: 0 }
-            },
-        ]).exec()
-            .then((result: { total: number }[]) => {
-                if (result && result.length > 0) {
-                    total = result[0].total
-                }
-            })
+        // Total, page and tab badge counts are independent of each other, so they all run together.
+        // An aggregate, not countDocuments: the date clause can hold an Invalid Date when no range is sent,
+        // which countDocuments would reject while casting.
+        const totalQuery = Quotation.aggregate([{ $match: filters }, { $count: 'total' }]).exec()
+            .then((result: { total: number }[]) => result[0]?.total ?? 0);
 
-        let quoteData = await Quotation.aggregate([
+        const quoteDataQuery = Quotation.aggregate([
             {
                 $match: filters,
             },
@@ -617,19 +605,15 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
                 $limit: row
             },
             ...quotationLookupStages
-        ]);
+        ]).exec();
 
-        quoteData.forEach((q: any) => {
-            q.isExpired = isQuoteExpired(q);
-            // Quotes saved before the quoted date existed fall back to the created date.
-            q.quotedDate = q.quotedDate ?? q.date;
-            delete q.revisions;
-        });
         // Badge counts for every tab, scoped by access only (not by the active tab's filters).
         const baseView = { isDeleted: { $ne: true }, status: { $ne: 'revised' } };
         const countOf = (extra: any) => Quotation.countDocuments({ $and: [baseView, accessFilter, extra] });
         const followUpCount = (view: string) => countOf({ ...followUpViewFilter('followUp.nextFollowUpDate', view), status: { $nin: QUOTE_FOLLOW_UP_CLOSED }, $nor: [pastDateFilter] });
-        const [vAll, vPending, vRejected, vApproved, vMine, vOverdue, vToday, vUpcoming] = await Promise.all([
+        const [total, quoteData, vAll, vPending, vRejected, vApproved, vMine, vOverdue, vToday, vUpcoming] = await Promise.all([
+            totalQuery,
+            quoteDataQuery,
             countOf({}),
             countOf({ $or: [{ 'dealData.status': 'pending' }, { status: 'Won', 'dealData.status': { $exists: false } }] }),
             countOf({ 'dealData.status': 'rejected' }),
@@ -639,6 +623,13 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             followUpCount('today'),
             followUpCount('upcoming'),
         ]);
+
+        quoteData.forEach((q: any) => {
+            q.isExpired = isQuoteExpired(q);
+            // Quotes saved before the quoted date existed fall back to the created date.
+            q.quotedDate = q.quotedDate ?? q.date;
+            delete q.revisions;
+        });
         const viewCounts = {
             all: vAll, 'pending-deal': vPending, 'rejected-deal': vRejected, 'ready-for-job': vApproved,
             mine: vMine, 'fu-overdue': vOverdue, 'fu-today': vToday, 'fu-upcoming': vUpcoming,
@@ -907,10 +898,21 @@ const buildDealGridQuery = (filters: unknown, sortKey: unknown, sortDir: unknown
     return { filter: clauses.length ? { $and: clauses } : {}, sort };
 };
 
-/** Counts deals the same way the page query does (same lookups/unwinds and the same search), so "of N" matches the rows. */
-const countDealSheets = async (filters: Record<string, any>, searchFilter: Record<string, any>): Promise<number> => {
+/** Per-tab totals for the deal sheet list, using the same access scope and search as the page query. */
+const dealViewCounts = async (accessFilter: Record<string, any>, searchFilter: Record<string, any>) => {
+    const base = { isDeleted: { $ne: true }, dealData: { $exists: true }, ...validDealSheetFilter };
+    const open = { 'dealData.status': { $nin: ['rejected', 'approved'] } };
+    const byView: Record<string, Record<string, any>> = {
+        all: {},
+        pending: open,
+        approved: { 'dealData.status': 'approved' },
+        rejected: { 'dealData.status': 'rejected' },
+        revoked: { ...open, 'editHistory.action': 'DealRevoked' },
+    };
+    const keys = Object.keys(byView);
+    // One pass through the lookups, split into the tab counts afterwards, instead of one full pipeline per tab.
     const result = await Quotation.aggregate([
-        { $match: filters },
+        { $match: { $and: [base, accessFilter] } },
         { $lookup: { from: 'customers', localField: 'client', foreignField: '_id', as: 'client' } },
         { $unwind: '$client' },
         { $lookup: { from: 'departments', localField: 'department', foreignField: '_id', as: 'department' } },
@@ -919,25 +921,9 @@ const countDealSheets = async (filters: Record<string, any>, searchFilter: Recor
         { $unwind: '$createdBy' },
         dealComputedFieldsStage,
         { $match: searchFilter },
-        { $count: 'total' },
+        { $facet: Object.fromEntries(keys.map((k) => [k, [{ $match: byView[k] }, { $count: 'total' }]])) },
     ]).exec();
-    return result?.[0]?.total ?? 0;
-};
-
-/** Per-tab totals for the deal sheet list, using the same access scope and search as the page query. */
-const dealViewCounts = async (accessFilter: Record<string, any>, searchFilter: Record<string, any>) => {
-    const base = { isDeleted: { $ne: true }, dealData: { $exists: true }, ...validDealSheetFilter };
-    const open = { 'dealData.status': { $nin: ['rejected', 'approved'] } };
-    const byView: Record<string, Record<string, any>> = {
-        all: base,
-        pending: { ...base, ...open },
-        approved: { ...base, 'dealData.status': 'approved' },
-        rejected: { ...base, 'dealData.status': 'rejected' },
-        revoked: { ...base, ...open, 'editHistory.action': 'DealRevoked' },
-    };
-    const keys = Object.keys(byView);
-    const totals = await Promise.all(keys.map((k) => countDealSheets({ $and: [byView[k], accessFilter] }, searchFilter)));
-    return Object.fromEntries(keys.map((k, i) => [k, totals[i]]));
+    return Object.fromEntries(keys.map((k) => [k, result?.[0]?.[k]?.[0]?.total ?? 0]));
 };
 
 export const getDealSheet = async (req: Request, res: Response, next: NextFunction) => {
@@ -996,9 +982,7 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
 
         const filters = { $and: [matchFilters, accessFilter] }
 
-        const total: number = await countDealSheets(filters, searchFilter);
-
-        let dealData = await Quotation.aggregate([
+        let [dealData, viewCounts] = await Promise.all([Quotation.aggregate([
             {
                 $match: filters,
             },
@@ -1172,9 +1156,9 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
                     }
                 }
             }
-        ]);
+        ]), dealViewCounts(accessFilter, searchFilter)]);
 
-        const viewCounts = await dealViewCounts(accessFilter, searchFilter);
+        const total: number = viewCounts[['all', 'rejected', 'revoked'].includes(view) ? view : 'pending'] ?? 0;
         if (!dealData || !total) return res.status(200).json({ total: 0, dealSheet: [], viewCounts })
         await withDealStageNames(dealData);
         return res.status(200).json({ total: total, dealSheet: dealData, viewCounts })
@@ -1234,9 +1218,7 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
 
         const filters = { $and: [matchFilters, accessFilter] }
 
-        const total: number = await countDealSheets(filters, searchFilter);
-
-        let dealData = await Quotation.aggregate([
+        let [dealData, viewCounts] = await Promise.all([Quotation.aggregate([
             {
                 $match: filters,
             },
@@ -1425,9 +1407,9 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
                     }
                 }
             }
-        ]);
+        ]), dealViewCounts(accessFilter, searchFilter)]);
 
-        const viewCounts = await dealViewCounts(accessFilter, searchFilter);
+        const total: number = viewCounts['approved'] ?? 0;
         if (!dealData || !total) return res.status(200).json({ total: 0, dealSheet: [], viewCounts })
         await withDealStageNames(dealData);
         return res.status(200).json({ total: total, dealSheet: dealData, viewCounts })
