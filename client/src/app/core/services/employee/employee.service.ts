@@ -1,6 +1,6 @@
 import { HttpClient, HttpContext, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, catchError, combineLatest, filter, map, Observable, switchMap, tap } from 'rxjs';
+import { BehaviorSubject, catchError, combineLatest, filter, finalize, map, Observable, shareReplay, switchMap, tap } from 'rxjs';
 import { ApprovalLimit, CreateEmployee, FilterEmployee, GetCategory, Responsibility, getEmployee, getEmployeeByID, MyProfile, Target, UpdateMyProfile } from 'src/app/shared/interfaces/employee.interface';
 import { login } from 'src/app/shared/interfaces/login';
 import { environment } from 'src/environments/environment';
@@ -186,8 +186,19 @@ export class EmployeeService {
     return this.http.patch<{ microsoftId: string | null }>(`${this.api}/employee/microsoft-link/${employeeId}`, { microsoftId })
   }
 
-  getEmployee() {
-    return this.http.get<getEmployee>(`${this.api}/employee/get`).pipe(map(withSuperAdminAccess))
+  private currentEmployee$?: Observable<getEmployee>
+
+  // The route guard, nav bar and settings all ask for the signed-in user at page load;
+  // concurrent callers share one request instead of each hitting /employee/get.
+  getEmployee(): Observable<getEmployee> {
+    if (!this.currentEmployee$) {
+      this.currentEmployee$ = this.http.get<getEmployee>(`${this.api}/employee/get`).pipe(
+        map(withSuperAdminAccess),
+        finalize(() => this.currentEmployee$ = undefined),
+        shareReplay({ bufferSize: 1, refCount: false })
+      )
+    }
+    return this.currentEmployee$
   }
 
   isEmployeePresent(): Observable<{ exists: boolean }> {

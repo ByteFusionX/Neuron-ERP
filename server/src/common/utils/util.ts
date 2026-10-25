@@ -7,6 +7,7 @@ import employeeModel from "../../models/employee.model";
 import categoryModel from "../../models/category.model";
 import departmentModel from "../../models/department.model";
 import mongoose from "mongoose";
+import { getCachedEmployee, setCachedEmployee } from "./employeeCache";
 
 
 export const calculateDiscountPrice = (discount: any, items: any): number => {
@@ -512,9 +513,14 @@ export const getEmployeeData = async (userToken: any): Promise<any> => {
     try {
         // Supports both the self-issued employeeId/password JWT ({ id }) and
         // the Azure AD token ({ oid }), since Azure login is only temporarily disabled.
+        const cacheKey = userToken?.id ? `id:${userToken.id}` : `oid:${userToken?.oid}`;
+        const cached = getCachedEmployee(cacheKey);
+        if (cached) return cached;
+
         const employee = userToken?.id
             ? await employeeModel.findById(userToken.id).populate('category reportingTo')
             : await employeeModel.findOne({ microsoftId: userToken?.oid }).populate('category reportingTo');
+        setCachedEmployee(cacheKey, employee);
         return employee;
     } catch (error) {
         console.error('Error fetching employee data:', error);

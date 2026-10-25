@@ -1,4 +1,5 @@
 import { Schema, Document, model, Types } from "mongoose";
+import { invalidateEmployeeCacheOnWrite } from "../common/utils/employeeCache";
 
 interface Employee extends Document {
   employeeId: string;
@@ -262,4 +263,5 @@ const employeeSchema = new Schema<Employee>({
 });
 
 employeeSchema.index({ firstName: 1, lastName: 1 })
+invalidateEmployeeCacheOnWrite(employeeSchema);
 export default model<Employee>("Employee", employeeSchema);

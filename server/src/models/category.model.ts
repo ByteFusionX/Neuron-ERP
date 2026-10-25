@@ -1,4 +1,5 @@
 import { Schema, Document, model, Types } from "mongoose";
+import { invalidateEmployeeCacheOnWrite } from "../common/utils/employeeCache";
 
 interface Category extends Document {
   categoryName: string;
@@ -214,5 +215,7 @@ const categorySchema = new Schema<Category>({
     default: false
   }
 });
+
+invalidateEmployeeCacheOnWrite(categorySchema);
 
 export default model<Category>("Category", categorySchema);
