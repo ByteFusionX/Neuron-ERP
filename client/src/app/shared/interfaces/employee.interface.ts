@@ -204,6 +204,7 @@ export interface GetCategory {
   /** Keys from the Responsibility master list. Older roles may still hold the retired object shape. */
   responsibilities?: string[] | Record<string, boolean>;
   employeeCount?: number;
+  employees?: { _id: string; employeeId: string; firstName: string; lastName: string; designation?: string; isBlocked?: boolean }[];
   privileges: Privileges;
 }
 
@@ -278,6 +279,8 @@ export interface Privileges {
     viewReport: string;
     allocateJobs: boolean;
     transferProcurementPerson: boolean;
+    /** Unset means allowed; only an explicit false hides the Update status action. */
+    statusUpdate?: boolean;
   };
   /** Roles saved before the split hold a bare boolean (true = view + approve + reject + revoke). */
   dealSheet: boolean | { viewReport: string; approve?: boolean; reject?: boolean; revoke?: boolean; update?: boolean };
@@ -291,6 +294,7 @@ export interface Privileges {
     canInitiateLPO: boolean;
     canApprovePOs: boolean;
     canReissueAndRevoke: boolean;
+    canCancel?: boolean;
   };
   grn: {
     viewReport: string;

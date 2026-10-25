@@ -216,7 +216,7 @@ export class RoleFormDrawerComponent implements OnChanges {
     {
       key: 'jobSheet', label: 'Job Sheet', abbr: 'JS', description: 'Jobs and allocation', master: 'jobSheetChecked', group: 'jobSheet',
       scopes: [scope('jobSheet.viewReport')],
-      flags: [{ path: 'jobSheet.allocateJobs', label: 'Allocate jobs' }, { path: 'jobSheet.transferProcurementPerson', label: 'Transfer procurement person' }],
+      flags: [{ path: 'jobSheet.allocateJobs', label: 'Allocate jobs' }, { path: 'jobSheet.transferProcurementPerson', label: 'Transfer procurement person' }, { path: 'jobSheet.statusUpdate', label: 'Update job status' }],
     },
     {
       key: 'purchase', label: 'Purchase', abbr: 'PR', description: 'Purchase requisitions', master: 'purchaseChecked', group: 'purchase',
@@ -230,6 +230,7 @@ export class RoleFormDrawerComponent implements OnChanges {
         { path: 'purchaseOrder.canInitiateLPO', label: 'Initiate LPO and issue PO' },
         { path: 'purchaseOrder.canApprovePOs', label: 'Approve purchase orders' },
         { path: 'purchaseOrder.canReissueAndRevoke', label: 'Re-issue and revoke POs' },
+        { path: 'purchaseOrder.canCancel', label: 'Cancel POs and move their quantity to another supplier' },
       ],
     },
     {
@@ -459,6 +460,7 @@ export class RoleFormDrawerComponent implements OnChanges {
         viewReport: 'none',
         allocateJobs: [false],
         transferProcurementPerson: [false],
+        statusUpdate: [true],
       }),
       purchase: this._fb.group({
         viewReport: 'none',
@@ -470,6 +472,7 @@ export class RoleFormDrawerComponent implements OnChanges {
         canInitiateLPO: [false],
         canApprovePOs: [false],
         canReissueAndRevoke: [false],
+        canCancel: [false],
       }),
       grn: this._fb.group({
         viewReport: 'none',
@@ -673,7 +676,7 @@ export class RoleFormDrawerComponent implements OnChanges {
       this.purchaseChecked = privileges.purchase?.viewReport !== 'none',
       this.purchaseOrderChecked = privileges.purchaseOrder ?
         ((privileges.purchaseOrder.viewReport ?? 'none') !== 'none' ||
-         privileges.purchaseOrder.canInitiateLPO || privileges.purchaseOrder.canApprovePOs || privileges.purchaseOrder.canReissueAndRevoke) : false,
+         privileges.purchaseOrder.canInitiateLPO || privileges.purchaseOrder.canApprovePOs || privileges.purchaseOrder.canReissueAndRevoke || !!privileges.purchaseOrder.canCancel) : false,
       this.grnChecked = privileges.grn ?
         ((privileges.grn.viewReport ?? 'none') !== 'none' || privileges.grn.canUploadInvoice) : false,
       this.technicalChecked = privileges.technical ?
@@ -830,9 +833,9 @@ export class RoleFormDrawerComponent implements OnChanges {
 
     if (formControlName === 'purchaseOrder') {
       if (checked) {
-        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canInitiateLPO: false, canApprovePOs: false, canReissueAndRevoke: false } } });
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canInitiateLPO: false, canApprovePOs: false, canReissueAndRevoke: false, canCancel: false } } });
       } else {
-        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canInitiateLPO: false, canApprovePOs: false, canReissueAndRevoke: false } } });
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canInitiateLPO: false, canApprovePOs: false, canReissueAndRevoke: false, canCancel: false } } });
       }
     } else if (formControlName === 'purchase') {
       if (checked) {

@@ -66,6 +66,7 @@ export interface Privileges {
     viewReport: string;
     allocateJobs: boolean;
     transferProcurementPerson: boolean;
+    statusUpdate?: boolean;
   };
   // Roles saved before the split hold a bare boolean (true = view + approve + reject + revoke).
   dealSheet: boolean | {
@@ -85,6 +86,7 @@ export interface Privileges {
     canInitiateLPO: boolean;
     canApprovePOs: boolean;
     canReissueAndRevoke: boolean;
+    canCancel?: boolean;
   };
   grn: {
     viewReport: string;

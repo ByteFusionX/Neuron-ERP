@@ -74,6 +74,7 @@ const PRIVILEGE_MODULES: PrivilegeModule[] = [
   { key: 'jobSheet', label: 'Job Sheet', flags: [
     { path: 'jobSheet.allocateJobs', label: 'Allocate jobs' },
     { path: 'jobSheet.transferProcurementPerson', label: 'Transfer procurement person' },
+    { path: 'jobSheet.statusUpdate', label: 'Update job status' },
   ]},
   { key: 'purchase', label: 'Purchase', flags: [
     { path: 'purchase.create', label: 'Create purchases' },
@@ -83,6 +84,7 @@ const PRIVILEGE_MODULES: PrivilegeModule[] = [
     { path: 'purchaseOrder.canInitiateLPO', label: 'Initiate LPO and issue PO' },
     { path: 'purchaseOrder.canApprovePOs', label: 'Approve purchase orders' },
     { path: 'purchaseOrder.canReissueAndRevoke', label: 'Re-issue and revoke POs' },
+    { path: 'purchaseOrder.canCancel', label: 'Cancel POs and move their quantity to another supplier' },
   ]},
   { key: 'grn', label: 'GRN', flags: [
     { path: 'grn.canUploadInvoice', label: 'Upload supplier invoice' },

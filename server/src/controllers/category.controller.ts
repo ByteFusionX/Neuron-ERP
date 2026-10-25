@@ -16,6 +16,11 @@ export const getCategory = async (req: Request, res: Response, next: NextFunctio
                     from: 'employees',
                     localField: '_id',
                     foreignField: 'category',
+                    pipeline: [
+                        { $match: { isDeleted: { $ne: true } } },
+                        { $sort: { firstName: 1 } },
+                        { $project: { _id: 1, employeeId: 1, firstName: 1, lastName: 1, designation: 1, isBlocked: 1 } },
+                    ],
                     as: 'employees'
                 }
             },
@@ -31,6 +36,7 @@ export const getCategory = async (req: Request, res: Response, next: NextFunctio
                     role: 1,
                     privileges: 1,
                     employeeCount: 1,
+                    employees: 1,
                     isSalespersonWithTarget: 1,
                     responsibilities: 1,
                 }
