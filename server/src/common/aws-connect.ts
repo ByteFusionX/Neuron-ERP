@@ -1,5 +1,5 @@
 // Import necessary modules from AWS SDK v3
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import fs from 'fs';
@@ -17,7 +17,9 @@ const s3Client = new S3Client({
         accessKeyId: process.env.AWS_ACCESSKEYID!,
         secretAccessKey: process.env.AWS_SECRETACCESSKEY!
     },
-    endpoint: process.env.AWS_ENDPOINT
+    endpoint: process.env.AWS_ENDPOINT,
+    // plain options object, so @smithy/node-http-handler (a transitive dependency) does not need importing
+    requestHandler: { httpsAgent: { maxSockets: 200 } }
 });
 
 export const uploadFileToAws = async (fileName: string, filePath: string, contentType?: string): Promise<string | void> => {
@@ -99,7 +101,8 @@ export const getFileUrlFromAws = async (fileName: string, expireTime: number | n
 export const isFileAvailableInAwsBucket = async (fileName: string): Promise<boolean> => {
     try {
         // Check if the object exists
-        await s3Client.send(new GetObjectCommand({
+        // HeadObject only fetches metadata; GetObject opens a body stream that is never read here, which keeps the socket busy
+        await s3Client.send(new HeadObjectCommand({
             Bucket: process.env.AWS_BUCKET_NAME, // Specify the AWS S3 bucket name
             Key: fileName, // Specify the file name
         }));
