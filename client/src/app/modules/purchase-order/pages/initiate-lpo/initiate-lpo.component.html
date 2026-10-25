@@ -50,8 +50,8 @@
 
     <!-- step 1: supplier tabs, tick items and set the issue quantity (the shared item-entry layout) -->
     <app-lpo-item-entry *ngIf="step === 1 && supplierGroups.length" [tabs]="tabs" [activeKey]="activeGroup?.key || ''"
-      [lines]="linesOf(activeGroup)" [loading]="!!activeGroup && loadingLinesFor === activeGroup.key" [currency]="currency()" [discount]="discountOf(activeGroup)"
-      (tabSelected)="selectSupplierKey($event)" (historyClicked)="onHistory($event)"></app-lpo-item-entry>
+      [lines]="linesOf(activeGroup)" [loading]="!!activeGroup && loadingLinesFor === activeGroup.key" [currency]="currency()" [discount]="discountOf(activeGroup)" [uomOptions]="uomOptions"
+      (tabSelected)="selectSupplierKey($event)"></app-lpo-item-entry>
     <p *ngIf="step === 1 && !supplierGroups.length" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-erp-border-dark">No confirmed supplier on any item yet.</p>
 
     <!-- step 2: delivery details, terms and notes for the active supplier's LPO -->

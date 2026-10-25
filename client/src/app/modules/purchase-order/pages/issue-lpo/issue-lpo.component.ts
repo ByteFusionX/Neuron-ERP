@@ -711,7 +711,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
           error: (error) => {
             this.isCreatingPO.set(false);
             console.error('Error creating purchase order:', error);
-            this.notificationService.error('Failed to create Purchase Order. Please try again.');
+            this.notificationService.error(error?.error?.message || 'Failed to create Purchase Order. Please try again.');
           }
         })
       );

@@ -75,7 +75,7 @@
             <span class="w-4 shrink-0"></span>
             <div class="le-strip le-labels min-w-0 flex-1">
               <span>Item</span><span class="text-right">Total qty</span><span class="text-right">Issued</span><span class="text-right">Pending</span><span class="text-right">Remaining</span>
-              <span>Issue qty</span><span class="text-right">Unit price</span><span class="text-right">Total</span><span class="text-center">History</span>
+              <span>Issue qty</span><span>UoM</span><span class="text-right">Unit price</span><span class="text-right">Total</span>
             </div>
           </div>
 
@@ -87,7 +87,7 @@
                   [attr.aria-label]="'Select ' + line.item.detail"></app-sf-checkbox>
                 <div class="le-strip min-w-0 flex-1">
                   <div class="col-span-4 min-w-0 py-1.5 min-[900px]:col-span-1">
-                    <p class="whitespace-pre-line text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ line.item.detail }}</p>
+                    <p [title]="line.item.detail" class="line-clamp-2 whitespace-pre-line text-xs font-normal text-gray-900 dark:text-gray-100">{{ line.item.detail }}</p>
                     <p *ngIf="partNo(line)" class="text-xs text-gray-500">{{ partNo(line) }}</p>
                     <span *ngIf="!isOpen(line)" class="text-xs font-semibold text-orange-600">Fully issued</span>
                   </div>
@@ -101,12 +101,17 @@
                     <ng-template #noQty><div class="le-cell le-num" [class.text-gray-400]="!allIssued">{{ allIssued ? totalQty(line) : '-' }}</div></ng-template>
                     <p *ngIf="qtyError(line)" class="mt-1 text-[11px] text-red-600">{{ qtyError(line) }}</p>
                   </div>
-                  <div class="le-cell le-num" title="Unit price">{{ unitPrice(line) | number:'1.2-2' }}</div>
-                  <div class="le-cell le-num font-medium" title="Total">{{ (line.picked ? line.qty * unitPrice(line) : (allIssued ? totalQty(line) * unitPrice(line) : 0)) | number:'1.2-2' }}</div>
-                  <div class="flex items-center justify-center">
-                    <button type="button" (click)="historyClicked.emit(line)"
-                      class="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 dark:border-erp-border-dark dark:text-gray-200 dark:hover:bg-gray-800">View</button>
+                  <div>
+                    <app-sf-combobox *ngIf="line.picked; else noUom" [options]="uomOptions" [ngModel]="uom(line)" (ngModelChange)="setUom(line, $event)" placeholder="UoM"
+                      [attr.aria-label]="'UoM for ' + line.item.detail"></app-sf-combobox>
+                    <ng-template #noUom><div class="le-cell">{{ uom(line) || '-' }}</div></ng-template>
                   </div>
+                  <div>
+                    <app-sf-number *ngIf="line.picked; else noPrice" [min]="0" [stepper]="false" [ngModel]="unitPrice(line)" (ngModelChange)="setPrice(line, $event)"
+                      [attr.aria-label]="'Unit price for ' + line.item.detail"></app-sf-number>
+                    <ng-template #noPrice><div class="le-cell le-num" title="Unit price">{{ unitPrice(line) | number:'1.2-2' }}</div></ng-template>
+                  </div>
+                  <div class="le-cell le-num font-medium" title="Total">{{ (line.picked ? line.qty * unitPrice(line) : (allIssued ? totalQty(line) * unitPrice(line) : 0)) | number:'1.2-2' }}</div>
                 </div>
               </div>
             </ng-container>

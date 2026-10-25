@@ -1,29 +1,35 @@
 .po-meta {
+  padding: 0.625rem 0.75rem;
   min-width: 0;
 }
 
+.po-meta + .po-meta {
+  border-left: 1px solid #e5e7eb;
+}
+
 .po-meta-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
-  color: rgb(107 114 128);
+  font-size: 0.6875rem;
+  color: #6b7280;
 }
 
 .po-meta-value {
-  margin-top: 0.25rem;
+  margin-top: 0.125rem;
   overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #111827;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.86rem;
-  font-weight: 700;
-  color: rgb(17 24 39);
 }
 
-:host-context(.dark) .po-meta-label {
-  color: rgb(156 163 175);
+:host-context(html.dark) .po-meta + .po-meta {
+  border-left-color: #262626;
 }
 
-:host-context(.dark) .po-meta-value {
-  color: rgb(243 244 246);
+:host-context(html.dark) .po-meta-label {
+  color: #a1a1a1;
+}
+
+:host-context(html.dark) .po-meta-value {
+  color: #ededed;
 }

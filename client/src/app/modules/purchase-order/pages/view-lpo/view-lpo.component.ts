@@ -6,17 +6,20 @@ import { MatDialog } from '@angular/material/dialog';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { PlaceOrderModalComponent, PlaceOrderModalResult } from '../place-order-modal/place-order-modal.component';
 import { buildApprovalTimeline } from 'src/app/shared/utils/approval-timeline.util';
-import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
-import { ApproveDealComponent } from 'src/app/modules/deal-sheet/pages/approve-deal/approve-deal.component';
-import { PurchaseViewModalComponent } from 'src/app/shared/components/purchase-view-modal/purchase-view-modal.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { ActionMenuComponent, ActionMenuItem } from 'src/app/shared/components/action-menu/action-menu.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailMetricsComponent } from 'src/app/shared/components/detail-panel/detail-metrics.component';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
-import { DetailMetric, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import saveAs from 'file-saver';
+import { ModalService } from 'src/app/shared/components/modal';
+import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DocumentUploadModalComponent, DocumentUploadModalResult } from 'src/app/shared/components/detail-panel/document-upload-modal/document-upload-modal.component';
+import { DetailDocument, DetailMetric, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailViewBadge, DetailViewBreadcrumb, DetailViewShellComponent, DetailViewStat, DetailViewTab } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
 
 @Component({
@@ -25,9 +28,11 @@ import { DetailViewBadge, DetailViewBreadcrumb, DetailViewShellComponent, Detail
   imports: [
     CommonModule,
     ActionButtonComponent,
+    ActionMenuComponent,
     DetailTableComponent,
     DetailMetricsComponent,
     DetailTimelineComponent,
+    DetailDocumentsComponent,
     DetailViewShellComponent
   ],
   templateUrl: './view-lpo.component.html'
@@ -45,18 +50,123 @@ export class ViewLpoComponent implements OnInit {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
+  private modal = inject(ModalService);
   private confirmDialog = inject(ConfirmDialogService);
-  private quotationService = inject(QuotationService);
   private employeeService = inject(EmployeeService);
 
 
   // view model for the shared detail-view shell
   tab = 'items';
-  readonly tabs: DetailViewTab[] = [
-    { id: 'items', label: 'Items' },
-    { id: 'summary', label: 'Summary' },
-    { id: 'history', label: 'Approval history' },
+  // Cached: a getter returning a fresh array every change detection makes the shell's ngOnChanges
+  // re-sync from the URL on each cycle and snap the tab back to the default.
+  private tabsCache: DetailViewTab[] = [];
+  private tabsCacheDocs: boolean | null = null;
+  get tabs(): DetailViewTab[] {
+    const docs = this.showDocuments;
+    if (this.tabsCacheDocs !== docs) {
+      this.tabsCacheDocs = docs;
+      this.tabsCache = [
+        { id: 'items', label: 'Items' },
+        { id: 'summary', label: 'Summary' },
+        ...(docs ? [{ id: 'documents', label: 'Documents' }] : []),
+        { id: 'history', label: 'Approval history' },
+      ];
+    }
+    return this.tabsCache;
+  }
+
+  /** Documents are kept once the order is approved. */
+  get showDocuments(): boolean {
+    return ['Approved', 'Placed'].includes(this.lpo?.poStatus);
+  }
+
+  canManageDocuments(): boolean {
+    return this.showDocuments && (this.isSuperAdmin || this.canInitiateLPO());
+  }
+
+  isUploadingFiles = false;
+  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+
+  get documents(): DetailDocument[] {
+    return (this.lpo?.documents ?? []).map((file: any) => ({
+      id: file.fileName,
+      name: file.originalname || file.fileName,
+      kind: file.mimetype?.split('/').pop(),
+      size: file.size ? `${Math.max(1, Math.round(file.size / 1024))} KB` : undefined,
+      date: file.uploadedAt,
+    }));
+  }
+
+  documentRemoveDetails = (doc: DetailDocument) => [
+    { label: 'PO no', value: this.lpo?.poNo ?? '' },
+    { label: 'Supplier', value: this.supplier?.supplierName ?? '' },
+    { label: 'File Name', value: doc.name },
   ];
+
+  startDocumentUpload(): void {
+    if (!this.canManageDocuments()) return;
+    this.modal.open<DocumentUploadModalResult>(DocumentUploadModalComponent, {
+      width: '680px',
+      data: { context: this.lpo?.poNo || this.lpoId, acceptedFiles: this.acceptedFiles, title: 'Upload PO documents' },
+    }).afterClosed().subscribe((result) => {
+      if (result?.files?.length) this.uploadDocuments(result.files);
+    });
+  }
+
+  private uploadDocuments(files: File[]): void {
+    if (this.isUploadingFiles) return;
+    this.isUploadingFiles = true;
+    this.purchaseOrderService.addPurchaseOrderDocuments(this.lpoId, files).subscribe({
+      next: (res) => {
+        this.lpo = { ...this.lpo, documents: res.data?.documents ?? this.lpo.documents };
+        this.isUploadingFiles = false;
+        this.notificationService.success('Files uploaded successfully');
+      },
+      error: (error) => {
+        this.isUploadingFiles = false;
+        this.notificationService.error(error.error?.message || 'Failed to upload files');
+      },
+    });
+  }
+
+  onDocumentRemove(doc: DetailDocument): void {
+    this.purchaseOrderService.removePurchaseOrderDocument(this.lpoId, doc.id).subscribe({
+      next: (res) => {
+        this.lpo = { ...this.lpo, documents: res.data?.documents ?? this.documents.filter((d) => d.id !== doc.id) };
+        this.notificationService.success('File deleted');
+      },
+      error: (error) => this.notificationService.error(error.error?.message || 'Failed to delete file'),
+    });
+  }
+
+  private fetchDocument(doc: DetailDocument, then: (blob: Blob) => void): void {
+    this.purchaseOrderService.getFile(doc.id).subscribe({
+      next: then,
+      error: (error) => {
+        if (error.status === 404) this.notificationService.warning('The file was not found on the server.');
+        else this.notificationService.error('An error occurred while opening the file.');
+      },
+    });
+  }
+
+  private static readonly PREVIEW_MIME: Record<string, string> = {
+    pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    webp: 'image/webp', svg: 'image/svg+xml', txt: 'text/plain',
+  };
+
+  onDocumentOpen(doc: DetailDocument): void {
+    this.fetchDocument(doc, (blob) => {
+      // S3 often serves octet-stream, which makes the browser download instead of preview.
+      const mime = ViewLpoComponent.PREVIEW_MIME[doc.id.split('.').pop()?.toLowerCase() ?? ''];
+      const url = window.URL.createObjectURL(mime ? new Blob([blob], { type: mime }) : blob);
+      window.open(url, '_blank');
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    });
+  }
+
+  onDocumentDownload(doc: DetailDocument): void {
+    this.fetchDocument(doc, (blob) => saveAs(blob, doc.name));
+  }
 
   private static readonly STATUS_TONES: Record<string, 'good' | 'warn' | 'bad' | 'neutral'> = {
     'Approved': 'good', 'Placed': 'good', 'Closed': 'good', 'Cancelled': 'bad', 'Pending for Approval': 'warn', 'Rejected': 'bad', 'Draft': 'neutral',
@@ -131,6 +241,7 @@ export class ViewLpoComponent implements OnInit {
           { type: 'field', label: 'Payment terms', value: l.paymentTerms || '-' },
           { type: 'field', label: 'Place of delivery', value: l.placeOfDelivery || '-' },
           { type: 'field', label: 'Shipping terms', value: l.shippingTerms || '-' },
+          ...(l.expectedDeliveryDate ? [{ type: 'field' as const, label: 'Expected delivery', value: new Date(l.expectedDeliveryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }] : []),
         ],
       },
     ];
@@ -281,112 +392,58 @@ export class ViewLpoComponent implements OnInit {
     return subtotal - discount;
   }
 
-  /**
-   * Open quotation preview (PDF) for the current LPO's quote reference.
-   */
-  onViewQuote(): void {
-    let quoteData: any =
-      this.lpo?.quoteId ||
-      this.purchase?.jobId?.quoteId;
+  isPreviewing = false;
+  isDownloading = false;
+  isDownloadingStamped = false;
 
-    if (!quoteData) {
-      this.notificationService.error('Quotation details not available');
-      return;
+  /** PDF actions live in the More menu, same as the quotation view. */
+  get moreItems(): ActionMenuItem[] {
+    return [
+      { id: 'preview', label: this.isPreviewing ? 'Preparing…' : 'Preview PDF', disabled: !this.lpo || this.isPreviewing },
+      { id: 'stamped', label: this.isDownloadingStamped ? 'Generating…' : 'Download stamped PDF', disabled: !this.lpo || this.isDownloadingStamped },
+      { id: 'pdf', label: this.isDownloading ? 'Generating…' : 'Download PDF', disabled: !this.lpo || this.isDownloading },
+    ];
+  }
+
+  onMenu(id: string): void {
+    switch (id) {
+      case 'preview': this.onPreviewPdf(); break;
+      case 'stamped': this.onDownloadPdf(true); break;
+      case 'pdf': this.onDownloadPdf(false); break;
     }
+  }
 
-    // Ensure the quotation has the enriched relational data expected by the PDF generator
-    if (this.lpo?.quoteId) {
-      quoteData = {
-        ...quoteData,
-        client: this.lpo.quoteId.client || quoteData.client,
-        createdBy: this.lpo.quoteId.createdBy || quoteData.createdBy,
-        attention: this.lpo.quoteId.attention || quoteData.attention,
-        department: this.lpo.quoteId.department || quoteData.department
-      };
-    }
+  onDownloadPdf(includeStamp: boolean): void {
+    const po = this.lpo;
+    if (!po) return;
+    if (includeStamp) this.isDownloadingStamped = true;
+    else this.isDownloading = true;
+    this.purchaseService.generatePDF(po, includeStamp)
+      .then((pdf) => pdf.download(`${String(po.poNo || 'purchase-order').replace(/[^a-zA-Z0-9._-]+/g, '_')}.pdf`))
+      .catch(() => this.notificationService.error('Error generating PDF. Please try again.'))
+      .finally(() => {
+        if (includeStamp) this.isDownloadingStamped = false;
+        else this.isDownloading = false;
+      });
+  }
 
-    const pdfDoc = this.quotationService.generatePDF(quoteData, true);
-    pdfDoc.then((pdf) => {
-      pdf.getBlob((blob: Blob) => {
-        const url = window.URL.createObjectURL(blob);
-        this.dialog.open(PdfPreviewComponent, {
-          data: { url, formatedQuote: quoteData }
+  onPreviewPdf(): void {
+    const po = this.lpo;
+    if (!po) return;
+    this.isPreviewing = true;
+    this.purchaseService.generatePDF(po, false)
+      .then((pdf) => {
+        pdf.getBlob((blob: Blob) => {
+          this.isPreviewing = false;
+          this.dialog.open(PdfPreviewComponent, { data: { url: window.URL.createObjectURL(blob), formatedQuote: po, type: 'purchase' } });
         });
+      })
+      .catch(() => {
+        this.isPreviewing = false;
+        this.notificationService.error('Error generating PDF. Please try again.');
       });
-    });
   }
 
-  /**
-   * Open deal sheet for the current Job (based on the linked quotation).
-   * This mirrors the behaviour from job-sheet open-to-work.
-   */
-  onViewDealSheet(): void {
-    let quoteData: any =
-      this.lpo?.quoteId ||
-      this.purchase?.jobId?.quoteId;
-
-    if (!quoteData?.dealData?.updatedItems) {
-      this.notificationService.error('Deal sheet data not available');
-      return;
-    }
-
-    // Enrich quoteData with client and salesperson details for the deal sheet header
-    if (this.lpo?.quoteId) {
-      quoteData = {
-        ...quoteData,
-        client: this.lpo.quoteId.client || quoteData.client,
-        createdBy: this.lpo.quoteId.createdBy || quoteData.createdBy
-      };
-    }
-
-    const priceDetails = {
-      totalSellingPrice: 0,
-      totalCost: 0,
-      profit: 0,
-      perc: 0
-    };
-
-    const quoteItems = quoteData.dealData.updatedItems.map((item: any) => {
-      let itemSelected = 0;
-
-      item.itemDetails.map((itemDetail: any) => {
-        if (itemDetail.dealSelected) {
-          itemSelected++;
-          priceDetails.totalSellingPrice += itemDetail.unitSellingPrice * itemDetail.quantity;
-          priceDetails.totalCost += itemDetail.quantity * itemDetail.unitCost;
-          return itemDetail;
-        }
-        return;
-      });
-
-      if (itemSelected) return item;
-      return;
-    });
-
-    if (Array.isArray(quoteData.dealData.additionalCosts)) {
-      quoteData.dealData.additionalCosts.forEach((cost: any) => {
-        if (cost.type === 'Additional Cost') {
-          priceDetails.totalCost += cost.value;
-        } else if (cost.type === 'Supplier Discount') {
-          priceDetails.totalCost -= cost.value;
-        } else if (cost.type === 'Customer Discount') {
-          priceDetails.totalSellingPrice -= cost.value;
-        } else {
-          priceDetails.totalCost += cost.value;
-        }
-      });
-    }
-
-    priceDetails.profit = priceDetails.totalSellingPrice - priceDetails.totalCost;
-    priceDetails.perc = priceDetails.totalSellingPrice
-      ? (priceDetails.profit / priceDetails.totalSellingPrice) * 100
-      : 0;
-
-    this.dialog.open(ApproveDealComponent, {
-      data: { approval: false, quoteData, quoteItems, priceDetails },
-      width: '1200x'
-    });
-  }
 
   onBack(): void {
     this.router.navigate(['/purchase/po'], { queryParams: { view: 'pending' } });
@@ -454,40 +511,40 @@ export class ViewLpoComponent implements OnInit {
 
   /** Placing is manual, by someone who can issue LPOs, once the LPO is approved. */
   canPlace(): boolean {
-    return this.lpo?.poStatus === 'Approved' && this.canInitiateLPO();
+    return this.lpo?.poStatus === 'Approved' && (this.isSuperAdmin || this.canInitiateLPO());
   }
 
-  async onPlace(): Promise<void> {
+  onPlace(): void {
     if (!this.canPlace()) return;
-    const { confirmed } = await this.confirmDialog.open({
-      tone: 'approve',
-      title: 'Place order',
-      message: 'Confirm the order has been sent to the supplier. Goods can be received against it after this.',
-      details: [
-        { label: 'PO no', value: this.lpo?.poNo || '-' },
-        { label: 'Supplier', value: this.supplier?.supplierName || '-' },
-        { label: 'Total', value: this.formatCurrency(this.getTotalAfterDiscount()) },
-      ],
-      confirmLabel: 'Place order',
-    });
-    if (!confirmed) return;
-
-    this.isPlacing = true;
-    this.purchaseOrderService.placePurchaseOrder(this.lpoId).subscribe({
-      next: () => {
-        this.notificationService.success('Order placed');
-        this.isPlacing = false;
-        this.loadLpo();
+    const contacts: any[] = this.supplier?.contacts || [];
+    this.modal.open<PlaceOrderModalResult>(PlaceOrderModalComponent, {
+      width: '560px',
+      data: {
+        context: this.lpo?.poNo || this.lpoId,
+        supplierName: this.supplier?.supplierName,
+        amount: this.formatCurrency(this.getTotalAfterDiscount()),
+        contactOptions: contacts.map((c) => ({ label: [c.name, c.designation].filter(Boolean).join(' · '), value: String(c._id) })),
       },
-      error: (error) => {
-        this.notificationService.error(error.error?.message || 'Failed to place the order');
-        this.isPlacing = false;
-      }
+    }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this.isPlacing = true;
+      this.purchaseOrderService.placePurchaseOrder(this.lpoId, result.expectedDeliveryDate, result.contactId, result.note).subscribe({
+        next: () => {
+          this.notificationService.success('Order placed');
+          this.isPlacing = false;
+          this.loadLpo();
+        },
+        error: (error) => {
+          this.notificationService.error(error.error?.message || 'Failed to place the order');
+          this.isPlacing = false;
+        }
+      });
     });
   }
 
   canApproveOrReject(): boolean {
-    return this.lpo?.poStatus === 'Pending for Approval' && this.canApprovePOs() && (this.isSuperAdmin || !this.isOwnLpo()) && this.isMyTurn();
+    if (this.lpo?.poStatus !== 'Pending for Approval') return false;
+    return this.isSuperAdmin || (this.canApprovePOs() && !this.isOwnLpo() && this.isMyTurn());
   }
 
   get approvalSteps(): any[] {
@@ -516,22 +573,6 @@ export class ViewLpoComponent implements OnInit {
   stepActor(step: any): string {
     const by = step.updatedBy;
     return by ? `${by.firstName ?? ''} ${by.lastName ?? ''}`.trim() : '';
-  }
-
-  onViewPurchase(): void {
-    if (!this.purchase) {
-      this.notificationService.error('Purchase details not available');
-      return;
-    }
-
-    this.dialog.open(PurchaseViewModalComponent, {
-      data: {
-        purchase: this.purchase
-      },
-      width: '1400px',
-      maxHeight: '90vh',
-      panelClass: 'purchase-view-modal'
-    });
   }
 
   itemRows(): Record<string, any>[] {

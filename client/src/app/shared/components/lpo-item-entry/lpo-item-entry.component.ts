@@ -11,6 +11,7 @@ import {
   lineRemaining,
   lineTotalQty,
   lineUnitPrice,
+  lineUom,
 } from './lpo-item-entry.model';
 
 type LpoFilter = 'selected' | 'unselected' | 'errors' | 'issued';
@@ -30,11 +31,11 @@ type LpoFilter = 'selected' | 'unselected' | 'errors' | 'issued';
     :host { display: block; }
     .le-strip { display: grid; gap: 0.375rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
     @media (min-width: 900px) {
-      .le-strip { grid-template-columns: minmax(0, 5fr) repeat(4, minmax(0, 1.2fr)) minmax(0, 1.6fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1fr); }
+      .le-strip { grid-template-columns: minmax(0, 5fr) repeat(4, minmax(0, 1.2fr)) minmax(0, 1.6fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.6fr); }
     }
     .le-labels { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.03em; color: #9ca3af; }
     :host-context(html.dark) .le-labels { color: #6b7280; }
-    .le-cell { display: flex; align-items: center; min-height: 2.25rem; border-radius: 0.5rem; padding: 0 0.5rem; font-size: 0.75rem; font-variant-numeric: tabular-nums; background: #f9fafb; color: #111827; }
+    .le-cell { display: flex; align-items: center; align-self: start; height: 2.25rem; border-radius: 0.5rem; padding: 0 0.5rem; font-size: 0.75rem; font-variant-numeric: tabular-nums; background: #f9fafb; color: #111827; }
     :host-context(html.dark) .le-cell { background: rgba(31, 41, 55, 0.5); color: #f3f4f6; }
     .le-num { justify-content: flex-end; }
   `],
@@ -50,7 +51,8 @@ export class LpoItemEntryComponent implements OnChanges {
   @Input() discount = 0;
 
   @Output() tabSelected = new EventEmitter<string>();
-  @Output() historyClicked = new EventEmitter<LpoIssueLine>();
+  /** Units of measure offered on each line. */
+  @Input() uomOptions: SfOption[] = [];
 
   supplierOptions: SfOption[] = [];
 
@@ -61,6 +63,7 @@ export class LpoItemEntryComponent implements OnChanges {
 
   readonly remaining = lineRemaining;
   readonly unitPrice = lineUnitPrice;
+  readonly uom = lineUom;
   readonly isOpen = lineIsOpen;
   readonly qtyError = lineQtyError;
   readonly totalQty = lineTotalQty;
@@ -186,6 +189,15 @@ export class LpoItemEntryComponent implements OnChanges {
   setQty(line: LpoIssueLine, value: any): void {
     const n = value === '' || value === null ? 0 : Number(value);
     line.qty = isNaN(n) ? 0 : n;
+  }
+
+  setUom(line: LpoIssueLine, value: any): void {
+    line.uom = value ?? '';
+  }
+
+  setPrice(line: LpoIssueLine, value: any): void {
+    const n = value === '' || value === null ? 0 : Number(value);
+    line.price = isNaN(n) ? 0 : n;
   }
 
   partNo(line: LpoIssueLine): string {

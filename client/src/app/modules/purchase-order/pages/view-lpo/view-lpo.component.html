@@ -18,10 +18,8 @@
     (activeTabChange)="tab = $event"
     [sections]="sidebarSections"
   >
-    <ng-container footerLeft>
-      <app-action-button variant="outline" *ngIf="purchase?.purchaseNo" (click)="onViewPurchase()">PR {{ purchase.purchaseNo }}</app-action-button>
-      <app-action-button variant="outline" *ngIf="purchase?.jobId?.quoteId?.quoteId || lpo?.quoteId?.quoteId" (click)="onViewQuote()">Quote {{ purchase?.jobId?.quoteId?.quoteId || lpo?.quoteId?.quoteId }}</app-action-button>
-      <app-action-button variant="outline" *ngIf="purchase?.jobId?.jobId || lpo?.jobId?.jobId" (click)="onViewDealSheet()">Deal sheet</app-action-button>
+    <ng-container headerActions>
+      <app-action-menu [items]="moreItems" (selected)="onMenu($event)"></app-action-menu>
     </ng-container>
 
     <ng-container footerRight>
@@ -35,7 +33,7 @@
 
     <div tabBody [ngSwitch]="tab">
       <div *ngSwitchCase="'items'" class="space-y-6">
-        <p *ngIf="lpo?.poStatus === 'Pending for Approval' && canApprovePOs() && (isSuperAdmin || !isOwnLpo()) && !isMyTurn()" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+        <p *ngIf="lpo?.poStatus === 'Pending for Approval' && (isSuperAdmin || canApprovePOs()) && (isSuperAdmin || !isOwnLpo()) && !isMyTurn()" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
           Waiting for the current approval stage — it is not your turn to decide yet.
         </p>
         <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows()" [currency]="currency()" numbered showTotals spread emptyMessage="No items"></app-detail-table>
@@ -48,6 +46,16 @@
           <p class="whitespace-pre-line text-sm text-gray-800 dark:text-gray-200">{{ lpo.termsAndCondition }}</p>
         </div>
       </div>
+
+      <app-detail-documents *ngSwitchCase="'documents'"
+        [documents]="documents"
+        [uploadable]="canManageDocuments() && !isUploadingFiles"
+        [removable]="canManageDocuments()"
+        [removeDetails]="documentRemoveDetails"
+        (upload)="startDocumentUpload()"
+        (open)="onDocumentOpen($event)"
+        (download)="onDocumentDownload($event)"
+        (remove)="onDocumentRemove($event)"></app-detail-documents>
 
       <div *ngSwitchCase="'history'">
         <app-detail-timeline [entries]="historyEntries" emptyMessage="No approval steps recorded for this LPO."></app-detail-timeline>

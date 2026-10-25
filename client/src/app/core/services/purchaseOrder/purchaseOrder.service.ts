@@ -18,7 +18,7 @@ export class PurchaseOrderService {
   constructor(private http: HttpClient) {}
 
   createPurchaseOrder(purchaseOrder: PurchaseOrder): Observable<any> {
-    return this.http.post<any>(this.baseUrl, purchaseOrder);
+    return this.http.post<any>(this.baseUrl, purchaseOrder, { context: context() });
   }
 
   updatePurchaseOrder(id: string, purchaseOrder: PurchaseOrder): Observable<PurchaseOrder> {
@@ -41,6 +41,8 @@ export class PurchaseOrderService {
     purchaseId?: string;
     jobId?: string;
     receiptStatus?: string;
+    vendorBills?: boolean;
+    readyToDeliver?: boolean;
   }): Observable<any> {
     let httpParams = new HttpParams();
     if (params?.page !== undefined) httpParams = httpParams.set('page', params.page);
@@ -49,6 +51,8 @@ export class PurchaseOrderService {
     if (params?.purchaseId) httpParams = httpParams.set('purchaseId', params.purchaseId);
     if (params?.jobId) httpParams = httpParams.set('jobId', params.jobId);
     if (params?.receiptStatus) httpParams = httpParams.set('receiptStatus', params.receiptStatus);
+    if (params?.vendorBills) httpParams = httpParams.set('vendorBills', 'true');
+    if (params?.readyToDeliver) httpParams = httpParams.set('readyToDeliver', 'true');
     params?.status?.forEach((status) => {
       httpParams = httpParams.append('status', status);
     });
@@ -96,8 +100,22 @@ export class PurchaseOrderService {
   }
 
   /** Approved → Placed: the order has been sent to the supplier. */
-  placePurchaseOrder(id: string): Observable<any> {
-    return this.http.patch<any>(`${this.baseUrl}/${id}/place`, {}, { context: context() });
+  addPurchaseOrderDocuments(id: string, files: File[]): Observable<any> {
+    const formData = new FormData();
+    files.forEach((file) => formData.append('files', file));
+    return this.http.patch<any>(`${this.baseUrl}/${id}/documents`, formData, { context: context() });
+  }
+
+  removePurchaseOrderDocument(id: string, fileName: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/${id}/documents/${encodeURIComponent(fileName)}`, { context: context() });
+  }
+
+  getFile(fileName: string): Observable<Blob> {
+    return this.http.get(`${environment.api}/file/${encodeURIComponent(fileName)}`, { responseType: 'blob' });
+  }
+
+  placePurchaseOrder(id: string, expectedDeliveryDate: string, contactId?: string, note?: string): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${id}/place`, { expectedDeliveryDate, contactId: contactId || undefined, note: note || undefined }, { context: context() });
   }
 
   rejectPurchaseOrder(id: string, comment?: string): Observable<any> {
@@ -111,5 +129,15 @@ export class PurchaseOrderService {
 
   revokePurchaseOrder(id: string): Observable<any> {
     return this.http.delete<any>(`${this.baseUrl}/${id}/revoke`, { context: context() });
+  }
+
+  /** Per PO line: received so far and what a cancel can still take off. */
+  getCancellable(id: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/${id}/cancellable`, { context: context() });
+  }
+
+  /** Cancels the given quantities (`lines: [{ index, qty }]`), or everything not received when `lines` is left out. */
+  cancelPurchaseOrder(id: string, reason: string, lines?: { index: number; qty: number }[]): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/${id}/cancel`, { reason, ...(lines ? { lines } : {}) }, { context: context() });
   }
 }

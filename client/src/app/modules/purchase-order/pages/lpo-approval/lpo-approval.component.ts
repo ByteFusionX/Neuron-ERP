@@ -16,19 +16,27 @@ import {
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DetailDocument, DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import saveAs from 'file-saver';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ModalService } from 'src/app/shared/components/modal';
+import { DocumentUploadModalComponent, DocumentUploadModalResult } from 'src/app/shared/components/detail-panel/document-upload-modal/document-upload-modal.component';
 import { ResetWorkflowComponent, ResetWorkflowModalData } from 'src/app/modules/presales/pages/reset-workflow/reset-workflow.component';
 import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { PlaceOrderModalComponent, PlaceOrderModalResult } from '../place-order-modal/place-order-modal.component';
+import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
+import { MatDialog } from '@angular/material/dialog';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 
 const ALL_STATUSES = ['Pending for Approval', 'Approved', 'Placed', 'Closed', 'Rejected'];
 const PENDING_STATUSES = ['Pending for Approval'];
-const APPROVED_STATUSES = ['Approved', 'Placed'];
-const CLOSED_STATUSES = ['Closed'];
+const APPROVED_STATUSES = ['Approved'];
+/** Placed by an employee after approval; Closed POs stay here until a GRN view exists. */
+const PLACED_STATUSES = ['Placed', 'Closed'];
 const REJECTED_STATUSES = ['Rejected'];
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
@@ -55,7 +63,7 @@ const statusLabel = (status: string) => status === 'Pending for Approval' ? 'Pen
 @Component({
   selector: 'app-lpo-approval',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, ActionButtonComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailDocumentsComponent, ActionButtonComponent],
   providers: [DatePipe],
   templateUrl: './lpo-approval.component.html',
   styleUrl: './lpo-approval.component.css',
@@ -72,9 +80,14 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   private workflowService = inject(WorkflowService);
   private employeeService = inject(EmployeeService);
   private confirmDialog = inject(ConfirmDialogService);
+  private purchaseService = inject(PurchaseService);
+  private dialog = inject(MatDialog);
   private poWorkflowSteps: { id: string; label: string }[] = [];
   isSuperAdmin = false;
   canInitiateLPO = false;
+  canApprovePOs = false;
+  private currentEmployeeId: string | null = null;
+  private currentCategoryId: string | null = null;
   private subscriptions = new Subscription();
 
   rows: any[] = [];
@@ -92,8 +105,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     { id: 'all', label: 'All' },
     { id: 'pending', label: 'Pending' },
     { id: 'approved', label: 'Approved' },
-    { id: 'partiallyReceived', label: 'Partially Received' },
-    { id: 'closed', label: 'Completed' },
+    { id: 'placed', label: 'Placed' },
     { id: 'rejected', label: 'Rejected' },
   ];
   columns: DataGridColumn<any>[] = [];
@@ -101,7 +113,11 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
+    { id: 'documents', label: 'Documents', icon: 'files' },
   ];
+
+  isUploadingFiles = false;
+  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
 
   readonly itemColumns: DetailTableColumn[] = [
     { key: 'item', label: 'Item' },
@@ -124,6 +140,9 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
       this.employeeService.employeeData$.subscribe((employee: any) => {
         this.isSuperAdmin = /^superadmin$/i.test(employee?.category?.role ?? '');
         this.canInitiateLPO = !!employee?.category?.privileges?.purchaseOrder?.canInitiateLPO;
+        this.canApprovePOs = !!employee?.category?.privileges?.purchaseOrder?.canApprovePOs;
+        this.currentEmployeeId = employee?._id ?? null;
+        this.currentCategoryId = employee?.category?._id ?? null;
       })
     );
     this.subscriptions.add(
@@ -143,6 +162,8 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     this.columns = [
       { key: 'poDate', label: 'Date', type: 'date', sortable: true, width: '120px' },
       { key: 'poNo', label: 'PO No', sortable: true, locked: true },
+      { key: 'poStatus', label: 'Status', type: 'badge', align: 'center', badgeClasses: STATUS_BADGE_CLASSES, badgeLabel: statusLabel },
+      { key: 'receiptStatus', label: 'Receipt', type: 'badge', align: 'center', badgeClasses: RECEIPT_BADGE_CLASSES },
       { key: 'supplier', label: 'Supplier', sortable: true, valueGetter: (row) => row.supplierId?.supplierName || '-' },
       { key: 'jobId', label: 'Job ID', sortable: true, valueGetter: (row) => row.jobId?.jobId || '-' },
       {
@@ -154,16 +175,19 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
       },
       { key: 'createdBy', label: 'Prepared By', valueGetter: (row) => this.personName(row.createdBy) },
       { key: 'customer', label: 'Customer', sortable: true, valueGetter: (row) => row.purchaseId?.customerId?.companyName || '-' },
-      { key: 'receiptStatus', label: 'Receipt', type: 'badge', align: 'center', badgeClasses: RECEIPT_BADGE_CLASSES },
-      { key: 'poStatus', label: 'Status', type: 'badge', align: 'center', badgeClasses: STATUS_BADGE_CLASSES, badgeLabel: statusLabel },
     ];
   }
 
   private buildRowActions(): void {
     this.rowActions = [
       { id: 'openFullLpo', label: 'Open full PO', icon: 'eye', quick: true, panel: true },
+      { id: 'approve', label: 'Approve', icon: 'check', quick: true, hidden: (r) => !this.canApproveOrReject(r) },
+      { id: 'reject', label: 'Reject', icon: 'close', quick: true, hidden: (r) => !this.canApproveOrReject(r) },
+      { id: 'previewPdf', label: 'Preview PDF', icon: 'eye' },
+      { id: 'downloadPdf', label: 'Download PDF', icon: 'download' },
       { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', quick: true, hidden: (r) => r.poStatus !== 'Pending for Approval' || !this.isSuperAdmin },
       { id: 'place', label: 'Place order', icon: 'check', quick: true, hidden: (r) => r.poStatus !== 'Approved' || !this.canInitiateLPO },
+      { id: 'uploadDocuments', label: 'Upload documents', icon: 'upload', quick: true, hidden: (r) => !['Approved', 'Placed'].includes(r.poStatus) || !(this.isSuperAdmin || this.canInitiateLPO) },
     ];
   }
 
@@ -193,19 +217,13 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
         return PENDING_STATUSES;
       case 'approved':
         return APPROVED_STATUSES;
-      case 'partiallyReceived':
-        return ['Placed', 'Closed'];
-      case 'closed':
-        return CLOSED_STATUSES;
+      case 'placed':
+        return PLACED_STATUSES;
       case 'rejected':
         return REJECTED_STATUSES;
       default:
         return ALL_STATUSES;
     }
-  }
-
-  private receiptStatusForView(viewId: string): string | undefined {
-    return viewId === 'partiallyReceived' ? 'Partially Received' : undefined;
   }
 
   onQueryChange(query: DataGridQuery): void {
@@ -225,7 +243,6 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
         row: this.row,
         search: this.searchQuery || undefined,
         status: this.statusesForView(this.activeViewId),
-        receiptStatus: this.receiptStatusForView(this.activeViewId),
       }).subscribe({
         next: (response) => {
           if (response.success) {
@@ -252,7 +269,6 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
         row: 1,
         search: this.searchQuery || undefined,
         status: this.statusesForView(view.id),
-        receiptStatus: this.receiptStatusForView(view.id),
       });
       return acc;
     }, {} as Record<string, ReturnType<PurchaseOrderService['getAllPurchaseOrders']>>);
@@ -279,28 +295,203 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     if (event.action.id === 'openFullLpo') this.openFullLpo(event.row);
     if (event.action.id === 'resetWorkflow') this.resetWorkflow(event.row);
     if (event.action.id === 'place') this.placeOrder(event.row);
+    if (event.action.id === 'uploadDocuments') this.uploadDocuments(event.row);
+    if (event.action.id === 'approve') this.approve(event.row);
+    if (event.action.id === 'reject') this.reject(event.row);
+    if (event.action.id === 'previewPdf') this.openPdf(event.row, true);
+    if (event.action.id === 'downloadPdf') this.openPdf(event.row, false);
   }
 
-  async placeOrder(row: any): Promise<void> {
-    const { confirmed } = await this.confirmDialog.open({
+  /** Same rule as the PO view page: approver privilege, not your own PO (unless superadmin), and your workflow stage is the one waiting. */
+  canApproveOrReject(row: any): boolean {
+    if (row?.poStatus !== 'Pending for Approval') return false;
+    if (this.isSuperAdmin) return true;
+    if (!this.canApprovePOs) return false;
+    const createdById = row.createdBy?._id || row.createdBy;
+    if (createdById && createdById === this.currentEmployeeId) return false;
+    const steps = [...(row.approvalStatus || [])].sort((a: any, b: any) => a.step - b.step);
+    if (!steps.length || this.isSuperAdmin) return true;
+    const pending = steps.filter((a: any) => a.status === 'pending');
+    return pending.filter((a: any) => a.step === pending[0]?.step).some((a: any) =>
+      a.managerApproval ? String(a.approver) === this.currentEmployeeId : String(a.role?._id || a.role) === this.currentCategoryId
+    );
+  }
+
+  async approve(row: any): Promise<void> {
+    const { confirmed, reason } = await this.confirmDialog.open({
       tone: 'approve',
-      title: 'Place order',
-      message: 'Confirm the order has been sent to the supplier. Goods can be received against it after this.',
+      title: 'Approve PO',
+      message: (row.approvalStatus || []).filter((a: any) => a.status === 'pending').length > 1 && !this.isSuperAdmin
+        ? 'Your approval moves this PO on to the next approval stage.'
+        : 'This PO will be approved and can then be placed with the supplier.',
       details: [
         { label: 'PO no', value: row.poNo || '-' },
         { label: 'Supplier', value: row.supplierId?.supplierName || '-' },
         { label: 'Total', value: this.formatAmount(row) },
       ],
-      confirmLabel: 'Place order',
+      confirmLabel: 'Approve',
+      reason: 'optional',
+      reasonLabel: 'Approval comment',
     });
     if (!confirmed) return;
-    this.purchaseOrderService.placePurchaseOrder(row._id).subscribe({
+    this.purchaseOrderService.approvePurchaseOrder(row._id, reason ?? '').subscribe({
       next: () => {
-        this.notificationService.success('Order placed');
+        this.notificationService.success('PO approved');
         this.loadData();
       },
-      error: (error) => this.notificationService.error(error.error?.message || 'Failed to place the order'),
+      error: (error) => this.notificationService.error(error.error?.message || 'Failed to approve the PO'),
     });
+  }
+
+  async reject(row: any): Promise<void> {
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'reject',
+      title: 'Reject PO',
+      message: 'This PO will be sent back to the person who raised it.',
+      details: [{ label: 'PO no', value: row.poNo || '-' }, { label: 'Supplier', value: row.supplierId?.supplierName || '-' }],
+      confirmLabel: 'Reject',
+      reason: true,
+      reasonLabel: 'Rejection reason',
+    });
+    if (!confirmed) return;
+    this.purchaseOrderService.rejectPurchaseOrder(row._id, reason ?? '').subscribe({
+      next: () => {
+        this.notificationService.success('PO rejected');
+        this.loadData();
+      },
+      error: (error) => this.notificationService.error(error.error?.message || 'Failed to reject the PO'),
+    });
+  }
+
+  /** The list row isn't fully populated (supplier contacts, quote, terms), so the PO is loaded in full first. */
+  private openPdf(row: any, preview: boolean): void {
+    this.purchaseOrderService.getPurchaseOrderById(row._id).subscribe({
+      next: (response: any) => {
+        const po = response?.success ? response.data : response;
+        this.purchaseService.generatePDF(po, false)
+          .then((pdf) => {
+            if (!preview) {
+              pdf.download(`${String(po.poNo || 'purchase-order').replace(/[^a-zA-Z0-9._-]+/g, '_')}.pdf`);
+              return;
+            }
+            pdf.getBlob((blob: Blob) => {
+              this.dialog.open(PdfPreviewComponent, { data: { url: window.URL.createObjectURL(blob), formatedQuote: po, type: 'purchase' } });
+            });
+          })
+          .catch(() => this.notificationService.error('Error generating PDF. Please try again.'));
+      },
+      error: () => this.notificationService.error('Failed to load the PO'),
+    });
+  }
+
+  placeOrder(row: any): void {
+    const contacts: any[] = row.supplierId?.contacts || [];
+    this.modal.open<PlaceOrderModalResult>(PlaceOrderModalComponent, {
+      width: '560px',
+      data: {
+        context: row.poNo || row._id,
+        supplierName: row.supplierId?.supplierName,
+        amount: this.formatAmount(row),
+        contactOptions: contacts.map((c) => ({ label: [c.name, c.designation].filter(Boolean).join(' · '), value: String(c._id) })),
+      },
+    }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this.purchaseOrderService.placePurchaseOrder(row._id, result.expectedDeliveryDate, result.contactId, result.note).subscribe({
+        next: () => {
+          this.notificationService.success('Order placed');
+          this.loadData();
+        },
+        error: (error) => this.notificationService.error(error.error?.message || 'Failed to place the order'),
+      });
+    });
+  }
+
+  /** Documents are kept once the order is approved. */
+  canManageDocuments(row: any): boolean {
+    return ['Approved', 'Placed'].includes(row?.poStatus) && (this.isSuperAdmin || this.canInitiateLPO);
+  }
+
+  /** Opens the upload modal over the row's documents tab. */
+  uploadDocuments(row: any): void {
+    if (!this.canManageDocuments(row)) return;
+    this.grid?.openRow(row, 'documents');
+    this.modal.open<DocumentUploadModalResult>(DocumentUploadModalComponent, {
+      width: '680px',
+      data: { context: row.poNo || row._id, acceptedFiles: this.acceptedFiles, title: 'Upload PO documents' },
+    }).afterClosed().subscribe((result) => {
+      if (result?.files?.length) this.saveDocuments(row, result.files);
+    });
+  }
+
+  private saveDocuments(row: any, files: File[]): void {
+    if (this.isUploadingFiles) return;
+    this.isUploadingFiles = true;
+    this.purchaseOrderService.addPurchaseOrderDocuments(row._id, files).subscribe({
+      next: (res) => {
+        row.documents = res.data?.documents ?? row.documents;
+        this.isUploadingFiles = false;
+        this.notificationService.success('Files uploaded successfully');
+      },
+      error: (error) => {
+        this.isUploadingFiles = false;
+        this.notificationService.error(error.error?.message || 'Failed to upload files');
+      },
+    });
+  }
+
+  poDocuments(row: any): DetailDocument[] {
+    return (row?.documents ?? []).map((file: any) => ({
+      id: file.fileName,
+      name: file.originalname || file.fileName,
+      kind: file.mimetype?.split('/').pop(),
+      size: file.size ? `${Math.max(1, Math.round(file.size / 1024))} KB` : undefined,
+      date: file.uploadedAt,
+    }));
+  }
+
+  documentRemoveDetails = (row: any) => (doc: DetailDocument) => [
+    { label: 'PO no', value: row?.poNo ?? '' },
+    { label: 'Supplier', value: row?.supplierId?.supplierName ?? '' },
+    { label: 'File Name', value: doc.name },
+  ];
+
+  onDocumentRemove(row: any, doc: DetailDocument): void {
+    this.purchaseOrderService.removePurchaseOrderDocument(row._id, doc.id).subscribe({
+      next: (res) => {
+        row.documents = res.data?.documents ?? (row.documents ?? []).filter((d: any) => d.fileName !== doc.id);
+        this.notificationService.success('File deleted');
+      },
+      error: (error) => this.notificationService.error(error.error?.message || 'Failed to delete file'),
+    });
+  }
+
+  private fetchDocument(doc: DetailDocument, then: (blob: Blob) => void): void {
+    this.purchaseOrderService.getFile(doc.id).subscribe({
+      next: then,
+      error: (error) => {
+        if (error.status === 404) this.notificationService.warning('The file was not found on the server.');
+        else this.notificationService.error('An error occurred while opening the file.');
+      },
+    });
+  }
+
+  private static readonly PREVIEW_MIME: Record<string, string> = {
+    pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    webp: 'image/webp', svg: 'image/svg+xml', txt: 'text/plain',
+  };
+
+  onDocumentOpen(doc: DetailDocument): void {
+    this.fetchDocument(doc, (blob) => {
+      // S3 often serves octet-stream, which makes the browser download instead of preview.
+      const mime = LpoApprovalComponent.PREVIEW_MIME[doc.id.split('.').pop()?.toLowerCase() ?? ''];
+      const url = window.URL.createObjectURL(mime ? new Blob([blob], { type: mime }) : blob);
+      window.open(url, '_blank');
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    });
+  }
+
+  onDocumentDownload(doc: DetailDocument): void {
+    this.fetchDocument(doc, (blob) => saveAs(blob, doc.name));
   }
 
   resetWorkflow(row: any): void {

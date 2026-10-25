@@ -3,6 +3,9 @@ export interface LpoIssueLine {
   item: any;
   picked: boolean;
   qty: number;
+  /** Edits made on the LPO line; unset means the PR line's own value. */
+  uom?: string;
+  price?: number;
 }
 
 /** One supplier tab: what goes on one LPO. */
@@ -19,7 +22,9 @@ export interface LpoSupplierTab {
 export const lineRemaining = (line: LpoIssueLine): number => Number(line.item.remainingQuantity) || 0;
 
 export const lineUnitPrice = (line: LpoIssueLine): number =>
-  Number(line.item.comparisons?.unitPrice ?? line.item.unitPrice) || 0;
+  Number(line.price ?? line.item.comparisons?.unitPrice ?? line.item.unitPrice) || 0;
+
+export const lineUom = (line: LpoIssueLine): string => line.uom ?? line.item.uom ?? line.item.comparisons?.uom ?? '';
 
 /** A line is open while something is left to order. */
 export const lineIsOpen = (line: LpoIssueLine): boolean => !line.item.isIssued && lineRemaining(line) > 0;

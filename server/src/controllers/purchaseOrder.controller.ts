@@ -8,13 +8,16 @@ import Rfq, { RfqType } from "../models/rfq.model";
 import jobModel from "../models/job.model";
 import mongoose from "mongoose";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
-import { uploadFileToAws } from "../common/aws-connect";
+import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { getNextSequence } from "../models/counter.model";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import Employee from "../models/employee.model";
 import { getWorkflowSteps, updateApprovalStatus, rebuildPendingRoute } from "../services/workflow.service";
+import { recordPrices } from "../services/supplierPrice.service";
+import { notifyByPrivilege } from "../services/notify.service";
+import { SupplierPriceSource } from "../models/supplierPrice.model";
 
 // LPO approval runs on its own "poApproval" workflow (Settings > Workflow > PO Approval); the amount is the LPO total after discount.
 const PO_WORKFLOW = 'poApproval';
@@ -63,6 +66,18 @@ const notifyLpoApprovers = async (po: any, sentBy: any, socket: Server) => {
     },
     socket
   );
+};
+
+/**
+ * The suppliers a PR line is ordered from: its selected comparisons, or, when nobody was chosen, the line's own
+ * supplier at the line cost (the PR submit gate accepts such a line, so it must be orderable too). A short line orders nothing.
+ */
+const lineSuppliers = (detail: any): { supplierId: any; quantity: number; unitPrice: number; comparison: any }[] => {
+  const won = (detail.comparisons || []).filter((c: any) => c.selected === true && c.supplierId);
+  if (won.length) return won.map((c: any) => ({ supplierId: c.supplierId, quantity: Number(c.quantity ?? detail.quantity) || 0, unitPrice: Number(c.unitPrice) || 0, comparison: c }));
+  if (detail.short || !detail.supplierId || !(Number(detail.unitCost) > 0)) return [];
+  const own = (detail.comparisons || []).find((c: any) => String(c.supplierId) === String(detail.supplierId));
+  return [{ supplierId: detail.supplierId, quantity: Number(detail.quantity) || 0, unitPrice: Number(detail.unitCost), comparison: own || {} }];
 };
 
 export const createPurchaseOrder = async (req: Request, res: Response) => {
@@ -168,12 +183,10 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     const lineByItemKey = new Map<string, string>();
     (existingPurchaseRequest.items || []).forEach((item: any) => {
       (item.itemDetails || []).forEach((detail: any) => {
-        const selected = (detail.comparisons || []).find((comparison: any) =>
-          comparison.selected === true && comparison.supplierId?.toString() === supplierId.toString()
-        );
+        const selected = lineSuppliers(detail).find((entry) => String(entry.supplierId) === supplierId.toString());
         if (!selected) return;
         const key = String(detail._id);
-        allowedByItem.set(key, (allowedByItem.get(key) || 0) + (Number(selected.quantity ?? detail.quantity) || 0));
+        allowedByItem.set(key, (allowedByItem.get(key) || 0) + selected.quantity);
         if (!lineByItemKey.has(itemKey(detail))) lineByItemKey.set(itemKey(detail), key);
       });
     });
@@ -233,7 +246,8 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       purchaseId,
       jobId,
       quoteId,
-      etaTerms: etaTerms || '',
+      // The schema requires ETA, but a supplier offer may not give one; fall back to the delivery terms.
+      etaTerms: etaTerms || deliveryTerms || 'As per terms',
       paymentTerms: paymentTerms || '',
       shippingTerms: shippingTerms || '',
       deliveryTerms: deliveryTerms || '',
@@ -290,6 +304,13 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
 
     const purchaseOrder = new PurchaseOrder(purchaseOrderData);
     await purchaseOrder.save();
+
+    // The PO price becomes the supplier's last price for each product, ahead of any comparison price.
+    await recordPrices(
+      items.map((item: any) => ({ supplierId, productId: item.partNo, price: Number(item.unitCost) })),
+      SupplierPriceSource.PO,
+      { currency: String(purchaseOrder.currency || existingPurchaseRequest.currency), sourceNo: poNo, sourceId: purchaseOrder._id, employeeId: employee._id }
+    );
 
     const socket = req.app.get('io') as Server;
     if (purchaseOrder.poStatus === 'Pending for Approval') {
@@ -511,17 +532,22 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
         }
       },
       { $unwind: { path: "$jobQuote", preserveNullAndEmptyArrays: true } },
+      // PO's own quoteId is a raw ObjectId; resolve it so $mergeObjects below gets an object
       {
-        $addFields: {
-          quoteId: {
-            $cond: [
-              { $ifNull: ["$quoteId", false] },
-              "$quoteId",
-              "$jobQuote"
-            ]
-          }
+        $lookup: {
+          from: "quotations",
+          localField: "quoteId",
+          foreignField: "_id",
+          as: "directQuote"
         }
       },
+      { $unwind: { path: "$directQuote", preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          quoteId: { $ifNull: ["$directQuote", "$jobQuote"] }
+        }
+      },
+      { $project: { directQuote: 0 } },
 
       // Quotation relations: client, department, createdBy
       {
@@ -547,7 +573,8 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
           from: "employees",
           localField: "quoteId.createdBy",
           foreignField: "_id",
-          as: "quoteCreatedBy"
+          as: "quoteCreatedBy",
+          pipeline: [{ $project: { password: 0 } }]
         }
       },
       {
@@ -575,7 +602,8 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
           from: "employees",
           localField: "approvedHistory.approvedBy",
           foreignField: "_id",
-          as: "approvedEmployees"
+          as: "approvedEmployees",
+          pipeline: [{ $project: { password: 0 } }]
         }
       },
       {
@@ -583,7 +611,8 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
           from: "employees",
           localField: "rejectedHistory.rejectedBy",
           foreignField: "_id",
-          as: "rejectedEmployees"
+          as: "rejectedEmployees",
+          pipeline: [{ $project: { password: 0 } }]
         }
       },
       {
@@ -688,7 +717,7 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
           }
         }
       },
-      { $project: { approvalRoles: 0, approvalEmployees: 0 } },
+      { $project: { approvalRoles: 0, approvalEmployees: 0, approvedEmployees: 0, rejectedEmployees: 0 } },
 
       // Enrich quoteId with related documents and resolve attention contact
       {
@@ -919,7 +948,7 @@ export const getPurchaseOrderByPurchaseId = async (req: Request, res: Response) 
 
 export const getAllPurchaseOrders = async (req: Request, res: Response) => {
   try {
-    const { page = 1, row = 10, search = "", status, purchaseId, jobId, receiptStatus } = req.query;
+    const { page = 1, row = 10, search = "", status, purchaseId, jobId, receiptStatus, vendorBills, readyToDeliver } = req.query;
     const pageNumber = Number(page);
     const pageSize = Number(row);
     const skip = (pageNumber - 1) * pageSize;
@@ -935,12 +964,21 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
 
     const privileges = employee.category?.privileges;
     const poViewReport = privileges?.purchaseOrder?.viewReport;
+    const invoiceViewReport = privileges?.invoice?.viewReport;
+    const isVendorBillsView = vendorBills === 'true';
+    const canViewVendorBills = isVendorBillsView && invoiceViewReport && invoiceViewReport !== 'none';
     const canWorkWithPurchaseOrders = (poViewReport && poViewReport !== 'none')
       || privileges?.purchaseOrder?.canApprovePOs === true
       || privileges?.purchaseOrder?.canInitiateLPO === true
-      || privileges?.purchaseOrder?.canReissueAndRevoke === true;
-    const accessFilter = poViewReport && poViewReport !== 'none'
-      ? await buildPrivilegeAccessFilter(employee._id, poViewReport, 'createdBy')
+      || privileges?.purchaseOrder?.canReissueAndRevoke === true
+      || canViewVendorBills;
+    const accessScope = poViewReport && poViewReport !== 'none'
+      ? poViewReport
+      : canViewVendorBills
+        ? invoiceViewReport
+        : null;
+    const accessFilter = accessScope
+      ? await buildPrivilegeAccessFilter(employee._id, accessScope, 'createdBy')
       : {};
 
     if (!canWorkWithPurchaseOrders) {
@@ -959,6 +997,10 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
     const initialMatchStage: any = {};
     const finalMatchStage: any = {};
 
+    if (isVendorBillsView) {
+      finalMatchStage.poStatus = { $in: ['Approved', 'Placed', 'Closed'] };
+    }
+
     if (purchaseId) {
       initialMatchStage.purchaseId = new mongoose.Types.ObjectId(purchaseId as string);
     }
@@ -975,14 +1017,24 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
         : [];
     const normalizedStatusFilters = statusFilters.map((value) => value.trim()).filter(Boolean);
 
-    if (normalizedStatusFilters.length > 1) {
+    // Vendor bills "Upcoming": placed orders that do not have any active GRN yet.
+    if (isVendorBillsView && normalizedStatusFilters.length === 1 && normalizedStatusFilters[0] === 'Placed') {
+      finalMatchStage.poStatus = 'Placed';
+      finalMatchStage['grns.0'] = { $exists: false };
+    }
+
+    if (!isVendorBillsView && normalizedStatusFilters.length > 1) {
       finalMatchStage.poStatus = { $in: normalizedStatusFilters };
-    } else if (normalizedStatusFilters.length === 1) {
+    } else if (!isVendorBillsView && normalizedStatusFilters.length === 1) {
       finalMatchStage.poStatus = normalizedStatusFilters[0];
     }
 
     if (receiptStatus) {
       finalMatchStage.receiptStatus = receiptStatus;
+    }
+
+    if (isVendorBillsView && readyToDeliver === 'true') {
+      finalMatchStage['deliveryNotes.0'] = { $exists: true };
     }
 
     const pipeline: any[] = [
@@ -1064,11 +1116,35 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
       {
         $lookup: {
           from: "grns",
-          localField: "_id",
-          foreignField: "purchaseOrderId",
+          let: { purchaseOrderId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$purchaseOrderId", "$$purchaseOrderId"] },
+                isDeleted: { $ne: true }
+              }
+            }
+          ],
           as: "grns"
         }
       },
+      ...(isVendorBillsView ? [{
+        $lookup: {
+          from: "deliverynotes",
+          let: { jobId: "$jobId._id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$jobId", "$$jobId"] },
+                isDeleted: { $ne: true }
+              }
+            },
+            { $sort: { dnDate: -1, createdAt: -1 } },
+            { $project: { dnNo: 1, dnDate: 1, status: 1 } }
+          ],
+          as: "deliveryNotes"
+        }
+      }] : []),
       {
         $addFields: {
           receivedQuantity: {
@@ -1307,11 +1383,31 @@ export const placePurchaseOrder = async (req: Request, res: Response) => {
     if (!employee) {
       return res.status(401).json({ success: false, message: "Employee not found" });
     }
+    const expected = new Date(req.body?.expectedDeliveryDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (!req.body?.expectedDeliveryDate || isNaN(expected.getTime())) {
+      return res.status(400).json({ success: false, message: "Expected delivery date is required" });
+    }
+    if (expected < today) {
+      return res.status(400).json({ success: false, message: "Expected delivery date can't be in the past" });
+    }
+    const note = String(req.body?.note ?? '').trim();
+    let contact: any;
+    if (req.body?.contactId) {
+      const po = await PurchaseOrder.findById(id).select('supplierId').lean();
+      const supplier: any = po ? await Supplier.findById(po.supplierId).select('contacts').lean() : null;
+      const found = (supplier?.contacts || []).find((c: any) => String(c._id) === String(req.body.contactId));
+      if (!found) {
+        return res.status(400).json({ success: false, message: "Selected contact doesn't belong to this supplier" });
+      }
+      contact = { name: found.name, email: found.email, phoneNumber: found.phoneNumber, designation: found.designation };
+    }
     const placed = await PurchaseOrder.findOneAndUpdate(
       { _id: id, poStatus: 'Approved' },
-      { $set: { poStatus: 'Placed', placedAt: new Date(), placedBy: employee._id, updatedAt: new Date() } },
+      { $set: { poStatus: 'Placed', placedAt: new Date(), placedBy: employee._id, expectedDeliveryDate: expected, updatedAt: new Date(), ...(contact && { placedContact: contact }), ...(note && { placedNote: note }) } },
       { new: true }
-    );
+    ).populate('supplierId', 'supplierName');
     if (!placed) {
       const exists = await PurchaseOrder.exists({ _id: id });
       return res.status(exists ? 409 : 404).json({
@@ -1319,10 +1415,182 @@ export const placePurchaseOrder = async (req: Request, res: Response) => {
         message: exists ? "Only an approved LPO can be placed" : "Purchase order not found",
       });
     }
+    // The receiving team hears now, and again on the expected day.
+    const supplierName = (placed.supplierId as any)?.supplierName || 'the supplier';
+    const dateText = expected.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const grnFilter = { privilegeKey: 'grn' as any, checkFunction: (p: any) => !!p.grn?.viewReport && p.grn.viewReport !== 'none' };
+    const base = { referenceModel: 'PurchaseOrder', sentBy: employee._id, referenceId: placed._id, additionalData: { purchaseOrderId: placed._id.toString() } };
+    await notifyByPrivilege({ ...base, type: 'LpoPlaced', title: 'LPO arriving', message: `${placed.poNo} from ${supplierName} is expected on ${dateText}` }, grnFilter);
+    // Finance sees the commitment early in Vendor Bills > Upcoming.
+    const billFilter = { privilegeKey: 'invoice' as any, checkFunction: (p: any) => !!p.invoice?.viewReport && p.invoice.viewReport !== 'none' };
+    await notifyByPrivilege({ ...base, type: 'LpoPlacedBilling', title: 'LPO placed', message: `${placed.poNo} to ${supplierName} was placed, delivery expected ${dateText}` }, billFilter);
+    const dueAt = new Date(expected);
+    dueAt.setHours(8, 0, 0, 0);
+    await notifyByPrivilege({ ...base, type: 'LpoDeliveryDue', title: 'LPO due today', message: `${placed.poNo} from ${supplierName} is due today. Create the GRN when it arrives.`, sendAt: dueAt, dedupeKey: `lpo-due:${placed._id}:${expected.toISOString().slice(0, 10)}` }, grnFilter);
     return res.status(200).json({ success: true, message: "Order placed", data: placed });
   } catch (error: any) {
     console.error("Place purchase order error:", error);
     return res.status(500).json({ success: false, message: "Failed to place the order", error: error.message });
+  }
+};
+
+const DOCUMENT_STATUSES = ['Approved', 'Placed'];
+
+/** Adds uploaded files to an approved/placed LPO's documents. */
+export const addPurchaseOrderDocuments = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid Purchase Order ID" });
+    }
+    const files: any[] = req.files || [];
+    if (!files.length) {
+      return res.status(400).json({ success: false, message: "Choose at least one file" });
+    }
+    const employee = await getEmployeeData(req.user);
+    const docs = await Promise.all(files.map(async (file: any) => {
+      await uploadFileToAws(file.filename, file.path);
+      return { fileName: file.filename, originalname: file.originalname, mimetype: file.mimetype, size: file.size, uploadedBy: employee?._id, uploadedAt: new Date() };
+    }));
+    const updated = await PurchaseOrder.findOneAndUpdate(
+      { _id: id, poStatus: { $in: DOCUMENT_STATUSES } },
+      { $push: { documents: { $each: docs } } },
+      { new: true }
+    );
+    if (!updated) {
+      const exists = await PurchaseOrder.exists({ _id: id });
+      return res.status(exists ? 409 : 404).json({ success: false, message: exists ? "Documents can only be added to an approved or placed LPO" : "Purchase order not found" });
+    }
+    return res.status(200).json({ success: true, message: "Documents uploaded", data: updated });
+  } catch (error: any) {
+    console.error("Add purchase order documents error:", error);
+    return res.status(500).json({ success: false, message: "Failed to upload documents", error: error.message });
+  }
+};
+
+export const removePurchaseOrderDocument = async (req: any, res: Response) => {
+  try {
+    const { id, fileName } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid Purchase Order ID" });
+    }
+    const updated = await PurchaseOrder.findOneAndUpdate(
+      { _id: id, poStatus: { $in: DOCUMENT_STATUSES }, 'documents.fileName': fileName },
+      { $pull: { documents: { fileName } } },
+      { new: true }
+    );
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Document not found" });
+    }
+    await deleteFileFromAws(fileName);
+    return res.status(200).json({ success: true, data: updated });
+  } catch (error: any) {
+    console.error("Remove purchase order document error:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete the document", error: error.message });
+  }
+};
+
+const CANCELLABLE_STATUSES =['Draft', 'Pending for Approval', 'Approved', 'Placed'];
+const sameDetail = (a: any, b: any) => String(a || '').replace(/\s+/g, ' ').trim().toLowerCase() === String(b || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** Each PO line with what is received on its GRNs and what can still be cancelled. */
+const cancellableLines = async (po: any) => {
+  const grns: any[] = await GRN.find({ purchaseOrderId: po._id, isDeleted: false }).select('items').lean();
+  return (po.items || []).map((item: any, index: number) => {
+    const received = grns.reduce((sum, grn) => sum + (grn.items || [])
+      .filter((g: any) => sameDetail(g.itemDescription, item.detail))
+      .reduce((s: number, g: any) => s + (Number(g.receivedQty) || 0), 0), 0);
+    const quantity = Number(item.quantity) || 0;
+    return {
+      index,
+      prLineKey: item.prLineKey,
+      detail: item.detail,
+      uom: item.uom,
+      quantity,
+      unitCost: Number(item.unitCost) || 0,
+      receivedQty: Math.min(received, quantity),
+      cancelledQty: Number(item.cancelledQty) || 0,
+      openQty: Math.max(0, quantity - received),
+    };
+  });
+};
+
+/** What a cancel can take off this PO: per line, the quantity not received yet. */
+export const getPurchaseOrderCancellable = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid Purchase Order ID" });
+    }
+    const po: any = await PurchaseOrder.findById(id).lean();
+    if (!po) return res.status(404).json({ success: false, message: "Purchase order not found" });
+    return res.status(200).json({
+      success: true,
+      data: { _id: po._id, poNo: po.poNo, poStatus: po.poStatus, cancellable: CANCELLABLE_STATUSES.includes(po.poStatus), lines: await cancellableLines(po) },
+    });
+  } catch (error: any) {
+    console.error("Get cancellable PO error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load the purchase order", error: error.message });
+  }
+};
+
+/**
+ * Cancels a PO, whole or in part. `lines: [{ index, qty }]` takes `qty` off those lines; without `lines`
+ * everything not yet received is cancelled. The cancelled quantity goes back to the request, where it can
+ * be ordered again from the same supplier or re-awarded to another. A PO left with nothing ordered is Cancelled.
+ */
+export const cancelPurchaseOrder = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const reason = String(req.body?.reason || '').trim();
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid Purchase Order ID" });
+    }
+    if (!reason) return res.status(400).json({ success: false, message: "Say why the PO is being cancelled." });
+    const employee = await getEmployeeData(req.user);
+    if (!employee) return res.status(401).json({ success: false, message: "Employee not found" });
+
+    const po: any = await PurchaseOrder.findById(id);
+    if (!po) return res.status(404).json({ success: false, message: "Purchase order not found" });
+    if (!CANCELLABLE_STATUSES.includes(po.poStatus)) {
+      return res.status(409).json({ success: false, message: `A ${po.poStatus} PO cannot be cancelled.` });
+    }
+
+    const lines = await cancellableLines(po);
+    const asked: { index: number; qty: number }[] = Array.isArray(req.body?.lines)
+      ? req.body.lines.map((l: any) => ({ index: Number(l?.index), qty: Number(l?.qty) || 0 })).filter((l: any) => l.qty > 0)
+      : lines.filter((l: any) => l.openQty > 0).map((l: any) => ({ index: l.index, qty: l.openQty }));
+    if (!asked.length) return res.status(400).json({ success: false, message: "Nothing to cancel: every line is already received." });
+
+    const cancelled: { prLineKey?: string; detail: string; qty: number }[] = [];
+    for (const { index, qty } of asked) {
+      const line = lines[index];
+      if (!line) return res.status(400).json({ success: false, message: "That line is not on this PO." });
+      if (qty > line.openQty + 0.0001) {
+        return res.status(400).json({ success: false, message: `Only ${line.openQty} of "${line.detail}" can be cancelled; the rest is received.` });
+      }
+      const item = po.items[index];
+      item.quantity = Number((line.quantity - qty).toFixed(4));
+      item.totalCost = Number((item.quantity * (Number(item.unitCost) || 0)).toFixed(2));
+      item.cancelledQty = (Number(item.cancelledQty) || 0) + qty;
+      cancelled.push({ prLineKey: item.prLineKey, detail: item.detail, qty });
+    }
+
+    po.cancelHistory.push({ cancelledBy: employee._id, reason, date: new Date(), lines: cancelled });
+    const ordered = (po.items || []).reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+    if (ordered <= 0) po.poStatus = 'Cancelled';
+    else if (po.poStatus === 'Placed' && lines.every((l: any) => Number(po.items[l.index].quantity) <= l.receivedQty + 0.0001)) po.poStatus = 'Closed';
+    po.markModified('items');
+    await po.save();
+
+    return res.status(200).json({
+      success: true,
+      message: po.poStatus === 'Cancelled' ? `${po.poNo} cancelled` : `${po.poNo} partly cancelled`,
+      data: po,
+    });
+  } catch (error: any) {
+    console.error("Cancel purchase order error:", error);
+    return res.status(500).json({ success: false, message: "Failed to cancel the purchase order", error: error.message });
   }
 };
 
@@ -1370,6 +1638,7 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
+    // The person who raised an LPO never signs it off, except superadmin.
     if (!/^superadmin$/i.test(employee.category?.role ?? "") && purchaseOrder.createdBy?.toString() === employee._id?.toString()) {
       return res.status(403).json({
         success: false,
@@ -1500,6 +1769,7 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
+    // The person who raised an LPO never signs it off, except superadmin.
     if (!/^superadmin$/i.test(employee.category?.role ?? "") && purchaseOrder.createdBy?.toString() === employee._id?.toString()) {
       return res.status(403).json({
         success: false,
@@ -1686,10 +1956,9 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
     purchaseRequestDoc.items.forEach((item: any) => {
       if (item.itemDetails && Array.isArray(item.itemDetails)) {
         item.itemDetails.forEach((itemDetail: any) => {
-          if (itemDetail.comparisons && Array.isArray(itemDetail.comparisons)) {
+          {
             // A line split between suppliers has one selected comparison per supplier.
-            itemDetail.comparisons.filter((comp: any) => comp.selected === true).forEach((selectedComparison: any) => {
-              if (!selectedComparison.supplierId) return;
+            lineSuppliers(itemDetail).forEach((selectedComparison) => {
               const supplierId = selectedComparison.supplierId.toString();
 
               if (!supplierMap.has(supplierId)) {
@@ -1936,11 +2205,11 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
     purchaseRequestDoc.items.forEach((item: any) => {
       if (item.itemDetails && Array.isArray(item.itemDetails)) {
         item.itemDetails.forEach((itemDetail: any) => {
-          if (itemDetail.comparisons && Array.isArray(itemDetail.comparisons)) {
-            const selectedComparison = itemDetail.comparisons.find((comp: any) =>
-              comp.selected === true && comp.supplierId && comp.supplierId.toString() === supplierId);
-            if (selectedComparison) {
-              const totalQuantity = selectedComparison.quantity || itemDetail.quantity || 0;
+          {
+            const chosen = lineSuppliers(itemDetail).find((entry) => String(entry.supplierId) === supplierId);
+            if (chosen) {
+              const selectedComparison = chosen.comparison;
+              const totalQuantity = chosen.quantity;
               const totalIssued = issuedItemsMap.get(itemKey(itemDetail)) || 0;
               const pendingQuantity = pendingItemsMap.get(itemKey(itemDetail)) || 0;
               const remainingQuantity = Math.max(0, totalQuantity - totalIssued - pendingQuantity);
@@ -1956,7 +2225,7 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
                 issuedQuantity: totalIssued,
                 pendingQuantity: pendingQuantity,
                 quantity: remainingQuantity,
-                unitPrice: selectedComparison.unitPrice,
+                unitPrice: chosen.unitPrice,
                 comparisons: selectedComparison,
                 isIssued: isFullyIssued
               });

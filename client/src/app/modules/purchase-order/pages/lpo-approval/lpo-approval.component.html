@@ -16,6 +16,7 @@
     emptyMessage="No purchase orders found"
     [rowActions]="rowActions"
     [views]="views"
+    [initialViewId]="activeViewId"
     storageKey="purchase-order-list"
     [detailLoading]="detailLoading"
     [detailTabs]="detailTabs"
@@ -46,6 +47,10 @@
       </div>
     </ng-template>
 
+    <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
+      <app-action-button *ngIf="tab === 'documents' && canManageDocuments(row)" variant="outline" icon="plus" [disabled]="isUploadingFiles" (click)="uploadDocuments(row)">Add Document</app-action-button>
+    </ng-template>
+
     <ng-template #detailFooterTemplate let-row>
       <app-action-button variant="primary" (click)="openFullLpo(row, $event)" icon="view">Open full PO</app-action-button>
     </ng-template>
@@ -59,6 +64,15 @@
         <ng-container *ngSwitchCase="'items'">
           <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals></app-detail-table>
         </ng-container>
+
+        <app-detail-documents *ngSwitchCase="'documents'"
+          title="PO files"
+          [documents]="poDocuments(row)"
+          [removable]="canManageDocuments(row)"
+          [removeDetails]="documentRemoveDetails(row)"
+          (open)="onDocumentOpen($event)"
+          (download)="onDocumentDownload($event)"
+          (remove)="onDocumentRemove(row, $event)"></app-detail-documents>
       </ng-container>
     </ng-template>
   </app-data-grid>

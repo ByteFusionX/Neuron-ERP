@@ -7,12 +7,20 @@ interface PurchaseOrder extends Document {
     items: {
         detail: string;
         quantity: number;
+        uom?: string;
         unitCost: number;
         totalCost: number;
         partNo?: any;
         prLineKey?: string;
         rfqQuoteId?: any;
         receivedQty?: number;
+        cancelledQty?: number;
+    }[];
+    cancelHistory: {
+        cancelledBy: any;
+        reason: string;
+        date: Date;
+        lines: { prLineKey?: string; detail: string; qty: number }[];
     }[];
     supplierId: any;
     purchaseId: any;
@@ -53,6 +61,10 @@ interface PurchaseOrder extends Document {
     stockHoldId?: any;
     placedAt?: Date;
     placedBy?: any;
+    expectedDeliveryDate?: Date;
+    placedContact?: { name?: string; email?: string; phoneNumber?: string; designation?: string };
+    placedNote?: string;
+    documents?: { fileName: string; originalname: string; mimetype?: string; size?: number; uploadedBy?: any; uploadedAt?: Date }[];
 }
 
 const purchaseOrderItemSchema = new Schema({
@@ -63,6 +75,10 @@ const purchaseOrderItemSchema = new Schema({
     quantity: {
         type: Number,
         required: true
+    },
+    uom: {
+        type: String,
+        default: ''
     },
     unitCost: {
         type: Number,
@@ -84,6 +100,12 @@ const purchaseOrderItemSchema = new Schema({
         type: Schema.Types.ObjectId
     },
     receivedQty: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+    // Taken off this line by a cancel; `quantity` is what is still ordered.
+    cancelledQty: {
         type: Number,
         default: 0,
         min: 0
@@ -137,6 +159,27 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         },
         items: {
             type: [purchaseOrderItemSchema],
+            default: []
+        },
+        // Every cancel, whole or partial: who, why, and how much of each line.
+        cancelHistory: {
+            type: [{
+                cancelledBy: {
+                    type: Schema.Types.ObjectId,
+                    ref: 'Employee'
+                },
+                reason: String,
+                date: {
+                    type: Date,
+                    default: Date.now
+                },
+                lines: [{
+                    _id: false,
+                    prLineKey: String,
+                    detail: String,
+                    qty: Number
+                }]
+            }],
             default: []
         },
         purchaseId: {
@@ -239,6 +282,22 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         placedBy: {
             type: Schema.Types.ObjectId,
             ref: "Employee",
+        },
+        // Given when the order is placed; drives the GRN Arriving tab and the due-day reminder.
+        expectedDeliveryDate: {
+            type: Date,
+        },
+        // Optional extras captured when the order is placed.
+        placedContact: {
+            type: new Schema({ name: String, email: String, phoneNumber: String, designation: String }, { _id: false }),
+        },
+        placedNote: {
+            type: String,
+        },
+        // Files kept against the approved order (supplier acknowledgement, signed copy, etc.).
+        documents: {
+            type: [new Schema({ fileName: String, originalname: String, mimetype: String, size: Number, uploadedBy: { type: Schema.Types.ObjectId, ref: "Employee" }, uploadedAt: { type: Date, default: Date.now } }, { _id: false })],
+            default: [],
         },
     },
     { timestamps: true }

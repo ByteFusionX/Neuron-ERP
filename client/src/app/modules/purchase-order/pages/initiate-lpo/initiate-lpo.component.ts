@@ -22,6 +22,7 @@ import { LpoItemEntryComponent } from 'src/app/shared/components/lpo-item-entry/
 import { LpoSupplierTab } from 'src/app/shared/components/lpo-item-entry/lpo-item-entry.model';
 import { SfDrawerComponent } from 'src/app/shared/components/smart-form/sf-drawer.component';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
+import { MasterListService } from 'src/app/core/services/master-list.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog/confirm-dialog.service';
 import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
@@ -32,6 +33,8 @@ interface IssueLine {
   item: any;
   picked: boolean;
   qty: number;
+  uom?: string;
+  price?: number;
 }
 
 type ComparisonItem = ReturnType<InitiateLpoComponent['selectedComparison']>[number];
@@ -73,6 +76,8 @@ export class InitiateLpoComponent implements OnInit {
   private grnService = inject(GrnService);
   private deliveryNoteService = inject(DeliveryNoteService);
   private dialog = inject(MatDialog);
+  private masterList = inject(MasterListService);
+  uomOptions: SfOption[] = [];
   compareOpen = false;
   loadingIssueHistoryFor: string | null = null;
   // LPOs/GRNs/DNs don't change between clicking "View" on different items of
@@ -161,10 +166,6 @@ export class InitiateLpoComponent implements OnInit {
     if (group) this.selectSupplier(group);
   }
 
-  onHistory(line: IssueLine): void {
-    this.viewItemIssueHistory({ detail: line.item.detail, partNo: this.partNoOf(line.item), quantity: line.item.originalQuantity || 0 });
-  }
-
   linesOf(group: SupplierGroup | undefined): IssueLine[] {
     return group ? this.lines.get(group.key) ?? [] : [];
   }
@@ -211,7 +212,7 @@ export class InitiateLpoComponent implements OnInit {
   }
 
   unitPriceOf(line: IssueLine): number {
-    return Number(line.item.comparisons?.unitPrice ?? line.item.unitPrice) || 0;
+    return Number(line.price ?? line.item.comparisons?.unitPrice ?? line.item.unitPrice) || 0;
   }
 
   setQty(line: IssueLine, value: any): void {
@@ -415,6 +416,7 @@ export class InitiateLpoComponent implements OnInit {
         partNo: l.item.partNo || null,
         prLineKey: l.item._id,
         quantity: l.qty,
+        uom: l.uom ?? l.item.uom ?? l.item.comparisons?.uom ?? '',
         unitCost: this.unitPriceOf(l),
         totalCost: l.qty * this.unitPriceOf(l),
       })),
@@ -563,6 +565,7 @@ export class InitiateLpoComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.masterList.getOptions('unit').subscribe((opts) => (this.uomOptions = opts));
     this.initForm();
     this.loadNotes();
     this.generatePONumber();
