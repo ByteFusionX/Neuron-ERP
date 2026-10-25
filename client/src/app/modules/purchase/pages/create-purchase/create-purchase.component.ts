@@ -1,3 +1,4 @@
+import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/form-prompt.service';
 import { CommonModule } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { AfterViewInit, Component, computed, effect, EventEmitter, HostBinding, inject, Input, OnDestroy, OnInit, Output, signal, untracked, ViewChild } from '@angular/core';
@@ -11,7 +12,7 @@ import { JobService } from 'src/app/core/services/job/job.service';
 import { ToastrService } from 'ngx-toastr';
 import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
 import { firstValueFrom, Subscription } from 'rxjs';
-import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber } from 'src/app/shared/interfaces/purchase.interface';
+import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber, SupplierLastPrice } from 'src/app/shared/interfaces/purchase.interface';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
 import { PrReviewStepComponent, ReviewAward, ReviewRow, ReviewSupplier } from './pr-review-step/pr-review-step.component';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
@@ -24,7 +25,9 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
 import { LineSupplierOffer } from 'src/app/shared/components/item-entry/item-entry.component';
-import { SalesRfqCompareColumn, SalesRfqComparison } from 'src/app/shared/interfaces/sales-rfq.interface';
+import { PurchaseOrderStatusRow, PurchaseOrderStatusSupplier, SalesRfqCompareColumn } from 'src/app/shared/interfaces/sales-rfq.interface';
+import { PoCancelModalComponent } from './po-cancel-modal/po-cancel-modal.component';
+import { PoReassignModalComponent } from './po-reassign-modal/po-reassign-modal.component';
 import { PrFormComponent } from './pr-form/pr-form.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog/confirm-dialog.service';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
@@ -41,11 +44,6 @@ interface PartNumberDropdownOption {
   value: string;
   data: PartNumberOption;
 }
-
-/** One supplier's lines from its tab, to be kept as an RFQ: the tab's quantity, and a price only when typed over. */
-import type { RfqTabTerms } from './pr-form/pr-form.component';
-
-type RfqWork ={ supplierId: string; lines: { lineKey: string; quantity: number; unitCost: number | null }[] };
 
 @Component({
   selector: 'app-create-purchase',
@@ -84,6 +82,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   @Output() saved = new EventEmitter<void>();
   /** Drawer mode: the slide-out animation finished; the host can unmount. */
   @Output() closed = new EventEmitter<void>();
+  /** Id of a request just sent for approval, so the list can show Pending before its reload lands. */
+  @Output() submitted = new EventEmitter<string>();
 
   @HostBinding('style.display') get hostDisplay(): string | null {
     return this.drawer ? 'contents' : null;
@@ -102,6 +102,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   private supplierService = inject(SupplierService)
   private purchaseOrderService = inject(PurchaseOrderService)
   private confirm = inject(ConfirmDialogService)
+  private formPrompt = inject(FormPromptService)
   private subscriptions = new Subscription()
 
   generatedPRId: string = '';
@@ -153,7 +154,9 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       itemName: item.itemName || '',
       itemDetails: (item.itemDetails || []).map((d: any, j: number) => ({
         itemCode: d.itemCode || '',
-        partNo: this.getPartNumberValue(d.partNo),
+        // The PR's partNo is the product link; the editor keeps that in productId and the code in partNo.
+        productId: this.getPartNumberValue(d.partNo) || null,
+        partNo: typeof d.partNo === 'object' ? d.partNo?.partNo || '' : '',
         detail: d.detail || '',
         quantity: d.quantity ?? null,
         unitCost: d.unitCost ?? null,
@@ -170,6 +173,14 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     const map = new Map<string, any>();
     this.itemsList().forEach((item: any, i: number) =>
       (item.itemDetails || []).forEach((d: any, j: number) => map.set(this.lineKeyOf(i, j, d), d)));
+    return map;
+  });
+
+  /** The item group each saved line belongs to; the flat editor folds every group into one, so this restores them on save. */
+  private groupByKey = computed(() => {
+    const map = new Map<string, string>();
+    this.itemsList().forEach((item: any, i: number) =>
+      (item.itemDetails || []).forEach((d: any, j: number) => map.set(this.lineKeyOf(i, j, d), item.itemName || '')));
     return map;
   });
 
@@ -202,6 +213,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   private isAwardedLine(detail: any): boolean {
     const won = (detail?.comparisons || []).filter((c: any) => c.selected);
     if (!won.length) return false;
+    // Every chosen supplier needs a price.
+    if (won.some((c: any) => !(Number(c.unitPrice) > 0))) return false;
     // A line split between suppliers is awarded once their shares add up to its quantity.
     if (!won.some((c: any) => c.awardedQty)) return true;
     const total = won.reduce((sum: number, c: any) => sum + (+c.awardedQty || +detail.quantity || 0), 0);
@@ -213,114 +226,117 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     // A line marked short goes for approval with whatever is awarded (the server gate skips it too).
     if (detail?.short) return true;
     const anyWon = (detail?.comparisons || []).some((c: any) => c.selected);
-    return anyWon ? this.isAwardedLine(detail) : !!detail?.supplierId;
+    return anyWon ? this.isAwardedLine(detail) : !!detail?.supplierId && Number(detail?.unitCost) > 0;
   }
 
-  /** The supplier RFQs of this request side by side; feeds the supplier pills under each line. */
-  private comparison = signal<SalesRfqComparison | null>(null);
+  /** Each supplier's last price per product (last PO, else last comparison), in the request's currency. */
+  private lastPrices = signal<SupplierLastPrice[]>([]);
 
-  private loadComparison(): void {
-    if (!this.purchaseId) return;
-    this.subscriptions.add(this.salesRfqService.comparePurchase(this.purchaseId).subscribe({
-      next: (res) => this.comparison.set(res.data),
-      error: () => this.comparison.set(null),
+  /** Loads the last prices of the request's products, so a supplier added to a line starts at its last price. */
+  private loadLastPrices(): void {
+    const ids = [...new Set([
+      ...this.itemsList().flatMap((item: any) => (item.itemDetails || []).map((d: any) => String(d.partNo?._id || d.partNo || ''))),
+      ...this.entryProductIds(),
+    ].filter(Boolean))];
+    this.lastPricesFor = ids.slice().sort().join(',');
+    if (!ids.length) { this.lastPrices.set([]); return; }
+    this.subscriptions.add(this.purchaseService.getSupplierPrices(ids, [], this.currency() || 'QAR').subscribe({
+      next: (res) => this.lastPrices.set(res?.data || []),
+      error: () => this.lastPrices.set([]),
     }));
   }
 
-  private offersByLine = computed(() => {
-    const map = new Map<string, LineSupplierOffer[]>();
-    const data = this.comparison();
-    if (!data) return map;
-    const columns = new Map(data.rfqs.map((c) => [c._id, c]));
-    for (const row of data.rows) {
-      for (const cell of row.cells) {
-        const column = columns.get(cell.rfqId);
-        if (!column) continue;
-        const priced = !!cell.quote && cell.quote.availability !== 'Unavailable' && cell.quote.unitPrice != null;
-        const list = map.get(cell.lineKey) ?? [];
-        list.push({
-          supplierId: column.supplierId,
-          supplierName: column.supplierName,
-          state: cell.quote?.selected ? 'awarded' : priced ? 'priced' : 'waiting',
-          price: cell.quote?.unitPrice ?? null,
-          rfqId: cell.rfqId,
-          quoteId: cell.quote?._id,
-          qty: cell.quote?.selected && cell.awardedQty ? cell.awardedQty : undefined,
-        });
-        map.set(cell.lineKey, list);
-      }
-    }
+  /** The product ids the last prices were loaded for. */
+  private lastPricesFor = '';
+
+  /** Products linked on the editor's lines, saved or not. */
+  private entryProductIds(): string[] {
+    return (this.entryItems.getRawValue()?.[0]?.items || [])
+      .flatMap((item: any) => (item.itemDetails || []).map((d: any) => String(d.productId || '')))
+      .filter(Boolean);
+  }
+
+  /** A line linked to a product with no loaded prices yet reloads them, so its suppliers start at their last price. */
+  private refreshLastPricesForEntry(): void {
+    const loaded = new Set(this.lastPricesFor.split(','));
+    if (this.entryProductIds().some((id) => !loaded.has(id))) this.loadLastPrices();
+  }
+
+  private lastPricesByProduct = computed(() => {
+    const map = new Map<string, SupplierLastPrice[]>();
+    this.lastPrices().forEach((p) => map.set(String(p.productId), [...(map.get(String(p.productId)) ?? []), p]));
     return map;
   });
 
-  /** RFQ suppliers of a line, plus its current supplier from the job sheet when that supplier has no RFQ for it yet. */
+  /** The suppliers on each saved line, from its comparisons: chosen ones are awarded, priced ones are offers. */
+  private offersByLine = computed(() => {
+    const map = new Map<string, LineSupplierOffer[]>();
+    this.originalsByKey().forEach((d, key) => {
+      const list: LineSupplierOffer[] = [];
+      (d?.comparisons || []).forEach((c: any) => {
+        if (!c.supplierId || list.some((o) => o.supplierId === String(c.supplierId))) return;
+        const price = Number(c.unitPrice) > 0 ? Number(c.unitPrice) : null;
+        list.push({
+          supplierId: String(c.supplierId),
+          supplierName: c.supplierName || this.supplierOptions().find((o) => o.value === String(c.supplierId))?.label || 'Supplier',
+          state: c.selected ? 'awarded' : price != null ? 'priced' : 'none',
+          price,
+          qty: c.selected && c.awardedQty ? Number(c.awardedQty) : undefined,
+        });
+      });
+      map.set(key, list);
+    });
+    return map;
+  });
+
+  /** A line's suppliers: those compared on it, its current supplier, and suppliers with a last price for the product. */
   lineOffers = (line: any): LineSupplierOffer[] => {
     // Called for every line on every change detection pass: hand back the same array until the inputs change.
     const cache = this.offerCache();
-    const key = `${line?.lineKey ?? ''}|${line?.supplierId ?? ''}`;
+    // Editor lines carry the product in productId; saved lines in partNo.
+    const product = String(line?.productId || line?.partNo || '');
+    const key = `${line?.lineKey ?? ''}|${line?.supplierId ?? ''}|${product}`;
     const hit = cache.get(key);
     if (hit) return hit;
-    const offers = [...(this.offersByLine().get(line?.lineKey) ?? [])];
-    const have = (id?: string, name?: string) => offers.some((o) => (id && o.supplierId === id) || o.supplierName === name);
-    const add = (id: string | undefined, name: string | undefined) => {
-      if (name && !have(id, name)) offers.push({ supplierId: id, supplierName: name, state: 'none' });
-    };
+    const offers = (this.offersByLine().get(line?.lineKey) ?? []).map((o) => ({ ...o }));
     const label = (id?: string) => (id ? this.supplierOptions().find((o) => o.value === id)?.label : undefined);
-    // Deal sheet suppliers on the saved line, then the line's current supplier, then suppliers from earlier RFQs for the product.
-    const saved = line?.lineKey ? this.originalsByKey().get(line.lineKey) : undefined;
-    (saved?.comparisons || []).forEach((c: any) => add(c.supplierId ? String(c.supplierId) : undefined, c.supplierName || label(String(c.supplierId))));
-    add(line?.supplierId, label(line?.supplierId));
-    (this.comparison()?.previousSuppliers?.[line?.lineKey] ?? []).forEach((s) => {
-      const known = have(s.supplierId, s.supplierName);
-      add(s.supplierId, s.supplierName);
-      if (!known) offers[offers.length - 1].pastOnly = true;
-      // A quote from another request is shown on this supplier's tab, not copied: it seeds the price and carries its source.
-      const o = offers.find((x) => (s.supplierId && x.supplierId === s.supplierId) || x.supplierName === s.supplierName);
-      if (o && s.last && o.state === 'none') {
-        o.previous = s.last;
-        if (s.last.currency === 'QAR') o.price = s.last.unitPrice;
+    if (line?.supplierId && !offers.some((o) => o.supplierId === String(line.supplierId))) {
+      const name = label(String(line.supplierId));
+      if (name) offers.push({ supplierId: String(line.supplierId), supplierName: name, state: 'none' });
+    }
+    // A last price seeds a supplier with no price on the line; a supplier only known from it does not join the line's tabs.
+    (this.lastPricesByProduct().get(product) ?? []).forEach((p) => {
+      let o = offers.find((x) => x.supplierId === String(p.supplierId));
+      if (!o) {
+        const name = label(String(p.supplierId));
+        if (!name) return;
+        o = { supplierId: String(p.supplierId), supplierName: name, state: 'none', pastOnly: true };
+        offers.push(o);
       }
+      o.last = p;
+      if (o.price == null) o.price = p.lastPrice;
     });
     cache.set(key, offers);
     return offers;
   };
 
-  /** Fresh (empty) whenever the RFQ offers or the supplier list change. */
+  /** Fresh (empty) whenever the offers, the last prices or the supplier list change. */
   private offerCache = computed(() => {
     this.offersByLine();
+    this.lastPricesByProduct();
     this.supplierOptions();
     return new Map<string, LineSupplierOffer[]>();
   });
 
-  /** The live RFQ of each supplier (status, needed-by date, terms), for the details panel of its tab. */
-  supplierRfqs = computed<Record<string, SalesRfqCompareColumn>>(() => {
-    const out: Record<string, SalesRfqCompareColumn> = {};
-    (this.comparison()?.rfqs ?? []).forEach((c) => { if (c.supplierId) out[c.supplierId] = c; });
-    return out;
-  });
-
-  onOfferPicked(event: { lineKey: string; offer: LineSupplierOffer }): void {
-    const { lineKey, offer } = event;
-    if (offer.state === 'awarded') return;
-    if (offer.state === 'priced' && offer.rfqId && offer.quoteId) {
-      this.salesRfqService.awardPurchase(this.purchaseId!, [{ rfqId: offer.rfqId, lineKey, quoteId: offer.quoteId }]).subscribe({
-        next: () => {
-          this.toaster.success(`${offer.supplierName} selected for the line`, 'Supplier');
-          this.loadPurchaseData();
-        },
-        error: (err) => this.toaster.error(err?.error?.message || 'Could not select this supplier. Use Compare & award.'),
-      });
-      return;
-    }
-    this.toaster.warning(`${offer.supplierName} has no price for this line yet.`, 'Supplier');
+  onOfferPicked(_event: { lineKey: string; offer: LineSupplierOffer }): void {
+    this.entryItems.markAsDirty();
+    this.recomputeLiveTotal();
   }
 
-  /** A supplier pill on a line: the line (already patched with the supplier and its price) is awarded to it, recording the RFQ award where a quote exists. */
-  onPillPicked(e: { lineKey: string; supplierId: string; price: number | null }): void {
-    this.lineTick.update((n) => n + 1);
+  /** A supplier pill on a line: the line (already patched with the supplier and its price) is that supplier's; kept on Save. */
+  onPillPicked(_e: { lineKey: string; supplierId: string; price: number | null }): void {
+    this.entryItems.markAsDirty();
     this.recomputeLiveTotal();
-    const offer = (this.offersByLine().get(e.lineKey) ?? []).find((o) => o.supplierId === e.supplierId);
-    if (offer && offer.state === 'priced' && this.purchaseId) this.onOfferPicked({ lineKey: e.lineKey, offer });
   }
 
   lineBadge = (i: number, j: number, k: number): string | null =>
@@ -357,21 +373,27 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     // Handed lines already counted through an offer (the RFQ was saved) are not counted twice.
     const handedExtra = new Map<string, number>(Object.entries(handed).map(([id, keys]) => [id, keys.length]));
     let total = 0;
+    const inUse = new Set<string>();
+    const removed = this.removedSuppliers();
     items.forEach((item: any) => (item.itemDetails || []).forEach((d: any) => {
       total++;
       const ids = new Set<string>();
       this.lineOffers(d).forEach((o) => o.supplierId && !o.pastOnly && ids.add(o.supplierId));
       if (d.supplierId) ids.add(String(d.supplierId));
       const excluded = this.tabExcluded();
+      const shared = d.lineKey ? this.prFormCmp?.itemEntry?.lineShares(d.lineKey) : null;
+      // A supplier that is a line's default, or holds an award on any line, stays on the PR.
+      if (d.supplierId) inUse.add(String(d.supplierId));
+      shared?.forEach((s) => s.qty > 0 && inUse.add(s.supplierId));
+      this.lineOffers(d).forEach((o) => o.supplierId && o.state === 'awarded' && inUse.add(o.supplierId));
+      removed.forEach((id) => ids.delete(id));
       ids.forEach((id) => {
         if ((excluded[id] ?? []).includes(d.lineKey)) return;
         counts.set(id, (counts.get(id) ?? 0) + 1);
         if (d.lineKey && handed[id]?.includes(d.lineKey)) handedExtra.set(id, (handedExtra.get(id) ?? 0) - 1);
       });
     }));
-    this.addedSuppliers().forEach((id) => counts.has(id) || counts.set(id, 0));
-    // Every saved RFQ of the request is a tab, even when its lines cannot be matched to the form yet.
-    (this.comparison()?.rfqs ?? []).forEach((c) => c.supplierId && (counts.has(c.supplierId) || counts.set(c.supplierId, 0)));
+    this.addedSuppliers().forEach((id) => removed.includes(id) || counts.has(id) || counts.set(id, 0));
     const name = (id: string) => this.supplierOptions().find((o) => o.value === id)?.label || 'Supplier';
     // Only a supplier added by hand that no line or offer uses yet can be closed (lines handed to the tab are released with it).
     // Keep each supplier where it first appeared, so awarding a line never reorders the tabs or pills.
@@ -379,9 +401,12 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     return [...counts]
       .sort(([a], [b]) => this.tabOrder.indexOf(a) - this.tabOrder.indexOf(b))
       .map(([id, count]) => ({
-        id, name: name(id), count: count + Math.max(0, handedExtra.get(id) ?? 0), total, closable: count === 0 && this.addedSuppliers().includes(id),
+        id, name: name(id), count: count + Math.max(0, handedExtra.get(id) ?? 0), total, closable: !inUse.has(id),
       }));
   });
+
+  /** Suppliers taken off the PR by hand: their saved comparisons are dropped on Save. */
+  private removedSuppliers = signal<string[]>([]);
   private tabOrder: string[] = [];
 
   /** Lines ticked on Items when a supplier tab was added: shown under that tab with that supplier, never written onto the line. */
@@ -394,56 +419,23 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   onSupplierTabClosed(id: string): void {
     this.addedSuppliers.update((l) => l.filter((x) => x !== id));
+    this.removedSuppliers.update((l) => [...new Set([...l, id])]);
     this.tabLines.update(({ [id]: _, ...rest }) => rest);
     if (this.activeTab === id) this.activeTab = 'items';
+    this.lineTick.update((n) => n + 1);
+    this.entryItems.markAsDirty();
   }
 
-  /** Terms typed in the New RFQ form, kept per supplier tab until the request is saved. */
-  tabTerms = signal<Record<string, RfqTabTerms>>({});
-
-  onTabTermsChanged(e: { supplierId: string; terms: RfqTabTerms }): void {
-    this.tabTerms.update((m) => ({ ...m, [e.supplierId]: e.terms }));
-  }
-
-  onSupplierTabAdded(e: { supplierId: string; lineKeys: string[]; terms?: RfqTabTerms }): void {
+  onSupplierTabAdded(e: { supplierId: string; lineKeys: string[] }): void {
     const id = e?.supplierId;
     if (!id) return;
-    if (e.terms) this.onTabTermsChanged({ supplierId: id, terms: e.terms });
+    this.removedSuppliers.update((l) => l.filter((x) => x !== id));
     if (!this.addedSuppliers().includes(id)) this.addedSuppliers.update((l) => [...l, id]);
     if (e.lineKeys.length) {
       this.tabLines.update((m) => ({ ...m, [id]: [...new Set([...(m[id] ?? []), ...e.lineKeys])] }));
     }
     this.activeTab = id;
-    if (e.lineKeys.length) this.persistRfq(id);
-  }
-
-  /** A new RFQ is saved at once (the request is kept as a draft first if it is not saved yet), so it is listed under RFQs without waiting for Save. */
-  private persistRfq(supplierId: string): void {
-    if (!this.syncEntryToList()) return;
-    const work = this.collectRfqWork().filter((w) => w.supplierId === supplierId);
-    if (!work.length) return;
-    const run = (purchaseId: string) => this.saveSupplierRfqs(purchaseId, work)
-      .then(() => {
-        this.toaster.success('RFQ created', 'RFQ');
-        if (this.purchaseForm.get('status')?.value === 'New') this.purchaseForm.get('status')?.setValue(this.draftStatus, { emitEvent: false });
-        this.loadComparison();
-        this.saved.emit();
-      })
-      .catch((err) => this.toaster.error(err?.error?.message || 'The RFQ could not be saved.'));
-    if (this.purchaseId) { run(this.purchaseId); return; }
-    const formValue = this.getFormValueForSave();
-    formValue.status = this.draftStatus;
-    this.subscriptions.add(
-      this.purchaseService.createPurchaseDraft(formValue).subscribe({
-        next: (res) => {
-          if (res.success && res.data?._id) {
-            this.purchaseId = res.data._id;
-            run(res.data._id);
-          }
-        },
-        error: () => this.toaster.error('Save the request first: it could not be saved as a draft for this RFQ.'),
-      })
-    );
+    if (e.lineKeys.length) this.entryItems.markAsDirty();
   }
 
   onLinesAddedToTab(lineKeys: string[]): void {
@@ -468,27 +460,14 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     this.lineTick.update((n) => n + 1);
   }
 
-  /** Awards the ticked lines to the active supplier. The item entry already set the line's supplier and cost; where the supplier has a matching RFQ price the award is recorded too. */
+  /** Chooses the active supplier for the ticked lines. The item entry already set the line's supplier, shares and cost; they are kept on Save. */
   onLinesAwardedToTab(lines: { lineKey: string; price: number; qty: number; total: number }[]): void {
     const id = this.activeTab;
     if (id === 'items' || !lines.length) return;
-    // The awarded supplier keeps the line under its tab even when another supplier leads the line.
+    // The chosen supplier keeps the line under its tab even when another supplier leads the line.
     this.tabLines.update((m) => ({ ...m, [id]: [...new Set([...(m[id] ?? []), ...lines.map((l) => l.lineKey)])] }));
     this.lineTick.update((n) => n + 1);
-    if (!this.purchaseId) return;
-    const awards: { rfqId: string; lineKey: string; quoteId: string; qty?: number }[] = [];
-    lines.forEach(({ lineKey, price, qty, total }) => {
-      const offer = (this.offersByLine().get(lineKey) ?? []).find((o) => o.supplierId === id);
-      if (offer && offer.rfqId && offer.quoteId && (offer.state === 'awarded' || offer.state === 'priced') && offer.price === price) {
-        // Less than the whole line is a split award: the server keeps the other suppliers' shares.
-        awards.push({ rfqId: offer.rfqId, lineKey, quoteId: offer.quoteId, ...(qty > 0 && qty < total ? { qty } : {}) });
-      }
-    });
-    if (!awards.length) return;
-    this.salesRfqService.awardPurchase(this.purchaseId, awards).subscribe({
-      next: () => this.loadComparison(),
-      error: (err) => this.toaster.error(err?.error?.message || 'Could not record the award. Use Compare & award.'),
-    });
+    this.entryItems.markAsDirty();
   }
 
   private recomputeLiveTotal(): void {
@@ -504,33 +483,94 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   /** Translates the editor back into the `itemsList` shape, keeping each saved line's hidden fields. */
-  private collectEntryItems(): any[] | null {
+  private collectEntryItems(quiet = false): any[] | null {
     const byKey = this.originalsByKey();
+    const groups = this.groupByKey();
     let invalid = false;
     const items: any[] = [];
+    const groupOf = (name: string) => {
+      let g = items.find((x) => x.itemName === name);
+      if (!g) items.push(g = { itemName: name, itemDetails: [] });
+      return g;
+    };
 
     (this.entryItems.getRawValue()?.[0]?.items || []).forEach((item: any) => {
-      const details = (item.itemDetails || []).filter((d: any) => this.lineHasContent(d)).map((d: any) => {
-        const { lineKey, profit, ...fields } = d;
+      const formName = (item.itemName || '').toString().trim();
+      (item.itemDetails || []).filter((d: any) => this.lineHasContent(d)).forEach((d: any) => {
+        const { lineKey, profit, productId, partNo: _partCode, ...fields } = d;
         if (!(fields.detail || '').toString().trim() || !(+fields.quantity > 0)) invalid = true;
         const original = lineKey ? byKey.get(lineKey) : undefined;
-        return {
+        const line = {
           ...(original ?? { isNewlyAdded: true, merged: false, comparisons: [] }),
           ...fields,
-          partNo: fields.partNo || '',
+          partNo: productId || '',
           supplierId: fields.supplierId || original?.supplierId || '',
         };
+        // The deal's cost stays the baseline; the line's own cost is the award.
+        const deal = this.dealHit(groups.get(lineKey) ?? formName, fields.detail);
+        if (deal?.cost != null) line.dealUnitCost = deal.cost;
+        line.comparisons = this.lineComparisons({ ...d, ...line });
+        // A deal line goes under its deal item, a saved line back to its own group, a new line under the group it was added to.
+        const name = deal?.itemName || (lineKey && groups.get(lineKey)) || formName || line.detail || 'Item';
+        groupOf(name).itemDetails.push(line);
       });
-      if (!details.length) return;
-      const itemName = (item.itemName || '').toString().trim() || details[0].detail || 'Item';
-      items.push({ itemName, itemDetails: details });
     });
 
     if (invalid) {
+      if (quiet) return items;
       this.toaster.warning('Please fill all required fields!');
       return null;
     }
     return items;
+  }
+
+  /**
+   * The line's supplier comparisons as the form now holds them: every supplier tab it is under keeps its price
+   * (typed, offered or its last price), and the suppliers chosen in the form are selected with their shares.
+   */
+  private lineComparisons(d: any): any[] {
+    const entry = this.prFormCmp?.itemEntry;
+    const key: string | undefined = d.lineKey;
+    // Payment terms are required on a comparison; the deal sheet's can be blank.
+    const gone = this.removedSuppliers();
+    const list: any[] = (d.comparisons || [])
+      .filter((c: any) => c.selected || !gone.includes(String(c.supplierId)))
+      .map((c: any) => ({ ...c, paymentTerms: c.paymentTerms || 'Not specified' }));
+    const lineQty = Number(d.quantity) || 0;
+    // A line added in this edit has no key yet: its own supplier and cost are its only comparison.
+    if (entry && !key && d.supplierId && Number(d.unitCost) > 0 && !list.some((c) => String(c.supplierId) === String(d.supplierId))) {
+      const supplierId = String(d.supplierId);
+      list.push({ supplierId, supplierName: this.supplierOptions().find((o) => o.value === supplierId)?.label || '', quantity: lineQty, unitPrice: Number(d.unitCost), paymentTerms: 'Not specified', selected: false });
+    }
+    if (!entry || !key) return list;
+    const nameOf = (id: string) => this.supplierOptions().find((o) => o.value === id)?.label || '';
+    const upsert = (supplierId: string, price: number | null, qty: number | null) => {
+      let c = list.find((x) => String(x.supplierId) === supplierId);
+      if (!c) {
+        if (price == null) return null;
+        c = { supplierId, supplierName: nameOf(supplierId), quantity: qty || lineQty, unitPrice: price, paymentTerms: 'Not specified', selected: false };
+        list.push(c);
+      } else if (price != null) c.unitPrice = price;
+      return c;
+    };
+    const shares = entry.lineShares(key);
+    this.linePills(d).forEach((p) => {
+      // The line's own supplier, unsplit, is priced by the line's cost; any other supplier by its tab.
+      const own = String(d.supplierId || '') === p.id && !(shares && shares.length > 1);
+      const price = own ? (Number(d.unitCost) > 0 ? Number(d.unitCost) : null) : entry.scopePrice(key, p.id);
+      upsert(p.id, price, entry.scopeEdit(key, p.id).quantity);
+    });
+    if (shares) {
+      list.forEach((c) => { c.selected = false; c.awardedQty = undefined; });
+      shares.filter((s) => s.qty > 0).forEach((s) => {
+        const c = upsert(s.supplierId, s.cost > 0 ? s.cost : null, s.qty);
+        if (!c) return;
+        c.selected = true;
+        c.awardedQty = s.qty;
+        c.quantity = s.qty;
+      });
+    }
+    return list;
   }
 
   /** Pulls unsaved editor changes into `itemsList` before a whole-form save. */
@@ -631,6 +671,10 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   ngOnInit(): void {
+    this.subscriptions.add(this.employeeService.employeeData$.subscribe((emp: any) => {
+      const role = String(emp?.category?.role || '');
+      this.canCancelPo = /^(admin|superadmin)$/i.test(role) || !!emp?.category?.privileges?.purchaseOrder?.canCancel;
+    }));
     const url = this.route.snapshot.routeConfig?.path || '';
     this.isEditing = !!this.editPurchaseId || (!this.drawer && url.includes('edit'));
 
@@ -661,7 +705,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       this.updateTotalLpo();
     });
 
-    this.subscriptions.add(this.entryItems.valueChanges.subscribe(() => this.recomputeLiveTotal()));
+    this.subscriptions.add(this.entryItems.valueChanges.subscribe(() => { this.recomputeLiveTotal(); this.refreshLastPricesForEntry(); }));
 
     this.refreshHeader();
     this.subscriptions.add(this.purchaseForm.valueChanges.subscribe(() => this.refreshHeader()));
@@ -714,8 +758,9 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   /** After create/draft: the page returns to the list, the drawer just closes over it. */
-  private backToList(): void {
+  private backToList(submittedId?: string): void {
     if (this.drawer) {
+      if (submittedId) this.submitted.emit(submittedId);
       this.saved.emit();
       this.closeDrawer();
       return;
@@ -736,20 +781,20 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       ...(this.isJobLess ? [{ label: 'General purchase', tone: 'info' as const }] : []),
     ]);
     this.headerSubtitle.set(this.isJobLess
-      ? (this.suppliersList().find((s) => s._id === v.supplierId)?.supplierName || 'Supplier chosen through RFQs')
+      ? (this.suppliersList().find((s) => s._id === v.supplierId)?.supplierName || 'Suppliers chosen per line')
       : (v.customer || 'No job selected'));
     this.stats.set(this.isJobLess
       ? [
           { label: 'PR No', value: v.purchaseNo || '—' },
           { label: 'Items', value: String(this.itemCount()) },
-          { label: 'Total LPO value', value: money },
+          { label: 'Total PR value', value: money },
         ]
       : [
           { label: 'PR No', value: v.purchaseNo || '—' },
           { label: 'Job ID', value: this.isEditing ? (v.jobId || '—') : (this.selectedJobSheet as any)?.jobId || '—' },
           { label: 'Deal sheet', value: v.dealSheetId || '—' },
           { label: 'Items', value: String(this.itemCount()) },
-          { label: 'Total LPO value', value: money },
+          { label: 'Total PR value', value: money },
         ]);
   }
 
@@ -770,7 +815,6 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   loadPurchaseData(): void {
     if (!this.purchaseId) return;
 
-    this.loadComparison();
     this.subscriptions.add(
       this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
         next: (res) => {
@@ -815,6 +859,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             if (purchase.currency) {
               this.currency.set(purchase.currency);
             }
+            this.loadLastPrices();
 
             if (purchase.mrRequest?.engineer) {
               this.patchMrValues(purchase.mrRequest);
@@ -880,12 +925,22 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       this.toaster.error('Award every product in Compare & award before sending for approval');
       return;
     }
+    this.statusBeforeSubmit = this.purchaseForm.get('status')?.value;
     this.purchaseForm.get('status')?.setValue('Pending')
     if (this.isEditing) {
       this.onEditSubmits()
     } else {
       this.sendToService()
     }
+  }
+
+  /** Status held before Submit set Pending, put back if the request fails so Save stays available. */
+  private statusBeforeSubmit: string | undefined;
+
+  private submitFailed(error: any): void {
+    console.error(error);
+    this.purchaseForm.get('status')?.setValue(this.statusBeforeSubmit ?? this.draftStatus);
+    this.toaster.error(error?.error?.message || 'Failed to send for approval');
   }
 
   /** A saved-but-unsubmitted PR is In Progress (New is only a job allocated but not yet started). */
@@ -900,88 +955,16 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   onDraftClicks() {
     if (!this.syncEntryToList()) return;
-    // Read the supplier tabs now: a first save gives the lines new ids and the tabs are keyed by the old ones.
-    const work = this.collectRfqWork();
     if (this.purchaseId) {
-      this.updatePurchaseDraft(work);
+      this.updatePurchaseDraft();
     } else {
-      this.createPurchaseDraft(work);
+      this.createPurchaseDraft();
     }
   }
 
   @ViewChild(PrFormComponent) private prFormCmp?: PrFormComponent;
 
-  /**
-   * What each supplier tab holds that should be kept as an RFQ on this request. The line's own (deal sheet)
-   * supplier is not saved: its price is always on the deal sheet. Every other supplier handed lines in a tab,
-   * or already asked about them, is saved with the quantity and price typed in its tab.
-   */
-  private collectRfqWork(): RfqWork[] {
-    const entry = this.prFormCmp?.itemEntry;
-    if (!entry) return [];
-    const byKey = this.originalsByKey();
-    const handed = this.tabLines();
-    const dropped = this.tabExcluded();
-    const offers = this.offersByLine();
-    const suppliers = this.supplierTabs().map((t) => t.id);
-    const out = new Map<string, { lineKey: string; quantity: number; unitCost: number | null }[]>();
-    (this.entryItems.getRawValue()?.[0]?.items || []).forEach((item: any) => (item.itemDetails || []).forEach((d: any) => {
-      const key: string | undefined = d.lineKey;
-      if (!key) return;
-      const saved = byKey.get(key);
-      for (const id of suppliers) {
-        const asked = (offers.get(key) ?? []).some((o) => o.supplierId === id);
-        const member = asked || !!handed[id]?.includes(key) || (saved?.comparisons || []).some((c: any) => String(c.supplierId) === id);
-        if (!member || (!asked && (dropped[id] ?? []).includes(key)) || (!asked && String(d.supplierId || '') === id)) continue;
-        const edit = entry.scopeEdit(key, id);
-        const quantity = edit.quantity ?? (Number(d.quantity) || 0);
-        if (!(quantity > 0)) continue;
-        out.set(id, [...(out.get(id) ?? []), { lineKey: key, quantity, unitCost: edit.unitCost }]);
-      }
-    }));
-    return [...out].map(([supplierId, lines]) => ({ supplierId, lines }));
-  }
-
-  /** Saves each supplier's lines as that supplier's RFQ on the request (an existing RFQ is updated, not duplicated), then any price typed in the tab. */
-  private async saveSupplierRfqs(purchaseId: string, work: RfqWork[]): Promise<number> {
-    if (!work.length) return 0;
-    const saved: any = (await firstValueFrom(this.purchaseService.getPurchaseById(purchaseId))).data;
-    const realKey = (key: string): string | undefined => {
-      const at = /^idx-(\d+)-(\d+)$/.exec(key);
-      return at ? saved?.items?.[+at[1]]?.itemDetails?.[+at[2]]?._id : key;
-    };
-    let count = 0;
-    for (const w of work) {
-      const lines = w.lines.map((l) => ({ ...l, key: realKey(l.lineKey) })).filter((l): l is typeof l & { key: string } => !!l.key);
-      if (!lines.length) continue;
-      const column = this.supplierRfqs()[w.supplierId];
-      const week = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const { deadline, ...asked } = this.tabTerms()[w.supplierId] ?? {};
-      const res = await firstValueFrom(this.salesRfqService.createFromPurchase(purchaseId, {
-        suppliers: [{ supplierId: w.supplierId, lineKeys: lines.map((l) => l.key) }],
-        lines: lines.map((l) => ({ itemDetailKey: l.key, quantity: l.quantity })),
-        requestedTerms: asked,
-        deadline: deadline || column?.deadline || week,
-      }));
-      const rfq = res.data?.[0];
-      const prices = lines.filter((l) => l.unitCost != null).map((l) => ({ itemDetailKey: l.key, unitPrice: l.unitCost, quantity: l.quantity }));
-      if (rfq && prices.length) {
-        await firstValueFrom(this.salesRfqService.submitReply(rfq._id, rfq.inviteId, { terms: column?.replyTerms ?? {}, prices }));
-      }
-      count++;
-    }
-    return count;
-  }
-
-  /** After the request itself is saved: keep the supplier tabs as RFQs, then carry on (a failure leaves the request saved). */
-  private saveRfqsThen(purchaseId: string, work: RfqWork[], done: () => void): void {
-    this.saveSupplierRfqs(purchaseId, work)
-      .then((n) => { if (n) this.toaster.success(`${n} supplier RFQ${n === 1 ? '' : 's'} saved`, 'RFQs'); })
-      .catch((err) => this.toaster.error(err?.error?.message || 'The request was saved, but the supplier RFQs could not be.'))
-      .finally(done);
-  }
-
-  createPurchaseDraft(work: RfqWork[] = []): void {
+  createPurchaseDraft(): void {
     const formValue = this.getFormValueForSave();
     formValue.status = this.draftStatus;
 
@@ -991,7 +974,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
           if (res.success && res.data?._id) {
             this.purchaseId = res.data._id;
             this.toaster.success('Purchase saved as draft');
-            this.saveRfqsThen(res.data._id, work, () => this.backToList());
+            this.backToList();
           }
         },
         error: (error) => {
@@ -1002,7 +985,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     );
   }
 
-  updatePurchaseDraft(work: RfqWork[] = []): void {
+  updatePurchaseDraft(): void {
     const formValue = this.getFormValueForSave();
     formValue.status = this.draftStatus;
 
@@ -1011,7 +994,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
         next: (res) => {
           if (res.success) {
             this.toaster.success('Purchase updated successfully');
-            this.saveRfqsThen(this.purchaseId!, work, () => this.backToList());
+            this.backToList();
           }
         },
         error: (error) => {
@@ -1039,13 +1022,10 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
         next: (res) => {
           if (res.success) {
             this.toaster.success('Purchase request submitted for approval');
-            this.backToList();
+            this.backToList(res.data?._id);
           }
         },
-        error: (error) => {
-          console.error(error);
-          this.toaster.error('Failed to create purchase');
-        }
+        error: (error) => this.submitFailed(error)
       })
     );
   }
@@ -1058,14 +1038,11 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       this.purchaseService.updatePurchase(this.purchaseId!, formValue).subscribe({
         next: (res) => {
           if (res.success) {
-            this.toaster.success('Purchase updated successfully');
-            this.backToList();
+            this.toaster.success('Purchase request submitted for approval');
+            this.backToList(this.purchaseId!);
           }
         },
-        error: (error) => {
-          console.error(error);
-          this.toaster.error('Failed to update purchase');
-        }
+        error: (error) => this.submitFailed(error)
       })
     );
   }
@@ -1165,6 +1142,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       const itemsWithComparisons = this.patchComparisonsData(updatedItems, job.quotation?.dealData);
       this.itemsList.set(itemsWithComparisons);
       this.patchItemsValuesWithPartNoIds(itemsWithComparisons);
+      this.loadLastPrices();
 
       if (job.quotation?.dealData?.additionalCosts) {
         this.convertAdditionalCostsToSupplierDiscounts(job.quotation.dealData.additionalCosts);
@@ -1184,7 +1162,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
         comparison: true,
         comparisons: detail.supplierDetails || detail.supplierId ? [
           {
-            paymentTerms: dealData?.paymentTerms || '',
+            paymentTerms: dealData?.paymentTerms || 'Not specified',
             etaTerms: detail.availability || '',
             // The Deal Sheet supplier is only a default; the PR has to award each line itself.
             selected: false,
@@ -1326,7 +1304,9 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** Awarded vs total product lines, for the Compare & award counter and the submit hint. */
   get awardStats(): { awarded: number; total: number } {
-    const lines = this.itemsList().flatMap((item: any) => item.itemDetails || []).filter((d: any) => Number(d.quantity) > 0);
+    // Unsaved awards and releases count too, so the counter moves as the pills are clicked.
+    const source = this.entryItems.dirty ? (this.collectEntryItems(true) ?? this.itemsList()) : this.itemsList();
+    const lines = source.flatMap((item: any) => item.itemDetails || []).filter((d: any) => Number(d.quantity) > 0);
     return { awarded: lines.filter((d: any) => this.isResolvedLine(d)).length, total: lines.length };
   }
 
@@ -1338,23 +1318,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     return null;
   }
 
-  /** Progress strip: Items -> RFQ sent -> Offers in -> Awarded -> Submitted. */
-  get flowSteps(): { label: string; done: boolean }[] {
-    const data = this.comparison();
-    const rfqSent = !!data?.rfqs?.length;
-    const offersIn = !!data?.rows?.some((r) => r.cells.some((c) => !!c.quote && c.quote.unitPrice != null));
-    const status = this.f['status']?.value;
-    const submitted = !!status && status !== 'New' && status !== 'In Progress';
-    return [
-      { label: 'Items', done: this.awardStats.total > 0 },
-      { label: 'RFQ sent', done: rfqSent || submitted },
-      { label: 'Offers in', done: offersIn || submitted },
-      { label: 'Awarded', done: this.allAwarded || submitted },
-      { label: 'Submitted', done: submitted },
-    ];
-  }
-
-  /** Saves unsaved edits (and the draft itself) so the RFQs can point at saved lines, then runs `next`. */
+  /** Saves unsaved edits (and the draft itself) so the awards can point at saved lines, then runs `next`. */
   private whenSaved(next: (purchaseId: string) => void): void {
     if (!this.isJobLess && !this.selectedJobSheet) {
       this.warningMessage('Please select any job from given list');
@@ -1373,15 +1337,30 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     this.saveItemsToBackend(items, (ok) => { if (ok) proceed(); });
   }
 
-  /** 1 = the lines needed, 2 = ask suppliers (one RFQ each), 3 = compare & award, 4 = POs once approved. */
-  step: 1 | 2 | 3 | 4 = 1;
+  /** 2 = items (the lines and their suppliers, one RFQ each), 3 = compare & award, 4 = POs once approved. Step 1 (Need) was merged into Items. */
+  step: 1 | 2 | 3 | 4 = 2;
   readonly steps: { n: 1 | 2 | 3 | 4; label: string }[] = [
-    { n: 1, label: 'Need' },
-    { n: 2, label: 'Ask suppliers' },
+    { n: 2, label: 'Items' },
     { n: 3, label: 'Compare & award' },
     { n: 4, label: 'POs' },
   ];
-  private dealQty = signal<Map<string, { itemName: string; detail: string; quantity: number; sellPrice: number | null; cost: number | null; supplierName: string }>>(new Map());
+  private dealQty = signal<Map<string, { itemName: string; detail: string; quantity: number; sellPrice: number | null; cost: number | null; supplierName: string; supplierId: string | null }>>(new Map());
+
+  /** The deal sheet's cost and supplier for a line, the baseline the PR's awards are compared with. */
+  lineDeal = (itemName: string, line: any): { cost: number | null; supplierId: string | null } | null => {
+    const hit = this.dealHit((line?.lineKey && this.groupByKey().get(line.lineKey)) || itemName, line?.detail);
+    return hit ? { cost: hit.cost, supplierId: hit.supplierId } : null;
+  };
+
+  /** The deal sheet line for a PR line: same item and detail, else the only deal line with that detail (a saved PR can regroup its lines). */
+  private dealHit(itemName: string, detail: string) {
+    const deal = this.dealQty();
+    const exact = deal.get(CreatePurchaseComponent.dealKey(itemName, detail));
+    if (exact) return exact;
+    const d = (detail || '').trim().toLowerCase();
+    const same = [...deal.values()].filter((v) => v.detail.trim().toLowerCase() === d);
+    return same.length === 1 ? same[0] : undefined;
+  }
   reviewBusy = signal(false);
 
   private static dealKey(itemName: string, detail: string): string {
@@ -1390,7 +1369,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** Deal sheet quantities and prices of the job, for the compare step's deal columns and margins. */
   private refreshDealQty(): void {
-    const deal = new Map<string, { itemName: string; detail: string; quantity: number; sellPrice: number | null; cost: number | null; supplierName: string }>();
+    const deal = new Map<string, { itemName: string; detail: string; quantity: number; sellPrice: number | null; cost: number | null; supplierName: string; supplierId: string | null }>();
     const updated = (this.selectedJobSheet as any)?.quotation?.dealData?.updatedItems || [];
     updated.forEach((item: any) => (item.itemDetails || []).forEach((d: any) => {
       const key = CreatePurchaseComponent.dealKey(item.itemName, d.detail);
@@ -1399,6 +1378,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
         itemName: item.itemName || '', detail: d.detail || '', quantity: (prev?.quantity ?? 0) + (Number(d.quantity) || 0),
         sellPrice: prev?.sellPrice ?? (Number(d.unitSellingPrice) || null), cost: prev?.cost ?? (Number(d.unitCost) || null),
         supplierName: prev?.supplierName || d.supplierName || '',
+        supplierId: prev?.supplierId || (d.supplierId?._id || d.supplierId ? String(d.supplierId?._id || d.supplierId) : null),
       });
     }));
     this.dealQty.set(deal);
@@ -1410,7 +1390,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     if (this.stepChosen) return;
     this.stepChosen = true;
     const step = this.initialStep ?? (status === 'Approved' ? 4 : status === 'Pending' ? 3 : null);
-    if (step) this.goToStep(step);
+    if (step) this.goToStep(step === 1 ? 2 : step);
   }
 
   get isApproved(): boolean {
@@ -1421,8 +1401,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   stepDone(n: number): boolean {
     const status = this.f['status']?.value;
     const submitted = !!status && !['New', 'In Progress', 'Rejected'].includes(status);
-    if (n === 1) return this.awardStats.total > 0;
-    if (n === 2) return !!this.comparison()?.rfqs?.length || submitted;
+    if (n === 2) return this.supplierTabs().length > 0 || submitted;
     if (n === 3) return submitted || (this.awardStats.total > 0 && !this.submitBlockedReason);
     return this.poCards().length > 0 && this.poCards().every((c) => c.lpos.some((l) => ['Placed', 'Closed'].includes(l.poStatus)));
   }
@@ -1434,8 +1413,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   goToStep(n: 1 | 2 | 3 | 4): void {
     if (this.stepLocked(n) || n === this.step) return;
     if (n === 1 || n === 2) {
-      if (n === 1) this.activeTab = 'items';
-      this.step = n;
+      this.activeTab = 'items';
+      this.step = 2;
       return;
     }
     if (n === 3) { this.onNextClicks(); return; }
@@ -1444,50 +1423,43 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   onNextClicks(): void {
-    if (this.step === 1) { this.step = 2; return; }
     // Submitted or approved: nothing to save, the compare step is read-only.
-    if (!this.canSaveDraft) {
+    // The totals bar of this step reads the item entry, so it must be on Items, not a supplier tab. The step opens a tick
+    // later so the item entry has left the supplier tab before the bar reads it.
+    const open = () => {
+      this.activeTab = 'items';
       this.refreshDealQty();
-      this.loadComparison();
-      this.step = 3;
+      setTimeout(() => (this.step = 3));
+    };
+    if (!this.canSaveDraft) { open(); return; }
+    // Choices made in the item form (pills, supplier tabs) are saved first, so the compare step starts from them.
+    const dirty = this.entryItems.dirty;
+    if (!this.syncEntryToList()) return;
+    if (dirty && this.purchaseId) {
+      this.saveItemsToBackend(this.itemsList(), (ok) => { if (ok) open(); });
       return;
     }
-    if (!this.syncEntryToList()) return;
-    this.whenSaved(() => {
-      this.refreshDealQty();
-      this.loadComparison();
-      this.step = 3;
-    });
+    this.whenSaved(open);
   }
 
   onBackClicks(): void {
-    if (this.step === 1) return;
+    if (this.step <= 2) return;
     this.goToStep((this.step - 1) as 1 | 2 | 3);
   }
 
-  /** Ask step counters: RFQs out, lines no supplier was asked about, lines at the 5-supplier limit. */
+  /** Items step counters: lines with no supplier yet. */
   askSummary = computed(() => {
     this.lineTick();
-    const data = this.comparison();
-    const asked = new Map<string, number>();
-    (data?.rows ?? []).forEach((r) => asked.set(r.key, r.cells.length));
     let unasked = 0;
-    let full = 0;
-    this.itemsList().forEach((item: any, i: number) => (item.itemDetails || []).forEach((d: any, j: number) => {
-      if (!(Number(d.quantity) > 0)) return;
-      const n = asked.get(this.lineKeyOf(i, j, d)) ?? 0;
-      if (!n) unasked++;
-      if (n >= 5) full++;
+    this.itemsList().forEach((item: any) => (item.itemDetails || []).forEach((d: any) => {
+      if (Number(d.quantity) > 0 && !d.supplierId && !(d.comparisons || []).some((c: any) => c.supplierId)) unasked++;
     }));
-    return { rfqs: data?.rfqs?.length ?? 0, unasked, full };
+    return { unasked };
   });
 
-  /** Every request line with its suppliers, what is awarded, and the quantity not yet covered. */
+  /** Every request line with its suppliers (from its comparisons), what is chosen, and the quantity not yet covered. */
   reviewRows = computed<ReviewRow[]>(() => {
     const deal = this.dealQty();
-    const cmp = this.comparison();
-    const cmpRows = new Map((cmp?.rows ?? []).map((r) => [r.key, r]));
-    const columns = new Map((cmp?.rfqs ?? []).map((c) => [c._id, c]));
     const rows: ReviewRow[] = [];
     this.itemsList().forEach((item: any, i: number) => (item.itemDetails || []).forEach((d: any, j: number) => {
       const prQty = Number(d.quantity) || 0;
@@ -1495,60 +1467,51 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       const key = this.lineKeyOf(i, j, d);
       const suppliers: ReviewSupplier[] = [];
       let allocated = 0;
-      (cmpRows.get(key)?.cells ?? []).forEach((cell) => {
-        const col = columns.get(cell.rfqId);
-        if (!col) return;
-        const q = cell.quote;
-        const priced = !!q && q.availability !== 'Unavailable' && q.unitPrice != null;
-        const won = !!q?.selected;
-        const qty = won ? (cell.awardedQty || prQty) : 0;
+      const nameOf = (id?: string) => (id ? this.supplierOptions().find((o) => o.value === id)?.label : undefined);
+      (d.comparisons || []).forEach((c: any) => {
+        const id = c.supplierId?._id || c.supplierId;
+        if (!id || suppliers.some((s) => s.supplierId === String(id))) return;
+        const won = !!c.selected;
+        const qty = won ? (Number(c.awardedQty) || Number(c.quantity) || prQty) : 0;
+        const price = Number(c.unitPrice) > 0 ? Number(c.unitPrice) : null;
         allocated += qty;
         suppliers.push({
-          supplierId: col.supplierId ? String(col.supplierId) : undefined, name: col.supplierName, state: won ? 'awarded' : priced ? 'priced' : 'waiting', price: q?.unitPrice ?? null,
-          qty, offerQty: priced ? (Number(q?.quantity) || prQty) : null, rfqId: cell.rfqId, quoteId: q?._id,
-          leadTimeDays: q?.leadTimeDays ?? null,
+          supplierId: String(id), name: c.supplierName || nameOf(String(id)) || 'Supplier',
+          state: won ? 'awarded' : price != null ? 'priced' : 'waiting', price,
+          qty, offerQty: price != null ? (Number(c.quantity) || prQty) : null,
         });
       });
-      // Every supplier from step 1 that is on this line (deal sheet, added tab, earlier RFQ) is an option, quoted or not.
-      const saved = this.originalsByKey().get(d.lineKey ?? key);
-      const optionOf = (id?: string, name?: string) => suppliers.find((s) => (id && s.supplierId === id) || s.name === name);
-      const addOption = (id: string | undefined, name: string | undefined) => {
-        if (!name || optionOf(id, name)) return;
-        const c = (saved?.comparisons || []).find((x: any) => (id && String(x.supplierId) === id) || x.supplierName === name);
-        const price = c?.unitPrice != null ? Number(c.unitPrice) : null;
-        suppliers.push({ supplierId: id, name, state: price != null ? 'option' : 'waiting', price, qty: 0, offerQty: price != null ? (Number(c?.quantity) || prQty) : null });
+      // Suppliers on the line in step 1 (its supplier, its tabs) are options too, at their last price when they have one.
+      const addOption = (id: string | undefined, name: string | undefined, price: number | null = null) => {
+        if (!id || !name || suppliers.some((s) => s.supplierId === id)) return;
+        suppliers.push({ supplierId: id, name, state: price != null ? 'priced' : 'waiting', price, qty: 0, offerQty: price != null ? prQty : null });
       };
-      this.lineOffers(d).forEach((o) => addOption(o.supplierId, o.supplierName));
+      const offers = this.lineOffers({ ...d, lineKey: key, partNo: this.getPartNumberValue(d.partNo), supplierId: this.lineSupplierId(d) });
+      offers.filter((o) => !o.pastOnly).forEach((o) => addOption(o.supplierId, o.supplierName, o.price ?? null));
       Object.entries(this.tabLines()).forEach(([sid, keys]) => {
-        if (keys.includes(key)) addOption(sid, this.supplierOptions().find((o) => o.value === sid)?.label);
+        if (keys.includes(key)) addOption(sid, nameOf(sid), offers.find((o) => o.supplierId === sid)?.price ?? null);
       });
-      // The deal sheet's supplier: an offer on the line that did not come from an RFQ quote.
-      const quoteIds = new Set(suppliers.map((s) => s.quoteId).filter(Boolean));
-      const defaultId = this.lineSupplierId({ ...d, comparisons: (d.comparisons || []).filter((c: any) => !quoteIds.has(String(c._id))) });
-      const defaultName = d.supplierDetails?.supplierName || d.supplierName
-        || (saved?.comparisons || []).find((x: any) => String(x.supplierId) === defaultId)?.supplierName
-        || (defaultId ? this.supplierOptions().find((o) => o.value === defaultId)?.label : '') || '';
-      if (defaultName) {
-        const hit = suppliers.find((s) => (defaultId && s.supplierId === defaultId) || s.name === defaultName);
-        const sid = defaultId || undefined;
-        // With no explicit award the deal sheet's supplier takes the whole line on submit.
-        if (!allocated) {
-          allocated = prQty;
-          if (hit && hit.state !== 'awarded') { hit.state = 'default'; hit.qty = prQty; }
-          else if (!hit) suppliers.unshift({ supplierId: sid, name: defaultName, state: 'default', price: Number(d.unitCost) || null, qty: prQty });
-        } else if (!hit) {
-          suppliers.push({ supplierId: sid, name: defaultName, state: 'waiting', price: Number(d.unitCost) || null, qty: 0 });
-        }
+      // The line's own supplier (from the deal sheet): with nobody chosen it supplies the whole line at the line's cost.
+      const defaultId = String(d.supplierId?._id || d.supplierId || '');
+      const defaultName = d.supplierDetails?.supplierName || d.supplierName || nameOf(defaultId) || '';
+      if (defaultId && !allocated) {
+        allocated = prQty;
+        const hit = suppliers.find((s) => s.supplierId === defaultId);
+        if (hit) {
+          hit.state = 'default'; hit.qty = prQty;
+          hit.price ??= Number(d.unitCost) || null;
+          hit.offerQty ??= prQty;
+        } else suppliers.unshift({ supplierId: defaultId, name: defaultName || 'Supplier', state: 'default', price: Number(d.unitCost) || null, qty: prQty, offerQty: prQty });
       }
-      const dealHit = deal.get(CreatePurchaseComponent.dealKey(item.itemName, d.detail));
+      const dealHit = deal.get(CreatePurchaseComponent.dealKey(item.itemName, d.detail)) ?? this.dealHit(item.itemName, d.detail);
       rows.push({
-        key, itemName: item.itemName || '', detail: d.detail || '', uom: d.uom || undefined, prQty,
+        key, itemName: dealHit?.itemName || item.itemName || '', detail: d.detail || '', uom: d.uom || undefined, prQty,
         dealQty: dealHit ? dealHit.quantity : null, allocated, remaining: Math.max(0, prQty - allocated), suppliers,
         sellPrice: dealHit?.sellPrice ?? (Number(d.unitSellingPrice) || null),
         dealCost: dealHit?.cost ?? null,
         dealSupplier: dealHit?.supplierName || defaultName || '',
-        short: !!(d.short ?? cmpRows.get(key)?.short),
-        shortReason: d.shortReason ?? cmpRows.get(key)?.shortReason,
+        short: !!d.short,
+        shortReason: d.shortReason,
       });
     }));
     return rows;
@@ -1573,39 +1536,16 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     this.onReviewAwardMany([a]);
   }
 
-  /** Saves awards in order; a full award away from the lowest price asks why, then retries with the reason. */
-  onReviewAwardMany(awards: ReviewAward[], reason?: string): void {
+  /** Saves the supplier choices in order, straight on the request's lines. */
+  onReviewAwardMany(awards: ReviewAward[]): void {
     if (!this.purchaseId || !awards.length) return;
     this.reviewBusy.set(true);
-    const body = awards.map((a) => ({ ...a, ...(reason ? { reason } : {}) }));
-    this.subscriptions.add(this.salesRfqService.awardPurchase(this.purchaseId, body).subscribe({
+    this.subscriptions.add(this.purchaseService.awardLines(this.purchaseId, awards).subscribe({
       next: () => { this.reviewBusy.set(false); this.loadPurchaseData(); this.saved.emit(); },
-      error: async (err) => {
+      error: (err) => {
         this.reviewBusy.set(false);
-        if (err?.error?.reasonRequired && !reason) {
-          const result = await this.confirm.open({
-            tone: 'approve',
-            title: 'Not the lowest price',
-            message: err.error.message || 'Another supplier offered a lower price.',
-            reason: true,
-            reasonLabel: 'Why this supplier?',
-            confirmLabel: 'Award anyway',
-            cancelLabel: 'Cancel',
-          });
-          if (result.confirmed && result.reason?.trim()) this.onReviewAwardMany(awards, result.reason.trim());
-          return;
-        }
         this.toaster.error(err?.error?.message || 'Could not save the award.');
       },
-    }));
-  }
-
-  /** A supplier's discount on its whole RFQ total, from its tab. */
-  onRfqDiscountSaved(e: { rfqId: string; type: 'amount' | 'percent'; value: number }): void {
-    if (!this.purchaseId) return;
-    this.subscriptions.add(this.salesRfqService.setPurchaseRfqDiscount(this.purchaseId, e.rfqId, e.type, e.value).subscribe({
-      next: (res) => { this.toaster.success(res?.message || 'Discount saved', 'Supplier'); this.loadComparison(); },
-      error: (err) => this.toaster.error(err?.error?.message || 'Could not save the discount.'),
     }));
   }
 
@@ -1641,23 +1581,106 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   /** Initiate LPO slide-over, opened on one supplier. */
   createPoSupplierId: string | null = null;
 
+  /** Per line and supplier: awarded, on POs, received, cancelled, left to order. */
+  orderRows = signal<PurchaseOrderStatusRow[]>([]);
+  /** Cancel a PO and move freed quantity to another supplier. */
+  canCancelPo = false;
+  /** Supplier cards opened to show their lines. */
+  openPoCards = new Set<string>();
+
   private loadPos(): void {
     if (!this.purchaseId) return;
     this.posLoading.set(true);
     this.subscriptions.add(this.purchaseOrderService.getAllPurchaseOrders({ purchaseId: this.purchaseId, row: 200 }).subscribe({
       next: (res: any) => {
-        this.lpos.set((res?.data || []).filter((l: any) => l.poStatus !== 'Cancelled'));
+        this.lpos.set(res?.data || []);
         this.posLoading.set(false);
       },
       error: () => { this.lpos.set([]); this.posLoading.set(false); this.toaster.error('Could not load the POs of this request.'); },
     }));
+    this.subscriptions.add(this.salesRfqService.getPurchaseOrderStatus(this.purchaseId).subscribe({
+      next: (res) => this.orderRows.set(res?.data?.rows || []),
+      error: () => this.orderRows.set([]),
+    }));
+  }
+
+  trackPoCardLine = (_: number, x: { row: PurchaseOrderStatusRow }) => x.row.lineKey;
+
+  /** A supplier's lines on the PO step: its share, what its POs hold, and what it still has to order. */
+  poCardLines(supplierId: string): { row: PurchaseOrderStatusRow; s: PurchaseOrderStatusSupplier }[] {
+    const out: { row: PurchaseOrderStatusRow; s: PurchaseOrderStatusSupplier }[] = [];
+    this.orderRows().forEach((row) => {
+      const s = row.suppliers.find((x) => x.supplierId === supplierId);
+      if (s && (s.awardedQty > 0 || s.pos.length)) out.push({ row, s });
+    });
+    return out;
+  }
+
+  /** Card totals: quantity to order, received, cancelled. */
+  poCardTotals(supplierId: string): { toOrder: number; ordered: number; received: number; cancelled: number } {
+    return this.poCardLines(supplierId).reduce((t, { s }) => ({
+      toOrder: t.toOrder + s.freeQty, ordered: t.ordered + s.orderedQty, received: t.received + s.receivedQty, cancelled: t.cancelled + s.cancelledQty,
+    }), { toOrder: 0, ordered: 0, received: 0, cancelled: 0 });
+  }
+
+  /** Request-wide: lines still missing a PO, and quantity no supplier is awarded. */
+  poStepSummary = computed(() => {
+    const rows = this.orderRows();
+    return {
+      lines: rows.length,
+      fullyOrdered: rows.filter((r) => r.awardedQty > 0 && r.toOrderQty <= 0).length,
+      toOrder: rows.filter((r) => r.toOrderQty > 0).length,
+      unawarded: rows.filter((r) => r.unawardedQty > 0 && !r.short).length,
+      cancelled: rows.filter((r) => r.cancelledQty > 0).length,
+    };
+  });
+
+  togglePoCard(id: string): void {
+    if (this.openPoCards.has(id)) this.openPoCards.delete(id); else this.openPoCards.add(id);
+  }
+
+  canCancelStatus(status: string): boolean {
+    return ['Draft', 'Pending for Approval', 'Approved', 'Placed'].includes(status);
+  }
+
+  onCancelPo(lpo: { _id: string; poNo: string }): void {
+    const ref = this.modal.open<{ success: boolean }>(PoCancelModalComponent, { width: '760px', closeOnBackdrop: false, data: { poId: lpo._id, poNo: lpo.poNo } });
+    ref.afterClosed().subscribe((r) => { if (r?.success) { this.loadPos(); this.saved.emit(); } });
+  }
+
+  onReassign(row: PurchaseOrderStatusRow, s: PurchaseOrderStatusSupplier): void {
+    if (!this.purchaseId) return;
+    const quoted: Record<string, number> = {};
+    // Only prices kept on the line count as offered; the server takes them as they are.
+    (this.originalsByKey().get(row.lineKey)?.comparisons || []).forEach((c: any) => {
+      if (c.supplierId && Number(c.unitPrice) > 0) quoted[String(c.supplierId?._id || c.supplierId)] = Number(c.unitPrice);
+    });
+    const ref = this.modal.open<{ success: boolean }>(PoReassignModalComponent, {
+      width: '560px',
+      closeOnBackdrop: false,
+      data: {
+        purchaseId: this.purchaseId, lineKey: row.lineKey, detail: row.detail, uom: row.uom, currency: this.currency() || 'QAR',
+        from: { supplierId: s.supplierId, supplierName: s.supplierName, freeQty: s.freeQty, unitPrice: s.unitPrice },
+        quoted, suppliers: this.supplierOptions(),
+      },
+    });
+    ref.afterClosed().subscribe((r) => { if (r?.success) { this.loadPurchaseData(); this.loadPos(); this.saved.emit(); } });
   }
 
   /** One card per awarded supplier: what it was awarded and the POs raised for it. */
   poCards = computed(() => {
     type Card = { supplierId: string; name: string; lines: number; value: number; lpos: { _id: string; poNo: string; poStatus: string }[] };
     const cards = new Map<string, Card>();
-    this.reviewRows().forEach((r) => {
+    // On an approved request the order status is the truth: shares moved after approval show up here.
+    if (this.orderRows().length) {
+      this.orderRows().forEach((row) => row.suppliers.forEach((s) => {
+        if (!(s.awardedQty > 0)) return;
+        const c: Card = cards.get(s.supplierId) ?? { supplierId: s.supplierId, name: s.supplierName, lines: 0, value: 0, lpos: [] };
+        c.lines++;
+        c.value += (s.unitPrice ?? 0) * s.awardedQty;
+        cards.set(s.supplierId, c);
+      }));
+    } else this.reviewRows().forEach((r) => {
       const awarded = r.suppliers.filter((s) => s.state === 'awarded');
       const chosen = awarded.length ? awarded : r.suppliers.filter((s) => s.state === 'default');
       chosen.forEach((s) => {
@@ -1685,11 +1708,83 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
         ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300'
         : status === 'Rejected'
           ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+          : status === 'Cancelled'
+            ? 'bg-gray-100 text-gray-500 line-through dark:bg-gray-800 dark:text-gray-400'
           : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
   }
 
   onCreatePo(supplierId: string): void {
     this.createPoSupplierId = supplierId;
+  }
+
+  makingPos = signal(false);
+
+  /** Suppliers with quantity still to order: the ones Make POs raises a PO for. */
+  get suppliersToOrder(): { supplierId: string; name: string }[] {
+    return this.poCards()
+      .filter((c) => this.poCardTotals(c.supplierId).toOrder > 0 || (!this.orderRows().length && !c.lpos.length))
+      .map((c) => ({ supplierId: c.supplierId, name: c.name }));
+  }
+
+  /** One PO per supplier for everything it still has to order, at its chosen prices; each PO then goes for approval. */
+  async onMakeAllPos(): Promise<void> {
+    const purchaseId = this.purchaseId;
+    const targets = this.suppliersToOrder;
+    if (!purchaseId || !targets.length || this.makingPos()) return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: `Make ${targets.length} PO${targets.length === 1 ? '' : 's'}?`,
+      message: 'Each supplier gets one PO for the quantity it still has to supply, at its chosen price. The POs go for approval.',
+      details: targets.map((t) => ({ label: 'Supplier', value: t.name })),
+      confirmLabel: 'Make POs',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+
+    this.makingPos.set(true);
+    const purchaseNo = this.f['purchaseNo']?.value || '';
+    const jobId = this.purchaseForm.get('job')?.value || undefined;
+    const quoteId = (this.selectedJobSheet as any)?.quotation?._id || undefined;
+    let made = 0;
+    for (const t of targets) {
+      try {
+        const items: any[] = ((await firstValueFrom(this.purchaseOrderService.getItemsForPurchaseRequest(purchaseId, t.supplierId)))?.data || [])
+          .filter((it: any) => Number(it.remainingQuantity) > 0);
+        if (!items.length) continue;
+        const poNo = (await firstValueFrom(this.purchaseOrderService.generatePONumber()))?.data;
+        const terms = items[0]?.comparisons || {};
+        const payload: any = {
+          poNo,
+          poStatus: 'Pending for Approval',
+          items: items.map((it: any) => {
+            const unitCost = Number(it.unitPrice) || 0;
+            const quantity = Number(it.remainingQuantity) || 0;
+            return { detail: it.detail, partNo: it.partNo?._id || it.partNo || null, prLineKey: it._id, quantity, uom: it.uom || it.comparisons?.uom || '', unitCost, totalCost: quantity * unitCost };
+          }),
+          supplierId: t.supplierId,
+          purchaseId,
+          jobId,
+          quoteId,
+          etaTerms: terms.etaTerms || 'As per terms',
+          paymentTerms: terms.paymentTerms || 'As per terms',
+          deliveryTerms: terms.etaTerms || terms.paymentTerms || 'As per terms',
+          // Both are required on a PO; the supplier's comparison terms when given, otherwise left for the approver to edit.
+          shippingTerms: terms.shippingTerms || 'As per terms',
+          placeOfDelivery: terms.deliveryLocation || terms.placeOfDelivery || 'As per terms',
+          subject: purchaseNo ? `Purchase order for ${purchaseNo}` : 'Purchase order',
+          poDate: new Date(),
+          discount: 0,
+        };
+        await firstValueFrom(this.purchaseOrderService.createPurchaseOrder(payload));
+        made++;
+      } catch (err: any) {
+        this.toaster.error(err?.error?.message || `Could not make the PO for ${t.name}.`);
+      }
+    }
+    this.makingPos.set(false);
+    if (made) this.toaster.success(`${made} PO${made === 1 ? '' : 's'} sent for approval`);
+    this.loadPos();
+    this.saved.emit();
   }
 
   onCreatePoClosed(): void {
@@ -1706,16 +1801,16 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   async onPlacePo(lpo: { _id: string; poNo: string }): Promise<void> {
-    const { confirmed } = await this.confirm.open({
-      tone: 'approve',
-      title: `Place ${lpo.poNo}?`,
-      message: 'Marks the order as sent to the supplier. Goods can then be received against it.',
+    const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const result = await this.formPrompt.prompt({
+      title: `Place ${lpo.poNo}`,
+      message: 'Confirm the order has been sent to the supplier. The receiving team is notified and the LPO shows in GRN > Arriving.',
       confirmLabel: 'Place order',
-      cancelLabel: 'Cancel',
+      fields: [{ key: 'expectedDeliveryDate', label: 'Expected delivery date', type: 'date', required: true, min: today, hint: 'The receiving team gets a reminder on this day.' }],
     });
-    if (!confirmed) return;
+    if (!result) return;
     this.placingId = lpo._id;
-    this.subscriptions.add(this.purchaseOrderService.placePurchaseOrder(lpo._id).subscribe({
+    this.subscriptions.add(this.purchaseOrderService.placePurchaseOrder(lpo._id, result['expectedDeliveryDate']).subscribe({
       next: () => { this.placingId = null; this.toaster.success(`${lpo.poNo} placed`); this.loadPos(); this.saved.emit(); },
       error: (err) => { this.placingId = null; this.toaster.error(err?.error?.message || 'Could not place the order.'); },
     }));
@@ -1926,8 +2021,9 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       this.purchaseService.updatePurchase(this.purchaseId, formValue).subscribe({
         next: (res) => {
           if (res.success) {
-            this.toaster.success('Purchase Updated Successfully');
+            this.toaster.success('Sent for approval');
             if (this.drawer) {
+              this.submitted.emit(this.purchaseId!);
               this.saved.emit();
               this.closeDrawer();
             } else {
@@ -1935,10 +2031,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             }
           }
         },
-        error: (error) => {
-          console.error(error);
-          this.toaster.error('Failed to update purchase');
-        }
+        error: (error) => this.submitFailed(error)
       })
     );
   }
@@ -2057,7 +2150,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             unitCost: typeof detail.unitCost === 'number' ? detail.unitCost : (detail.unitCost ? parseFloat(String(detail.unitCost)) : 0),
             availability: detail.availability || '',
             supplierName: detail.supplierName || '',
-            supplierId: typeof detail.supplierId === 'object' && detail.supplierId !== null ? detail.supplierId._id : (detail.supplierId || ''),
+            supplierId: typeof detail.supplierId === 'object' && detail.supplierId !== null ? detail.supplierId._id : (detail.supplierId || null),
             uom: detail.uom || '',
             email: detail.email || '',
             phoneNo: detail.phoneNo || '',

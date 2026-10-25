@@ -16,7 +16,7 @@ import cusRouter from './routes/customer.router';
 import equiRouter from './routes/enquiry.router';
 import celebRouter from './routes/celebrationCheck.router';
 import startCronJob from './services/cron.service';
-import { migrateWorkflowsToGlobalLayout, migrateJobDraftsToNew } from './services/workflowMigration.service';
+import { migrateWorkflowsToGlobalLayout } from './services/workflowMigration.service';
 import quoteRouter from './routes/quotation.router';
 import fileRouter from './routes/file.router';
 import PassportMiddleware from './common/middlewares/jwt.middleware';
@@ -37,7 +37,6 @@ import pushSubscriptionRouter from './routes/pushSubscription.router';
 import customerTypeRouter from './routes/customerType.router';
 import supplierRouter from './routes/supplier.router';
 import purchaseRequestRouter from './routes/purchaseRequest.router';
-import rfqRouter from './routes/rfq.router';
 import salesRfqRouter from './routes/salesRfq.router';
 import technicalRouter from './routes/technical.router';
 import purchaseOrderRouter from "./routes/purchaseOrder.router";
@@ -141,7 +140,6 @@ app.use('/push-subscription', pushSubscriptionRouter)
 app.use('/customerType', customerTypeRouter)
 app.use('/supplier', supplierRouter)
 app.use('/purchase', purchaseRequestRouter)
-app.use('/purchase/rfq', rfqRouter)
 app.use('/sales-rfq', salesRfqRouter)
 app.use('/technical', technicalRouter)
 app.use('/workflow', workflowRouter)
@@ -183,7 +181,6 @@ connectToDatabase()
     });
 
     migrateWorkflowsToGlobalLayout();
-    migrateJobDraftsToNew();
     startCronJob();
     socketConnection(io)
     emailWorker.start();

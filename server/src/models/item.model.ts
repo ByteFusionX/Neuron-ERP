@@ -6,12 +6,14 @@ export interface ItemDetail {
     quantity: number;
     unitCost: number;
     unitSellingPrice: number;
+    dealUnitCost?: number;
     profit: number;
     availability: string;
     uom?: string;
     itemCode?: string;
     partNo?: Types.ObjectId;
     supplierName?: string;
+    supplierId?: Types.ObjectId;
     email?: string;
     phoneNo?: string;
     dealSelected: boolean;
@@ -48,6 +50,11 @@ const itemDetailSchema = new Schema({
         required: false,
         min: 0
     },
+    // Purchase: the cost the deal started with, kept when a supplier award changes unitCost.
+    dealUnitCost: {
+        type: Number,
+        min: 0
+    },
     profit: {
         type: Number,
         min: 0
@@ -69,6 +76,11 @@ const itemDetailSchema = new Schema({
     },
     supplierName: {
         type: String
+    },
+    // The line's default supplier (deal sheet supplier or the product's default vendor); used when no RFQ award is made.
+    supplierId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Supplier',
     },
     email: {
         type: String,

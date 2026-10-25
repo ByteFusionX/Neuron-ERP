@@ -11,8 +11,6 @@ import { buildApprovalTimeline } from 'src/app/shared/utils/approval-timeline.ut
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
-import { ApproveDealComponent } from 'src/app/modules/deal-sheet/pages/approve-deal/approve-deal.component';
-import { Quotatation } from 'src/app/shared/interfaces/quotation.interface';
 import {
   DetailViewBadge,
   DetailViewBreadcrumb,
@@ -255,75 +253,6 @@ export class ViewPurchaseComponent {
     this.historyEntries = buildApprovalTimeline(p.approvalStatus);
   }
 
-  /**
-   * Open deal sheet for the job linked to this purchase (via job.quoteId.dealData).
-   * This reuses the same dialog and calculation logic pattern used in job-sheet/open-to-work.
-   */
-  onViewDealSheet(): void {
-    const quoteData: any = this.purchase?.jobId?.quoteId;
-
-    if (!quoteData?.dealData?.updatedItems) {
-      this.notificationService.error('Deal sheet data not available');
-      return;
-    }
-
-    const priceDetails = {
-      totalSellingPrice: 0,
-      totalCost: 0,
-      profit: 0,
-      perc: 0
-    };
-
-    const quoteItems = quoteData.dealData.updatedItems.map((item: any) => {
-      let itemSelected = 0;
-
-      item.itemDetails.map((itemDetail: any) => {
-        if (itemDetail.dealSelected) {
-          itemSelected++;
-          priceDetails.totalSellingPrice += itemDetail.unitSellingPrice * itemDetail.quantity;
-          priceDetails.totalCost += itemDetail.quantity * itemDetail.unitCost;
-          return itemDetail;
-        }
-        return;
-      });
-
-      if (itemSelected) return item;
-      return;
-    });
-
-    if (Array.isArray(quoteData.dealData.additionalCosts)) {
-      quoteData.dealData.additionalCosts.forEach((cost: any) => {
-        if (cost.type === 'Additional Cost') {
-          priceDetails.totalCost += cost.value;
-        } else if (cost.type === 'Supplier Discount') {
-          priceDetails.totalCost -= cost.value;
-        } else if (cost.type === 'Customer Discount') {
-          priceDetails.totalSellingPrice -= cost.value;
-        } else {
-          priceDetails.totalCost += cost.value;
-        }
-      });
-    }
-
-    // The discount quoted to the customer travels with the deal and comes off its selling price.
-    priceDetails.totalSellingPrice -= Number(quoteData.dealData.totalDiscount) || 0;
-    priceDetails.profit = priceDetails.totalSellingPrice - priceDetails.totalCost;
-    priceDetails.perc = priceDetails.totalSellingPrice
-      ? (priceDetails.profit / priceDetails.totalSellingPrice) * 100
-      : 0;
-
-    this.dialog.open(ApproveDealComponent, {
-      data: {
-        approval: false,
-        quoteData: quoteData as Quotatation,
-        quoteItems,
-        priceDetails,
-        quoteView: false
-      },
-      width: '1200x'
-    });
-  }
-
   hasNewItemsToMerge(): boolean {
     if (!this.purchase?.items) return false;
 
@@ -478,7 +407,7 @@ export class ViewPurchaseComponent {
 
   onEdit() {
     if (!this.purchase?._id) return;
-    this.router.navigate(['/purchase', 'edit', this.purchase._id]);
+    this.router.navigate(['/purchase', 'pr'], { queryParams: { edit: this.purchase._id } });
   }
 
   onDownloadFile(file: any) {

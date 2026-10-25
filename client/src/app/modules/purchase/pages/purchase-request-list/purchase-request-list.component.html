@@ -73,10 +73,10 @@
 
 <!-- Mounted only while open, so each opening starts a fresh form. -->
 <app-create-purchase *ngIf="createDrawerOpen" [drawer]="true" [withoutJob]="false" [sourceLocked]="true" [initialJobId]="createDrawerJobId"
-    (saved)="onCreateDrawerSaved()" (closed)="onCreateDrawerClosed()"></app-create-purchase>
+    (saved)="onCreateDrawerSaved()" (submitted)="onDrawerSubmitted($event)" (closed)="onCreateDrawerClosed()"></app-create-purchase>
 
 <!-- Mounted only while open, so each opening starts from a fresh load of that PR. -->
 <app-create-purchase *ngIf="editDrawerOpen" [drawer]="true" [editPurchaseId]="editDrawerPurchaseId" [sourceLocked]="true"
-    (saved)="onEditDrawerSaved()" (closed)="onEditDrawerClosed()"></app-create-purchase>
+    (saved)="onEditDrawerSaved()" (submitted)="onDrawerSubmitted($event)" (closed)="onEditDrawerClosed()"></app-create-purchase>
 
 <app-initiate-lpo *ngIf="initiateLpoPurchaseId" [purchaseIdInput]="initiateLpoPurchaseId" (issued)="onInitiateLpoIssued()" (closed)="onInitiateLpoClosed()"></app-initiate-lpo>

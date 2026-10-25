@@ -1,4 +1,3 @@
-import PurchaseRequest from "../models/purchaseRequest.model";
 import Workflow from "../models/workflow.model";
 import Enquiry from "../models/enquiry.model";
 import Category from "../models/category.model";
@@ -76,16 +75,5 @@ const restartWaitingPresaleJobs = async () => {
             { _id: enquiry._id },
             { $set: { 'preSale.assignApproval': { ...chain, restartCount: (enquiry.preSale as any)?.assignApproval?.restartCount ?? 0 } } }
         );
-    }
-};
-
-/**
- * Folds the retired Drafted status into New. Safe to run on every start: nothing is left to convert after the first.
- */
-export const migrateJobDraftsToNew = async () => {
-    try {
-        await PurchaseRequest.updateMany({ status: 'Drafted' }, { $set: { status: 'New' } });
-    } catch (error) {
-        console.error('Failed to migrate job purchase drafts:', error);
     }
 };

@@ -11,9 +11,38 @@ import { createNotificationWithPrivileges } from "./notification.controller";
 import { getNextSequence } from "../models/counter.model";
 import technicalModel from "../models/technical.model";
 import Employee from "../models/employee.model";
-import { syncPurchaseFromRfqs, importSalesRfqsIntoPurchase } from "./salesRfq.controller";
+import { recordPrices, findPrices } from "../services/supplierPrice.service";
+import { SupplierPriceSource } from "../models/supplierPrice.model";
+import { applyLineAward, LineAward } from "../services/purchaseAward.service";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
+
+const prLines = (items: any[]) => (items || []).flatMap((item: any) => item.itemDetails || []);
+
+/**
+ * Lines that cannot go for approval: not fully allocated to chosen suppliers, or a chosen supplier without a price.
+ * A line marked short (with a reason) goes as it is; a line nobody chose goes with its default supplier at its own cost.
+ */
+const unallocatedLines = (lines: any[]) => lines.filter((detail: any) => {
+    if (detail.short && String(detail.shortReason || '').trim()) return false;
+    const won = (detail.comparisons || []).filter((c: any) => c.selected);
+    if (!won.length) return !detail.supplierId || !(Number(detail.unitCost) > 0);
+    if (won.some((c: any) => !c.supplierId || !(Number(c.unitPrice) > 0))) return true;
+    if (!won.some((c: any) => c.awardedQty)) return false;
+    return won.reduce((sum: number, c: any) => sum + (Number(c.awardedQty) || Number(detail.quantity) || 0), 0) + 0.0001 < Number(detail.quantity);
+});
+
+const SUBMIT_GATE_MESSAGE = (open: number) =>
+    `${open} product(s) are not fully allocated. Choose suppliers for the full quantity, each with a price, or mark the product short with a reason.`;
+
+/** Every supplier price taken for comparison on the request, kept as that supplier's last PR price for the product. */
+const recordComparisonPrices = (purchase: any, employeeId: any) => recordPrices(
+    prLines(purchase.items).flatMap((detail: any) => (detail.comparisons || []).map((c: any) => ({
+        supplierId: c.supplierId, productId: detail.partNo, price: Number(c.unitPrice),
+    }))),
+    SupplierPriceSource.PR,
+    { currency: purchase.currency, sourceNo: purchase.purchaseNo, sourceId: purchase._id, employeeId }
+);
 
 const normalizePartNumberValue = (value: any) => {
     if (!value) return undefined;
@@ -67,7 +96,7 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
         // A super admin oversees every buyer's allocated jobs; everyone else sees only their own.
         ...(isSuperAdmin ? { procurementPerson: { $exists: true, $ne: null } } : { procurementPerson: new ObjectId(String(employeeId)) }),
         _id: { $nin: withPr },
-    }).populate({ path: 'quoteId', select: 'client currency', populate: { path: 'client', select: 'companyName' } })
+    }).populate({ path: 'quoteId', select: 'client currency dealData.updatedItems', populate: { path: 'client', select: 'companyName' } })
         .populate('procurementPerson', 'firstName lastName')
         .populate('allocatedBy', 'firstName lastName')
         .sort({ updatedDate: -1, _id: -1 })
@@ -80,6 +109,11 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
             status: 'New',
             overallStatus: 'new',
             items: [],
+            // No PR lines exist yet, so the details panel shows the deal sheet's lines the buyer will work from.
+            dealItems: (job.quoteId?.dealData?.updatedItems ?? []).map((item: any) => ({
+                itemName: item.itemName,
+                itemDetails: (item.itemDetails ?? []).map((d: any) => ({ detail: d.detail, quantity: d.quantity, unitCost: d.unitCost })),
+            })),
             jobId: job,
             customerId: job.quoteId?.client,
             currency: job.quoteId?.currency,
@@ -225,6 +259,15 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
         }
 
         if (status && !isDraft) {
+            const lines = prLines(requestData.items).filter((detail: any) => Number(detail.quantity) > 0);
+            const open = unallocatedLines(lines);
+            if (!lines.length || open.length) {
+                return res.status(400).json({
+                    success: false,
+                    message: !lines.length ? "Add at least one product before sending for approval" : SUBMIT_GATE_MESSAGE(open.length),
+                    status: 400
+                });
+            }
             try {
                 const approvalStatus = await getWorkflowSteps('purchaseApproval', employee._id.toString(), purchaseApprovalContext(requestData));
                 requestData.approvalStatus = approvalStatus;
@@ -238,16 +281,11 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
         const newPurchaseRequest = new PurchaseRequest(requestData);
         const savedPurchaseRequest = await newPurchaseRequest.save();
 
-        if (!isManual) {
-            // Supplier prices already gathered on the enquiry's sales RFQs carry over, so the buyer starts from them.
-            try {
-                await importSalesRfqsIntoPurchase(savedPurchaseRequest, employee);
-            } catch (error) {
-                console.error('Could not bring sales RFQs into the purchase request:', error);
-            }
-            await jobModel.updateOne({ _id: jobId }, { $set: { status: `Purchase ${!isDraft ? 'Requested' : 'Drafted'}` } })
+        if (status && !isDraft) await recordComparisonPrices(savedPurchaseRequest, employee._id);
 
-            await jobModel.findByIdAndUpdate(jobId, {
+        if (!isManual) {
+            // A job a user put On Hold stays there until they resume it.
+            await jobModel.updateOne({ _id: jobId, allocateStatus: { $ne: allocateStatus.OnHold } }, {
                 $set: {
                     allocateStatus: allocateStatus.WorkInProgress,
                     updatedDate: new Date()
@@ -348,7 +386,8 @@ const PO_QUANTITY_STAGES: any[] = [
                                                                     in: { $add: ['$$value', { $ifNull: ['$$this.quantity', '$$detailQuantity'] }] }
                                                                 }
                                                             },
-                                                            0
+                                                            // A line given its supplier directly (no comparison) counts in full.
+                                                            { $cond: [{ $ifNull: ['$$this.supplierId', false] }, '$$detailQuantity', 0] }
                                                         ]
                                                     }
                                                 }
@@ -1390,13 +1429,10 @@ export const updatePurchaseItems = async (req: Request, res: Response, next: Nex
             { new: true, runValidators: true }
         );
 
-        // Prices come from the supplier RFQs: whatever the form sent for an RFQ-priced line is replaced by them.
-        const syncedPurchaseRequest = updatedPurchaseRequest ? await syncPurchaseFromRfqs(id) : null;
-
         return res.status(200).json({
             success: true,
             message: "Purchase items updated successfully",
-            data: syncedPurchaseRequest || updatedPurchaseRequest,
+            data: updatedPurchaseRequest,
             status: 200
         });
     } catch (error) {
@@ -1468,12 +1504,10 @@ export const updatePurchaseSupplierOffers = async (req: Request, res: Response, 
             { new: true, runValidators: true }
         );
 
-        const syncedPurchaseRequest = updatedPurchaseRequest ? await syncPurchaseFromRfqs(id) : null;
-
         return res.status(200).json({
             success: true,
             message: "Purchase supplier offers updated successfully",
-            data: syncedPurchaseRequest || updatedPurchaseRequest,
+            data: updatedPurchaseRequest,
             status: 200
         });
     } catch (error) {
@@ -1967,6 +2001,16 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
                 }
             },
             { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'procurementPerson',
+                    foreignField: '_id',
+                    as: 'procurementPerson',
+                    pipeline: [{ $project: { firstName: 1, lastName: 1, email: 1 } }]
+                }
+            },
+            { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
             {
                 $addFields: {
                     lpoValue: {
@@ -2906,26 +2950,15 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
             }));
         }
 
-        // A request goes for approval only once every product is fully awarded or marked short.
+        // A request goes for approval only once every product is fully allocated, each chosen supplier priced, or marked short.
         if (isStatusChangingFromDraft || isStatusChangingFromRejected) {
-            await syncPurchaseFromRfqs(id);
-            const lines: any[] = (Array.isArray(updateData.items) ? updateData.items : (await PurchaseRequest.findById(id).lean() as any)?.items || [])
-                .flatMap((item: any) => item.itemDetails || [])
+            const lines: any[] = prLines(Array.isArray(updateData.items) ? updateData.items : existingPurchaseRequest.items)
                 .filter((detail: any) => Number(detail.quantity) > 0);
-            // Awarded means a supplier won it, and for a line split between suppliers their shares add up to the whole quantity.
-            const open = lines.filter((detail: any) => {
-                // A line marked short goes as it is, with whatever share is awarded.
-                if (detail.short && String(detail.shortReason || '').trim()) return false;
-                const won = (detail.comparisons || []).filter((c: any) => c.selected);
-                // A line nobody has awarded goes with its default supplier (from the deal sheet) when it has one.
-                if (!won.length) return !detail.supplierId;
-                if (!won.some((c: any) => c.awardedQty)) return false;
-                return won.reduce((sum: number, c: any) => sum + (Number(c.awardedQty) || Number(detail.quantity) || 0), 0) + 0.0001 < Number(detail.quantity);
-            });
+            const open = unallocatedLines(lines);
             if (!lines.length || open.length) {
                 return res.status(400).json({
                     success: false,
-                    message: !lines.length ? "Add at least one product before sending for approval" : `${open.length} product(s) are not fully awarded. Award the full quantity, or mark the product short with a reason.`,
+                    message: !lines.length ? "Add at least one product before sending for approval" : SUBMIT_GATE_MESSAGE(open.length),
                     status: 400
                 });
             }
@@ -3001,11 +3034,12 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
             });
         }
 
-        // The form's copy of the prices can be stale; the RFQs are the truth, also once the request is with approvers.
-        await syncPurchaseFromRfqs(id, true);
+        if (isStatusChangingFromDraft || isStatusChangingFromRejected) {
+            await recordComparisonPrices(updatedPurchaseRequest, employee._id);
+        }
 
         if (updateData.status === PurchaseRequestStatus.Pending) {
-            await jobModel.findByIdAndUpdate(existingPurchaseRequest.jobId, {
+            await jobModel.updateOne({ _id: existingPurchaseRequest.jobId, allocateStatus: { $ne: allocateStatus.OnHold } }, {
                 $set: {
                     allocateStatus: allocateStatus.WorkInProgress,
                     updatedDate: new Date()
@@ -3358,6 +3392,54 @@ export const resetPurchaseWorkflow = async (req: Request, res: Response, next: N
         purchaseRequest.updatedAt = new Date();
         await purchaseRequest.save();
         return res.status(200).json({ success: true, message: 'Purchase approval workflow reset' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const EDITABLE_PR_STATUSES = [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress, PurchaseRequestStatus.Rejected] as string[];
+
+/**
+ * Chooses suppliers for request lines, straight on the lines' comparisons.
+ * Body: `{ awards: [{ lineKey, supplierId, qty?, unitPrice?, supplierName?, clear? }] }`.
+ */
+export const awardPurchaseLines = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const employee = await getEmployeeData(req.user);
+        const purchase: any = await PurchaseRequest.findOne({ _id: req.params.id, isDeleted: false });
+        if (!purchase) return res.status(404).json({ success: false, message: "Purchase request not found" });
+        if (!EDITABLE_PR_STATUSES.includes(purchase.status)) {
+            return res.status(409).json({ success: false, message: "This request is with the approvers, so suppliers can no longer change." });
+        }
+        const awards: LineAward[] = Array.isArray(req.body?.awards) ? req.body.awards : [];
+        if (!awards.length) return res.status(400).json({ success: false, message: "Nothing to award." });
+        for (const award of awards) {
+            if (!award?.supplierId || !ObjectId.isValid(String(award.supplierId))) {
+                return res.status(400).json({ success: false, message: "Pick a supplier." });
+            }
+            if (!award.supplierName && !award.clear) {
+                award.supplierName = (await supplierModel.findById(award.supplierId).select('supplierName').lean() as any)?.supplierName;
+            }
+            const error = applyLineAward(purchase, award, employee?._id);
+            if (error) return res.status(400).json({ success: false, message: error });
+        }
+        purchase.totalLpo = prLines(purchase.items).reduce((sum: number, d: any) => sum + (Number(d.quantity) || 0) * (Number(d.unitCost) || 0), 0);
+        if (employee) purchase.updatedBy = employee._id;
+        purchase.updatedAt = new Date();
+        purchase.markModified('items');
+        await purchase.save({ validateModifiedOnly: true });
+        return res.status(200).json({ success: true, message: "Award saved", data: purchase });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/** The last price of each supplier for these products (PO price first, else the last comparison price). Query: `productIds`, `supplierIds`, `currency` (comma lists). */
+export const getSupplierPrices = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const list = (v: any) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
+        const data = await findPrices(list(req.query.productIds), list(req.query.supplierIds), req.query.currency ? String(req.query.currency) : undefined);
+        return res.status(200).json({ success: true, data });
     } catch (error) {
         next(error);
     }

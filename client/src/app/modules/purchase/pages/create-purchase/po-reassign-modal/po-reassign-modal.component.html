@@ -1,0 +1,42 @@
+<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
+  <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+    <div class="min-w-0 flex-1">
+      <h2 class="text-base font-semibold leading-6">Move to another supplier</h2>
+      <p class="mt-0.5 whitespace-pre-line text-xs text-gray-500 dark:text-gray-400">{{ data.detail }}</p>
+    </div>
+    <button type="button" (click)="close()" aria-label="Close"
+      class="grid h-8 w-8 place-content-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">✕</button>
+  </header>
+
+  <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+    <p class="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+      <b>{{ data.from.supplierName }}</b> has <b>{{ data.from.freeQty }}{{ data.uom ? ' ' + data.uom : '' }}</b> not on any PO. Move some or all of it.
+      The request stays approved; the new supplier's PO goes for PO approval as usual.
+    </p>
+
+    <app-sf-field label="Move to" required>
+      <app-sf-combobox [options]="options" [(ngModel)]="toSupplierId" placeholder="Search supplier"></app-sf-combobox>
+    </app-sf-field>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <app-sf-field label="Quantity" required>
+        <app-sf-number [(ngModel)]="qty" [min]="0" [max]="data.from.freeQty" [stepper]="false"></app-sf-number>
+        <p *ngIf="qtyError" class="mt-1 text-[11px] text-red-600">{{ qtyError }}</p>
+      </app-sf-field>
+      <app-sf-field [label]="'Unit price (' + data.currency + ')'" [required]="quotedPrice == null">
+        <app-sf-number *ngIf="quotedPrice == null" [(ngModel)]="price" [min]="0" [stepper]="false" placeholder="Supplier's price"></app-sf-number>
+        <p *ngIf="quotedPrice != null" class="flex h-9 items-center rounded-lg bg-gray-50 px-3 text-sm tabular-nums dark:bg-gray-900/40">{{ quotedPrice | number: '1.2-2' }} <span class="ml-2 text-xs text-gray-500">from its comparison</span></p>
+      </app-sf-field>
+    </div>
+    <p *ngIf="toSupplierId && quotedPrice == null" class="text-[11px] text-amber-700 dark:text-amber-400">This supplier has no price on this line yet. The price you enter is saved as its comparison for this line.</p>
+
+    <app-sf-field label="Reason" required>
+      <app-sf-textarea [(ngModel)]="reason" [rows]="2" placeholder="e.g. PO cancelled, better price, faster delivery"></app-sf-textarea>
+    </app-sf-field>
+  </div>
+
+  <footer class="flex items-center justify-end gap-2 border-t border-gray-100 px-6 py-3 dark:border-erp-border-dark">
+    <app-action-button variant="secondary" (click)="close()">Cancel</app-action-button>
+    <app-action-button variant="primary" [disabled]="invalid || saving" (click)="submit()">{{ saving ? 'Moving…' : 'Move quantity' }}</app-action-button>
+  </footer>
+</div>

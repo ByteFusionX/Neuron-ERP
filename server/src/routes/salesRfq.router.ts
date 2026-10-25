@@ -22,6 +22,8 @@ import {
     getPurchaseRfqComparison,
     awardPurchaseRfqLines,
     markPurchaseLineShort,
+    getPurchaseOrderStatus,
+    reassignPurchaseLine,
     setPurchaseRfqDiscount,
     importPurchaseSalesRfqs,
     getRfqPriceHistory,
@@ -38,7 +40,7 @@ import {
     updateSalesRfqQuote,
     uploadSalesRfqQuoteFiles,
 } from '../controllers/salesRfq.controller';
-import { requireAnyPrivilege } from "../common/middlewares/privilege.middleware";
+import { requireAnyPrivilege, requirePrivilege } from "../common/middlewares/privilege.middleware";
 const upload = require("../common/multer.storage");
 
 // Sales RFQ: supplier price and availability collected between an enquiry and its quotation.
@@ -66,6 +68,9 @@ salesRfqRouter.post('/from-purchase/:purchaseId', createPurchaseRfqs);
 salesRfqRouter.get('/purchase/:purchaseId/compare', getPurchaseRfqComparison);
 salesRfqRouter.put('/purchase/:purchaseId/award', awardPurchaseRfqLines);
 salesRfqRouter.put('/purchase/:purchaseId/short', markPurchaseLineShort);
+salesRfqRouter.get('/purchase/:purchaseId/order-status', getPurchaseOrderStatus);
+// Moving an approved line's quantity to another supplier is the same call as cancelling a PO.
+salesRfqRouter.post('/purchase/:purchaseId/reassign', requirePrivilege("purchaseOrder", "canCancel"), reassignPurchaseLine);
 salesRfqRouter.put('/purchase/:purchaseId/rfqs/:rfqId/discount', setPurchaseRfqDiscount);
 salesRfqRouter.post('/purchase/:purchaseId/import-sales', importPurchaseSalesRfqs);
 salesRfqRouter.get('/:id', getSalesRfqById);

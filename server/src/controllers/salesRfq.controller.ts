@@ -6,6 +6,7 @@ import Supplier, { supplierStatus } from "../models/supplier.model";
 import { getEmployeeData, buildPrivilegeAccessFilter, getQarRates } from "../common/utils/util";
 import { uploadFileToAws } from "../common/aws-connect";
 import { nextRfqNo } from "../services/rfqNumber.service";
+import { findLine, settleLine } from "../services/purchaseAward.service";
 import { resolveSourceSalesRfqId } from "./rfq.controller";
 import { getAvailability, getLastReceiptCosts } from "../services/stock.service";
 import Product from "../models/products.model";
@@ -290,13 +291,8 @@ const populateSalesRfq = (query: any) => query
     .populate('ownerId', '-password')
     .populate('createdBy', '-password');
 
-const sendRfq = async (res: Response, rfq: any, message?: string, statusCode = 200, syncPurchase = true, reopenAwards: boolean | string[] = false) => {
-    // The purchase request mirrors its RFQs' prices and awards, so it follows every change made to them.
-    if (reopenAwards && rfq.rfqType === RfqType.Procurement && rfq.purchaseRequestId) {
-        const keys = Array.isArray(reopenAwards) ? reopenAwards : (rfq.requestedLines || []).map((line: any) => line.itemDetailKey);
-        await reopenPurchaseAwards(rfq.purchaseRequestId, keys);
-    }
-    if (syncPurchase && rfq.rfqType === RfqType.Procurement && rfq.purchaseRequestId) await syncPurchaseFromRfqs(rfq.purchaseRequestId);
+// Suppliers and prices of a purchase request are chosen on the request itself now; an RFQ change no longer reaches it.
+const sendRfq = async (res: Response, rfq: any, message?: string, statusCode = 200, _syncPurchase = true, _reopenAwards: boolean | string[] = false) => {
     const data = await populateSalesRfq(Rfq.findById(rfq._id));
     return res.status(statusCode).json({ success: true, message, data });
 };
@@ -2387,8 +2383,10 @@ export const syncPurchaseFromRfqs = async (purchaseId: any, force = false) => {
                     detail.email = invite?.contactEmail || undefined;
                     detail.phoneNo = undefined;
                 }
-            } else if (hadAward && !kept.some((c: any) => c.selected)) {
-                detail.unitCost = 0;
+            } else if (hadAward) {
+                // No award left: the line keeps the price it already has (the default supplier's) instead of dropping to 0.
+                const keptWon = kept.find((c: any) => c.selected);
+                if (keptWon && toNumber(keptWon.unitPrice) > 0) detail.unitCost = toNumber(keptWon.unitPrice);
             }
         }
         total += toNumber(detail.quantity) * toNumber(detail.unitCost);
@@ -2715,6 +2713,160 @@ export const markPurchaseLineShort = async (req: Request, res: Response, next: N
         purchase.markModified('items');
         await purchase.save({ validateModifiedOnly: true });
         return res.status(200).json({ success: true, message: short ? "Marked short" : "Short mark cleared" });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/** POs that still hold quantity: everything except rejected and cancelled ones. */
+const LIVE_PO_STATUSES = { $nin: ['Rejected', 'Cancelled'] };
+
+/** Per line and supplier: what was awarded, what is on POs, received, cancelled, and what is left to order. */
+const purchaseOrderState = async (purchase: any) => {
+    const pos: any[] = await PurchaseOrder.find({ purchaseId: purchase._id }).select('poNo poStatus supplierId items').lean();
+    const GRN = mongoose.model('GRN');
+    const grns: any[] = pos.length ? await GRN.find({ purchaseOrderId: { $in: pos.map((po) => po._id) }, isDeleted: false }).select('purchaseOrderId items').lean() : [];
+    const clean = (s: any) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const receivedOf = (po: any, item: any) => grns
+        .filter((g) => String(g.purchaseOrderId) === String(po._id))
+        .reduce((sum, g) => sum + (g.items || []).filter((gi: any) => clean(gi.itemDescription) === clean(item.detail))
+            .reduce((s: number, gi: any) => s + (Number(gi.receivedQty) || 0), 0), 0);
+
+    const rows: any[] = [];
+    (purchase.items || []).forEach((item: any) => (item.itemDetails || []).forEach((detail: any) => {
+        const key = String(detail._id);
+        const lineQty = toNumber(detail.quantity);
+        const suppliers = new Map<string, any>();
+        const entry = (id: string, name: string) => {
+            const hit = suppliers.get(id) ?? { supplierId: id, supplierName: name, awardedQty: 0, unitPrice: null, orderedQty: 0, receivedQty: 0, cancelledQty: 0, pos: [] as any[] };
+            if (!hit.supplierName && name) hit.supplierName = name;
+            suppliers.set(id, hit);
+            return hit;
+        };
+        (detail.comparisons || []).filter((c: any) => c.selected && c.supplierId).forEach((c: any) => {
+            const s = entry(String(c.supplierId), c.supplierName);
+            s.awardedQty += toNumber(c.awardedQty) || toNumber(c.quantity) || lineQty;
+            s.unitPrice = toNumber(c.unitPrice);
+        });
+        pos.forEach((po) => (po.items || []).forEach((poItem: any) => {
+            const covers = poItem.prLineKey ? String(poItem.prLineKey) === key
+                : (poItem.partNo && detail.partNo ? String(poItem.partNo) === String(detail.partNo) : clean(poItem.detail) === clean(detail.detail));
+            if (!covers || !po.supplierId) return;
+            const s = entry(String(po.supplierId), '');
+            const live = !['Rejected', 'Cancelled'].includes(po.poStatus);
+            const qty = toNumber(poItem.quantity);
+            const received = Math.min(receivedOf(po, poItem), qty);
+            if (live) { s.orderedQty += qty; s.receivedQty += received; }
+            s.cancelledQty += toNumber(poItem.cancelledQty);
+            s.pos.push({ _id: po._id, poNo: po.poNo, poStatus: po.poStatus, qty, receivedQty: received, cancelledQty: toNumber(poItem.cancelledQty) });
+        }));
+        const list = [...suppliers.values()].map((s) => ({ ...s, freeQty: Math.max(0, Number((s.awardedQty - s.orderedQty).toFixed(4))) }));
+        const awarded = list.reduce((sum, s) => sum + s.awardedQty, 0);
+        const ordered = list.reduce((sum, s) => sum + s.orderedQty, 0);
+        rows.push({
+            lineKey: key, itemName: item.itemName, detail: detail.detail, uom: detail.uom, partNo: detail.partNo, quantity: lineQty,
+            short: !!detail.short, awardedQty: awarded, orderedQty: ordered,
+            receivedQty: list.reduce((sum, s) => sum + s.receivedQty, 0),
+            cancelledQty: list.reduce((sum, s) => sum + s.cancelledQty, 0),
+            toOrderQty: Math.max(0, Number((awarded - ordered).toFixed(4))),
+            unawardedQty: Math.max(0, Number((lineQty - awarded).toFixed(4))),
+            suppliers: list,
+        });
+    }));
+    return rows;
+};
+
+/** The PO step's view of a request: every line with its suppliers, what is ordered, received, cancelled and left. */
+export const getPurchaseOrderStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const purchase = await loadPurchase(req.params.purchaseId, res);
+        if (!purchase) return;
+        return res.status(200).json({ success: true, data: { purchaseId: purchase._id, status: purchase.status, currency: purchase.currency || 'QAR', rows: await purchaseOrderState(purchase.toObject()) } });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Moves quantity of an approved request line that no PO holds (never ordered, or freed by a cancel) from its
+ * chosen supplier to another. The other supplier is one already priced on the line, or a new one with a price
+ * entered here. The request stays approved; the new supplier's PO still goes for approval.
+ * Body: `{ lineKey, fromSupplierId, toSupplierId, qty, unitPrice?, reason }`.
+ */
+export const reassignPurchaseLine = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const employee = await getEmployeeData(req.user);
+        if (!employee) return res.status(401).json({ success: false, message: "Employee not found" });
+        const purchase = await loadPurchase(req.params.purchaseId, res);
+        if (!purchase) return;
+        if (purchase.status !== 'Approved') {
+            return res.status(409).json({ success: false, message: "Only an approved request's lines are moved this way; before approval, change the award." });
+        }
+        const { lineKey, fromSupplierId, toSupplierId } = req.body || {};
+        const qty = toNumber(req.body?.qty);
+        const reason = String(req.body?.reason || '').trim();
+        if (!reason) return res.status(400).json({ success: false, message: "Say why the quantity is moving to another supplier." });
+        if (!(qty > 0)) return res.status(400).json({ success: false, message: "Enter a quantity above zero." });
+        if (!toSupplierId || String(toSupplierId) === String(fromSupplierId)) {
+            return res.status(400).json({ success: false, message: "Pick a different supplier." });
+        }
+
+        const state = await purchaseOrderState(purchase.toObject());
+        const row = state.find((r) => r.lineKey === String(lineKey));
+        if (!row) return res.status(404).json({ success: false, message: "That product is not on this request." });
+        const from = row.suppliers.find((s: any) => s.supplierId === String(fromSupplierId));
+        if (!from || !(from.awardedQty > 0)) return res.status(400).json({ success: false, message: "That supplier is not awarded this product." });
+        if (qty > from.freeQty + 0.0001) {
+            return res.status(400).json({ success: false, message: `Only ${from.freeQty} of "${row.detail}" is not on a PO with ${from.supplierName}.` });
+        }
+
+        // The suppliers of a line live on its comparisons (one per supplier, `selected` with its share when it supplies the line).
+        const detail = findLine(purchase, row.lineKey);
+        const comparisons: any[] = detail?.comparisons || [];
+        const fromOffer = comparisons.find((c: any) => c.selected && String(c.supplierId) === from.supplierId);
+        if (!detail || !fromOffer) {
+            return res.status(409).json({ success: false, message: `${from.supplierName} is not chosen on "${row.detail}", so nothing can be moved.` });
+        }
+
+        const { supplier, error } = await loadAskableSupplier(toSupplierId);
+        if (error) return res.status(400).json({ success: false, message: error });
+        let toOffer = comparisons.find((c: any) => String(c.supplierId) === String(supplier._id) && toNumber(c.unitPrice) > 0);
+        const price = req.body?.unitPrice != null && req.body.unitPrice !== '' ? toNumber(req.body.unitPrice, -1) : null;
+        if (!toOffer && (price == null || !(price > 0))) {
+            return res.status(400).json({ success: false, message: `${supplier.supplierName} has no price for "${row.detail}". Enter one.` });
+        }
+        if (toOffer && price != null && price > 0 && price !== toNumber(toOffer.unitPrice)) {
+            return res.status(400).json({ success: false, message: `${supplier.supplierName} already offered ${toOffer.unitPrice} for "${row.detail}". Use that price.` });
+        }
+        if (!toOffer) {
+            comparisons.push({
+                supplierId: supplier._id, supplierName: supplier.supplierName, quantity: qty, unitPrice: price,
+                paymentTerms: 'Not specified', remarks: `Entered on re-award: ${reason}`, selected: false, createdBy: employee._id, createdAt: new Date(),
+            });
+            detail.comparisons = comparisons;
+            toOffer = detail.comparisons[detail.comparisons.length - 1];
+        }
+
+        // Any other supplier on a whole-line award needs its share spelled out, so the line's cost is weighted right.
+        comparisons.forEach((c: any) => {
+            if (c !== fromOffer && c !== toOffer && c.selected && !c.awardedQty) c.awardedQty = toNumber(c.quantity) || row.quantity;
+        });
+        // The old supplier keeps what is on its POs; the new one takes the moved quantity on top of any share it had.
+        const fromShare = toNumber(fromOffer.awardedQty) || toNumber(fromOffer.quantity) || row.quantity;
+        const left = Number((fromShare - qty).toFixed(4));
+        if (left > 0) { fromOffer.awardedQty = left; fromOffer.quantity = left; }
+        else { fromOffer.selected = false; fromOffer.awardedQty = undefined; }
+        const toShare = toOffer.selected ? (toNumber(toOffer.awardedQty) || toNumber(toOffer.quantity)) : 0;
+        toOffer.selected = true;
+        toOffer.awardedQty = Number((toShare + qty).toFixed(4));
+        toOffer.quantity = toOffer.awardedQty;
+        settleLine(detail);
+
+        purchase.updatedBy = employee._id;
+        purchase.updatedAt = new Date();
+        purchase.markModified('items');
+        await purchase.save({ validateModifiedOnly: true });
+        return res.status(200).json({ success: true, message: `${qty} of "${row.detail}" moved to ${supplier.supplierName}` });
     } catch (error) {
         next(error);
     }

@@ -19,17 +19,16 @@
     </app-sf-field>
   </div>
 
-  <!-- Ask suppliers step: how many lines still have no supplier asked, and the per-line limit -->
+  <!-- Items step: how many lines still have no supplier -->
   <div *ngIf="stage === 'ask' && (selectedJobSheet || isJobLess)" class="flex flex-wrap items-center gap-2 rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-2.5 text-xs text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/20 dark:text-violet-200">
-    <span>Tick lines on <b>Items</b> and click <b>RFQ</b> to ask a supplier. One RFQ per supplier; at most {{ maxSuppliersPerLine }} suppliers per line.</span>
+    <span>Tick lines on <b>Items</b>, pick a supplier and click <b>Compare</b> to enter its prices. Each supplier starts at its last price. Choose the supplier of a line with its pill or <b>Assign</b> on the supplier's tab.</span>
     <span *ngIf="askSummary" class="ml-auto flex flex-wrap gap-1.5">
-      <span class="rounded-full bg-white px-2.5 py-0.5 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ askSummary.rfqs }} RFQ{{ askSummary.rfqs === 1 ? '' : 's' }}</span>
-      <span *ngIf="askSummary.unasked" class="rounded-full bg-amber-100 px-2.5 py-0.5 font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{{ askSummary.unasked }} line{{ askSummary.unasked === 1 ? '' : 's' }} not asked</span>
-      <span *ngIf="askSummary.full" class="rounded-full bg-gray-100 px-2.5 py-0.5 font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ askSummary.full }} at {{ maxSuppliersPerLine }}/{{ maxSuppliersPerLine }}</span>
+      <span class="rounded-full bg-white px-2.5 py-0.5 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ supplierTabs.length }} supplier{{ supplierTabs.length === 1 ? '' : 's' }}</span>
+      <span *ngIf="askSummary.unasked" class="rounded-full bg-amber-100 px-2.5 py-0.5 font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{{ askSummary.unasked }} line{{ askSummary.unasked === 1 ? '' : 's' }} with no supplier</span>
     </span>
   </div>
 
-  <div *ngIf="(selectedJobSheet || isJobLess) && stage !== 'need'" class="flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-erp-border-dark pb-3">
+  <div *ngIf="selectedJobSheet || isJobLess" class="flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-erp-border-dark pb-3">
     <div class="flex flex-wrap items-center gap-1">
       <button
         type="button"
@@ -45,7 +44,7 @@
         class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
         [ngClass]="activeTab === t.id ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 dark:border-erp-border-dark text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
       >
-        <button type="button" class="inline-flex items-center gap-1.5" [title]="t.name" (click)="tabSelected.emit(t.id)">
+        <button type="button" class="inline-flex items-center gap-1.5" (click)="tabSelected.emit(t.id)">
           <span class="max-w-[7rem] truncate">{{ t.name }}</span>
           <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="activeTab === t.id ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ t.count }}<ng-container *ngIf="t.total != null">/{{ t.total }}</ng-container></span>
         </button>
@@ -53,7 +52,6 @@
           *ngIf="t.closable"
           type="button"
           class="-mr-1 grid h-4 w-4 place-content-center rounded hover:bg-black/10"
-          title="Close supplier tab"
           aria-label="Close supplier tab"
           (click)="supplierClosed.emit(t.id)"
         >
@@ -61,62 +59,27 @@
         </button>
       </div>
     </div>
-    <span *ngIf="activeTab === 'items' && !readOnly" class="ml-auto" [attr.title]="selectedKeys.length ? null : 'Select items to create an RFQ'">
-      <app-action-button variant="ghost" [disabled]="!selectedKeys.length" (click)="openRfqModal()">
-        <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> RFQ<ng-container *ngIf="selectedKeys.length"> ({{ selectedKeys.length }})</ng-container>
+    <div *ngIf="!readOnly" class="ml-auto flex items-center gap-2">
+      <app-sf-combobox
+        class="w-56"
+        [options]="freeSuppliers"
+        [(ngModel)]="compareSupplierId"
+        [ngModelOptions]="{ standalone: true }"
+        [disabled]="!selectedKeys.length"
+        placeholder="Select supplier"
+        aria-label="Supplier to compare"
+      ></app-sf-combobox>
+      <app-action-button variant="ghost" [disabled]="!selectedKeys.length || !compareSupplierId" (click)="addCompare()">
+        <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Compare<ng-container *ngIf="selectedKeys.length"> ({{ selectedKeys.length }})</ng-container>
       </app-action-button>
-    </span>
+    </div>
   </div>
 
-  <!-- Supplier tab: what this supplier is asked, and what it replied -->
-  <section *ngIf="activeTab !== 'items' && (selectedJobSheet || isJobLess) && (activeRfq || activeTerms)" class="rounded-xl border border-gray-200 px-4 py-3 dark:border-erp-border-dark">
+  <!-- Supplier tab: the supplier whose prices are entered below -->
+  <section *ngIf="activeTab !== 'items' && (selectedJobSheet || isJobLess)" class="rounded-xl border border-gray-200 px-4 py-3 dark:border-erp-border-dark">
     <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-      <ng-container *ngIf="activeRfq as r; else unsaved">
-        <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ r.rfqNo }}</span>
-        <span class="text-sm text-gray-700 dark:text-gray-300">{{ r.supplierName }}</span>
-        <span *ngIf="r.supplierStatus" class="rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ r.supplierStatus }}</span>
-        <span *ngIf="r.supplierStatus === 'Declined' && r.declineReason" class="text-xs text-red-600">{{ r.declineReason }}</span>
-      </ng-container>
-      <ng-template #unsaved>
-        <span class="text-sm text-gray-700 dark:text-gray-300">{{ activeTabName }}</span>
-        <span class="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">RFQ is created when the request is saved</span>
-      </ng-template>
-      <button *ngIf="!readOnly" type="button" class="ml-auto text-xs font-medium text-violet-600 hover:underline" (click)="openRfqModal(activeTab)">Edit terms</button>
-    </div>
-    <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-5">
-      <div class="pr-meta"><p class="pr-meta-label">Price needed by</p><p class="pr-meta-value">{{ (activeTerms?.deadline | date: 'dd MMM yyyy') || '-' }}</p></div>
-      <div class="pr-meta"><p class="pr-meta-label">Payment terms</p><p class="pr-meta-value">{{ activeTerms?.paymentTerms || '-' }}</p></div>
-      <div class="pr-meta"><p class="pr-meta-label">Delivery terms</p><p class="pr-meta-value">{{ activeTerms?.deliveryTerms || '-' }}</p></div>
-      <div class="pr-meta"><p class="pr-meta-label">Shipping terms</p><p class="pr-meta-value">{{ activeTerms?.shippingTerms || '-' }}</p></div>
-      <div class="pr-meta"><p class="pr-meta-label">Place of delivery</p><p class="pr-meta-value">{{ activeTerms?.deliveryLocation || '-' }}</p></div>
-    </div>
-    <div *ngIf="activeRfq as r" class="mt-3 grid gap-x-6 gap-y-3 border-t border-gray-100 pt-3 dark:border-erp-border-dark sm:grid-cols-2 lg:grid-cols-5">
-      <div class="pr-meta"><p class="pr-meta-label">Sent via</p><p class="pr-meta-value">{{ r.sentVia || '-' }}</p></div>
-      <div class="pr-meta"><p class="pr-meta-label">Reply currency</p><p class="pr-meta-value">{{ r.replyTerms?.currency || '-' }}</p></div>
-      <div class="pr-meta"><p class="pr-meta-label">Reply payment terms</p><p class="pr-meta-value">{{ r.replyTerms?.paymentTerms || '-' }}</p></div>
-      <div class="pr-meta"><p class="pr-meta-label">Valid until</p><p class="pr-meta-value">{{ (r.replyTerms?.validityDate | date: 'dd MMM yyyy') || '-' }}</p></div>
-      <div class="pr-meta"><p class="pr-meta-label">Warranty</p><p class="pr-meta-value">{{ r.replyTerms?.warrantyTerms || '-' }}</p></div>
-    </div>
-    <!-- Discount the supplier gives on its whole quote, on top of any line discounts -->
-    <div *ngIf="activeRfq as r" class="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 text-xs dark:border-erp-border-dark">
-      <span class="pr-meta-label">Total discount</span>
-      <ng-container *ngIf="!readOnly; else discountView">
-        <select class="h-8 rounded-lg border border-gray-300 px-2 text-xs dark:border-gray-700 dark:bg-transparent"
-          [ngModel]="discountDraft(r).type" (ngModelChange)="setDiscountDraft(r, { type: $event })" [ngModelOptions]="{ standalone: true }">
-          <option value="amount">Amount</option>
-          <option value="percent">%</option>
-        </select>
-        <input type="number" min="0" [max]="discountDraft(r).type === 'percent' ? 100 : null"
-          class="h-8 w-28 rounded-lg border border-gray-300 px-2 text-right text-xs tabular-nums dark:border-gray-700 dark:bg-transparent"
-          [ngModel]="discountDraft(r).value" (ngModelChange)="setDiscountDraft(r, { value: +$event || 0 })" [ngModelOptions]="{ standalone: true }" />
-        <app-action-button variant="secondary" [disabled]="!discountDirty(r)" (click)="saveDiscount(r)">Save</app-action-button>
-      </ng-container>
-      <ng-template #discountView>
-        <span class="pr-meta-value">{{ r.totalDiscountValue ? (r.totalDiscountType === 'percent' ? r.totalDiscountValue + '%' : (r.totalDiscountValue | number: '1.2-2')) : '-' }}</span>
-      </ng-template>
-      <span *ngIf="r.quotedTotal" class="ml-auto text-gray-500">
-        Quoted {{ r.quotedTotal | number: '1.2-2' }}<ng-container *ngIf="savedDiscount(r) > 0"> − {{ savedDiscount(r) | number: '1.2-2' }} = <b class="tabular-nums text-gray-900 dark:text-gray-100">{{ r.quotedTotal - savedDiscount(r) | number: '1.2-2' }}</b></ng-container>
-      </span>
+      <span class="text-sm text-gray-700 dark:text-gray-300">{{ activeTabName }}</span>
+      <span class="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">{{ tabHint }}</span>
     </div>
   </section>
 
@@ -140,6 +103,7 @@
       [linePills]="linePills"
       (pillClicked)="pillPicked.emit($event)"
       [lineOffers]="lineOffers"
+      [lineDeal]="lineDeal"
       [supplierScope]="activeTab === 'items' ? null : activeTab"
       [supplierScopeName]="activeTab === 'items' ? '' : activeTabName"
       [scopeLineKeys]="tabLineKeys"
@@ -152,6 +116,6 @@
   </div>
 
   <ng-template #noJob>
-    <div class="pr-empty-state">Select a job to load its items.</div>
+    <div class="pr-empty-state">{{ requestedJobId() || isEditing ? 'Loading the job’s items…' : 'Select a job to load its items.' }}</div>
   </ng-template>
 </form>

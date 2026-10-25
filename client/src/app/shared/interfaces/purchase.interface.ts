@@ -139,3 +139,28 @@ export interface PurchaseOrder {
   updatedAt?: Date;
   createdBy?: any;
 }
+
+/** One supplier choice on a purchase request line. */
+export interface PurchaseLineAward {
+    lineKey: string;
+    supplierId: string;
+    /** The share this supplier supplies; blank = the whole line. */
+    qty?: number;
+    /** A price for a supplier that has none on the line yet. */
+    unitPrice?: number;
+    supplierName?: string;
+    /** Takes the supplier off the line. */
+    clear?: boolean;
+}
+
+/** A supplier's last price for a product: from its last PO, else from the last request it was compared on. */
+export interface SupplierLastPrice {
+    supplierId: string;
+    productId: string;
+    currency: string;
+    lastPrice: number;
+    lastDate: string;
+    source: 'PO' | 'PR';
+    sourceNo?: string;
+    previousPrice?: number;
+}

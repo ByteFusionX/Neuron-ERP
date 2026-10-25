@@ -10,6 +10,7 @@ import {
   SalesRfqFxRates,
   SalesRfqLineInput,
   PurchaseRfqData,
+  PurchaseOrderStatus,
   SalesRfqQuoteInput,
   SalesRfqStockCheck,
   SalesRfqReplyPrice,
@@ -82,6 +83,16 @@ export class SalesRfqService {
   /** Marks a request line short (not fully covered, with a reason), or clears the mark. */
   markPurchaseShort(purchaseId: string, lineKey: string, short: boolean, reason?: string): Observable<{ success: boolean; message?: string }> {
     return this.http.put<{ success: boolean; message?: string }>(`${this.api}/purchase/${purchaseId}/short`, { lineKey, short, reason }, { context: context() });
+  }
+
+  /** The PO step's lines: per supplier awarded, ordered, received, cancelled and left to order. */
+  getPurchaseOrderStatus(purchaseId: string): Observable<{ success: boolean; data: PurchaseOrderStatus }> {
+    return this.http.get<{ success: boolean; data: PurchaseOrderStatus }>(`${this.api}/purchase/${purchaseId}/order-status`, { context: context() });
+  }
+
+  /** Moves quantity no PO holds from one awarded supplier to another on an approved request. */
+  reassignPurchaseLine(purchaseId: string, body: { lineKey: string; fromSupplierId: string; toSupplierId: string; qty: number; unitPrice?: number | null; reason: string }): Observable<{ success: boolean; message?: string }> {
+    return this.http.post<{ success: boolean; message?: string }>(`${this.api}/purchase/${purchaseId}/reassign`, body, { context: context() });
   }
 
   /** Sets the discount a supplier gives on its whole RFQ total; 0 clears it. */

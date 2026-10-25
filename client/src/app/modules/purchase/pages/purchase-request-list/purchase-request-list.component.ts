@@ -123,6 +123,12 @@ export class PurchaseRequestListComponent {
     this.activeViewId = PR_VIEW_IDS.includes(initialView) ? initialView : 'all';
     this.buildColumns();
     this.buildRowActions();
+    // The PR view page's Edit links here with ?edit=<id>, so it opens the same edit drawer as the list.
+    const editId = this.route.snapshot.queryParamMap.get('edit');
+    if (editId) {
+      this.onEditPr({ _id: editId });
+      this.router.navigate([], { relativeTo: this.route, queryParams: { edit: null }, queryParamsHandling: 'merge', replaceUrl: true });
+    }
 
     this.subscriptions.add(
       this.workflowService.getWorkflows({ feature: WorkflowFeature.PURCHASE_APPROVAL }).subscribe((response) => {
@@ -179,13 +185,12 @@ export class PurchaseRequestListComponent {
           return r.currency ? `${formatted} ${r.currency}` : formatted;
         },
       },
-      { key: 'selectedPrQuantity', label: 'PR Qty', align: 'right', valueGetter: (r) => r.selectedPrQuantity ?? '-' },
-      { key: 'issuedPoQuantity', label: 'PO Qty', align: 'right', valueGetter: (r) => r.issuedPoQuantity ?? '-' },
-      { key: 'remainingPoQuantity', label: 'Remaining', align: 'right', valueGetter: (r) => r.remainingPoQuantity ?? '-' },
+      { key: 'selectedPrQuantity', label: 'Awarded Qty', align: 'right', width: '120px', valueGetter: (r) => r.selectedPrQuantity ?? '-' },
+      { key: 'issuedPoQuantity', label: 'PO Qty', align: 'right', width: '90px', valueGetter: (r) => r.issuedPoQuantity ?? '-' },
+      { key: 'remainingPoQuantity', label: 'Remaining', align: 'right', width: '110px', valueGetter: (r) => r.remainingPoQuantity ?? '-' },
       { key: 'awarded', label: 'Awarded', align: 'right', valueGetter: (r) => { const a = this.awardStats(r); return a.total ? `${a.awarded}/${a.total}` : '-'; } },
-      { key: 'poProgress', label: 'POs', valueGetter: (r) => this.poProgressLabel(r) },
       { key: 'createdBy', label: 'Created By', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '-' },
-      { key: 'supplier', label: 'Supplier', valueGetter: (r) => r.supplierId?.supplierName || '-' },
+      { key: 'supplier', label: 'Supplier', valueGetter: (r) => this.supplierLabel(r) },
       {
         key: 'procurementPerson', label: 'Assigned To',
         valueGetter: (r) => r.procurementPerson?.firstName ? `${r.procurementPerson.firstName} ${r.procurementPerson.lastName}` : '-',
@@ -220,22 +225,33 @@ export class PurchaseRequestListComponent {
   /** Every product line has an awarded supplier offer (done in Compare & award). */
   private allAwarded(r: any): boolean {
     const lines = (r.items ?? []).flatMap((item: any) => item.itemDetails ?? []).filter((d: any) => Number(d.quantity) > 0);
-    return lines.length > 0 && lines.every((d: any) => d.supplierId || (d.comparisons ?? []).some((c: any) => c.selected));
+    return lines.length > 0 && lines.every((d: any) => this.isAllocated(d));
+  }
+
+  /** Same rule as the server's submit gate: short with a reason, or chosen suppliers priced and covering the quantity, or a priced default supplier. */
+  private isAllocated(d: any): boolean {
+    if (d.short && String(d.shortReason || '').trim()) return true;
+    const won = (d.comparisons ?? []).filter((c: any) => c.selected);
+    if (!won.length) return !!d.supplierId && Number(d.unitCost) > 0;
+    if (won.some((c: any) => !c.supplierId || !(Number(c.unitPrice) > 0))) return false;
+    if (!won.some((c: any) => c.awardedQty)) return true;
+    return won.reduce((sum: number, c: any) => sum + (Number(c.awardedQty) || Number(d.quantity) || 0), 0) + 0.0001 >= Number(d.quantity);
+  }
+
+  /** The request's supplier: the header one (general purchase), else the suppliers its lines are awarded to. */
+  supplierLabel(r: any): string {
+    if (r.supplierId?.supplierName) return r.supplierId.supplierName;
+    const names = new Set<string>();
+    (r.items ?? []).forEach((item: any) => (item.itemDetails ?? []).forEach((d: any) =>
+      (d.comparisons ?? []).filter((c: any) => c.selected && c.supplierName).forEach((c: any) => names.add(c.supplierName))));
+    if (!names.size) return '-';
+    const list = [...names];
+    return list.length <= 2 ? list.join(', ') : `${list[0]} +${list.length - 1} more`;
   }
 
   awardStats(r: any): { awarded: number; total: number } {
     const lines = (r.items ?? []).flatMap((item: any) => item.itemDetails ?? []).filter((d: any) => Number(d.quantity) > 0);
     return { awarded: lines.filter((d: any) => d.supplierId || (d.comparisons ?? []).some((c: any) => c.selected)).length, total: lines.length };
-  }
-
-  /** "x placed / y pending / z not created" once the PR is approved; LPOs are only raised after that. */
-  poProgressLabel(r: any): string {
-    if (r.status !== 'Approved') return '-';
-    const placed = r.placedPoCount ?? 0;
-    const pending = r.pendingPoCount ?? 0;
-    const notCreated = r.notCreatedPoCount ?? 0;
-    if (!placed && !pending && !notCreated) return '-';
-    return `${placed} placed / ${pending} pending / ${notCreated} not created`;
   }
 
   /** The one thing this request is waiting on, shown in the grid and the details panel. */
@@ -290,7 +306,7 @@ export class PurchaseRequestListComponent {
       { id: 'sendApproval', label: 'Send for approval', icon: 'send', quick: true, hidden: (r) => !['New', 'In Progress'].includes(r.status) || !this.hasItems(r) || !this.allAwarded(r) },
       {
         id: 'initiateLpo', label: 'Initiate LPO', icon: 'send', quick: true,
-        hidden: (r) => !this.isFullyApproved(r),
+        hidden: (r) => !this.isFullyApproved(r) || (r.remainingPoQuantity ?? 1) <= 0,
       },
       // The PR drawer's POs step: one card per awarded supplier with Create PO / Place order.
       { id: 'pos', label: 'POs', icon: 'eye', quick: true, hidden: (r) => !this.isFullyApproved(r) },
@@ -505,6 +521,8 @@ export class PurchaseRequestListComponent {
       this.purchaseService.updatePurchase(row._id, { status: 'Pending' } as any).subscribe({
         next: () => {
           this.notificationService.success('Sent for approval');
+          // The open detail panel shows the new status at once instead of In Progress until the reload lands.
+          row.status = 'Pending';
           this.getPurchases();
         },
         error: (error) => this.notificationService.error(error?.error?.message || 'Failed to send for approval'),
@@ -571,7 +589,8 @@ export class PurchaseRequestListComponent {
 
   private buildItemRows(row: any): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
-    (row.items ?? []).forEach((item: any) => {
+    const source = row.items?.length ? row.items : row.dealItems ?? [];
+    source.forEach((item: any) => {
       (item.itemDetails ?? []).forEach((d: any) => {
         const won = (d.comparisons ?? []).find((c: any) => c.selected);
         rows.push({ item: d.detail, award: won ? 'Awarded' : 'Not awarded', qty: d.quantity, price: d.unitCost, amount: (d.quantity ?? 0) * (d.unitCost ?? 0) });
@@ -589,14 +608,22 @@ export class PurchaseRequestListComponent {
     const add = (variant: ApprovalJourneyStage['variant'], icon: string, title: string, subtitle?: string) =>
       stages.push({ key: `pr-${stages.length}`, variant, icon, title, subtitle: subtitle || undefined });
 
-    add('done', 'check_circle', 'Purchase request created', join(name(row.createdBy), when(row.createdAt)));
+    // A New-tab job has no request yet: say what it is waiting for instead of claiming a PR was created.
+    const noPrYet = row.status === 'New' && !this.hasItems(row);
+    add('done', 'check_circle', noPrYet ? 'Job ready for purchase' : 'Purchase request created', join(name(row.createdBy), when(row.createdAt)));
 
     if (row.allocatedTo && row.allocatedAt) {
-      add('done', 'check_circle', `Allocated to ${name(row.procurementPerson) || 'buyer'}`, join(row.allocatedBy ? `By ${name(row.allocatedBy)}` : '', when(row.allocatedAt)));
+      add('done', 'check_circle', `Allocated to ${name(row.procurementPerson) || 'procurement person'}`, join(row.allocatedBy ? `By ${name(row.allocatedBy)}` : '', when(row.allocatedAt)));
     }
 
     if (row.status === 'New' || row.status === 'In Progress') {
-      add('current', 'schedule', Array.isArray(row.items) && row.items.length ? 'Purchase request in progress' : 'Waiting for the buyer to create the purchase request');
+      add('current', 'schedule', noPrYet
+        ? `Waiting for ${name(row.procurementPerson) || 'the allocated person'} to create the PR`
+        : 'Purchase request in progress');
+    }
+    if (noPrYet) {
+      add('stage', 'schedule', 'Approval', 'Starts once the PR is sent for approval');
+      return stages;
     }
 
     (row.approvalStatus ?? []).forEach((approval: any, i: number, all: any[]) => {
@@ -616,6 +643,30 @@ export class PurchaseRequestListComponent {
   }
 
   overviewSections(row: any): DetailOverviewSection[] {
+    const isNewJob = row.status === 'New' && !this.hasItems(row);
+    const rows = this.itemRows(row);
+    const money = (v: number) => `${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency ?? ''}`.trim();
+    const estimated = rows.reduce((s, r) => s + (r['amount'] || 0), 0);
+    const awarded = rows.filter((r) => r['award'] === 'Awarded').reduce((s, r) => s + (r['amount'] || 0), 0);
+    const totalQty = rows.reduce((s, r) => s + (Number(r['qty']) || 0), 0);
+    const lpo = Number(row.totalLpo) || 0;
+    const financials: DetailOverviewSection['fields'] = [
+      { type: 'field', label: 'Line Items', value: rows.length, numeric: true, noHover: true },
+      { type: 'field', label: 'Total Quantity', value: totalQty, numeric: true, noHover: true },
+    ];
+    if (!isNewJob) {
+      financials.push({ type: 'field', label: 'Quoted Value', value: money(estimated), numeric: true, noHover: true });
+    }
+    if (isNewJob) {
+      // No PR yet, so the LPO value is the job's deal value (deal sheet lines × unit cost).
+      financials.push({ type: 'field', label: 'LPO Value', value: money(estimated), numeric: true, noHover: true });
+    } else {
+      financials.push(
+        { type: 'field', label: 'Awarded Value', value: money(awarded), numeric: true, noHover: true },
+        { type: 'field', label: 'Pending Award', value: money(estimated - awarded), numeric: true, noHover: true },
+        { type: 'field', label: 'LPO Value', value: money(lpo), numeric: true, noHover: true },
+      );
+    }
     return [
       {
         title: 'General',
@@ -625,7 +676,7 @@ export class PurchaseRequestListComponent {
           { type: 'dg', key: 'status' },
           { type: 'field', label: 'Customer', value: row.customerId?.companyName },
           { type: 'field', label: 'Job ID', value: row.jobId?.jobId },
-          { type: 'field', label: 'Supplier', value: row.supplierId?.supplierName || '-' },
+          ...(isNewJob ? [] : [{ type: 'field' as const, label: 'Supplier', value: this.supplierLabel(row) }]),
           { type: 'field', label: 'Date', value: this.datePipe.transform(row.approvedDate || row.createdAt, 'dd MMM yyyy') },
           { type: 'field', label: 'Created By', value: row.createdBy ? `${row.createdBy.firstName} ${row.createdBy.lastName}` : '-' },
           { type: 'field', label: 'Procurement Person', value: row.procurementPerson?.firstName ? `${row.procurementPerson.firstName} ${row.procurementPerson.lastName}` : '-' },
@@ -634,9 +685,8 @@ export class PurchaseRequestListComponent {
       },
       {
         title: 'Overview',
-        fields: [
-          { type: 'field', label: 'LPO Value', value: `${(row.totalLpo ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency ?? ''}`, numeric: true, noHover: true },
-        ],
+        columns: '2',
+        fields: financials,
       },
     ];
   }
@@ -674,6 +724,12 @@ export class PurchaseRequestListComponent {
     event?.stopPropagation();
     this.editDrawerPurchaseId = row._id;
     this.editDrawerOpen = true;
+  }
+
+  /** Rows and the open detail panel show Pending at once instead of their old status until the reload lands. */
+  onDrawerSubmitted(id: string): void {
+    const row = this.rows.find((r) => r._id === id);
+    if (row) row.status = 'Pending';
   }
 
   onEditDrawerSaved(): void {

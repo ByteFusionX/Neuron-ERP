@@ -392,6 +392,52 @@ export interface PurchaseRfqLine {
 /** A supplier RFQ raised from a purchase request (same shape as a sales RFQ, tied to the request instead of an enquiry). */
 export type PurchaseRfq = Omit<SalesRfq, 'rfqType' | 'enquiryId'> & { rfqType: 'Procurement'; purchaseRequestId: string; purchaseNo?: string };
 
+/** One PO on a request line, as the PO step lists it. */
+export interface PurchaseOrderStatusPo {
+  _id: string;
+  poNo: string;
+  poStatus: string;
+  qty: number;
+  receivedQty: number;
+  cancelledQty: number;
+}
+
+/** A supplier on a request line: awarded share, what its POs hold, and what is still to order. */
+export interface PurchaseOrderStatusSupplier {
+  supplierId: string;
+  supplierName: string;
+  awardedQty: number;
+  unitPrice: number | null;
+  orderedQty: number;
+  receivedQty: number;
+  cancelledQty: number;
+  freeQty: number;
+  pos: PurchaseOrderStatusPo[];
+}
+
+export interface PurchaseOrderStatusRow {
+  lineKey: string;
+  itemName?: string;
+  detail: string;
+  uom?: string;
+  quantity: number;
+  short: boolean;
+  awardedQty: number;
+  orderedQty: number;
+  receivedQty: number;
+  cancelledQty: number;
+  toOrderQty: number;
+  unawardedQty: number;
+  suppliers: PurchaseOrderStatusSupplier[];
+}
+
+export interface PurchaseOrderStatus {
+  purchaseId: string;
+  status: string;
+  currency: string;
+  rows: PurchaseOrderStatusRow[];
+}
+
 export interface PurchaseRfqData {
   purchase: { _id: string; purchaseNo: string; status: string; editable: boolean; currency: string; hasJob?: boolean };
   lines: PurchaseRfqLine[];

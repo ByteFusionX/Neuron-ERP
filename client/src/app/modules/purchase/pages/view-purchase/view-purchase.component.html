@@ -20,7 +20,6 @@
   >
     <ng-container footerLeft *ngIf="purchase as p">
       <app-action-button variant="outline" *ngIf="p.status === 'Rejected' && p.rejectedReason?.length" (click)="showStatusHistory()" icon="view">View reason</app-action-button>
-      <app-action-button variant="outline" *ngIf="dealId" (click)="onViewDealSheet()">Deal sheet {{ dealId }}</app-action-button>
       <ng-container *ngIf="p.status === 'Pending'">
         <app-action-button variant="outline" *ngIf="!isManual && hasNewItemsToMerge()" [disabled]="isMerging" (click)="onMergeItems()">
           {{ isMerging ? 'Merging…' : 'Merge items' }}

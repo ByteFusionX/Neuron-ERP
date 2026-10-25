@@ -1,0 +1,50 @@
+<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
+  <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+    <div class="min-w-0 flex-1">
+      <h2 class="text-base font-semibold leading-6">Cancel {{ data.poNo }}</h2>
+      <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Cancel all of it or only some quantity per line. Received quantity cannot be cancelled. What you cancel goes back to the request, to order again or move to another supplier.</p>
+    </div>
+    <button type="button" (click)="close()" aria-label="Close"
+      class="grid h-8 w-8 place-content-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">✕</button>
+  </header>
+
+  <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+    <p *ngIf="loading" class="text-sm text-gray-500">Loading lines…</p>
+
+    <ng-container *ngIf="!loading">
+      <div class="flex items-center gap-3 text-xs">
+        <button type="button" class="font-medium text-violet-700 hover:underline dark:text-violet-400" (click)="setAll(true)">Cancel everything open</button>
+        <button type="button" class="font-medium text-gray-600 hover:underline dark:text-gray-400" (click)="setAll(false)">Clear</button>
+      </div>
+
+      <div class="overflow-hidden rounded-xl border border-gray-200 dark:border-erp-border-dark">
+        <div class="grid grid-cols-[minmax(0,4fr)_repeat(4,minmax(0,1fr))_minmax(0,1.4fr)] gap-2 bg-gray-50 px-3 py-2 text-[11px] uppercase tracking-wide text-gray-500 dark:bg-gray-900/40">
+          <span>Item</span><span class="text-right">Ordered</span><span class="text-right">Received</span><span class="text-right">Cancelled</span><span class="text-right">Open</span><span class="text-right">Cancel now</span>
+        </div>
+        <div class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+          <div *ngFor="let l of lines" class="grid grid-cols-[minmax(0,4fr)_repeat(4,minmax(0,1fr))_minmax(0,1.4fr)] items-center gap-2 px-3 py-2 text-xs" [class.opacity-50]="!l.openQty">
+            <span class="min-w-0 whitespace-pre-line text-[13px] font-medium">{{ l.detail }}<span *ngIf="l.uom" class="ml-1 text-xs font-normal text-gray-500">({{ l.uom }})</span></span>
+            <span class="text-right tabular-nums">{{ l.quantity }}</span>
+            <span class="text-right tabular-nums">{{ l.receivedQty }}</span>
+            <span class="text-right tabular-nums text-gray-500">{{ l.cancelledQty || '-' }}</span>
+            <span class="text-right font-medium tabular-nums">{{ l.openQty }}</span>
+            <div>
+              <app-sf-number [(ngModel)]="l.qty" [min]="0" [max]="l.openQty" [stepper]="false" [disabled]="!l.openQty" [attr.aria-label]="'Cancel qty for ' + l.detail"></app-sf-number>
+              <p *ngIf="lineError(l)" class="mt-1 text-[11px] text-red-600">{{ lineError(l) }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <app-sf-field label="Reason" required>
+        <app-sf-textarea [(ngModel)]="reason" [rows]="2" placeholder="Why is this being cancelled? e.g. supplier can't deliver, better price elsewhere"></app-sf-textarea>
+      </app-sf-field>
+    </ng-container>
+  </div>
+
+  <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 px-6 py-3 dark:border-erp-border-dark">
+    <span *ngIf="!loading && cancelTotal > 0" class="mr-auto text-xs text-gray-500">{{ whole ? 'Cancels everything open on this PO' : 'Partial cancel: the PO keeps the rest' }}</span>
+    <app-action-button variant="secondary" (click)="close()">Keep PO</app-action-button>
+    <app-action-button variant="primary" [disabled]="invalid || saving" (click)="submit()">{{ saving ? 'Cancelling…' : 'Cancel ' + cancelTotal + ' qty' }}</app-action-button>
+  </footer>
+</div>
