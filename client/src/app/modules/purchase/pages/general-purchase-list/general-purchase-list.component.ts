@@ -3,7 +3,9 @@ import { InitiateLpoComponent } from 'src/app/modules/purchase-order/pages/initi
 import { Component, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { forkJoin, Subscription } from 'rxjs';
+import { BehaviorSubject, forkJoin, Observable, Subscription } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ApprovalStatusComponent, ApprovalStatusData } from 'src/app/shared/components/approval-status/approval-status.component';
@@ -51,6 +53,7 @@ export class GeneralPurchaseListComponent {
   private notificationService = inject(ToastrService);
   private modal = inject(ModalService);
   private datePipe = inject(DatePipe);
+  private auditLog = inject(AuditLogService);
   private subscriptions = new Subscription();
 
   rows: any[] = [];
@@ -169,6 +172,7 @@ export class GeneralPurchaseListComponent {
       }).subscribe({
         next: (response) => {
           this.rows = response.purchase.data;
+          this.historyCache.clear();
           this.total = response.purchase.total ?? 0;
           this.isLoading = false;
         },
@@ -261,6 +265,22 @@ export class GeneralPurchaseListComponent {
       });
     });
     return rows;
+  }
+
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+
+  /** Audit-log events (approve/reject excluded, the approval steps below already show them). */
+  auditFor(row: any): Observable<DetailTimelineEntry[]> {
+    let subject = this.historyCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(row._id, subject);
+      this.auditLog.getHistory('generalPurchaseRequest', row._id).subscribe({
+        next: (entries) => subject!.next(toTimelineEntries((entries || []).filter((e) => e.action !== 'approved' && e.action !== 'rejected'))),
+        error: () => this.historyCache.delete(row._id),
+      });
+    }
+    return subject.asObservable();
   }
 
   historyEntries(row: any): DetailTimelineEntry[] {

@@ -1,4 +1,4 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-5 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
     <app-data-grid #grid
         class="flex-1 min-h-0"
         [fillHeight]="true"
@@ -66,6 +66,10 @@
                 <ng-container *ngSwitchCase="'approval'">
                     <app-approval-journey [stages]="approvalJourney(row)" orientation="vertical" [rejectionNote]="null"></app-approval-journey>
                 </ng-container>
+
+                <app-detail-timeline *ngSwitchCase="'history'"
+                    [entries]="(historyFor(row) | async) ?? []"
+                    emptyMessage="No history recorded yet."></app-detail-timeline>
             </ng-container>
         </ng-template>
     </app-data-grid>

@@ -3,7 +3,9 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
-import { Subscription, catchError, forkJoin, map, of } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, catchError, forkJoin, map, of } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { ToastrService } from 'ngx-toastr';
 
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
@@ -77,6 +79,8 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   private purchaseOrderService = inject(PurchaseOrderService);
   private purchaseService = inject(PurchaseService);
   private subscriptions = new Subscription();
+  private auditLog = inject(AuditLogService);
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
 
   canCreateDn = signal<boolean>(false);
 
@@ -240,6 +244,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
 
   loadData(filters?: Partial<FilterParams>): void {
     this.isLoading.set(true);
+    this.historyCache.clear();
     const requestId = ++this.requestSequence;
     const paginationState = this.paginationService.paginationState();
 
@@ -555,6 +560,20 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
       date: row.pod?.receivedDate || row.updatedDate || row.createdDate,
       uploadedBy: 'Proof of Delivery',
     }));
+  }
+
+  /** Recorded events when the DN has any; DNs from before logging keep the timeline derived from their fields. */
+  historyFor(row: DeliveryNote): Observable<DetailTimelineEntry[]> {
+    let subject = this.historyCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(row._id, subject);
+      this.auditLog.getHistory('deliveryNote', row._id).subscribe({
+        next: (e) => subject!.next(e?.length ? toTimelineEntries(e) : this.detailHistory(row)),
+        error: () => this.historyCache.delete(row._id),
+      });
+    }
+    return subject.asObservable();
   }
 
   detailHistory(row: DeliveryNote): DetailTimelineEntry[] {

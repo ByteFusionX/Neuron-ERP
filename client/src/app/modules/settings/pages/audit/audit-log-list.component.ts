@@ -2,9 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuditLogEntry, AuditLogService } from 'src/app/core/services/audit-log.service';
-import { formatAuditDate } from 'src/app/shared/utils/audit-timeline.util';
-
-const MODULE_LABELS: Record<string, string> = { enquiry: 'Enquiry' };
+import { auditModuleLabel, formatAuditDate } from 'src/app/shared/utils/audit-timeline.util';
 
 /** Cross-module activity log: every module that records to the global audit log shows up here. */
 @Component({
@@ -103,7 +101,7 @@ export class AuditLogListComponent implements OnInit {
   }
 
   moduleLabel(type: string): string {
-    return MODULE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
+    return auditModuleLabel(type);
   }
 
   date(at: string): string {

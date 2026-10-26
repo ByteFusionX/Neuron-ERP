@@ -95,6 +95,10 @@
                         (remove)="onDocumentRemove(row, $event)"></app-detail-documents>
                 </ng-container>
 
+                <app-detail-timeline *ngSwitchCase="'history'"
+                    [entries]="(historyFor(row) | async) ?? []"
+                    emptyMessage="No history recorded yet."></app-detail-timeline>
+
                 <ng-container *ngSwitchCase="'share'">
                     <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">Employees who can access this customer.</p>
 

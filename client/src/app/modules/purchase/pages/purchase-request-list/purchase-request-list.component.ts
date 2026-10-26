@@ -3,7 +3,10 @@ import { Component, ViewChild, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
@@ -21,7 +24,7 @@ import {
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { CreatePurchaseComponent } from '../create-purchase/create-purchase.component';
 import { ModalService } from 'src/app/shared/components/modal';
@@ -51,7 +54,7 @@ const PR_VIEW_IDS = ['new', 'inProgress', 'rejected', 'all', 'pending', 'readyTo
 
 @Component({
   selector: 'app-purchase-request-list',
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, ApprovalJourneyComponent, ActionButtonComponent, InitiateLpoComponent, CreatePurchaseComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailTimelineComponent, ApprovalJourneyComponent, ActionButtonComponent, InitiateLpoComponent, CreatePurchaseComponent],
   providers: [DatePipe],
   templateUrl: './purchase-request-list.component.html',
   styleUrl: './purchase-request-list.component.css',
@@ -68,6 +71,7 @@ export class PurchaseRequestListComponent {
   private confirmDialog = inject(ConfirmDialogService);
   private modal = inject(ModalService);
   private workflowService = inject(WorkflowService);
+  private auditLog = inject(AuditLogService);
   private prWorkflowSteps: { id: string; label: string }[] = [];
   private subscriptions = new Subscription();
 
@@ -76,7 +80,24 @@ export class PurchaseRequestListComponent {
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'approval', label: 'Approval', icon: 'activity' },
+    { id: 'history', label: 'History', icon: 'clock' },
   ];
+
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+
+  /** Audit-log events for a PR; approve/reject are left out because the Approval tab already shows them. */
+  historyFor(row: any): Observable<DetailTimelineEntry[]> {
+    let subject = this.historyCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(row._id, subject);
+      this.auditLog.getHistory(row.sourceType === 'manual' ? 'generalPurchaseRequest' : 'purchaseRequest', row._id).subscribe({
+        next: (entries) => subject!.next(toTimelineEntries((entries || []).filter((e) => e.action !== 'approved' && e.action !== 'rejected'))),
+        error: () => this.historyCache.delete(row._id),
+      });
+    }
+    return subject.asObservable();
+  }
 
   readonly itemColumns: DetailTableColumn[] = [
     { key: 'item', label: 'Item', truncate: true },
@@ -301,6 +322,7 @@ export class PurchaseRequestListComponent {
   // Each action shows only where it applies, so a row never lists buttons it cannot use.
   private buildRowActions(): void {
     this.rowActions = [
+      { id: 'view', label: 'View PR', icon: 'eye', quick: true },
       { id: 'edit', label: 'Edit', icon: 'pencil', quick: true, hidden: (r) => !this.canEdit(r) },
       { id: 'createPr', label: 'Create PR', icon: 'plus', quick: true, hidden: (r) => !this.canCreateFromJob(r) },
       { id: 'sendApproval', label: 'Send for approval', icon: 'send', quick: true, hidden: (r) => !['New', 'In Progress'].includes(r.status) || !this.hasItems(r) || !this.allAwarded(r) },
@@ -309,7 +331,7 @@ export class PurchaseRequestListComponent {
         hidden: (r) => !this.isFullyApproved(r) || (r.remainingPoQuantity ?? 1) <= 0,
       },
       // The PR drawer's POs step: one card per awarded supplier with Create PO / Place order.
-      { id: 'pos', label: 'POs', icon: 'eye', quick: true, hidden: (r) => !this.isFullyApproved(r) },
+      { id: 'pos', label: 'POs', icon: 'files', quick: true, hidden: (r) => !this.isFullyApproved(r) },
       {
         id: 'approve', label: 'Approve', icon: 'check', quick: true,
         hidden: (r) => !this.canDecide(r),
@@ -383,6 +405,7 @@ export class PurchaseRequestListComponent {
       this.purchaseService.getPurchases(filterParams).subscribe({
         next: (response) => {
           this.rows = response.purchase.data;
+          this.historyCache.clear();
           this.total = response.purchase.total ?? 0;
           this.isLoading = false;
         },
@@ -451,6 +474,9 @@ export class PurchaseRequestListComponent {
   onRowAction(event: DataGridRowActionEvent<any>): void {
     const { action, row } = event;
     switch (action.id) {
+      case 'view':
+        this.openFullPurchase(row);
+        break;
       case 'initiateLpo':
         this.openInitiateLpo(row._id);
         break;

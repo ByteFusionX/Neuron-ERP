@@ -8,10 +8,10 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
-import { DetailDocument, DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocument, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { forkJoin, of } from 'rxjs';
+import { BehaviorSubject, Observable, forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import saveAs from 'file-saver';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
@@ -22,6 +22,9 @@ import { CreateGrnComponent } from '../create-grn/create-grn.component';
 import { StockService } from 'src/app/core/services/stock/stock.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 
 @Component({
   selector: 'app-grn-list',
@@ -34,6 +37,7 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
     DetailOverviewComponent,
     DetailTableComponent,
     DetailDocumentsComponent,
+    DetailTimelineComponent,
     ActionButtonComponent,
     StockReturnDrawerComponent,
     CreateGrnComponent,
@@ -54,6 +58,24 @@ export class GrnListComponent implements OnInit {
   private purchaseOrderService = inject(PurchaseOrderService);
   private purchaseService = inject(PurchaseService);
   private confirm = inject(ConfirmDialogService);
+  private auditLog = inject(AuditLogService);
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+
+  /** Arriving / Upcoming rows are LPOs, so they show the LPO's history; GRN rows show the GRN's. */
+  historyFor(row: any): Observable<DetailTimelineEntry[]> {
+    const type = this.isArrivingView ? 'purchaseOrder' : 'grn';
+    const key = `${type}:${row._id}`;
+    let subject = this.historyCache.get(key);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(key, subject);
+      this.auditLog.getHistory(type, row._id).subscribe({
+        next: (e) => subject!.next(toTimelineEntries(e)),
+        error: () => this.historyCache.delete(key),
+      });
+    }
+    return subject.asObservable();
+  }
 
   rows: any[] = [];
   /** Supplier return: rejected goods leaving quarantine against a GRN. */
@@ -87,6 +109,7 @@ export class GrnListComponent implements OnInit {
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'documents', label: 'Documents', icon: 'files' },
+    { id: 'history', label: 'History', icon: 'clock' },
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
@@ -191,6 +214,7 @@ export class GrnListComponent implements OnInit {
 
   getGRNs(query?: Partial<DataGridQuery>): void {
     this.isLoading = true;
+    this.historyCache.clear();
     const params: any = {
       page: query?.page ?? this.page,
       row: query?.pageSize ?? this.row,

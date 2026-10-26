@@ -67,6 +67,9 @@
                 <ng-container *ngSwitchCase="'history'">
                     <app-detail-timeline [entries]="historyEntries(row)" emptyMessage="No promotions or transfers recorded yet."></app-detail-timeline>
                 </ng-container>
+                <ng-container *ngSwitchCase="'activity'">
+                    <app-detail-timeline [entries]="(activityFor(row) | async) ?? []" emptyMessage="No account activity recorded yet."></app-detail-timeline>
+                </ng-container>
             </ng-container>
         </ng-template>
     </app-data-grid>

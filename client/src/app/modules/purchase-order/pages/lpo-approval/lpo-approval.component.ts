@@ -2,7 +2,10 @@ import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { forkJoin, Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, forkJoin, Subscription } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { ToastrService } from 'ngx-toastr';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
@@ -18,7 +21,7 @@ import {
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
-import { DetailDocument, DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocument, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import saveAs from 'file-saver';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ModalService } from 'src/app/shared/components/modal';
@@ -64,7 +67,7 @@ const statusLabel = (status: string) => status === 'Pending for Approval' ? 'Pen
 @Component({
   selector: 'app-lpo-approval',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailDocumentsComponent, ActionButtonComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailDocumentsComponent, DetailTimelineComponent, ActionButtonComponent],
   providers: [DatePipe],
   templateUrl: './lpo-approval.component.html',
   styleUrl: './lpo-approval.component.css',
@@ -83,6 +86,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   private confirmDialog = inject(ConfirmDialogService);
   private purchaseService = inject(PurchaseService);
   private dialog = inject(MatDialog);
+  private auditLog = inject(AuditLogService);
   private poWorkflowSteps: { id: string; label: string }[] = [];
   isSuperAdmin = false;
   canInitiateLPO = false;
@@ -115,7 +119,23 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'documents', label: 'Documents', icon: 'files' },
+    { id: 'history', label: 'History', icon: 'clock' },
   ];
+
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+
+  historyFor(row: any): Observable<DetailTimelineEntry[]> {
+    let subject = this.historyCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(row._id, subject);
+      this.auditLog.getHistory('purchaseOrder', row._id).subscribe({
+        next: (entries) => subject!.next(toTimelineEntries(entries)),
+        error: () => this.historyCache.delete(row._id),
+      });
+    }
+    return subject.asObservable();
+  }
 
   isUploadingFiles = false;
   readonly acceptedFiles = ALLOWED_UPLOAD_TYPES;
@@ -248,6 +268,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
         next: (response) => {
           if (response.success) {
             this.rows = response.data ?? [];
+            this.historyCache.clear();
             this.total = response.pagination?.total ?? this.rows.length;
           }
           this.isLoading = false;

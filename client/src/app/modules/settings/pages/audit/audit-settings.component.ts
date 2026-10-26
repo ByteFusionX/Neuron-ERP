@@ -3,9 +3,7 @@ import { CommonModule } from '@angular/common';
 import { AuditLogEntry, AuditLogService } from 'src/app/core/services/audit-log.service';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridQuery, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
-import { formatAuditDate } from 'src/app/shared/utils/audit-timeline.util';
-
-const MODULE_LABELS: Record<string, string> = { enquiry: 'Enquiry' };
+import { auditModuleLabel, formatAuditDate } from 'src/app/shared/utils/audit-timeline.util';
 
 @Component({
   selector: 'app-audit-settings',
@@ -55,7 +53,7 @@ export class AuditSettingsComponent implements OnInit {
   readonly auditSubtitle = (row: AuditLogEntry): string => `${this.moduleLabel(row.entityType)} - ${this.date(row.at)}`;
 
   moduleLabel(type: string): string {
-    return MODULE_LABELS[type] ?? (type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Unknown');
+    return auditModuleLabel(type);
   }
 
   date(at: string): string {

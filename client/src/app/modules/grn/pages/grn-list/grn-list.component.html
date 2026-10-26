@@ -1,4 +1,4 @@
-<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-data-grid
     #grid
     class="flex-1 min-h-0"
@@ -102,6 +102,10 @@
           [removable]="false"
           (open)="onDocumentOpen($event)"
           (download)="onDocumentDownload($event)"></app-detail-documents>
+
+        <app-detail-timeline *ngSwitchCase="'history'"
+          [entries]="(historyFor(row) | async) ?? []"
+          emptyMessage="No history recorded yet."></app-detail-timeline>
       </ng-container>
     </ng-template>
   </app-data-grid>

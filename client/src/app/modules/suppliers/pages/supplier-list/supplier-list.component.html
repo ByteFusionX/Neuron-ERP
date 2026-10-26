@@ -32,7 +32,7 @@
         [detailTitle]="supplierTitle"
         [detailSubtitle]="supplierSubtitle"
         (queryChange)="onQueryChange($event)"
-        (rowOpen)="onRowOpen()"
+        (rowOpen)="onRowOpen($event)"
         (cellEdit)="onCellEdit($event)"
         (rowAction)="onRowAction($event)"
         (create)="onCreateSupplier()">
@@ -89,7 +89,7 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'history'">
-                    <app-detail-timeline [entries]="historyEntries(row)" emptyMessage="No approval or rejection history yet."></app-detail-timeline>
+                    <app-detail-timeline [entries]="historyEntries(row)" emptyMessage="No history yet."></app-detail-timeline>
                 </ng-container>
             </ng-container>
         </ng-template>

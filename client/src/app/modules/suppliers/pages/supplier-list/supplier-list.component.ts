@@ -11,6 +11,8 @@ import { ToastrService } from 'ngx-toastr';
 import { buildBreadcrumbs } from 'src/app/shared/constants/nav-menu';
 import { FileService } from 'src/app/core/services/file.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
+import { AuditLogEntry, AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Supplier, SupplierListResponse, SupplierStatus } from 'src/app/shared/interfaces/suppliers.interface';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
@@ -115,6 +117,8 @@ export class SupplierListComponent implements OnInit, OnDestroy {
   toDate: string | null = null;
 
   private confirm = inject(ConfirmDialogService);
+  private auditLog = inject(AuditLogService);
+  private auditByRow = new Map<string, AuditLogEntry[]>();
 
   private fileService = inject(FileService);
   private subscriptions = new Subscription();
@@ -381,7 +385,6 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     );
   }
 
-  onRowOpen(): void {}
 
   onCellEdit(_e: DataGridCellEditEvent<Supplier>): void {}
 
@@ -523,13 +526,31 @@ export class SupplierListComponent implements OnInit, OnDestroy {
       reason: h.reason,
       tone: (h.blocked ? 'bad' : 'good') as 'bad' | 'good',
     }));
-    return [...approved, ...rejected, ...blocks]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    // Audit log rows replace the legacy lists from the first logged event onwards; older records keep their legacy lines.
+    const audit = this.auditByRow.get(row._id ?? '') ?? [];
+    const firstAudit = audit.length ? Math.min(...audit.map((e) => new Date(e.at).getTime())) : Infinity;
+    const legacy = [...approved, ...rejected, ...blocks]
+      .filter((h) => new Date(h.date).getTime() < firstAudit)
       .map((h) => ({
-        text: `${h.text}${h.by ? ` by ${h.by}` : ''}`,
-        meta: [this.datePipe.transform(h.date as any, 'dd MMM yyyy, HH:mm'), h.reason].filter(Boolean).join(' · '),
-        tone: h.tone,
+        at: new Date(h.date).getTime(),
+        entry: {
+          text: `${h.text}${h.by ? ` by ${h.by}` : ''}`,
+          meta: [this.datePipe.transform(h.date as any, 'dd MMM yyyy, HH:mm'), h.reason].filter(Boolean).join(' · '),
+          tone: h.tone,
+        } as DetailTimelineEntry,
       }));
+    const logged = audit.map((e) => ({ at: new Date(e.at).getTime(), entry: toTimelineEntries([e])[0] }));
+    return [...logged, ...legacy].sort((a, b) => b.at - a.at).map((x) => x.entry);
+  }
+
+  /** Loads the central audit history for the supplier whose panel was opened. */
+  onRowOpen(row?: Supplier): void {
+    const id = row?._id;
+    if (!id) return;
+    this.auditLog.getHistory('supplier', id).subscribe({
+      next: (entries) => this.auditByRow.set(id, entries),
+      error: () => {},
+    });
   }
 
   private statusTone(status: SupplierStatus): 'good' | 'warn' | 'bad' {

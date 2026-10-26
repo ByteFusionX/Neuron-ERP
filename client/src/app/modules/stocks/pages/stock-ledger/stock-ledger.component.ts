@@ -21,7 +21,7 @@ export class StockLedgerComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private subscription = new Subscription();
 
-  readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Inventory' }, { label: 'Stock Ledger' }];
+  readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Inventory' }, { label: 'Stock Movement' }];
 
   tableData = signal<StockMovement[]>([]);
   isLoading = signal(false);

@@ -32,7 +32,7 @@ export class StockOverviewComponent implements OnInit {
   private productCategoryService = inject(ProductCategoryService);
   private formPrompt = inject(FormPromptService);
 
-  readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Inventory' }, { label: 'Stock Overview' }];
+  readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Inventory' }, { label: 'Stock Balance' }];
 
   tableData = signal<StockRow[]>([]);
   columns: DataGridColumn<StockRow>[] = [];
