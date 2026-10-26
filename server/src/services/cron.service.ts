@@ -581,6 +581,10 @@ const startCronJob = () => {
                 })
             ]);
 
+            // Sweep celebration posts of people blocked/deleted before the block-time purge existed (or by other means)
+            const inactiveIds = (await employeeModel.find({ $or: [{ isBlocked: true }, { isDeleted: true }] }).select('_id').lean()).map((e: any) => e._id);
+            if (inactiveIds.length > 0) await announcementModel.deleteMany({ celeb: true, employee: { $in: inactiveIds } });
+
             if (birthdayEmployees.length > 0) {
                 const birthdayPromises = birthdayEmployees.map(element => processEmployeeEvent(element, 'birthday'));
                 await Promise.all(birthdayPromises);
