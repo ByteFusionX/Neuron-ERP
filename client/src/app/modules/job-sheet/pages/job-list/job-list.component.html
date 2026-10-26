@@ -1,9 +1,9 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-5 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
     <div *ngIf="hasScope" class="flex items-center justify-between gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-[13px] text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200">
         <span>Showing only jobs for: <strong>{{ scopeSummary }}</strong>. The report filters you came from are still applied.</span>
         <button type="button" class="font-medium underline underline-offset-2 hover:no-underline" (click)="clearScope()">Show all jobs</button>
     </div>
-    <app-data-grid #grid
+    <app-data-grid #grid [strong]="true"
         class="flex-1 min-h-0"
         [fillHeight]="true"
         title="Job Sheet"
@@ -74,6 +74,10 @@
             <ng-container [ngSwitch]="tab">
                 <ng-container *ngSwitchCase="'overview'">
                     <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'items'">
+                    <app-detail-table title="Deal items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" [currency]="row.quotation?.currency"></app-detail-table>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'comments'">

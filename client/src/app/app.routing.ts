@@ -160,6 +160,7 @@ export const routes: Routes = [
     children: [
       { path: '', canActivate: [RoleGuard], component: JobListComponent },
       { path: 'report', canActivate: [RoleGuard], loadComponent: () => import('./modules/job-sheet/pages/job-report/job-report.component').then((c) => c.JobReportComponent) },
+      { path: 'view/:id', canActivate: [RoleGuard], loadComponent: () => import('./modules/job-sheet/pages/view-job/view-job.component').then((c) => c.ViewJobComponent) },
     ]
   },
   {

@@ -27,7 +27,8 @@ import {
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
-import { DetailOverviewSection, DetailDocument } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
+import { DetailOverviewSection, DetailDocument, DetailTableColumn, DetailFootRow } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
@@ -77,10 +78,38 @@ const PAGE_SIZES = [5, 15, 30, 50];
   imports: [
     NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, DatePipe, DecimalPipe,
     DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, ActionButtonComponent, ViewToggleComponent,
-    DetailTimelineComponent,
+    DetailTimelineComponent, DetailTableComponent,
   ],
 })
 export class JobListComponent {
+  readonly itemColumns: DetailTableColumn[] = [
+    { key: 'item', label: 'Item', wrap: true, clamp: true, tooltipKey: 'item' },
+    { key: 'qty', label: 'Qty', type: 'number' },
+    { key: 'price', label: 'Price', type: 'currency' },
+    { key: 'sellingPrice', label: 'Selling Price', type: 'currency' },
+    { key: 'amount', label: 'Amount', type: 'currency' },
+  ];
+
+  itemRows(row: getJob): Record<string, any>[] {
+    const items = ((row.quotation?.dealData as any)?.updatedItems ?? []) as any[];
+    return items.flatMap((item) =>
+      (item.itemDetails ?? [])
+        .filter((d: any) => d.dealSelected)
+        .map((d: any) => ({
+          item: d.detail,
+          qty: d.quantity,
+          price: d.unitCost,
+          sellingPrice: d.unitSellingPrice,
+          amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0),
+        })),
+    );
+  }
+
+  itemFootRows(row: getJob): DetailFootRow[] {
+    const subtotal = this.itemRows(row).reduce((sum, r) => sum + (Number(r['amount']) || 0), 0);
+    return [{ label: 'Total', emphasis: true, cells: { amount: { value: subtotal, format: 'currency' } } }];
+  }
+
   @ViewChild('grid') grid?: DataGridComponent<getJob>;
 
   rows: getJob[] = [];
@@ -101,6 +130,7 @@ export class JobListComponent {
   detailLoading = false;
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
+    { id: 'items', label: 'Items', icon: 'card' },
     { id: 'comments', label: 'Comments', icon: 'chat' },
     { id: 'lpo', label: 'Documents', icon: 'files' },
     { id: 'workflow', label: 'Workflow', icon: 'activity' },
@@ -242,6 +272,7 @@ export class JobListComponent {
 
   private buildRowActions(): void {
     this.rowActions = [
+      { id: 'detailView', label: 'Detail View', icon: 'eye', quick: true },
       {
         id: 'status', label: 'Update status', icon: 'pencil', quick: true,
         hidden: (r) => !this.canChangeStatus(r),
@@ -420,6 +451,9 @@ export class JobListComponent {
   onRowAction(event: DataGridRowActionEvent<getJob>): void {
     const { action, row } = event;
     switch (action.id) {
+      case 'detailView':
+        this._router.navigate(['/job-sheet/view', row._id], { state: { returnUrl: this._router.url } });
+        break;
       case 'status':
         this.onUpdateStatus(row);
         break;
@@ -671,7 +705,9 @@ export class JobListComponent {
       subject = new BehaviorSubject<WorkflowState>({ status: 'loading', timeline: null });
       this.workflowCache.set(id, subject);
       this._jobHistoryService.getJobHistory(id).subscribe({
-        next: (res) => subject!.next(res.success ? { status: 'ready', timeline: res.data } : { status: 'error', timeline: null }),
+        next: (res) => subject!.next(res.success
+          ? { status: 'ready', timeline: { ...res.data, timeline: [...(res.data?.timeline ?? [])].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()) } }
+          : { status: 'error', timeline: null }),
         error: () => subject!.next({ status: 'error', timeline: null }),
       });
     }
