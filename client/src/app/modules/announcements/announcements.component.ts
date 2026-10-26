@@ -1,7 +1,10 @@
 import { AfterViewInit, Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
-import { NgIf, NgSwitch, NgSwitchCase, DatePipe } from '@angular/common';
+import { AsyncPipe, NgIf, NgSwitch, NgSwitchCase, DatePipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subject } from 'rxjs';
+import { BehaviorSubject, Observable, Subject } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { takeUntil } from 'rxjs/operators';
 import { ToastrService } from 'ngx-toastr';
 import { AnnouncementService } from 'src/app/core/services/announcement/announcement.service';
@@ -20,7 +23,7 @@ import {
   DataGridView,
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
-import { DetailOverviewSection } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailOverviewSection, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { StatusPillComponent } from 'src/app/shared/components/status-indicator/status-pill.component';
 import { StatusTone } from 'src/app/shared/components/status-indicator/status-tone';
@@ -59,7 +62,9 @@ const PRIORITY_TONE: Record<string, StatusTone> = { normal: 'neutral', important
     NgIf,
     NgSwitch,
     NgSwitchCase,
+    AsyncPipe,
     DatePipe,
+    DetailTimelineComponent,
     DataGridComponent,
     DetailOverviewComponent,
     ActionButtonComponent,
@@ -72,10 +77,31 @@ export class AnnouncementsComponent implements OnInit, AfterViewInit, OnDestroy 
   @ViewChild('grid') grid?: DataGridComponent<announcementGetData>;
 
   readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Announcements' }];
-  readonly detailTabs: DataGridDetailTab[] = [
-    { id: 'message', label: 'Message', icon: 'info' },
-    { id: 'overview', label: 'Details', icon: 'files' },
-  ];
+  detailTabs: DataGridDetailTab[] = this.buildDetailTabs();
+
+  /** The audit trail is for authors and admins; readers only see the announcement itself. */
+  private buildDetailTabs(): DataGridDetailTab[] {
+    return [
+      { id: 'message', label: 'Message', icon: 'info' },
+      { id: 'overview', label: 'Details', icon: 'files' },
+      ...(this.canManage ? [{ id: 'history', label: 'History', icon: 'clock' }] : []),
+    ];
+  }
+
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+
+  historyFor(row: announcementGetData): Observable<DetailTimelineEntry[]> {
+    let subject = this.historyCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(row._id, subject);
+      this.auditLog.getHistory('announcement', row._id).subscribe({
+        next: (entries) => subject!.next(toTimelineEntries(entries)),
+        error: () => this.historyCache.delete(row._id),
+      });
+    }
+    return subject.asObservable();
+  }
   readonly priorityTone = PRIORITY_TONE;
   readonly priorityLabel = (value: string) => PRIORITY_OPTIONS.find((o) => o.value === value)?.label ?? value;
 
@@ -106,6 +132,7 @@ export class AnnouncementsComponent implements OnInit, AfterViewInit, OnDestroy 
   private readonly destroy$ = new Subject<void>();
   private readonly confirm = inject(ConfirmDialogService);
   private readonly formPrompt = inject(FormPromptService);
+  private readonly auditLog = inject(AuditLogService);
 
   constructor(
     public announcements: AnnouncementService,
@@ -363,9 +390,13 @@ export class AnnouncementsComponent implements OnInit, AfterViewInit, OnDestroy 
     this.announcements.getAnnouncement(this.query).pipe(takeUntil(this.destroy$)).subscribe({
       next: (res) => {
         this.loadError = false;
-        this.canManage = res.canManage;
+        if (this.canManage !== res.canManage) {
+          this.canManage = res.canManage;
+          this.detailTabs = this.buildDetailTabs();
+        }
         this.total = res.total;
         this.data = res.announcements;
+        this.historyCache.clear();
         this.syncViews();
         this.isLoading = false;
       },

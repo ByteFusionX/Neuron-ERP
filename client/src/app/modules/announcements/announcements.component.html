@@ -68,6 +68,7 @@
           <p class="whitespace-pre-line break-words text-sm leading-relaxed text-gray-800 dark:text-gray-200">{{ row.description }}</p>
         </div>
         <app-detail-overview *ngSwitchCase="'overview'" [grid]="grid!" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+        <app-detail-timeline *ngSwitchCase="'history'" [entries]="(historyFor(row) | async) ?? []" emptyMessage="No history recorded yet."></app-detail-timeline>
       </ng-container>
     </ng-template>
   </app-data-grid>
