@@ -1,6 +1,7 @@
-<div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="flex h-full flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-detail-view-shell
     class="min-h-0 flex-1"
+    headerTone="contrast"
     [loading]="loading"
     [empty]="!loading && !quoteData"
     emptyTitle="Quotation not found"
@@ -8,19 +9,54 @@
     [emptyLink]="['/quotations']"
     emptyLinkLabel="Back to quotations"
     [breadcrumbs]="breadcrumbs"
-    [avatarText]="headerAvatarText"
-    [title]="headerTitle"
-    [badges]="badges"
-    [subtitle]="headerSubtitle"
+    customTitle
     [stats]="stats"
-    [tabs]="tabs"
-    [activeTab]="tab"
-    (activeTabChange)="onTabChange($event)"
+    statsLayout="fields"
+    statsTitle="Summary"
+    statsStorageKey="quotation-summary"
+    tabParam=""
+    bodyBare
     [hasSidebar]="true"
+    [(panelOpen)]="panelOpen"
+    sidebarBare
+    sectioned
     *ngIf="quoteData as q; else emptyShell"
   >
+    <div headerTitle class="flex min-w-0 flex-col gap-0.5">
+      <!-- line 1: identity (ID, revision, states); line 2: who it's for and who owns it -->
+      <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div class="flex min-w-0 items-center gap-2">
+          <h1 class="dvs-strong truncate text-lg font-semibold text-gray-900 dark:text-gray-50">{{ q.quoteId }}</h1>
+          <app-detail-revision-chip [revision]="revision" hideZero title="View revision history" (open)="onViewRevisions()"></app-detail-revision-chip>
+        </div>
+      </div>
+      <div class="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] font-normal text-gray-900 dark:text-gray-100">
+        <span *ngIf="q.client?.companyName" class="truncate">{{ q.client?.companyName }}</span>
+        <span *ngIf="q.client?.companyName && headerOwner" class="text-gray-300 dark:text-gray-600">·</span>
+        <span *ngIf="headerOwner">Owner {{ headerOwner }}</span>
+      </div>
+    </div>
+
+    <!-- overview facts, left of the metrics -->
+    <!-- spans two of the row's three tracks so Details (14 facts, 4 across) and Summary (6, 2 across) end near the same height -->
+    <app-detail-section beforeStats title="Details" class="lg:col-span-2 lg:border-r lg:border-gray-200 lg:pr-8 dark:lg:border-gray-800">
+      <app-detail-fields-menu sectionActions [items]="detailItems" storageKey="quotation-details" (hiddenChange)="hiddenDetail = $event" (orderChange)="detailOrder = $event"></app-detail-fields-menu>
+      <div class="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
+        <ng-container *ngFor="let e of visibleDetail; trackBy: trackEntry">
+          <app-detail-field *ngIf="e.fact as f" [label]="f.label" stacked [class.col-span-2]="e.key === 'Subject'">
+            <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
+          </app-detail-field>
+          <app-detail-field *ngIf="e.state as s" [label]="s.key" stacked>
+            <span class="inline-flex items-center gap-1.5">
+              <span class="h-1.5 w-1.5 rounded-full" [ngClass]="s.dot"></span>
+              <span class="font-medium" [ngClass]="s.text">{{ s.label }}</span>
+            </span>
+          </app-detail-field>
+        </ng-container>
+      </div>
+    </app-detail-section>
+
     <ng-container headerActions>
-      <app-detail-revision-chip [revision]="revision" hideZero title="View revision history" (open)="onViewRevisions()"></app-detail-revision-chip>
       <app-action-button variant="outline" [title]="editDisabledReason" [disabled]="isEditDisabled" (click)="onQuoteEdit()" icon="edit">Edit quote</app-action-button>
       <app-action-menu [items]="moreItems" (selected)="onMenu($event)"></app-action-menu>
       <!-- "Send quote" stays hidden until mail is integrated; it only recorded the quote as sent. -->
@@ -28,7 +64,7 @@
       <app-action-button *ngIf="!nextStep" variant="primary" [title]="statusLockedReason" [disabled]="isStatusLocked" (click)="onUpdateStatus()">Update status</app-action-button>
     </ng-container>
 
-    <div tabToolbar *ngIf="(tab === 'items' || tab === 'pricing') && q.optionalItems.length > 1" class="flex items-center gap-2">
+    <div headerActions *ngIf="q.optionalItems.length > 1" class="flex items-center gap-2">
       <label for="mainCalculationOption" class="text-xs text-gray-500 dark:text-gray-400">Select Item Options:</label>
       <select
         id="mainCalculationOption"
@@ -40,95 +76,27 @@
       </select>
     </div>
 
-    <ng-container sidebar>
-      <!-- previous module -->
-      <app-detail-section title="Enquiry" *ngIf="enquiryFacts.length">
-        <app-detail-field *ngFor="let f of enquiryFacts" [label]="f.label" [tone]="f.tone ?? null" [numeric]="f.numeric ?? false">
-          <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
-        </app-detail-field>
-      </app-detail-section>
+    <!-- same tabs and bodies as the quotation list's detail panel -->
+    <app-quotation-side-panel #sidePanel sidebar class="min-h-0 flex-1" [quote]="$any(q)"
+      [termsTemplate]="termsTpl"
+      [revisionsTemplate]="revisionsTpl"
+      [historyTemplate]="canSeeHistory ? historyTpl : null"
+      (uploadLpo)="onUploadLpo()"></app-quotation-side-panel>
 
-      <!-- next module: handover to the deal sheet -->
-      <app-detail-section title="Deal sheet" *ngIf="dealFacts.length">
-        <app-detail-field *ngFor="let f of dealFacts" [label]="f.label" [tone]="f.pill ? null : (f.tone ?? null)" [numeric]="f.numeric ?? false">
-          <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
-        </app-detail-field>
-      </app-detail-section>
+    <div tabBody class="h-full">
+      <app-detail-table class="block h-full" [columns]="itemCols" [rows]="itemRows" groupStyle="band" centerGroups numbered groupTotals spread bare tools storageKey="quotation-items" searchKey="detail" searchTextKey="detailText" [footRows]="itemFootRows" emptyMessage="No items in this option."></app-detail-table>
 
-      <app-detail-section title="Stock held" *ngIf="heldLines.length">
-        <app-detail-field label="Released on" [tone]="null">
-          {{ stockHold?.expiresAt ? (stockHold!.expiresAt | date: 'dd MMM yyyy, HH:mm') : '-' }}
-        </app-detail-field>
-        <app-detail-field *ngFor="let l of heldLines" [label]="l.partNo || l.detail" [numeric]="true"
-          [tone]="l.held < l.requested ? 'warn' : null">{{ l.held }}/{{ l.requested }}{{ l.uom ? ' ' + l.uom : '' }}</app-detail-field>
-        <button *ngIf="stockHold?.canHold" type="button" [disabled]="stockHoldBusy" (click)="onReleaseStockHold()"
-          class="mt-1 text-xs font-medium text-red-600 hover:underline disabled:opacity-50 dark:text-red-400">Release hold</button>
-      </app-detail-section>
-
-      <!-- shared by every module -->
-      <app-detail-section title="Customer" *ngIf="customerFacts.length">
-        <app-detail-field *ngFor="let f of customerFacts" [label]="f.label" [tone]="f.tone ?? null" [numeric]="f.numeric ?? false">
-          <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
-        </app-detail-field>
-      </app-detail-section>
-    </ng-container>
-
-    <div tabBody [ngSwitch]="tab">
-      <!-- overview -->
-      <div *ngSwitchCase="'overview'" class="grid gap-4 xl:grid-cols-2">
-        <section *ngFor="let sec of overviewSections; let first = first" class="rounded-lg border border-gray-200 p-4 dark:border-erp-border-dark" [class.xl:col-span-2]="first">
-          <h3 class="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{{ sec.title }}</h3>
-          <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2" [class.xl:grid-cols-3]="first">
-            <app-detail-field *ngFor="let f of sec.facts" [label]="f.label" [tone]="f.pill ? null : (f.tone ?? null)" stacked [class.sm:col-span-2]="f.label === 'Subject'" [class.xl:col-span-3]="f.label === 'Subject'">
-              <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
-            </app-detail-field>
-          </div>
-        </section>
-      </div>
-
-      <!-- items -->
-      <div *ngSwitchCase="'items'">
-        <app-detail-table [columns]="itemCols" [rows]="itemRows" groupStyle="band" numbered groupTotals spread centerGroups emptyMessage="No items in this option."></app-detail-table>
-      </div>
-
-      <!-- revisions -->
-      <div *ngSwitchCase="'revisions'">
+      <!-- revisions (shown in the side panel) -->
+      <ng-template #revisionsTpl><div>
         <div *ngIf="viewedRevision !== null" class="mb-3 flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200">
           <span>PDF download and preview use Rev {{ viewedRevision }}, dated {{ revisionDateLabel }}.</span>
           <button type="button" class="font-semibold underline" (click)="clearViewedRevision()">Use current</button>
         </div>
-        <app-revision-history [data]="revisionSource" [reloadKey]="revision" (revisionSelected)="onRevisionSelected($event)"></app-revision-history>
-      </div>
+        <app-revision-history compact [data]="revisionSource" [reloadKey]="revision" (revisionSelected)="onRevisionSelected($event)"></app-revision-history>
+      </div></ng-template>
 
-      <!-- documents -->
-      <div *ngSwitchCase="'documents'">
-        <app-detail-documents
-          [documents]="docList"
-          [downloadable]="false"
-          emptyMessage="No files on this quotation, its deal, enquiry or events."
-          (open)="openDocument($event)"
-        ></app-detail-documents>
-      </div>
-
-      <!-- events -->
-      <div *ngSwitchCase="'events'">
-        <app-detail-task-list
-          [items]="eventItems"
-          defaultFilter="event"
-          [showTasks]="false"
-          [showEvents]="true"
-          addable
-          (add)="onAddEvent()"
-          (toggle)="onToggleEvent($event)"
-          (remove)="onDeleteEvent($event)"
-          (eventOutcome)="onEventOutcome($event.item, $event.status)"
-          (previewFile)="onPreviewEventFile($event.file)"
-          (deleteFile)="onDeleteEventFile($event.item, $event.file)"
-        ></app-detail-task-list>
-      </div>
-
-      <!-- history -->
-      <div *ngSwitchCase="'history'">
+      <!-- history (shown in the side panel, super admins and the owner) -->
+      <ng-template #historyTpl><div>
         <!-- the log itself, newest first, bucketed by day -->
         <div *ngFor="let g of historyGroups" class="mb-5 last:mb-0">
           <div class="mb-2 flex items-center gap-3">
@@ -197,26 +165,12 @@
         </div>
 
         <p *ngIf="!historyLog.length" class="text-[13px] text-gray-500 dark:text-gray-400">No edit history available.</p>
-      </div>
+      </div></ng-template>
 
-      <!-- pricing -->
-      <div *ngSwitchCase="'pricing'" class="space-y-6">
-        <div class="grid gap-6 lg:grid-cols-2">
-          <app-detail-section title="Cost Summary">
-            <app-detail-field label="Total Cost" numeric>{{ calculateAllTotalCost() | numberFormatter }}</app-detail-field>
-            <app-detail-field label="Total Selling price" numeric>{{ calculateDiscoutPrice() | numberFormatter }}</app-detail-field>
-            <app-detail-field label="Profit Margin" numeric>{{ calculateProfitMargin() | numberFormatter }}</app-detail-field>
-            <app-detail-field label="Profit margin with %" numeric>{{ calculateTotalProfit().toFixed(2) }}%</app-detail-field>
-          </app-detail-section>
-          <app-detail-section title="Price Summary">
-            <app-detail-field label="Subtotal" numeric>{{ calculateSellingPrice() | numberFormatter }}</app-detail-field>
-            <app-detail-field label="Discount" numeric>{{ q.optionalItems[selectedOption].totalDiscount | numberFormatter }}</app-detail-field>
-            <app-detail-field label="Total Amount" numeric>{{ calculateDiscoutPrice() | numberFormatter }}</app-detail-field>
-          </app-detail-section>
-        </div>
-
+      <!-- terms (shown in the side panel) -->
+      <ng-template #termsTpl><div class="space-y-6">
         <app-detail-clause-list [clauses]="noteClauses" emptyMessage="No customer notes or terms & conditions."></app-detail-clause-list>
-      </div>
+      </div></ng-template>
     </div>
   </app-detail-view-shell>
 

@@ -1,5 +1,5 @@
 import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule, formatDate } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -12,7 +12,6 @@ import { EventActionsService } from 'src/app/core/services/events/event-actions.
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { ModalService } from 'src/app/shared/components/modal';
 import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/event-create-modal.component';
-import { DetailTaskListComponent } from 'src/app/shared/components/detail-panel/detail-task-list.component';
 import { SfOption } from 'src/app/shared/components/smart-form';
 import { ContactDetail } from 'src/app/shared/interfaces/customer.interface';
 import { Events } from 'src/app/shared/interfaces/evets.interface';
@@ -30,6 +29,7 @@ import { EditHistoryModalComponent } from 'src/app/shared/components/edit-histor
 import { RevisionHistoryComponent, RevisionHistoryData } from 'src/app/shared/components/revision-history/revision-history.component';
 import { QuoteFormDrawerComponent } from '../quote-form-drawer/quote-form-drawer.component';
 import { DealFormComponent } from '../deal-form/deal-form.component';
+import { QuotationSidePanelComponent } from './quotation-side-panel.component';
 import { LpoUploadModalComponent, LpoUploadModalResult } from '../quotation-list/lpo-upload-modal.component';
 import { ActionMenuComponent, ActionMenuItem } from 'src/app/shared/components/action-menu/action-menu.component';
 import { DetailRevisionChipComponent } from 'src/app/shared/components/detail-panel/detail-revision-chip.component';
@@ -39,15 +39,15 @@ import {
 } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
+import { DetailFieldsMenuComponent, DetailFieldsMenuItem } from 'src/app/shared/components/detail-panel/detail-fields-menu.component';
 import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
 import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { } from 'src/app/shared/components/detail-panel/detail-metrics.component';
 import { } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailClauseListComponent } from 'src/app/shared/components/detail-panel/detail-clause-list.component';
-import { DetailClause, DetailDocument, DetailSummaryRow, DetailTableColumn, DetailTaskItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
-import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
+import { DetailClause, DetailDocument, DetailFootRow, DetailSummaryRow, DetailTableColumn, DetailTaskItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DETAIL_TONE, DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
 import { marginFromPrice } from 'src/app/shared/utils/deal-pricing.util';
 import {
   DetailViewBadge,
@@ -61,7 +61,6 @@ import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
 import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
 
-type Tab = 'overview' | 'items' | 'pricing' | 'revisions' | 'documents' | 'events' | 'history';
 
 const QUOTE_STATUS_TONE: Record<string, DetailTone> = {
   Won: 'good',
@@ -135,12 +134,11 @@ export interface QvHistoryEntry {
     DetailViewShellComponent,
     ActionButtonComponent,
     DetailSectionComponent,
+    DetailFieldsMenuComponent,
     DetailFieldComponent,
     DetailBadgeComponent,
     DetailTableComponent,
     RouterLink,
-    DetailDocumentsComponent,
-    DetailTaskListComponent,
     DetailClauseListComponent,
     DetailRevisionChipComponent,
     RevisionHistoryComponent,
@@ -148,40 +146,42 @@ export interface QvHistoryEntry {
     QuoteFormDrawerComponent,
     DealFormComponent,
     NumberFormatterPipe,
+    QuotationSidePanelComponent,
   ],
 })
 export class QuotationViewComponent implements OnInit, OnDestroy {
   quoteData: getQuotatation | null = null;
   loading = true;
-  tab: Tab = 'overview';
+  /** Right panel visibility, toggled by the shell's Hide / Show panel button. */
+  panelOpen = true;
+  @ViewChild('sidePanel') private sidePanel?: QuotationSidePanelComponent;
   selectedOption = 0;
   isDownloading = false;
   isDownloadingStamped = false;
   isPreviewing = false;
   isNoteOwner = false;
   isSuperAdmin = false;
+  private employeeId = '';
+  /** The History tab is for super admins and the quotation's owner. */
+  get canSeeHistory(): boolean {
+    const owner = this.quoteData?.createdBy as any;
+    const ownerId = typeof owner === 'string' ? owner : owner?._id;
+    return this.isSuperAdmin || (!!ownerId && ownerId === this.employeeId);
+  }
   editOpen = false;
   /** Nudged after an edit so the page refetches the quote the same way the route does. */
   private reload$ = new BehaviorSubject<void>(undefined);
 
-  tabs: { id: Tab; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'items', label: 'Items' },
-    { id: 'pricing', label: 'Pricing' },
-    { id: 'documents', label: 'Documents' },
-    { id: 'events', label: 'Events' },
-  ];
-  private readonly baseTabs = this.tabs;
-  private readonly revisionsTab: { id: Tab; label: string } = { id: 'revisions', label: 'Revisions' };
-  private readonly historyTab: { id: Tab; label: string } = { id: 'history', label: 'History' };
-  /** `?tab=` is honoured once, on the first load, so later reloads don't yank the user back. */
+  /** `?tab=` (now a side-panel tab) is honoured once, on the first load, so later reloads don't yank the user back. */
   private tabFromUrlApplied = false;
   historyLog: QvHistoryEntry[] = [];
   events: Events[] = [];
   docList: DetailDocument[] = [];
   private docFiles = new Map<string, any>();
-  readonly itemCols: DetailTableColumn[] = [
+  private readonly allItemCols: DetailTableColumn[] = [
+    { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
     { key: 'detail', label: 'Item Details', type: 'html', wrap: true, clamp: true, tooltipKey: 'detailText' },
+    { key: 'partNo', label: 'Part No', hiddenByDefault: true },
     { key: 'image', label: 'Image', type: 'image', imagePreview: true, align: 'center', width: '5rem' },
     { key: 'quantity', label: 'Qty', type: 'number' },
     { key: 'uom', label: 'UOM', align: 'center' },
@@ -191,11 +191,14 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     { key: 'unitPrice', label: 'Unit Price', align: 'right' },
     { key: 'totalPrice', label: 'Total Price', align: 'right', emphasis: true, total: true, totalKey: 'totalPriceRaw', totalFormat: '1.2-2' },
     // Anything that isn't off the shelf falls back to a neutral badge, so lead times read as "not yet".
-    { key: 'availability', label: 'Avbl.', type: 'badge', badgeTones: { 'Ex-Stock': 'good', 'ex-stock': 'good' } },
   ];
+  /** Image and UOM are dropped when no line in the option fills them, so empty "—" columns don't take up width. */
+  itemCols: DetailTableColumn[] = this.allItemCols;
   itemRows: Record<string, any>[] = [];
   /** Totals shown as the table's summary card instead of a footer row. */
   itemSummary: DetailSummaryRow[] = [];
+  /** Cost summary lines for the items table footer, figures under the Total Cost / Total Price columns. */
+  itemFootRows: DetailFootRow[] = [];
 
   /** Customer notes and T&C as numbered clauses, like the project page's Terms tab. */
   get noteClauses(): DetailClause[] {
@@ -217,6 +220,20 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   dealFacts: QvFact[] = [];
   /** Overview cards: the quotation's own data, grouped by what it describes. */
   overviewSections: { title: string; facts: QvFact[] }[] = [];
+  detailItems: DetailFieldsMenuItem[] = [];
+  hiddenDetail = new Set<string>();
+  detailOrder: string[] = [];
+  detailEntries: { key: string; fact?: QvFact; state?: { key: string; label: string; dot: string; text: string } }[] = [];
+  /** Detail fields that are switched on, in the user's order. */
+  get visibleDetail() {
+    const pos = (k: string) => { const i = this.detailOrder.indexOf(k); return i < 0 ? this.detailOrder.length : i; };
+    return this.detailEntries.filter((e) => !this.hiddenDetail.has(e.key)).sort((a, b) => pos(a.key) - pos(b.key));
+  }
+  trackEntry = (_: number, e: { key: string }) => e.key;
+  /** Menu key for a fact; drops the revision suffix so the saved choice survives a revision change. */
+  factKey(label: string): string {
+    return label.replace(/ \(Rev \d+\)$/, '');
+  }
   /** Stock held for this Won quote until the job takes it over; null until loaded or when not Won. */
   stockHold: QuoteStockHold | null = null;
   stockHoldBusy = false;
@@ -245,7 +262,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this._employeeService.employeeData$.subscribe((employee) => {
         this.isSuperAdmin = /^superadmin$/i.test(String(employee?.category.role ?? ''));
-        this.syncTabs();
+        this.employeeId = employee?._id ?? '';
         this.isNoteOwner = !!employee && !!this.quoteData && employee._id === this.quoteData.createdBy?._id;
       }),
     );
@@ -291,15 +308,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
           },
         }),
     );
-  }
-
-  /** Base tabs, plus Deal sheet once a deal exists and History for super admins. */
-  private syncTabs(): void {
-    const tabs = [...this.baseTabs];
-    if (this.revision) { tabs.push(this.revisionsTab); }
-    if (this.isSuperAdmin) { tabs.push(this.historyTab); }
-    this.tabs = tabs;
-    if (!tabs.some((t) => t.id === this.tab)) { this.tab = 'overview'; }
   }
 
   ngOnDestroy(): void {
@@ -569,10 +577,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     });
   }
 
-  onTabChange(id: string): void {
-    this.tab = id as Tab;
-  }
-
   onOptionChange(): void {
     this.rebuild();
   }
@@ -656,9 +660,15 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     return this.quoteData?.revision ?? 0;
   }
 
-  /** Revisions are a tab, not a dialog: a quote can carry dozens of lines and needs the full page width. */
+  /** Revisions live in the side panel; open it if hidden and switch to that tab. */
   onViewRevisions(): void {
-    if (this.tabs.some((x) => x.id === 'revisions')) { this.onTabChange('revisions'); }
+    this.showPanelTab('revisions');
+  }
+
+  private showPanelTab(id: string): void {
+    this.panelOpen = true;
+    // The panel is only created once it's open, so wait a tick before switching its tab.
+    setTimeout(() => this.sidePanel?.show(id));
   }
 
   get revisionSource(): RevisionHistoryData {
@@ -1215,19 +1225,18 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       .toUpperCase();
   }
 
-  get headerAvatarText(): string {
-    return this.initials(this.quoteData?.client?.companyName);
+  get headerOwner(): string {
+    const by = this.quoteData ? this.fullName(this.quoteData.createdBy) : 'N/A';
+    return by !== 'N/A' ? by : '';
   }
 
-  get headerTitle(): string {
-    return this.quoteData?.quoteId || '';
-  }
-
-  get headerSubtitle(): string {
-    const q = this.quoteData;
-    if (!q) return '';
-    const by = this.fullName(q.createdBy);
-    return by !== 'N/A' ? 'Quoted by ' + by : '';
+  /** Quote and deal status as labelled segments for the header's status strip. */
+  get headerStates(): { key: string; label: string; dot: string; text: string }[] {
+    return this.badges.map((b, i) => {
+      const tone = DETAIL_TONE[b.tone || 'neutral'];
+      const isDeal = i > 0;
+      return { key: isDeal ? 'Deal' : 'Status', label: isDeal ? b.label.replace(/^Deal /, '') : b.label, dot: tone.dot, text: tone.text };
+    });
   }
 
   calculateTotalCost(i: number, j: number, k: number): number {
@@ -1366,11 +1375,10 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       this.breadcrumbs = this.badges = this.stats = this.itemRows = this.docList = [];
       return;
     }
-    this.syncTabs();
     if (!this.tabFromUrlApplied) {
       this.tabFromUrlApplied = true;
       const wanted = this._route.snapshot.queryParamMap.get('tab');
-      if (wanted && this.tabs.some((t) => t.id === wanted)) { this.tab = wanted as Tab; }
+      if (wanted) { this.showPanelTab(wanted); }
     }
     this.buildDocuments(q);
     this.events = (q.events || []) as Events[];
@@ -1397,6 +1405,10 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
 
     const hasItems = !!q.optionalItems?.[this.selectedOption];
     this.itemRows = hasItems ? this.buildItemRows(num) : [];
+    const lines = this.itemRows.filter((r) => !r['_group']);
+    const hasImage = lines.some((r) => r['image']);
+    const hasUom = lines.some((r) => r['uom'] && r['uom'] !== '—');
+    this.itemCols = this.allItemCols.filter((c) => (c.key !== 'image' || hasImage) && (c.key !== 'uom' || hasUom));
     this.stats = hasItems
       ? [
           { label: 'Total Cost' + currency, value: num(this.calculateAllTotalCost()) },
@@ -1407,7 +1419,20 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
           { label: 'Total Amount' + currency, value: num(this.calculateDiscoutPrice()) },
         ]
       : [];
-    // The same figures as the stats strip, but as the card under the items table, ending on the amount due.
+    // One footer row: each figure sits under its own column (cost, profit, price).
+    this.itemFootRows = hasItems
+      ? [
+          {
+            label: 'Total',
+            emphasis: true,
+            cells: {
+              totalCost: { value: num(this.calculateAllTotalCost()) },
+              profit: { value: `${num(this.calculateProfitMargin())} (${this.calculateTotalProfit().toFixed(2)}%)` },
+              totalPrice: { value: num(this.calculateDiscoutPrice()) },
+            },
+          },
+        ]
+      : [];
     this.itemSummary = hasItems
       ? [
           { label: 'Total Cost', value: num(this.calculateAllTotalCost()), note: q.currency || '' },
@@ -1450,17 +1475,29 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     const person = (p: any) => this.personName(p) || '';
     this.overviewSections = [
       {
+        title: 'Customer',
+        facts: keep([
+          { label: 'Customer', value: q.client?.companyName || '', link: ['/customers'], queryParams: { search: q.client?.companyName } },
+          { label: 'Contact', value: this.personName(q.attention) },
+          { label: 'Phone', value: q.attention?.phoneNo || (q.client?.contactNo ? String(q.client.contactNo) : '') },
+          { label: 'Email', value: q.attention?.email || q.client?.customerEmailId || '' },
+        ]),
+      },
+      {
         title: 'Quotation',
         facts: keep([
-          { label: 'Subject', value: q.subject || '' },
+          { label: 'Department', value: q.department?.departmentName || '' },
+          { label: 'Enquiry', value: q.enqId?.enquiryId || '', link: ['/enquiry'], queryParams: clientId ? { customer: clientId } : undefined },
+          { label: 'Currency', value: q.currency || '' },
           { label: this.activeRevision > 0 ? `Quoted date (Rev ${this.activeRevision})` : 'Quoted date', value: date(this.revisionDate(this.activeRevision)) },
           { label: 'Created', value: date(q.date) },
           { label: 'Closing date', value: date(q.closingDate || q.validityDate) },
           { label: 'Quoting company', value: q.quoteCompany || '' },
-          { label: 'Department', value: q.department?.departmentName || '' },
-          { label: 'Sales person', value: person(q.createdBy) },
+          { label: 'Subject', value: q.subject || '' },
           { label: 'Created by user', value: person(q.createdByUser) },
-        ]),
+          { label: 'Deal ID', value: d?.dealId || '', deal: true },
+          { label: 'Deal status', value: d?.status || '', pill: true, tone: DEAL_STATUS_TONE[(d?.status || '').toLowerCase()] ?? 'neutral' },
+        ] as QvFact[]),
       },
       {
         title: 'Terms',
@@ -1476,12 +1513,34 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
           { label: 'Last sent', value: lastSent ? `${date(lastSent.sentAt)} to ${lastSent.recipient}` : '' },
           { label: 'Sent revision', value: q.currentSentRevision !== undefined ? `Rev ${q.currentSentRevision}` : '' },
           { label: 'Next follow-up', value: date(q.followUp?.nextFollowUpDate), tone: isFollowUpOverdue ? 'bad' : null },
-          { label: 'Last activity', value: date(q.followUp?.lastActivityDate) },
           { label: 'Customer decision', value: q.customerDecision?.decision || '', pill: true, tone: q.customerDecision?.decision === 'accepted' ? 'good' : q.customerDecision?.decision === 'rejected' ? 'bad' : 'warn' },
           { label: 'Lost to competitor', value: q.customerDecision?.competitor || '' },
         ] as QvFact[]),
       },
     ].filter((sec) => sec.facts.length);
+
+    // Everything the Details section can show, in display order, for its show/hide menu.
+    // Subject is long, so it goes last by default; the user can drag it elsewhere.
+    const entries: typeof this.detailEntries = [];
+    let subject: QvFact | null = null;
+    for (const sec of this.overviewSections) {
+      for (const f of sec.facts) {
+        if (f.label === 'Subject') { subject = f; continue; }
+        if (f.label === 'Deal status') {
+          // shown like the quote Status (dot + text), not as a pill
+          const ds = this.headerStates.find((s) => s.key === 'Deal');
+          if (ds) entries.push({ key: 'Deal status', state: { ...ds, key: 'Deal status' } });
+          continue;
+        }
+        entries.push({ key: this.factKey(f.label), fact: f });
+        if (f.label === 'Closing date') {
+          for (const s of this.headerStates) if (s.key !== 'Deal') entries.push({ key: s.key, state: s });
+        }
+      }
+    }
+    if (subject) entries.push({ key: 'Subject', fact: subject });
+    this.detailEntries = entries;
+    this.detailItems = entries.map((e) => ({ key: e.key, label: e.key, hiddenByDefault: e.key === 'Currency' || e.key === 'Created' }));
 
     // The next module in the flow: where the quote stands on its way to a deal sheet.
     this.dealFacts = keep([
@@ -1571,6 +1630,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
           imageAlt: d.image?.originalname || 'Item image',
           detail: this.boldPipe.transform(this.bracketsPipe.transform(d.detail) as string),
           detailText: d.detail,
+          itemCode: (d as any).itemCode || '—',
+          partNo: (d as any).partNo || '—',
           quantity: d.quantity,
           uom: d.uom || '—',
           unitCost: num(d.unitCost),

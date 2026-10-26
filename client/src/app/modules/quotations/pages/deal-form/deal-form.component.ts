@@ -37,7 +37,8 @@ export class DealFormComponent implements OnInit, OnChanges {
   /** Last quotation shown. Kept after `quotation` is cleared so the panel content survives the slide-out. */
   q: Quotatation | null = null;
   private built: Quotatation | null = null;
-  form!: FormGroup;
+  // Empty until a quotation is passed in; the template renders (closed) before buildForm runs.
+  form: FormGroup = this.fb.group({});
   /** One entry per build: swapping it re-creates item-entry, which seeds itself once on init. */
   forms: FormGroup[] = [];
   seed: ItemEntryOptionValue[] = [];
@@ -247,7 +248,7 @@ export class DealFormComponent implements OnInit, OnChanges {
   }
 
   private recompute(): void {
-    if (!this.form) return;
+    if (!this.form.get('optionalItems')) return;
     const v = this.form.getRawValue();
     const option = (v.optionalItems as any[])[this.selectedOption];
     const lines = ((option?.items as any[]) || []).flatMap((it) =>
