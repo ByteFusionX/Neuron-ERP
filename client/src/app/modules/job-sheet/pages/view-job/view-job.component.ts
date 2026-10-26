@@ -7,6 +7,10 @@ import { ToastrService } from 'ngx-toastr';
 import saveAs from 'file-saver';
 
 import { JobService } from 'src/app/core/services/job/job.service';
+import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
+import { DomSanitizer } from '@angular/platform-browser';
+import { ParseBoldTextPipe } from 'src/app/shared/pipes/boldParse.pipe';
+import { ParseBracketsTextPipe } from 'src/app/shared/pipes/highlightParse.pipe';
 import { JobHistoryService } from 'src/app/core/services/job/job-history.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ModalService } from 'src/app/shared/components/modal';
@@ -40,6 +44,20 @@ interface JobFact {
   link?: any[];
   queryParams?: Record<string, any>;
   state?: { dot: string; text: string };
+}
+
+/** One step in the Costs tab breakdown; negative values reduce the total. */
+interface CostBreakdownLine {
+  label: string;
+  note?: string;
+  value: number;
+}
+
+interface CostBreakdownSection {
+  title: string;
+  start: CostBreakdownLine;
+  lines: CostBreakdownLine[];
+  total: CostBreakdownLine;
 }
 
 type PanelTab = 'costs' | 'documents' | 'workflow' | 'history';
@@ -86,6 +104,9 @@ export class ViewJobComponent implements OnInit {
   private modal = inject(ModalService);
   private matDialog = inject(MatDialog);
   private auditLog = inject(AuditLogService);
+  private quoteService = inject(QuotationService);
+  private boldPipe = new ParseBoldTextPipe();
+  private bracketsPipe = new ParseBracketsTextPipe(inject(DomSanitizer));
 
   loading = true;
   job: getJob | null = null;
@@ -117,29 +138,29 @@ export class ViewJobComponent implements OnInit {
 
   itemRows: Record<string, any>[] = [];
   itemFootRows: DetailFootRow[] = [];
-  costRows: Record<string, any>[] = [];
+  costBreakdown: CostBreakdownSection[] = [];
+  costProfit = { value: 0, perc: 0 };
   documents: DetailDocument[] = [];
   private docFiles = new Map<string, any>();
 
   workflow: TimelineEvent[] = [];
   workflowStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
 
-  readonly itemColumns: DetailTableColumn[] = [
+  private readonly allItemColumns: DetailTableColumn[] = [
     { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
-    { key: 'detail', label: 'Item Details', type: 'text', wrap: true },
+    { key: 'detail', label: 'Item Details', type: 'html', wrap: true, clamp: true, tooltipKey: 'detailText' },
     { key: 'partNo', label: 'Part No', hiddenByDefault: true },
+    { key: 'image', label: 'Image', type: 'image', imagePreview: true, align: 'center', width: '5rem' },
     { key: 'quantity', label: 'Qty', type: 'number', align: 'center' },
+    { key: 'uom', label: 'UOM', align: 'center', hiddenByDefault: true },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency', align: 'right' },
     { key: 'totalCost', label: 'Total Cost', type: 'currency', align: 'right', total: true },
     { key: 'unitSellingPrice', label: 'Unit Selling Price', type: 'currency', align: 'right' },
     { key: 'totalSellingPrice', label: 'Total Selling Price', type: 'currency', align: 'right', total: true },
     { key: 'supplier', label: 'Supplier', type: 'text' },
+    { key: 'availability', label: 'Availability', type: 'text', hiddenByDefault: true },
   ];
-  readonly costColumns: DetailTableColumn[] = [
-    { key: 'type', label: 'Type', type: 'text' },
-    { key: 'name', label: 'Name', type: 'text', wrap: true },
-    { key: 'value', label: 'Value', type: 'currency', align: 'right', total: true },
-  ];
+  itemColumns: DetailTableColumn[] = this.allItemColumns;
 
   private isSuperAdmin = false;
   private canAllocateJobs = false;
@@ -327,14 +348,41 @@ export class ViewJobComponent implements OnInit {
     this.detailFacts = this.buildDetailFacts();
     this.detailItems = this.detailFacts.map((f) => ({ key: f.label, label: f.label, hiddenByDefault: f.label === 'Currency' || f.label === 'Department' }));
     this.itemRows = this.buildItemRows(selectedDealItems(d.updatedItems));
-    this.costRows = (d.additionalCosts || []).map((cost: any) => ({
-      type: cost.type || 'Cost',
-      name: cost.type === 'Supplier Discount'
-        ? cost.supplierDetails?.supplierName || cost.name || 'Supplier discount'
-        : cost.name || cost.type || 'Additional cost',
-      value: cost.value || 0,
-    }));
+    this.buildCostBreakdown(d, price);
+    const hasImage = this.itemRows.some((r) => !r['_group'] && r['image']);
+    this.itemColumns = this.allItemColumns.filter((c) => c.key !== 'image' || hasImage);
     this.documents = this.buildDocuments();
+  }
+
+  /** Costs tab: how the selected lines' sums become the deal totals, same as the deal sheet view. */
+  private buildCostBreakdown(d: any, price: { totalCost: number; totalSellingPrice: number; profit: number; perc: number }): void {
+    let lineSell = 0;
+    let lineCost = 0;
+    for (const item of selectedDealItems(d.updatedItems) ?? []) {
+      for (const detail of (item as any)?.itemDetails ?? []) {
+        if (!detail.dealSelected) continue;
+        lineSell += (Number(detail.unitSellingPrice) || 0) * (Number(detail.quantity) || 0);
+        lineCost += (Number(detail.unitCost) || 0) * (Number(detail.quantity) || 0);
+      }
+    }
+    const costLines: CostBreakdownLine[] = [];
+    const sellLines: CostBreakdownLine[] = [];
+    for (const c of d.additionalCosts ?? []) {
+      const value = Number(c.value) || 0;
+      if (!value) continue;
+      if (c.type === 'Additional Cost') costLines.push({ label: c.name || 'Additional cost', note: 'Additional cost', value });
+      else if (c.type === 'Supplier Discount') costLines.push({ label: c.supplierDetails?.supplierName || c.name || 'Supplier', note: 'Supplier discount', value: -value });
+    }
+    const quoteDiscount = Number(d.totalDiscount) || 0;
+    if (quoteDiscount) sellLines.push({ label: 'Quotation discount', value: -quoteDiscount });
+    for (const c of d.additionalCosts ?? []) {
+      if (c.type === 'Customer Discount' && Number(c.value)) sellLines.push({ label: c.name || 'Customer discount', note: 'Customer discount', value: -Number(c.value) });
+    }
+    this.costBreakdown = [
+      { title: 'Cost', start: { label: 'Items cost', value: lineCost }, lines: costLines, total: { label: 'Total cost', value: price.totalCost } },
+      { title: 'Selling price', start: { label: 'Items selling price', value: lineSell }, lines: sellLines, total: { label: 'Net deal value', value: price.totalSellingPrice } },
+    ];
+    this.costProfit = { value: price.profit, perc: price.perc || 0 };
   }
 
   private buildDetailFacts(): JobFact[] {
@@ -380,8 +428,12 @@ export class ViewJobComponent implements OnInit {
       rows.push({ _group: true, label: item.itemName });
       selected.forEach((detail: any) => {
         rows.push({
-          detail: detail.detail,
+          image: detail.image?.fileName ? this.quoteService.itemImageUrl(detail.image.fileName) : '',
+          imageAlt: detail.image?.originalname || 'Item image',
+          detail: this.boldPipe.transform(this.bracketsPipe.transform(detail.detail) as string),
           detailText: detail.detail,
+          uom: detail.uom || '—',
+          availability: detail.availability || '—',
           itemCode: detail.itemCode || '—',
           partNo: detail.partNo || '—',
           quantity: detail.quantity,

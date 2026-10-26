@@ -66,11 +66,41 @@
             </nav>
 
             <div class="dv-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel" [ngSwitch]="panelTab">
-                <app-detail-table *ngSwitchCase="'costs'"
-                    [columns]="costColumns"
-                    [rows]="costRows"
-                    [currency]="quote?.currency"
-                    emptyMessage="No additional costs or discounts."></app-detail-table>
+                <ng-container *ngSwitchCase="'costs'">
+                    <app-detail-section *ngFor="let s of costBreakdown" [title]="s.title">
+                        <dl class="text-[13px]">
+                            <div class="flex items-baseline justify-between gap-3 py-1">
+                                <dt class="text-gray-600 dark:text-gray-400">{{ s.start.label }}</dt>
+                                <dd class="tabular-nums text-gray-900 dark:text-gray-100">{{ s.start.value | number: '1.2-2' }}</dd>
+                            </div>
+                            <div *ngFor="let l of s.lines" class="flex items-baseline justify-between gap-3 py-1">
+                                <dt class="min-w-0">
+                                    <span class="block truncate text-gray-700 dark:text-gray-300" [title]="l.label">{{ l.label }}</span>
+                                    <span *ngIf="l.note" class="block text-[11px] text-gray-400">{{ l.note }}</span>
+                                </dt>
+                                <dd class="shrink-0 tabular-nums"
+                                    [ngClass]="l.value < 0 ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400'">
+                                    {{ l.value < 0 ? '−' : '+' }} {{ (l.value < 0 ? -l.value : l.value) | number: '1.2-2' }}
+                                </dd>
+                            </div>
+                            <p *ngIf="!s.lines.length" class="py-1 text-[11px] text-gray-400">No adjustments.</p>
+                            <div class="mt-1 flex items-baseline justify-between gap-3 border-t border-gray-200 pt-2 dark:border-erp-border-dark">
+                                <dt class="font-semibold text-gray-900 dark:text-gray-100">{{ s.total.label }}</dt>
+                                <dd class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ s.total.value | number: '1.2-2' }} {{ quote?.currency }}</dd>
+                            </div>
+                        </dl>
+                    </app-detail-section>
+
+                    <app-detail-section title="Profit" class="block border-t border-gray-200 pt-5 dark:border-erp-border-dark">
+                        <div class="flex items-baseline justify-between gap-3 text-[13px]">
+                            <span class="text-gray-600 dark:text-gray-400">Selling price − cost</span>
+                            <span class="tabular-nums font-semibold text-violet-600 dark:text-violet-400">
+                                {{ costProfit.value | number: '1.2-2' }} {{ quote?.currency }}
+                                <span class="ml-1 text-[11px] font-normal text-gray-500">{{ costProfit.perc | number: '1.1-1' }}%</span>
+                            </span>
+                        </div>
+                    </app-detail-section>
+                </ng-container>
 
                 <app-detail-documents *ngSwitchCase="'documents'"
                     title="Customer LPO"
@@ -111,6 +141,7 @@
                 centerGroups
                 numbered
                 groupTotals
+                [striped]="false"
                 spread
                 bare
                 tools
