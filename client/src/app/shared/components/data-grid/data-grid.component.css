@@ -563,3 +563,19 @@ tr:hover .dg-editable {
 }
 
 .dg-tall .dg-td { height: 3.3125rem; }
+
+/* ---- strong: higher-contrast text only (opt-in via [strong]) ---- */
+.dg-strong .dg-th { color: #374151; }
+.dg-strong .dg-td { color: #1f2937; }
+.dg-strong .dg-tf { color: #111827; }
+.dg-strong .text-gray-400 { color: #6b7280; }
+.dg-strong .text-gray-500 { color: #4b5563; }
+.dg-strong .text-gray-600 { color: #374151; }
+.dg-strong .text-gray-700 { color: #1f2937; }
+
+:host-context(html.dark) .dg-strong .dg-th { color: #d4d4d4; }
+:host-context(html.dark) .dg-strong .dg-td { color: #f5f5f5; }
+:host-context(html.dark) .dg-strong .dg-tf { color: #fafafa; }
+:host-context(html.dark) .dg-strong .dark\:text-gray-400 { color: #bdbdbd; }
+:host-context(html.dark) .dg-strong .dark\:text-gray-300 { color: #e0e0e0; }
+:host-context(html.dark) .dg-strong .dark\:text-gray-200 { color: #f0f0f0; }

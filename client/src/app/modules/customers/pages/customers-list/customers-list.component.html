@@ -1,8 +1,9 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
-    <app-data-grid #grid
+<div class="h-full flex flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid [strong]="true"
         class="flex-1 min-h-0"
         [fillHeight]="true"
         title="Customers"
+        subtitle="Manage customer records and contacts"
         [breadcrumbs]="breadcrumbs"
         rowKey="_id"
         [serverSide]="true"
@@ -142,6 +143,6 @@
         </ng-template>
     </app-data-grid>
 
-    <app-customer-form-drawer [open]="formOpen" [mode]="formMode" [customer]="formCustomer"
+    <app-customer-form-drawer class="contents" [open]="formOpen" [mode]="formMode" [customer]="formCustomer"
         (saved)="onFormSaved()" (closed)="formOpen = false"></app-customer-form-drawer>
 </div>

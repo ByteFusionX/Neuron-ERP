@@ -188,17 +188,6 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         valueGetter: (r) => (r.sharedWith?.length ? 'Shared' : null),
         badgeClasses: { Shared: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300' },
       },
-      { key: 'paymentTerms', label: 'Payment Terms', valueGetter: (r) => r.paymentTerms || '' },
-      {
-        key: 'creditStatus', label: 'Credit Status', type: 'badge', width: '120px',
-        valueGetter: (r) => r.creditStatus,
-        badgeClasses: {
-          'Good Standing': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
-          Watch: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
-          Hold: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
-          Exceeded: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
-        },
-      },
     ];
   }
 

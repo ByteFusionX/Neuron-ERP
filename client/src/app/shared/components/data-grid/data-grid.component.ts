@@ -122,6 +122,9 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   /** Total row count for the current query, used for pagination when `serverSide` is true. */
   @Input() totalCount = 0;
 
+  /** Higher-contrast palette (darker text, stronger borders, tinted header). Opt-in per module. */
+  @Input({ transform: booleanAttribute }) strong = false;
+
   @HostBinding('class.dg-fill-height') get hostFillHeight(): boolean {
     return this.fillHeight;
   }
