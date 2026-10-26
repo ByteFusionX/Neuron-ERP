@@ -247,7 +247,11 @@
               <!-- Inert while the line is not on this supplier's tab; the pills below stay clickable so the line can be handed over -->
               <div class="contents" [class.space-y-1.5]="!compact" [attr.inert]="supplierScope && !lineActive(i, j, k) ? '' : null" [class.pointer-events-none]="supplierScope && !lineActive(i, j, k)">
               <!-- Description spans the full width; the numbers sit underneath (compact: beside them) -->
-              <div *ngIf="isDeal" class="whitespace-pre-line text-[13px]"
+              <div *ngIf="isDeal && dealDescriptionTextarea" [ngClass]="compact ? 'min-[1400px]:w-[24%] min-[1400px]:shrink-0' : ''"
+                (mousedown)="$event.stopPropagation()" (touchstart)="$event.stopPropagation()">
+                <app-sf-textarea formControlName="detail" readonly expandOnFocus [rows]="compact ? 1 : 2"></app-sf-textarea>
+              </div>
+              <div *ngIf="isDeal && !dealDescriptionTextarea" class="whitespace-pre-line text-[13px]"
                 [ngClass]="[detail.get('dealSelected')?.value ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500', compact ? 'min-[1400px]:w-[24%] min-[1400px]:shrink-0' : '']"
                 [innerHTML]="detail.get('detail')?.value | parseBracketsText | parseBoldText"></div>
               <!-- Pointer-downs stop here so dragging the textarea's resize grip never starts a line reorder. -->
@@ -383,7 +387,7 @@
                 <span *ngIf="!pillsFor(i, j, k).length" class="rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[10px] text-gray-400 dark:border-gray-600">No supplier</span>
               </div>
 
-              <div *ngIf="isQuote" class="mt-2 flex min-h-12 w-full basis-full items-center gap-2">
+              <div *ngIf="isQuote" class="mt-1 flex w-full basis-full items-center gap-1.5">
                 <ng-container *ngIf="detail.get('image')?.value as image; else addLineImage">
                   <p class="max-w-48 truncate text-[11px] text-gray-500 dark:text-gray-400">{{ image.originalname }}</p>
                   <button type="button" aria-label="View image"
@@ -398,9 +402,9 @@
                   </button>
                 </ng-container>
                 <ng-template #addLineImage>
-                  <label class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-600 hover:border-violet-400 hover:text-violet-700 dark:border-erp-border-dark dark:text-gray-400" [attr.aria-label]="'Upload item image'"
+                  <label class="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-dashed border-gray-300 text-gray-600 hover:border-violet-400 hover:text-violet-700 dark:border-erp-border-dark dark:text-gray-400" [attr.aria-label]="'Upload item image'"
                     [class.pointer-events-none]="imageUploads[imageKey(i, j, k)]" [class.opacity-50]="imageUploads[imageKey(i, j, k)]">
-                    <ng-icon name="heroArrowUpTray" class="h-4 w-4"></ng-icon>
+                    <ng-icon name="heroArrowUpTray" class="h-3.5 w-3.5"></ng-icon>
                     <input type="file" class="hidden" accept="image/png,image/jpeg,image/webp" [disabled]="imageUploads[imageKey(i, j, k)]" (change)="uploadImage($event, i, j, k)" />
                   </label>
                 </ng-template>
@@ -545,7 +549,7 @@
       <input #paletteInput type="text" [value]="paletteTerm" (input)="onPaletteInput($any($event.target).value)" (keydown)="onPaletteKeydown($event)"
         placeholder="Search products by name, item code or part no…" autocomplete="off"
         role="combobox" aria-expanded="true" aria-controls="ie-palette-list"
-        class="h-12 min-w-0 flex-1 border-0 bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-gray-100" />
+        class="h-12 min-w-0 flex-1 border-0 bg-transparent text-sm text-gray-900 outline-none placeholder:text-[13px] placeholder:font-semibold placeholder:text-gray-400 focus:ring-0 dark:text-gray-100" />
       <span *ngIf="paletteLoading" class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-gray-300 border-t-violet-600"></span>
     </div>
     <p class="border-b border-gray-100 px-4 py-1.5 text-[11px] text-gray-500 dark:border-erp-border-dark">

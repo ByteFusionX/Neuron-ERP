@@ -24,6 +24,8 @@ interface DetailTableLine {
   excluded?: boolean;
   /** kind 'group' only: how many data rows the group holds, for the band's count chip. */
   groupCount?: number;
+  /** kind 'data' only: this is the final item row in its group. */
+  groupEnd?: boolean;
 }
 
 /**
@@ -69,7 +71,7 @@ interface DetailTableLine {
         <tbody class="bg-white dark:bg-erp-surface-dark">
           <ng-container *ngFor="let line of lines">
             <!-- a row with _group set spans every column as a sub-heading: { _group: true, label, badge?, note? } -->
-            <tr *ngIf="line.kind === 'group' && groupStyle !== 'band'" class="border-y border-gray-200 bg-gray-50/70 dark:border-erp-border-dark dark:bg-white/[0.04]">
+            <tr *ngIf="line.kind === 'group' && groupStyle !== 'band'" class="border-t border-b border-gray-200 bg-gray-50/70 dark:border-erp-border-dark dark:bg-white/[0.04]">
               <td *ngIf="groupLead > 0" [attr.colspan]="groupLead"></td>
               <td [attr.colspan]="span - groupLead" [class.text-center]="centerGroups" class="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">
                 <span class="mr-2 inline-block h-3 w-[3px] shrink-0 -mb-[2px] rounded-full bg-gray-400 dark:bg-gray-500" *ngIf="!centerGroups"></span>
@@ -81,9 +83,9 @@ interface DetailTableLine {
 
             <!-- band heading: the group name, an item-count chip and the group's own total on one tinted bar -->
             <!-- a one-item group repeats its line's figures, so the count chip and total only show for two or more -->
-            <tr *ngIf="line.kind === 'group' && groupStyle === 'band'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos" class="border-t border-gray-200 bg-gray-50/80 dark:border-white/10 dark:bg-white/[0.03]">
-              <td *ngIf="numbered && !centerGroups" class="px-3 py-1.5"></td>
-              <td [attr.colspan]="centerGroups ? span : span - (numbered ? 1 : 0)" class="px-3 py-1.5">
+            <tr *ngIf="line.kind === 'group' && groupStyle === 'band'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos" class="bg-gray-50/80 dark:bg-white/[0.03]">
+              <td *ngIf="numbered && !centerGroups" class="border-y-2 border-gray-300 px-3 py-1.5 dark:border-gray-700"></td>
+              <td [attr.colspan]="centerGroups ? span : span - (numbered ? 1 : 0)" [class.pr-10]="tools" class="border-y-2 border-gray-300 px-3 py-1.5 dark:border-gray-700">
                 <div class="relative flex items-center gap-2">
                   <div class="flex min-w-0 items-center gap-2" [class.mx-auto]="centerGroups">
                     <span class="inline-block h-3 w-[3px] shrink-0 rounded-full bg-violet-400 dark:bg-violet-500"></span>
@@ -100,8 +102,8 @@ interface DetailTableLine {
               </td>
             </tr>
 
-            <tr *ngIf="line.kind === 'data'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos" [class.bg-gray-50]="line.stripe" [class.opacity-60]="line.excluded"
-              [ngClass]="line.stripe ? 'dark:bg-white/[0.02]' : ''"
+            <tr *ngIf="line.kind === 'data'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos" [class.bg-gray-50]="striped && line.stripe" [class.opacity-60]="line.excluded"
+              [ngClass]="[(striped && line.stripe ? 'dark:bg-white/[0.02]' : ''), (groupDividers && line.groupEnd ? 'border-b-2 border-gray-300 dark:border-gray-700' : '')]"
               class="border-b border-gray-100 transition-colors last:border-0 hover:bg-violet-50/60 dark:border-white/5 dark:hover:bg-white/[0.06]">
               <td *ngIf="numbered" class="px-3 py-2.5 text-right align-top text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{{ line.index }}</td>
               <td *ngFor="let c of columns" [class.text-right]="isRight(c)" [class.text-center]="c.align === 'center'" [class.tabular-nums]="isRight(c) || c.type === 'date'"
@@ -113,8 +115,9 @@ interface DetailTableLine {
                   <ng-container *ngSwitchCase="'number'">{{ line.row[c.key] | number }}</ng-container>
                   <ng-container *ngSwitchCase="'date'">{{ line.row[c.key] | date: 'dd MMM yyyy' }}</ng-container>
                   <app-detail-badge *ngSwitchCase="'badge'" [label]="line.row[c.key]" [tone]="badgeTone(c, line.row)"></app-detail-badge>
-                  <div *ngSwitchCase="'html'" [innerHTML]="line.row[c.key]" [class.dt-clamp]="c.clamp"
-                    [attr.title]="c.tooltipKey ? line.row[c.tooltipKey] : null"></div>
+                  <div #htmlCell *ngSwitchCase="'html'" [innerHTML]="line.row[c.key]" [class.dt-clamp]="c.clamp"
+                    [matTooltip]="c.tooltipKey ? line.row[c.tooltipKey] : ''" [matTooltipDisabled]="!isOverflowing(htmlCell)"
+                    matTooltipPosition="above" matTooltipClass="dt-tooltip"></div>
                   <ng-container *ngSwitchCase="'image'">
                     <button *ngIf="line.row[c.key] && c.imagePreview" type="button" (click)="openImage(line.row[c.key], line.row[c.key + 'Alt'])"
                       class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 text-gray-600 transition-colors hover:border-violet-400 hover:bg-violet-50 hover:text-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500/40 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-violet-500/10"
@@ -164,7 +167,8 @@ interface DetailTableLine {
           <tr *ngFor="let f of footRows; let first = first">
             <td *ngIf="numbered" [class.h-11]="bare" [class.bare-foot]="bare && first" [class.border-t]="!bare && first" class="border-gray-200 dark:border-erp-border-dark"></td>
             <td *ngFor="let c of columns; let i = index" [class.h-11]="bare" [class.bare-foot]="bare && first" [class.border-t]="!bare && first" [class.text-right]="isRight(c)" [class.text-center]="c.align === 'center'"
-              class="whitespace-nowrap border-gray-200 px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider tabular-nums text-gray-500 dark:border-erp-border-dark dark:text-gray-400">
+              [ngClass]="[f.emphasis ? 'font-bold' : 'font-semibold', c.emphasis || (f.emphasis && i === 0) ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400']"
+              class="whitespace-nowrap border-gray-200 px-3 py-2.5 text-left text-[11px] uppercase tracking-wider tabular-nums dark:border-erp-border-dark">
               <ng-container *ngIf="i === 0">{{ f.label }}</ng-container>
               <ng-container *ngIf="f.cells[c.key] as cell">{{ footValue(cell) }}</ng-container>
             </td>
@@ -249,6 +253,10 @@ export class DetailTableComponent implements OnInit {
   @Input({ transform: booleanAttribute }) large = false;
   /** Adds a bar above the table to collapse groups and to show or hide columns (for long tables). */
   @Input({ transform: booleanAttribute }) tools = false;
+  /** Alternates data-row backgrounds to make dense tables easier to scan. */
+  @Input({ transform: booleanAttribute }) striped = true;
+  /** Draws a stronger rule after the final data row in each group. */
+  @Input({ transform: booleanAttribute }) groupDividers = false;
   /** When set, hidden columns are remembered in this browser under this key. */
   @Input() storageKey = '';
   constructor(@Inject(LOCALE_ID) private locale: string, private host: ElementRef<HTMLElement>) {}
@@ -467,6 +475,7 @@ export class DetailTableComponent implements OnInit {
     let sums: Record<string, number> = {};
     let groupHasRows = false;
     let groupLine: DetailTableLine | null = null;
+    let lastDataLine: DetailTableLine | null = null;
     let group = -1;
 
     const closeGroup = () => {
@@ -475,6 +484,7 @@ export class DetailTableComponent implements OnInit {
         groupLine.groupCount = groupCount;
         groupLine.sums = sums;
       }
+      if (lastDataLine) lastDataLine.groupEnd = true;
       if (!this._groupTotals || !groupHasRows || !totalCols.length) return;
       lines.push({ kind: 'subtotal', row: {}, index: 0, pos: lines.length, stripe: false, sums, group });
     };
@@ -487,11 +497,13 @@ export class DetailTableComponent implements OnInit {
         groupCount = 0;
         sums = {};
         groupHasRows = false;
+        lastDataLine = null;
         continue;
       }
       const excluded = !!r['_excludeFromTotal'];
       groupCount++;
-      lines.push({ kind: 'data', row: r, index: ++index, pos: lines.length, stripe: groupCount % 2 === 0, excluded, group });
+      lastDataLine = { kind: 'data', row: r, index: ++index, pos: lines.length, stripe: groupCount % 2 === 0, excluded, group };
+      lines.push(lastDataLine);
       groupHasRows = true;
       if (!excluded) {
         for (const c of totalCols) sums[c.key] = (sums[c.key] || 0) + (Number(r[c.totalKey ?? c.key]) || 0);
@@ -559,6 +571,10 @@ export class DetailTableComponent implements OnInit {
 
   isRight(c: DetailTableColumn): boolean {
     return c.align ? c.align === 'right' : c.type === 'number' || c.type === 'currency';
+  }
+
+  isOverflowing(element: HTMLElement): boolean {
+    return element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight;
   }
 
   /** The group's own total for a band heading: the last summed column, formatted like the footer. */

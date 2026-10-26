@@ -15,11 +15,11 @@ import { SF_STYLES } from './sf.model';
     <ng-container *ngIf="listAbove">
       <ng-container *ngTemplateOutlet="list"></ng-container>
     </ng-container>
-    <label [attr.for]="inputId" class="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-4 py-5 text-center transition-colors"
-      [ngClass]="dragging ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30' : 'border-gray-300 dark:border-erp-border-dark hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'"
+    <label [attr.for]="inputId" class="flex cursor-pointer items-center justify-center rounded-lg border border-dashed text-center transition-colors"
+      [ngClass]="[compact ? 'flex-row gap-1.5 px-2 py-1' : 'flex-col gap-1 px-4 py-5', dragging ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30' : 'border-gray-300 dark:border-erp-border-dark hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800']"
       [class.pointer-events-none]="disabled" [class.opacity-50]="disabled"
       (dragover)="$event.preventDefault(); dragging = true" (dragleave)="dragging = false" (drop)="onDrop($event)">
-      <svg class="h-6 w-6 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+      <svg [ngClass]="compact ? 'h-4 w-4' : 'h-6 w-6'" class="text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
       </svg>
       <span class="text-[13px] text-gray-700 dark:text-gray-300"><span class="font-medium text-violet-700 dark:text-violet-400">Click to upload</span> or drag and drop</span>
@@ -55,6 +55,9 @@ export class SfFileComponent extends SfControl<File[]> {
   @Input({ transform: booleanAttribute }) multiple = true;
   /** Render the selected-files list above the drop zone instead of below. */
   @Input({ transform: booleanAttribute }) listAbove = false;
+
+  /** Single-line, minimal-padding drop zone. */
+  @Input({ transform: booleanAttribute }) compact = false;
 
   dragging = false;
   rejected: string[] = [];

@@ -29,6 +29,8 @@ export interface DetailViewStat {
   label: string;
   value: string;
   danger?: boolean;
+  /** Unchecked in the Summary fields menu until the user turns it on. */
+  hiddenByDefault?: boolean;
   /** 0-100; renders a progress bar under the value when set. */
   progress?: number;
   progressClass?: string;
@@ -177,7 +179,7 @@ export class DetailViewShellComponent implements OnInit, OnChanges, OnDestroy {
   ngOnChanges(changes: SimpleChanges): void {
     // Tabs can arrive late (e.g. a role-gated tab), so re-check a deep link when the list changes.
     if (changes['tabs'] && !changes['tabs'].firstChange) this.syncFromUrl();
-    if (changes['stats']) this.statItems = this.stats.map((s) => ({ key: s.label, label: s.label }));
+    if (changes['stats']) this.statItems = this.stats.map((s) => ({ key: s.label, label: s.label, hiddenByDefault: s.hiddenByDefault }));
   }
 
   ngOnDestroy(): void {

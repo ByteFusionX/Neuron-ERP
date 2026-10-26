@@ -131,6 +131,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
    * line with a `lineKey`. With `rfqPriced` the supplier's unit price and availability are entered too.
    */
   @Input() mode: 'quote' | 'deal' | 'purchase' | 'rfq' = 'quote';
+  @Input() dealDescriptionTextarea = false;
   @Input() quoteReference = '';
   /** RFQ mode: show the supplier's unit price (stored in `unitCost`) and availability on each line. */
   @Input() rfqPriced = false;
@@ -1238,7 +1239,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
         if (this.autoCollapseLines != null && details.length > this.autoCollapseLines) this.collapsed.add(itemGroup);
         return itemGroup;
       });
-      this.optionalItems.push(this.optionGroup(this._fb.array(items.length ? items : [this.createItem()]), option.totalDiscount ?? null, option.meta));
+      this.optionalItems.push(this.optionGroup(this._fb.array(items.length ? items : [this.createItem()]), option.totalDiscount || null, option.meta));
     });
     if (!this.optionalItems.length) this.addOption();
     this.selectedOption = 0;
@@ -1565,7 +1566,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   private undo(kind: 'option' | 'item' | 'line'): void {
     if (kind === 'option' && this.removedOptions.length) {
       const { option, i } = this.removedOptions.pop();
-      this.optionalItems.insert(i, this.optionGroup(this._fb.array((option.items || []).map((item: any) => this.rebuildItem(item))), option.totalDiscount ?? null, option.meta));
+      this.optionalItems.insert(i, this.optionGroup(this._fb.array((option.items || []).map((item: any) => this.rebuildItem(item))), option.totalDiscount || null, option.meta));
       this.selectedOption = i;
     } else if (kind === 'item' && this.removedItems.length) {
       const { item, i, j } = this.removedItems.pop();
