@@ -9,7 +9,7 @@ import {
   QuoteItem,
   QuoteItemDetail,
 } from 'src/app/shared/interfaces/quotation.interface';
-import { UpdateDealsheetComponent } from '../update-dealsheet/update-dealsheet.component';
+import { DealFormComponent } from 'src/app/modules/quotations/pages/deal-form/deal-form.component';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { ViewCommentComponent } from 'src/app/shared/components/view-comment/view-comment.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -30,6 +30,9 @@ import {
 } from '@angular/common';
 
 import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
+import { DomSanitizer } from '@angular/platform-browser';
+import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
+import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
 import { SupplierService } from '../../../../core/services/supplier.service';
 import { Supplier } from '../../../../shared/interfaces/suppliers.interface';
 import { PurchaseOrderService } from '../../../../core/services/purchaseOrder/purchaseOrder.service';
@@ -72,6 +75,21 @@ interface DealFact {
   state?: { dot: string; text: string };
 }
 
+/** One step in the Costs tab breakdown; negative values reduce the total. */
+interface CostBreakdownLine {
+  label: string;
+  note?: string;
+  value: number;
+}
+
+interface CostBreakdownSection {
+  title: string;
+  start: CostBreakdownLine;
+  lines: CostBreakdownLine[];
+  total: CostBreakdownLine;
+  hint: string;
+}
+
 interface ViewDealsheetNavState {
   approval: boolean;
   quoteData: Quotatation;
@@ -88,7 +106,7 @@ interface ViewDealsheetNavState {
   styleUrls: ['./view-dealsheet.component.css'],
   standalone: true,
   imports: [
-    UpdateDealsheetComponent,
+    DealFormComponent,
     CommonModule,
     DetailViewShellComponent,
     ActionButtonComponent,
@@ -117,7 +135,7 @@ export class ViewDealsheetComponent implements OnInit {
   panelOpen = true;
   panelTab: 'approval' | 'costs' | 'documents' | 'history' = 'costs';
   private readonly baseTabs: { id: 'approval' | 'costs' | 'documents' | 'history'; label: string }[] = [
-    { id: 'costs', label: 'Costs' },
+    { id: 'costs', label: 'Pricing' },
     { id: 'documents', label: 'Documents' },
     { id: 'approval', label: 'Approval' },
   ];
@@ -153,25 +171,26 @@ export class ViewDealsheetComponent implements OnInit {
   }
   trackFact = (_: number, f: DealFact) => f.label;
   itemRows: Record<string, any>[] = [];
-  costRows: Record<string, any>[] = [];
   documents: DetailDocument[] = [];
   private docFiles = new Map<string, any>();
-  readonly itemColumns: DetailTableColumn[] = [
+  private boldPipe = new ParseBoldTextPipe();
+  private bracketsPipe = new ParseBracketsTextPipe(inject(DomSanitizer));
+  // Same column set as the quotation view's item table, plus the deal-only supplier column.
+  private readonly allItemColumns: DetailTableColumn[] = [
     { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
-    { key: 'detail', label: 'Item Details', type: 'text', wrap: true },
+    { key: 'detail', label: 'Item Details', type: 'html', wrap: true, clamp: true, tooltipKey: 'detailText' },
     { key: 'partNo', label: 'Part No', hiddenByDefault: true },
+    { key: 'image', label: 'Image', type: 'image', imagePreview: true, align: 'center', width: '5rem' },
     { key: 'quantity', label: 'Qty', type: 'number', align: 'center' },
+    { key: 'uom', label: 'UOM', align: 'center', hiddenByDefault: true },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency', align: 'right' },
     { key: 'totalCost', label: 'Total Cost', type: 'currency', align: 'right', total: true },
     { key: 'unitSellingPrice', label: 'Unit Selling Price', type: 'currency', align: 'right' },
     { key: 'totalSellingPrice', label: 'Total Selling Price', type: 'currency', align: 'right', total: true },
     { key: 'supplier', label: 'Supplier', type: 'text' },
+    { key: 'availability', label: 'Availability', type: 'text', hiddenByDefault: true },
   ];
-  readonly costColumns: DetailTableColumn[] = [
-    { key: 'type', label: 'Type', type: 'text' },
-    { key: 'name', label: 'Name', type: 'text', wrap: true },
-    { key: 'value', label: 'Value', type: 'currency', align: 'right', total: true },
-  ];
+  itemColumns: DetailTableColumn[] = this.allItemColumns;
 
   constructor(
     private router: Router,
@@ -214,18 +233,7 @@ export class ViewDealsheetComponent implements OnInit {
       this.router.navigateByUrl(this.returnUrl);
       return;
     }
-    this._employeeService.employeeData$
-      .pipe(
-        take(1),
-        switchMap((employee) =>
-          this._quoteService.getQuotationById(
-            id,
-            dealSheetPrivileges(employee?.category?.privileges).viewReport,
-            employee?._id,
-          ),
-        ),
-      )
-      .subscribe({
+    this.fetchDeal(id).subscribe({
         next: (quote) => {
           if (!quote?.dealData) {
             this.toast.error('This quotation has no deal sheet yet.');
@@ -234,20 +242,10 @@ export class ViewDealsheetComponent implements OnInit {
           }
           const listByStatus: Record<string, string> = {
             approved: '/deal-sheet/approved',
-            rejected: '/deal-sheet/rejecteds',
+            rejected: '/deal-sheet/rejected',
           };
           this.returnUrl = listByStatus[quote.dealData.status ?? ''] ?? '/deal-sheet/pendings';
-          this.data = {
-            approval: quote.dealData.status === 'pending',
-            quoteData: quote,
-            quoteItems: selectedDealItems(quote.dealData.updatedItems),
-            priceDetails: dealSheetPriceDetails(
-              quote.dealData.updatedItems,
-              quote.dealData.additionalCosts,
-              quote.dealData.totalDiscount,
-            ),
-            quoteView: false,
-          };
+          this.applyDeal(quote);
           this.start();
         },
         error: (error) => {
@@ -259,6 +257,49 @@ export class ViewDealsheetComponent implements OnInit {
           this.router.navigateByUrl(this.returnUrl);
         },
       });
+  }
+
+  private fetchDeal(id: string) {
+    return this._employeeService.employeeData$.pipe(
+      take(1),
+      switchMap((employee) =>
+        this._quoteService.getQuotationById(
+          id,
+          dealSheetPrivileges(employee?.category?.privileges).viewReport,
+          employee?._id,
+        ),
+      ),
+    );
+  }
+
+  private applyDeal(quote: Quotatation): void {
+    this.data = {
+      ...this.data,
+      approval: quote.dealData.status === 'pending',
+      quoteData: quote,
+      quoteItems: selectedDealItems(quote.dealData.updatedItems),
+      priceDetails: dealSheetPriceDetails(
+        quote.dealData.updatedItems,
+        quote.dealData.additionalCosts,
+        quote.dealData.totalDiscount,
+      ),
+      quoteView: false,
+    };
+  }
+
+  /** After approve/reject/update the page stays open and shows the deal's new state. */
+  private reloadDeal(): void {
+    const id = this.data.quoteData._id;
+    if (!id) return;
+    this.fetchDeal(id).subscribe({
+      next: (quote) => {
+        if (!quote?.dealData) return;
+        this.applyDeal(quote);
+        this.rebuildView();
+        this.loadHistory();
+      },
+      error: () => this.toast.error('Could not refresh the deal sheet. Please reload the page.'),
+    });
   }
 
   private start(): void {
@@ -418,7 +459,7 @@ export class ViewDealsheetComponent implements OnInit {
       next: () => {
         this.updateOpen = false;
         this.toast.success('Deal sheet updated');
-        this.router.navigateByUrl(this.returnUrl);
+        this.reloadDeal();
       },
       error: (error) => {
         console.error('Error saving deal sheet:', error);
@@ -465,6 +506,10 @@ export class ViewDealsheetComponent implements OnInit {
     const discount = (Number(d.totalDiscount) || 0) + this.customerDiscount;
     this.stats = [
       { label: `Total Cost${currency}`, value: this.formatNumber(po ? this.poSummaryTotalCost : this.data.priceDetails.totalCost) },
+      // Already taken off Total Cost; shown beside it so the saving is visible.
+      ...(this.supplierDiscount ? [{ label: `Supplier Discount${currency}`, value: this.formatNumber(this.supplierDiscount) }] : []),
+      // Extra deal costs already inside Total Cost; off until the user ticks it in the Summary menu.
+      ...(this.additionalCost ? [{ label: `Additional Cost${currency}`, value: this.formatNumber(this.additionalCost), hiddenByDefault: true }] : []),
       { label: `Subtotal${currency}`, value: this.formatNumber(this.data.priceDetails.totalSellingPrice + discount) },
       { label: `Profit${currency}`, value: this.formatNumber(po ? this.poSummaryProfit : this.data.priceDetails.profit) },
       { label: 'Profit %', value: `${(po ? this.poSummaryPerc : this.data.priceDetails.perc).toFixed(2)}%` },
@@ -476,7 +521,8 @@ export class ViewDealsheetComponent implements OnInit {
     this.detailFacts = this.buildDetailFacts();
     this.detailItems = this.detailFacts.map((f) => ({ key: f.label, label: f.label, hiddenByDefault: f.label === 'Currency' || f.label === 'Department' }));
     this.itemRows = this.buildItemRows();
-    this.costRows = this.buildCostRows();
+    const hasImage = this.itemRows.some((r) => !r['_group'] && r['image']);
+    this.itemColumns = this.allItemColumns.filter((c) => c.key !== 'image' || hasImage);
     this.documents = this.buildDocuments();
   }
 
@@ -513,6 +559,18 @@ export class ViewDealsheetComponent implements OnInit {
   get customerDiscount(): number {
     return (this.data?.quoteData?.dealData?.additionalCosts ?? [])
       .filter((c: any) => c.type === 'Customer Discount')
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+  }
+
+  get additionalCost(): number {
+    return (this.data?.quoteData?.dealData?.additionalCosts ?? [])
+      .filter((c: any) => c.type === 'Additional Cost')
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+  }
+
+  get supplierDiscount(): number {
+    return (this.data?.quoteData?.dealData?.additionalCosts ?? [])
+      .filter((c: any) => c.type === 'Supplier Discount')
       .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
   }
 
@@ -623,13 +681,71 @@ export class ViewDealsheetComponent implements OnInit {
 
   /** Totals shown in the item table footer, each figure under the column it belongs to. */
   get itemFootRows(): DetailFootRow[] {
+    const cost = this.viewMode === 'po' ? this.poSummaryTotalCost : this.data.priceDetails.totalCost;
+    return [{
+      label: 'Total',
+      emphasis: true,
+      cells: {
+        totalSellingPrice: { value: this.data.priceDetails.totalSellingPrice, format: 'currency' },
+        totalCost: { value: cost, format: 'currency' },
+      },
+    }];
+  }
+
+  /**
+   * Costs tab: how the selected lines' sums become the deal totals.
+   * Additional costs and supplier discounts move cost; quotation and customer discounts move selling price.
+   * The PO view costs lines at their PO prices, so deal-level cost adjustments are left out there.
+   */
+  get costBreakdown(): CostBreakdownSection[] {
     const po = this.viewMode === 'po';
-    const cost = po ? this.poSummaryTotalCost : this.data.priceDetails.totalCost;
-    const profit = po ? this.poSummaryProfit : this.data.priceDetails.profit;
-    const sell = this.data.priceDetails.totalSellingPrice;
+    const deal = this.data.quoteData.dealData;
+    let lineSell = 0;
+    let lineCost = 0;
+    for (const item of this.data.quoteItems ?? []) {
+      for (const detail of item?.itemDetails ?? []) {
+        if (!detail.dealSelected) continue;
+        lineSell += (Number(detail.unitSellingPrice) || 0) * (Number(detail.quantity) || 0);
+        lineCost += po ? this.getPoItemTotalCost(detail) : (Number(detail.unitCost) || 0) * (Number(detail.quantity) || 0);
+      }
+    }
+
+    const costLines: CostBreakdownLine[] = [];
+    const sellLines: CostBreakdownLine[] = [];
+    for (const c of po ? [] : deal?.additionalCosts ?? []) {
+      const value = Number(c.value) || 0;
+      if (!value) continue;
+      if (c.type === 'Additional Cost') costLines.push({ label: c.name || 'Additional cost', note: 'Additional cost', value });
+      else if (c.type === 'Supplier Discount') costLines.push({ label: c.supplierDetails?.supplierName || c.name || 'Supplier', note: 'Supplier discount', value: -value });
+    }
+    const quoteDiscount = Number(deal?.totalDiscount) || 0;
+    if (quoteDiscount) sellLines.push({ label: 'Quotation discount', value: -quoteDiscount });
+    for (const c of deal?.additionalCosts ?? []) {
+      if (c.type === 'Customer Discount' && Number(c.value)) sellLines.push({ label: c.name || 'Customer discount', note: 'Customer discount', value: -Number(c.value) });
+    }
+
     return [
-      { label: 'Total', emphasis: true, cells: { totalSellingPrice: { value: sell, format: 'currency' }, totalCost: { value: cost, format: 'currency' } } },
+      {
+        title: 'Cost',
+        start: { label: po ? 'Items at PO prices' : 'Items cost', value: lineCost },
+        lines: costLines,
+        total: { label: 'Total cost', value: po ? this.poSummaryTotalCost : this.data.priceDetails.totalCost },
+        hint: po ? 'PO view uses PO prices. Deal cost adjustments are not applied.' : '',
+      },
+      {
+        title: 'Selling price',
+        start: { label: 'Items selling price', value: lineSell },
+        lines: sellLines,
+        total: { label: 'Net deal value', value: this.data.priceDetails.totalSellingPrice },
+        hint: '',
+      },
     ];
+  }
+
+  get costBreakdownProfit(): { value: number; perc: number } {
+    return this.viewMode === 'po'
+      ? { value: this.poSummaryProfit, perc: this.poSummaryPerc }
+      : { value: this.data.priceDetails.profit, perc: this.data.priceDetails.perc };
   }
 
   /** Revoke is for approved deals only, and only for Super Admins or roles granted the revoke privilege. */
@@ -694,9 +810,14 @@ export class ViewDealsheetComponent implements OnInit {
       rows.push({ _group: true, label: item.itemName });
       selected.forEach((detail: QuoteItemDetail) => {
         const unitCost = this.viewMode === 'po' ? this.getPoUnitCost(detail) : detail.unitCost;
+        const d = detail as any;
         rows.push({
-          detail: detail.detail,
+          image: d.image?.fileName ? this._quoteService.itemImageUrl(d.image.fileName) : '',
+          imageAlt: d.image?.originalname || 'Item image',
+          detail: this.boldPipe.transform(this.bracketsPipe.transform(detail.detail) as string),
           detailText: detail.detail,
+          uom: d.uom || '—',
+          availability: d.availability || '—',
           itemCode: (detail as any).itemCode || '—',
           partNo: (detail as any).partNo || '—',
           quantity: detail.quantity,
@@ -709,16 +830,6 @@ export class ViewDealsheetComponent implements OnInit {
       });
     });
     return rows;
-  }
-
-  private buildCostRows(): Record<string, any>[] {
-    return (this.data.quoteData.dealData.additionalCosts || []).map((cost: any) => ({
-      type: cost.type || 'Cost',
-      name: cost.type === 'Supplier Discount'
-        ? cost.supplierDetails?.supplierName || cost.name || 'Supplier discount'
-        : cost.name || cost.type || 'Additional cost',
-      value: cost.value || 0,
-    }));
   }
 
   private buildDocuments(): DetailDocument[] {
@@ -783,7 +894,7 @@ export class ViewDealsheetComponent implements OnInit {
               this.isApproving = false;
               if (res.success) {
                 this.toast.success(res.awaitingNextApproval ? (res.message || 'Approved at your stage') : 'Deal approved');
-                this.router.navigateByUrl(this.returnUrl);
+                this.reloadDeal();
               }
             },
             error: (error) => {
@@ -806,7 +917,7 @@ export class ViewDealsheetComponent implements OnInit {
             next: () => {
               this.isRejecting = false;
               this.toast.success('Deal rejected');
-              this.router.navigateByUrl(this.returnUrl);
+              this.reloadDeal();
             },
             error: (error) => {
               this.isRejecting = false;

@@ -62,7 +62,7 @@ import { ModalService } from 'src/app/shared/components/modal';
 import { ResetWorkflowComponent, ResetWorkflowModalData } from 'src/app/modules/presales/pages/reset-workflow/reset-workflow.component';
 import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { ApprovalStep, WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
-import { UpdateDealsheetComponent, UpdateDealsheetData } from '../update-dealsheet/update-dealsheet.component';
+import { DealFormComponent, UpdateDealsheetData } from 'src/app/modules/quotations/pages/deal-form/deal-form.component';
 
 /** Matches the grid's default page size so the Rows selector is never blank. */
 const DEFAULT_PAGE_SIZE = 15;
@@ -79,7 +79,7 @@ const DEFAULT_PAGE_SIZE = 15;
   styleUrls: ['./deal-sheet-list.component.css'],
   providers: [NumberFormatterPipe, DatePipe],
   imports: [
-    UpdateDealsheetComponent,
+    DealFormComponent,
     NgIf,
     AsyncPipe,
     NgClass,
@@ -408,7 +408,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     all: 'dealsheets',
     pending: 'pendings',
     approved: 'approved',
-    rejected: 'rejecteds',
+    rejected: 'rejected',
     revoked: 'revokeds',
   };
 
@@ -651,7 +651,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** `UpdateDealsheetComponent` seeds its form from `quoteItems` (the deal's own updated items,
+  /** `DealFormComponent` (update mode) seeds its form from `quoteItems` (the deal's own updated items,
    *  same as what the old view-dealsheet page passed via router state). */
   updateOpen = false;
   updateRow: Quotatation | null = null;

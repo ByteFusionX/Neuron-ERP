@@ -1,10 +1,11 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges, ViewChild, inject } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
 import { ToastrService } from 'ngx-toastr';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
-import { dealData, Quotatation } from 'src/app/shared/interfaces/quotation.interface';
+import { dealData, priceDetails, Quotatation, QuoteItem } from 'src/app/shared/interfaces/quotation.interface';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ItemEntryComponent, ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
 import { SfDrawerComponent, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
@@ -13,19 +14,31 @@ import { DealCost } from 'src/app/shared/utils/deal-pricing.util';
 
 export type CostType = 'Additional Cost' | 'Supplier Discount' | 'Customer Discount';
 
+/** Seed for editing an existing deal sheet: the quotation plus the deal's own saved lines. */
+export interface UpdateDealsheetData {
+  approval: boolean;
+  quoteData: Quotatation;
+  quoteItems: (QuoteItem | undefined)[];
+  priceDetails: priceDetails;
+  quoteView?: boolean;
+}
+
 /**
- * Convert-to-deal-sheet form, hosted in a wide slide-over. Two steps: (1) tick and reprice the quoted
- * lines with `app-item-entry` in deal mode, (2) payment terms, attachments and adjustments.
- * The host binds `quotation` to open it and reacts to `saved` (server response) / `closed`.
+ * Deal sheet form, hosted in a wide slide-over. Two steps: (1) tick and reprice the lines with
+ * `app-item-entry` in deal mode, (2) payment terms, attachments and adjustments.
+ * Convert: bind `quotation`; the form saves itself and emits the server response on `saved`.
+ * Update: bind `update`; the form emits the multipart body on `updated` and the host saves it.
  */
 @Component({
   selector: 'app-deal-form',
   templateUrl: './deal-form.component.html',
-  imports: [NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent, SupplierFormDrawerComponent],
+  imports: [NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, NgIcon, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent, SupplierFormDrawerComponent],
 })
 export class DealFormComponent implements OnInit, OnChanges {
   @Input() quotation: Quotatation | null = null;
+  @Input() update: UpdateDealsheetData | null = null;
   @Output() saved = new EventEmitter<Quotatation>();
+  @Output() updated = new EventEmitter<FormData>();
   @Output() closed = new EventEmitter<void>();
   @ViewChild(SfDrawerComponent) drawer?: SfDrawerComponent;
 
@@ -36,7 +49,11 @@ export class DealFormComponent implements OnInit, OnChanges {
 
   /** Last quotation shown. Kept after `quotation` is cleared so the panel content survives the slide-out. */
   q: Quotatation | null = null;
-  private built: Quotatation | null = null;
+  private built: Quotatation | UpdateDealsheetData | null = null;
+  mode: 'convert' | 'update' = 'convert';
+  /** Update mode: files already on the deal, and the ones the user took off it. */
+  existingFiles: any[] = [];
+  removedFiles: any[] = [];
   // Empty until a quotation is passed in; the template renders (closed) before buildForm runs.
   form: FormGroup = this.fb.group({});
   /** One entry per build: swapping it re-creates item-entry, which seeds itself once on init. */
@@ -46,6 +63,8 @@ export class DealFormComponent implements OnInit, OnChanges {
   saving = false;
   bulkSupplier: string | null = null;
   step: 1 | 2 = 1;
+  /** Stretches the drawer to the full viewport width. */
+  fullView = false;
   readonly steps = [{ n: 1, label: 'Line items' }, { n: 2, label: 'Terms & adjustments' }];
 
   supplierOptions: SfOption<string>[] = [];
@@ -99,23 +118,34 @@ export class DealFormComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    const next = changes['quotation']?.currentValue as Quotatation | null;
+    if (!changes['quotation'] && !changes['update']) return;
+    const next = this.update ?? this.quotation;
     if (!next) {
-      // Closed: forget what was built so reopening the same quotation starts from a clean form.
+      // Closed: forget what was built so reopening the same deal starts from a clean form.
       this.built = null;
       return;
     }
     if (next !== this.built) {
-      this.built = this.q = next;
+      this.built = next;
+      this.mode = this.update ? 'update' : 'convert';
+      this.q = this.update ? this.update.quoteData : this.quotation;
       this.selectedOption = 0;
       this.step = 1;
+      this.fullView = false;
       this.bulkSupplier = null;
+      this.removedFiles = [];
+      this.existingFiles = this.update ? [...((this.update.quoteData.dealData?.attachments as any[]) ?? [])] : [];
       this.buildForm();
     }
   }
 
-  get open(): boolean { return !!this.quotation; }
-  get isResubmit(): boolean { return (this.q as any)?.dealData?.status === 'rejected'; }
+  get open(): boolean { return !!(this.quotation || this.update); }
+  get isUpdate(): boolean { return this.mode === 'update'; }
+  get isResubmit(): boolean { return !this.isUpdate && (this.q as any)?.dealData?.status === 'rejected'; }
+  get title(): string {
+    return this.isUpdate ? 'Update Deal Sheet ' + ((this.q as any)?.dealData?.dealId ?? '') : 'Convert to Deal Sheet';
+  }
+  get dirty(): boolean { return this.form.dirty || this.removedFiles.length > 0; }
   get optionalItems(): FormArray { return this.form.get('optionalItems') as FormArray; }
   get costs(): FormArray { return this.form.get('costs') as FormArray; }
   get issues(): string[] { return this.step === 1 ? this.lineIssues : this.termIssues; }
@@ -129,7 +159,7 @@ export class DealFormComponent implements OnInit, OnChanges {
     ((this.q as any).dealData?.updatedItems ?? []).forEach((it: any) =>
       (it.itemDetails ?? []).forEach((d: any) => previous.set(`${it.itemName}|${d.detail}`, d)));
 
-    this.seed = this.q!.optionalItems.map((option) => ({
+    this.seed = this.update ? this.updateSeed(this.update) : this.q!.optionalItems.map((option) => ({
       totalDiscount: option.totalDiscount,
       items: option.items
         .filter((item) => !item.isOptional || !!item.includeInTotal)
@@ -180,6 +210,40 @@ export class DealFormComponent implements OnInit, OnChanges {
     // item-entry fills `optionalItems` while the view updates, so state derived from it is refreshed
     // right after rather than mid-check.
     this.form.valueChanges.subscribe(() => this.queueRecompute());
+  }
+
+  /** Update mode: the deal's own saved lines are the starting point, ticks and suppliers included. */
+  private updateSeed(data: UpdateDealsheetData): ItemEntryOptionValue[] {
+    const saved = (data.quoteItems ?? []).filter((i): i is QuoteItem => !!i);
+    const quoted = data.quoteData.optionalItems?.[0];
+    return [{
+      totalDiscount: quoted?.totalDiscount,
+      items: (saved.length ? saved : (quoted?.items ?? [])).map((item) => ({
+        itemName: item.itemName,
+        itemDetails: (item.itemDetails ?? []).map((d: any) => ({
+          productId: d.productId,
+          itemCode: d.itemCode,
+          partNo: d.partNo,
+          detail: d.detail,
+          quantity: d.quantity,
+          unitCost: d.unitCost,
+          profit: d.profit,
+          unitSellingPrice: d.unitSellingPrice,
+          availability: d.availability,
+          supplierId: d.supplierId?._id ?? d.supplierId ?? null,
+          uom: d.uom,
+          dealSelected: !!d.dealSelected,
+        })),
+      })),
+    }];
+  }
+
+  onExistingFileRemoved(index: number): void {
+    this.removedFiles.push(...this.existingFiles.splice(index, 1));
+  }
+
+  fileLabel(file: any): string {
+    return file?.name || file?.originalname || file?.fileName || 'Attachment';
   }
 
   // --- step 1 helpers --------------------------------------------------------
@@ -305,12 +369,23 @@ export class DealFormComponent implements OnInit, OnChanges {
 
   back(): void { this.step = 1; }
 
+  // Stepper header clicks: going forward runs the same line checks as Next.
+  goTo(n: number): void {
+    if (n === this.step) return;
+    if (n === 2) this.next();
+    else this.back();
+  }
+
   onSubmit(): void {
     this.form.markAllAsTouched();
     this.recompute();
     const blocking = [...this.lineIssues, ...this.termIssues];
     if (blocking.length && !this.saving) this.toastr.warning(blocking[0]);
     if (blocking.length || this.saving || !this.q?._id) return;
+    if (this.isUpdate) {
+      this.updated.emit(this.buildFormData());
+      return;
+    }
     this.saving = true;
     this.quoteService.saveDealSheet(this.buildFormData() as unknown as dealData, this.q._id).subscribe({
       next: (res) => {
@@ -348,7 +423,8 @@ export class DealFormComponent implements OnInit, OnChanges {
         if (c.type === 'Additional Cost') return { type: c.type, name: c.name, value: c.value };
         return { type: c.type, value: c.value };
       }),
-      totalDiscount: option.totalDiscount,
+      ...(this.isUpdate ? { removedFiles: this.removedFiles, existingFiles: this.existingFiles } : {}),
+      totalDiscount: option.totalDiscount ?? 0,
     }));
     (value.attachments as File[]).forEach((f) => formData.append('attachments', f as Blob));
     return formData;

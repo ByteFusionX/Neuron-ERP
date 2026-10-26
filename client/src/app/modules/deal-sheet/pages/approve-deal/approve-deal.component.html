@@ -107,20 +107,23 @@
                             <div class="px-2 py-3">QTY</div>
                         </th>
                         <th scope="col" class="border   text-center">
-                            <div class="px-6 py-3">Unit Selling Price ({{ data.quoteData.currency }})</div>
-                        </th>
-                        <th scope="col" class="border   text-center">
-                            <div class="px-6 py-3">Total Selling Price ({{ data.quoteData.currency }})</div>
-                        </th>
-                        <th scope="col" class="border   text-center">
                             <div class="px-6 py-3">Unit Cost ({{ data.quoteData.currency }})</div>
                         </th>
                         <th scope="col" class="border   text-center">
                             <div class="px-6 py-3">Total Cost ({{ data.quoteData.currency }})</div>
                         </th>
+                        <th scope="col" class="border   text-center">
+                            <div class="px-6 py-3">Unit Selling Price ({{ data.quoteData.currency }})</div>
+                        </th>
+                        <th scope="col" class="border   text-center">
+                            <div class="px-6 py-3">Total Selling Price ({{ data.quoteData.currency }})</div>
+                        </th>
 
                         <th scope="col" class="border   text-center min-w-[90px]">
                             <div class="px-2 py-3">Supplier Name</div>
+                        </th>
+                        <th scope="col" class="border   text-center min-w-[90px]">
+                            <div class="px-2 py-3">Availability</div>
                         </th>
 
                     </tr>
@@ -129,7 +132,7 @@
                     <ng-container *ngFor="let item of data.quoteItems; let i = index">
                         <ng-container *ngIf="checkAtLeastOneDealSelected(item)">
                             <tr>
-                                <td colspan="8" class="border px-6 py-2 bg-gray-50">
+                                <td colspan="9" class="border px-6 py-2 bg-gray-50">
                                     <div
                                         class="flex justify-center items-center text-md text-black font-medium uppercase">
                                         {{ item?.itemName }}
@@ -149,16 +152,16 @@
                                         {{ detail.quantity }}
                                     </td>
                                     <td class="px-2 py-2 border text-center">
-                                        {{ detail.unitSellingPrice| numberFormatter }}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{ detail.unitSellingPrice * detail.quantity | numberFormatter }}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
                                         {{ (viewMode === 'po' ? getPoUnitCost(detail) : detail.unitCost) | numberFormatter }}
                                     </td>
                                     <td class="py-2 border text-center">
                                         {{ (viewMode === 'po' ? getPoItemTotalCost(detail) : (detail.quantity * detail.unitCost)) | numberFormatter }}
+                                    </td>
+                                    <td class="px-2 py-2 border text-center">
+                                        {{ detail.unitSellingPrice| numberFormatter }}
+                                    </td>
+                                    <td class="px-2 py-2 border text-center">
+                                        {{ detail.unitSellingPrice * detail.quantity | numberFormatter }}
                                     </td>
                                     <td class="py-2 border text-center">
                                         <!-- Legacy supplier data -->
@@ -170,12 +173,13 @@
                                             {{ getSupplierName(detail.supplierId) || '-' }}
                                         </span>
                                     </td>
+                                    <td class="py-2 border text-center">{{ detail.availability || '-' }}</td>
                                 </tr>
                             </ng-container>
                         </ng-container>
                     </ng-container>
                     <tr class="border-none text-gray-800">
-                        <td colspan="8" class="px-6 py-2 "></td>
+                        <td colspan="9" class="px-6 py-2 "></td>
                     </tr>
                     <ng-container *ngFor="let cost of data.quoteData.dealData.additionalCosts;let i = index">
                         <tr class=" border-b text-gray-800 mt-4">
@@ -200,7 +204,7 @@
                             <td colspan="1" class=" border py-2 text-center">
                                 {{ cost.value }}
                             </td>
-                            <td [attr.colspan]="cost.type ? (cost.type === 'Customer Discount' ? 5 : 3) : 2"
+                            <td [attr.colspan]="cost.type ? (cost.type === 'Customer Discount' ? 6 : 4) : 3"
                                 class="border px-6 py-2 bg-gray-50">
 
                             </td>

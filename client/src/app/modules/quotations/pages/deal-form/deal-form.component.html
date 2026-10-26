@@ -1,17 +1,25 @@
-<app-sf-drawer title="Convert to Deal Sheet"
+<app-sf-drawer [title]="title"
     [subtitle]="q ? ((q.quoteId || '') + ' · ' + (q.client.companyName || '') + ' · ' + q.currency) : ''"
-    [width]="step === 2 ? 'min(720px, 96vw)' : 'min(1400px, 96vw)'" [open]="open" [dirty]="form.dirty" (closed)="onDrawerClosed()">
+    [width]="fullView ? '100vw' : (step === 2 ? 'min(720px, 96vw)' : 'min(1400px, 96vw)')" [open]="open" [dirty]="dirty" (closed)="onDrawerClosed()">
+
+    <button sfDrawerHeader type="button"
+        class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+        [attr.aria-label]="fullView ? 'Exit full view' : 'Expand to full view'" [title]="fullView ? 'Exit full view' : 'Expand to full view'"
+        (click)="fullView = !fullView">
+        <ng-icon [name]="fullView ? 'heroArrowsPointingIn' : 'heroArrowsPointingOut'" class="h-4 w-4"></ng-icon>
+    </button>
 
     <form *ngFor="let f of forms" id="deal-form" [formGroup]="f" (ngSubmit)="onSubmit()" novalidate>
 
         <!-- Step header -->
         <ol class="mb-5 flex items-center gap-3">
             <ng-container *ngFor="let s of steps; let last = last">
-                <li class="flex items-center gap-2">
+                <li><button type="button" class="flex items-center gap-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                    [class.cursor-default]="step === s.n" [attr.aria-current]="step === s.n ? 'step' : null" (click)="goTo(s.n)">
                     <span class="grid h-6 w-6 place-content-center rounded-full text-xs font-semibold"
                         [ngClass]="step === s.n ? 'bg-violet-600 text-white' : step > s.n ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400'">{{ step > s.n ? '✓' : s.n }}</span>
                     <span class="text-[13px] font-medium" [ngClass]="step === s.n ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'">{{ s.label }}</span>
-                </li>
+                </button></li>
                 <li *ngIf="!last" aria-hidden="true" class="h-px w-10 bg-gray-200 dark:bg-erp-border-dark"></li>
             </ng-container>
         </ol>
@@ -92,13 +100,21 @@
                     <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Attachments <span class="ml-1 text-[11px] font-normal text-gray-400">Optional</span></h3>
                     <p class="mt-0.5 text-xs text-gray-500">Supplier quotes or approvals · PDF, Word or images, up to 5 MB each.</p>
                 </header>
+                <ul *ngIf="existingFiles.length" class="mb-2 divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-erp-border-dark dark:border-erp-border-dark">
+                    <li *ngFor="let file of existingFiles; let i = index" class="flex items-center gap-3 px-3 py-2 text-[13px]">
+                        <ng-icon name="heroDocumentArrowUp" class="h-4 w-4 shrink-0 text-gray-400"></ng-icon>
+                        <span class="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100">{{ fileLabel(file) }}</span>
+                        <button type="button" class="rounded px-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400" [attr.aria-label]="'Remove ' + fileLabel(file)"
+                            (click)="onExistingFileRemoved(i)">&times;</button>
+                    </li>
+                </ul>
                 <app-sf-file formControlName="attachments" [maxSizeMb]="5"></app-sf-file>
             </section>
         </div>
 
         <!-- Step 1 owns the editable line table. Step 2 renders the same totals above the drawer footer. -->
         <div *ngIf="step === 1">
-            <app-item-entry mode="deal" [optionalItems]="$any(f.get('optionalItems'))" [seedOptionalItems]="seed"
+            <app-item-entry mode="deal" [dealDescriptionTextarea]="true" [optionalItems]="$any(f.get('optionalItems'))" [seedOptionalItems]="seed"
                 [currency]="q?.currency || 'QAR'" [supplierOptions]="supplierOptions"
                 [itemsHidden]="false" [costAdjustment]="costAdjustment" [discountAdjustment]="discountAdjustment"
                 [allowOptionalItems]="false" [allowCreateProduct]="false" (optionChanged)="onOptionChanged($event)"></app-item-entry>
@@ -108,7 +124,7 @@
     </form>
 
     <div *ngIf="step === 2 && form" sfDrawerBottom class="bg-gray-50 px-6 py-3 dark:bg-erp-surface-dark-alt">
-        <app-item-entry mode="deal" [optionalItems]="$any(form.get('optionalItems'))" [seedOptionalItems]="seed"
+        <app-item-entry mode="deal" [dealDescriptionTextarea]="true" [optionalItems]="$any(form.get('optionalItems'))" [seedOptionalItems]="seed"
             [currency]="q?.currency || 'QAR'" [supplierOptions]="supplierOptions"
             [itemsHidden]="true" [costAdjustment]="costAdjustment" [discountAdjustment]="discountAdjustment"
             [allowOptionalItems]="false" [allowCreateProduct]="false" (optionChanged)="onOptionChanged($event)"></app-item-entry>
@@ -119,7 +135,8 @@
         <app-action-button variant="secondary" (click)="drawer?.requestClose()">Cancel</app-action-button>
         <app-action-button *ngIf="step === 2" variant="secondary" (click)="back()">Back</app-action-button>
         <app-action-button *ngIf="step === 1" variant="primary" [disabled]="!!lineIssues.length" (click)="next()">Next</app-action-button>
-        <app-action-button *ngIf="step === 2 && !isResubmit" variant="primary" [disabled]="saving || !!termIssues.length" (click)="onSubmit()">
+        <app-action-button *ngIf="step === 2 && isUpdate" variant="primary" [disabled]="!!termIssues.length" (click)="onSubmit()">Update</app-action-button>
+        <app-action-button *ngIf="step === 2 && !isUpdate && !isResubmit" variant="primary" [disabled]="saving || !!termIssues.length" (click)="onSubmit()">
             {{ saving ? 'Submitting…' : 'Submit' }}
         </app-action-button>
         <app-action-button *ngIf="step === 2 && isResubmit" variant="primary" [disabled]="saving || !!termIssues.length" (click)="onSubmit()">

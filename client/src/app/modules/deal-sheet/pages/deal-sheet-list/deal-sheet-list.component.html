@@ -87,4 +87,4 @@
     </app-data-grid>
 </div>
 
-<app-update-dealsheet [open]="updateOpen" [data]="updateData" (saved)="onUpdateSaved($event)" (closed)="updateOpen = false"></app-update-dealsheet>
+<app-deal-form class="contents" [update]="updateOpen ? updateData : null" (updated)="onUpdateSaved($event)" (closed)="updateOpen = false"></app-deal-form>
