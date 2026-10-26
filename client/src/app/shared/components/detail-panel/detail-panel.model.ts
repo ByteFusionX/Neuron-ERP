@@ -74,6 +74,8 @@ export interface DetailDocument {
 export interface DetailTableColumn {
   key: string;
   label: string;
+  /** Starts unchecked in the column chooser (tables with `tools`); the user can still turn it on. */
+  hiddenByDefault?: boolean;
   /** 'stack' renders `key` as a bold title with `subKey` as a muted second line. */
   type?: 'text' | 'number' | 'currency' | 'date' | 'badge' | 'html' | 'stack' | 'image' | 'textarea';
   /** type 'image' only: shows a View action that opens a larger modal preview. */

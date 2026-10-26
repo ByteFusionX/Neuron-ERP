@@ -7,9 +7,12 @@
 
 .dvs-shell { border: 1px solid #f3f4f6; background: #fff; border-radius: 0.75rem; overflow: hidden; }
 .dvs-line { border-color: #f3f4f6; }
-.dvs-label { font-size: 0.6875rem; color: #6b7280; }
+/* `sectioned` layout: header, body and panel as separate cards. */
+.dvs-card { border: 1px solid #e5e7eb; background: #fff; border-radius: 0.75rem; overflow: hidden; }
+:host-context(html.dark) .dvs-card { border-color: #262626; background: #111111; }
+.dvs-label { font-size: 0.6875rem; color: #4b5563; }
 .dvs-kpi { margin-top: 0.125rem; font-size: 1rem; font-weight: 600; color: #111827; font-variant-numeric: tabular-nums; }
-.dvs-muted { color: #6b7280; }
+.dvs-muted { color: #4b5563; }
 .dvs-strong { color: #111827; }
 
 .dvs-tabs { scrollbar-width: none; -ms-overflow-style: none; }
@@ -21,9 +24,13 @@
 :host-context(html.dark) .dvs-shell { border-color: #262626; background: #111111; }
 :host-context(html.dark) .dvs-line { border-color: #262626; }
 :host-context(html.dark) .dvs-label,
-:host-context(html.dark) .dvs-muted { color: #a1a1a1; }
+:host-context(html.dark) .dvs-muted { color: #c4c4c4; }
 :host-context(html.dark) .dvs-kpi,
 :host-context(html.dark) .dvs-strong { color: #ededed; }
+
+/* Opt-in tinted header so the title and actions stand apart from the body. */
+.dvs-header-contrast { background: none; border-bottom-color: #e5e7eb; }
+:host-context(html.dark) .dvs-header-contrast { background: none; border-bottom-color: #2e2e2e; }
 
 /* Bottom action bar; collapses when neither side has a button. */
 .dvs-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; background: #fff; }

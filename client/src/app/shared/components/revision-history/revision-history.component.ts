@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, booleanAttribute, Input, Output, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DetailClauseListComponent } from 'src/app/shared/components/detail-panel/detail-clause-list.component';
 import { DetailRevisionChipComponent } from 'src/app/shared/components/detail-panel/detail-revision-chip.component';
@@ -80,7 +80,82 @@ const FIELD_LABELS: Record<keyof QuoteRevisionSnapshot, string> = {
           {{ error }}
         </p>
 
-        <div *ngIf="!loading && !error" class="grid gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
+        <!-- compact: one column for narrow side panels; the rail becomes a row of pills -->
+        <div *ngIf="!loading && !error && compact" class="space-y-4">
+          <div *ngIf="rows.length > 1" class="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+            <button *ngFor="let r of rows" type="button" (click)="select(r)"
+              class="flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors"
+              [ngClass]="r === selected
+                ? 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/15 dark:text-violet-200'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-erp-border-dark dark:text-gray-400 dark:hover:bg-white/[0.05]'">
+              {{ r.revision ? 'Rev ' + r.revision : 'Original' }}
+              <span *ngIf="r.current" class="h-1.5 w-1.5 rounded-full bg-emerald-500" title="Current"></span>
+            </button>
+          </div>
+
+          <div *ngIf="selected as s" class="space-y-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <app-detail-revision-chip [revision]="s.revision"></app-detail-revision-chip>
+                <span *ngIf="s.current" class="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Current</span>
+              </div>
+              <p class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ s.snapshot.subject || 'No subject' }}</p>
+              <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                <ng-container *ngIf="s.by; else originalC">Saved by {{ s.by }}<span *ngIf="s.at"> · {{ s.at | date: 'dd MMM yyyy, h:mm a' }}</span></ng-container>
+                <ng-template #originalC>The {{ entityLabel }} as it was first created.</ng-template>
+              </p>
+              <p *ngIf="s.reason" class="mt-2 border-l-2 border-violet-300 pl-2.5 text-xs italic text-gray-600 dark:border-violet-500/40 dark:text-gray-400">“{{ s.reason }}”</p>
+              <div *ngIf="s.changed.length" class="mt-2.5 flex flex-wrap gap-1">
+                <span *ngFor="let c of s.changed" class="rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">{{ c }}</span>
+              </div>
+            </div>
+
+            <section *ngIf="s.itemChanges.length">
+              <h4 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Changes</h4>
+              <ul class="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-erp-border-dark dark:border-erp-border-dark">
+                <li *ngFor="let c of s.itemChanges" class="flex items-start gap-2 px-3 py-2 text-xs">
+                  <span class="mt-px shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase"
+                    [ngClass]="c.kind === 'added' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                      : c.kind === 'removed' ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
+                      : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'">{{ c.kind === 'qty' ? 'Qty' : c.kind }}</span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block font-medium text-gray-800 dark:text-gray-200">{{ c.name }}</span>
+                    <span *ngIf="c.text" class="tabular-nums text-gray-500 dark:text-gray-400">{{ c.text }}</span>
+                  </span>
+                </li>
+              </ul>
+            </section>
+
+            <section>
+              <h4 class="mb-1.5 flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                <span>Items · {{ s.items.length }}</span>
+                <span class="normal-case tracking-normal">{{ s.snapshot.currency || '' }}</span>
+              </h4>
+              <ul *ngIf="s.items.length; else noItemsC" class="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-erp-border-dark dark:border-erp-border-dark">
+                <li *ngFor="let it of s.items" class="px-3 py-2.5">
+                  <div class="flex items-baseline justify-between gap-3">
+                    <span class="min-w-0 truncate text-[13px] font-medium text-gray-900 dark:text-gray-100" [title]="it.name">{{ it.name }}</span>
+                    <span class="shrink-0 text-[13px] font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ it.unitSellingPrice }}</span>
+                  </div>
+                  <div class="mt-0.5 flex items-start justify-between gap-3">
+                    <span class="qrh-clamp min-w-0 text-xs text-gray-500 dark:text-gray-400" [title]="it.detail">{{ it.detail }}</span>
+                    <span class="shrink-0 text-xs tabular-nums text-gray-500 dark:text-gray-400">× {{ it.quantity }} {{ it.uom }}</span>
+                  </div>
+                </li>
+              </ul>
+              <ng-template #noItemsC>
+                <p class="rounded-lg border border-dashed border-gray-300 px-3 py-6 text-center text-[13px] text-gray-500 dark:border-erp-border-dark dark:text-gray-400">No items recorded at this revision.</p>
+              </ng-template>
+            </section>
+
+            <section>
+              <h4 class="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Notes &amp; Terms</h4>
+              <app-detail-clause-list [clauses]="s.clauses" emptyMessage="No notes or terms at this revision."></app-detail-clause-list>
+            </section>
+          </div>
+        </div>
+
+        <div *ngIf="!loading && !error && !compact" class="grid gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
           <!-- rail -->
           <ol class="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
             <li *ngFor="let r of rows" class="shrink-0 md:shrink">
@@ -170,11 +245,14 @@ const FIELD_LABELS: Record<keyof QuoteRevisionSnapshot, string> = {
         </div>
     </div>
   `,
+  styles: [`.qrh-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }`],
 })
 export class RevisionHistoryComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) data!: RevisionHistoryData;
   /** Change this (e.g. the current revision number) to refetch after an edit. */
   @Input() reloadKey: unknown;
+  /** Single-column layout for narrow side panels. */
+  @Input({ transform: booleanAttribute }) compact = false;
 
   /** Emits the revision number whenever the user picks one in the rail. */
   @Output() revisionSelected = new EventEmitter<number>();

@@ -55,6 +55,10 @@ import { RouterLink } from '@angular/router';
     :host-context(html.dark) .btn-outline { color: #d4d4d4; border-color: #3f3f46; }
     :host-context(html.dark) .btn-outline:hover:not(:disabled) { background: #1a1a1a; }
 
+    /* Reversing actions such as revoking an approval. */
+    .btn-warning { color: #fff; background: #f97316; border-color: #f97316; }
+    .btn-warning:hover:not(:disabled) { background: #ea580c; border-color: #ea580c; }
+
     .btn-secondary { color: #374151; background: #fff; border-color: #e5e7eb; }
     .btn-secondary:hover:not(:disabled) { background: #f9fafb; }
     :host-context(html.dark) .btn-secondary { color: #d4d4d4; background: #1a1a1a; border-color: #262626; }
@@ -62,7 +66,7 @@ import { RouterLink } from '@angular/router';
   `],
 })
 export class ActionButtonComponent {
-  @Input() variant: 'primary' | 'secondary' | 'tool' | 'ghost' | 'outline' = 'secondary';
+  @Input() variant: 'primary' | 'secondary' | 'tool' | 'ghost' | 'outline' | 'warning' = 'secondary';
   /** Optional leading icon. */
   @Input() icon: 'plus' | 'edit' | 'view' | 'download' | 'upload' | 'withdraw' | null = null;
   @Input() type: 'button' | 'submit' = 'button';
