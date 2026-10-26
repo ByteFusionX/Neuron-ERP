@@ -18,6 +18,10 @@ import { getWorkflowSteps, updateApprovalStatus, rebuildPendingRoute } from "../
 import { recordPrices } from "../services/supplierPrice.service";
 import { notifyByPrivilege } from "../services/notify.service";
 import { SupplierPriceSource } from "../models/supplierPrice.model";
+import { logAudit } from "../services/audit.service";
+
+const logPoAudit = (req: Request, po: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
+  logAudit(req, { entityType: 'purchaseOrder', entityId: po._id, entityLabel: po.poNo, action, summary, changes });
 
 // LPO approval runs on its own "poApproval" workflow (Settings > Workflow > PO Approval); the amount is the LPO total after discount.
 const PO_WORKFLOW = 'poApproval';
@@ -305,6 +309,9 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     const purchaseOrder = new PurchaseOrder(purchaseOrderData);
     await purchaseOrder.save();
 
+    await logPoAudit(req, purchaseOrder, 'created', `Purchase order ${purchaseOrder.poNo} created`);
+    if (purchaseOrder.poStatus === 'Pending for Approval') await logPoAudit(req, purchaseOrder, 'submitted', 'Sent for approval');
+
     // The PO price becomes the supplier's last price for each product, ahead of any comparison price.
     await recordPrices(
       items.map((item: any) => ({ supplierId, productId: item.partNo, price: Number(item.unitCost) })),
@@ -428,6 +435,8 @@ export const reissuePurchaseOrder = async (req: Request, res: Response) => {
         message: "Purchase order not found",
       });
     }
+
+    await logPoAudit(req, updatedOrder, 'reissued', `Purchase order ${updatedOrder.poNo} re-issued`);
 
     // No issuedQuantity bookkeeping needed here: reissue updates this same
     // PO document's items in place, so the next derived-sum read (see
@@ -1352,6 +1361,8 @@ export const updatePurchaseOrderStatus = async (req: Request, res: Response) => 
       });
     }
 
+    if (updatedPurchaseOrder.poStatus === 'Pending for Approval') await logPoAudit(req, updatedPurchaseOrder, 'submitted', 'Sent for approval');
+
     if (updatedPurchaseOrder.poStatus === 'Pending for Approval' && updatedPurchaseOrder.approvalStatus?.length) {
       const employee = await getEmployeeData(req.user);
       await notifyLpoApprovers(updatedPurchaseOrder, employee?._id, req.app.get('io') as Server);
@@ -1415,6 +1426,7 @@ export const placePurchaseOrder = async (req: Request, res: Response) => {
         message: exists ? "Only an approved LPO can be placed" : "Purchase order not found",
       });
     }
+    await logPoAudit(req, placed, 'placed', `Placed with the supplier, delivery expected ${expected.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}${note ? ` — ${note}` : ''}`);
     // The receiving team hears now, and again on the expected day.
     const supplierName = (placed.supplierId as any)?.supplierName || 'the supplier';
     const dateText = expected.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -1583,6 +1595,10 @@ export const cancelPurchaseOrder = async (req: Request, res: Response) => {
     po.markModified('items');
     await po.save();
 
+    await logPoAudit(req, po, po.poStatus === 'Cancelled' ? 'cancelled' : 'partly-cancelled',
+      `${po.poStatus === 'Cancelled' ? 'Cancelled' : 'Partly cancelled'} — ${reason}`,
+      cancelled.map((c) => ({ label: c.detail, to: `${c.qty} cancelled` })));
+
     return res.status(200).json({
       success: true,
       message: po.poStatus === 'Cancelled' ? `${po.poNo} cancelled` : `${po.poNo} partly cancelled`,
@@ -1683,6 +1699,8 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
         runValidators: true,
       }
     ).populate('approvedHistory.approvedBy', 'firstName lastName');
+
+    await logPoAudit(req, purchaseOrder, 'approved', `${nextStatus === 'Approved' ? 'Approved (final step)' : 'Approved (step)'}${comment ? ` — ${comment}` : ''}`);
 
     const socket = req.app.get('io') as Server;
     if (nextStatus === 'Pending for Approval') {
@@ -1811,6 +1829,8 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
         runValidators: true,
       }
     ).populate('rejectedHistory.rejectedBy', 'firstName lastName');
+
+    await logPoAudit(req, purchaseOrder, 'rejected', `Rejected${comment ? ` — ${comment}` : ''}`);
 
     // No issuedQuantity bookkeeping needed: 'Rejected' POs are already
     // excluded from the derived-sum queries in getSuppliersForPurchaseRequest
@@ -2105,6 +2125,7 @@ export const revokePurchaseOrder = async (req: Request, res: Response) => {
     // getSuppliersForPurchaseRequest / getItemsForPurchaseRequest, so this
     // PO stops counting automatically.
     await PurchaseOrder.findByIdAndDelete(id);
+    await logPoAudit(req, purchaseOrder, 'revoked', `Purchase order ${purchaseOrder.poNo} revoked and deleted`);
 
     return res.status(200).json({
       success: true,

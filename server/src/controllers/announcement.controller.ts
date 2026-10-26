@@ -4,6 +4,7 @@ import { Types } from "mongoose";
 import { dispatchAnnouncement } from "../services/announcementNotify.service";
 import { cancelScheduledJob } from "../services/outbox.service";
 import { getEmployeeData } from "../common/utils/util";
+import { logAudit } from "../services/audit.service";
 import { activeForUser, announcementState, AnnouncementState, PUBLISH_AT, stateMatch } from "../common/utils/announcementVisibility";
 
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -85,6 +86,13 @@ export const createAnnouncement = async (req: any, res: Response, next: NextFunc
     }
 
     if (!saved) return res.status(502).json({ success: false, message: 'Failed to save announcement' });
+    // Drafts and edits are routine; only a new announcement is worth a history line
+    if (!isEdit) {
+      await logAudit(req, {
+        entityType: 'announcement', entityId: saved._id, entityLabel: fields.title, action: 'created',
+        summary: fields.status === 'draft' ? 'Draft saved' : publishAt > now ? 'Announcement scheduled' : 'Announcement published',
+      });
+    }
     const message = fields.status === 'draft' ? 'Draft saved' : isEdit ? 'Announcement updated' : 'Announcement created';
     return res.status(200).json({ success: true, message });
   } catch (error) {
@@ -206,7 +214,8 @@ const toListItem = (doc: any, userId: string, canManage: boolean, now: Date) => 
 export const deleteAnnouncement = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    await announcementModel.findByIdAndDelete(id);
+    const removed = await announcementModel.findByIdAndDelete(id);
+    if (removed) await logAudit(req, { entityType: 'announcement', entityId: removed._id, entityLabel: String(removed.title), action: 'deleted', summary: 'Announcement deleted' });
     // A scheduled notification for a deleted announcement must not still go out
     await cancelScheduledJob(`announcement:${id}`);
     res.status(200).json({ success: true, message: 'Announcement deleted' });

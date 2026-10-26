@@ -8,6 +8,7 @@ import StockMovement, { ADJUSTMENT_REASONS } from "../models/stockMovement.model
 import StockReservation from "../models/stockReservation.model";
 import { StockHold } from "../models/stockHold.model";
 import { getEmployeeData } from "../common/utils/util";
+import { logAudit } from "../services/audit.service";
 import {
     StockError,
     getActiveReservationFilter,
@@ -413,6 +414,7 @@ export const createStockReturn = async (req: Request, res: Response, next: NextF
                     returnDispatchedAt: new Date(),
                 }
             });
+            await logAudit(req, { entityType: 'grn', entityId: sourceId, entityLabel: source.number, action: 'return-sent', summary: `Rejected goods sent back to supplier${resolution ? ` (${resolution})` : ''}` });
         }
         return res.status(201).json({ success: true, message: isCustomer ? 'Customer return recorded' : 'Supplier return recorded' });
     } catch (error) {
@@ -431,6 +433,7 @@ export const resolveSupplierReturn = async (req: Request, res: Response, next: N
             { new: true }
         );
         if (!grn) throw new StockError('No return in progress for this GRN', 409);
+        await logAudit(req, { entityType: 'grn', entityId: grn._id, entityLabel: grn.grnNo, action: 'return-resolved', summary: 'Supplier return resolved, invoice ready' });
         return res.status(200).json({ success: true, message: 'Supplier return resolved; invoice is ready' });
     } catch (error) {
         return fail(res, next, error);

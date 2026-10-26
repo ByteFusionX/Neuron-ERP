@@ -491,7 +491,7 @@ export const rejectInvoiceByCustomer = async (req: Request, res: Response) => {
                     warnings.push(`Linked Delivery Note "${dnId}" not found — could not cascade rejection to stock`);
                     continue;
                 }
-                const dnWarnings = await applyDnItemRejections(dn, dnItems, reason, employee._id, socket);
+                const dnWarnings = await applyDnItemRejections(dn, dnItems, reason, employee._id, socket, req);
                 warnings.push(...dnWarnings);
             } catch (dnError: any) {
                 warnings.push(`Delivery Note "${dnId}": ${dnError.message || 'failed to apply rejection'}`);

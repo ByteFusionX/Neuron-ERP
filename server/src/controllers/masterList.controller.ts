@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import MasterListItemModel, { LIST_MODULE, MASTER_LISTS, MasterListName } from '../models/masterListItem.model';
 import { getEmployeeData } from "../common/utils/util";
+import { logAudit } from "../services/audit.service";
 import Product from '../models/products.model';
 import Supplier from '../models/supplier.model';
 
@@ -61,6 +62,7 @@ export const createMasterListItem = async (req: Request, res: Response) => {
         if (await labelTaken(list, label)) return res.status(409).json({ success: false, message: "That name already exists in this list" });
         const creator = await getEmployeeData(req.user);
         const item = await MasterListItemModel.create({ module: LIST_MODULE[list as MasterListName], list, label, value, isActive: req.body.isActive === undefined ? true : !!req.body.isActive, createdBy: creator?._id ?? null });
+        await logAudit(req, { entityType: 'masterList', entityId: item._id, entityLabel: `${list}: ${item.label}`, action: 'created', summary: `Added "${item.label}" to ${list}` });
         return res.status(201).json({ success: true, data: item });
     } catch (error: any) {
         if (error?.code === 11000) return res.status(409).json({ success: false, message: "That name already exists in this list" });
@@ -76,13 +78,14 @@ export const updateMasterListItem = async (req: Request, res: Response) => {
         const editor = await getEmployeeData(req.user);
         const update: Record<string, unknown> = { updatedBy: editor?._id ?? null };
         let renamedFrom: string | null = null;
+        const current = await MasterListItemModel.findOne({ _id: id, list, isDeleted: { $ne: true } }).select('label isActive').lean();
+        const wasActive = current?.isActive !== false;
         if (req.body.label !== undefined) {
             const label = String(req.body.label).trim();
             if (!label) return res.status(400).json({ success: false, message: "Name is required" });
             if (await labelTaken(list, label, id)) return res.status(409).json({ success: false, message: "That name already exists in this list" });
             update.label = label;
-            const before = await MasterListItemModel.findOne({ _id: id, list, isDeleted: { $ne: true } }).select('label').lean();
-            if (before && before.label !== label) renamedFrom = before.label;
+            if (current && current.label !== label) renamedFrom = current.label;
         }
         if (req.body.value !== undefined) {
             const value = parseValue(req.body.value);
@@ -99,6 +102,13 @@ export const updateMasterListItem = async (req: Request, res: Response) => {
         }
         if (renamedFrom && list === 'supplierType') {
             await Supplier.updateMany({ isDeleted: { $ne: true }, supplierType: new RegExp(`^${escapeRegex(renamedFrom)}$`, 'i') }, { $set: { supplierType: item.label } });
+        }
+        const entityLabel = `${list}: ${item.label}`;
+        if (renamedFrom) {
+            await logAudit(req, { entityType: 'masterList', entityId: item._id, entityLabel, action: 'renamed', summary: `Renamed "${renamedFrom}" to "${item.label}" in ${list}` });
+        }
+        if (req.body.isActive !== undefined && !!req.body.isActive !== wasActive) {
+            await logAudit(req, { entityType: 'masterList', entityId: item._id, entityLabel, action: item.isActive ? 'unhidden' : 'hidden', summary: `"${item.label}" ${item.isActive ? 'shown' : 'hidden'} in ${list}` });
         }
         return res.status(200).json({ success: true, data: item });
     } catch (error: any) {
@@ -125,6 +135,7 @@ export const deleteMasterListItem = async (req: Request, res: Response) => {
         existing.deletedAt = new Date();
         existing.deletedBy = editor?._id ?? null;
         await existing.save();
+        await logAudit(req, { entityType: 'masterList', entityId: existing._id, entityLabel: `${list}: ${existing.label}`, action: 'deleted', summary: `Deleted "${existing.label}" from ${list}` });
         return res.status(200).json({ success: true });
     } catch (error) {
         console.error('Error deleting master list item:', error);

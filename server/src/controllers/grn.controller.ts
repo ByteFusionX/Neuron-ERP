@@ -13,6 +13,10 @@ import { getNextSequence } from "../models/counter.model";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { Server } from "socket.io";
 import { StockHold } from "../models/stockHold.model";
+import { logAudit } from "../services/audit.service";
+
+const logGrnAudit = (req: Request, grn: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
+  logAudit(req, { entityType: 'grn', entityId: grn._id, entityLabel: grn.grnNo, action, summary, changes });
 
 const seedGRNSequence = (prefix: string) => async (): Promise<number> => {
   const lastEntry = await GRN.findOne({
@@ -393,6 +397,13 @@ export const createGRN = async (req: Request, res: Response) => {
     }
 
     const rejectedItems = (items || []).filter((item: any) => Number(item.rejectedQty) > 0);
+    const totalAccepted = items.reduce((s: number, i: any) => s + (Number(i.acceptedQty) || 0), 0);
+    const totalRejected = items.reduce((s: number, i: any) => s + (Number(i.rejectedQty) || 0), 0);
+    await logGrnAudit(req, grn, 'created',
+      `Goods received against ${populatedPurchaseOrder?.poNo || 'LPO'}: ${totalAccepted} accepted${totalRejected ? `, ${totalRejected} rejected (return required)` : ''}`);
+    if (allItemsFullyReceived && lpoItems.length > 0) {
+      await logGrnAudit(req, grn, 'lpo-closed', `${populatedPurchaseOrder?.poNo || 'LPO'} fully received and closed`);
+    }
     if (rejectedItems.length > 0) {
       const socket = req.app.get('io') as Server;
       await createNotificationWithPrivileges(
@@ -942,6 +953,17 @@ export const updateGRN = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Project / site is required" });
     }
 
+    const day = (d: any) => d ? new Date(d).toISOString().slice(0, 10) : '';
+    const diffs: { label: string; from?: string; to?: string }[] = [];
+    const track = (label: string, from: any, to: any) => {
+      if (String(from ?? '') !== String(to ?? '')) diffs.push({ label, from: String(from ?? '') || '—', to: String(to ?? '') || '—' });
+    };
+    track('GRN date', day(grn.grnDate), day(grnDate));
+    track('Supplier delivery note no.', grn.supplierDeliveryNoteNo, supplierDeliveryNoteNo);
+    track('Supplier invoice no.', grn.supplierInvoiceNo, supplierInvoiceNo);
+    track('Supplier invoice date', day(grn.supplierInvoiceDate), day(supplierInvoiceDate));
+    if (inspectionResult) track('Inspection result', grn.inspectionResult, inspectionResult);
+
     grn.grnDate = new Date(grnDate);
     grn.supplierInvoiceNo = supplierInvoiceNo || undefined;
     grn.supplierInvoiceDate = supplierInvoiceDate ? new Date(supplierInvoiceDate) : undefined;
@@ -969,6 +991,7 @@ export const updateGRN = async (req: Request, res: Response) => {
     }
 
     await grn.save();
+    if (diffs.length) await logGrnAudit(req, grn, 'updated', 'GRN details edited', diffs);
     return res.status(200).json({ success: true, message: "GRN updated", data: grn });
   } catch (error: any) {
     console.error("Update GRN error:", error);
@@ -1029,6 +1052,7 @@ export const updateGRNSupplierInvoices = async (req: any, res: Response) => {
       });
     }
 
+    await logGrnAudit(req, updatedGrn, 'invoice-files', `Supplier invoice files updated (${supplierInvoices.length} file${supplierInvoices.length === 1 ? '' : 's'})`);
     return res.status(200).json({
       success: true,
       message: "Supplier invoices updated successfully",
@@ -1097,6 +1121,7 @@ export const updateGRNSupplierDeliveryNotes = async (req: any, res: Response) =>
       });
     }
 
+    await logGrnAudit(req, updatedGrn, 'delivery-note-files', `Supplier delivery note files updated (${supplierDeliveryNotes.length} file${supplierDeliveryNotes.length === 1 ? '' : 's'})`);
     return res.status(200).json({
       success: true,
       message: "Supplier delivery notes updated successfully",

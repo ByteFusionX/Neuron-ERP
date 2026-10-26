@@ -16,6 +16,10 @@ import { createNotificationWithPrivileges } from './notification.controller';
 import { getEmployeeData } from '../common/utils/util';
 import { Server } from 'socket.io';
 import { uploadFileToAws } from '../common/aws-connect';
+import { logAudit } from '../services/audit.service';
+
+const logDnAudit = (req: any, dn: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
+    logAudit(req, { entityType: 'deliveryNote', entityId: dn._id, entityLabel: dn.dnNo, action, summary, changes });
 
 /**
  * The stock lines a delivery note takes out of the warehouse: its inventory items with a positive
@@ -260,6 +264,8 @@ export const createDn = async (req: Request, res: Response) => {
         if (jobId && mongoose.Types.ObjectId.isValid(jobId)) {
             await checkAndUpdateJobCompletionStatus(jobId);
         }
+
+        await logDnAudit(req, savedDn, 'created', savedDn.status === 'Draft' ? `Delivery note ${savedDn.dnNo} saved as draft` : `Delivery note ${savedDn.dnNo} created`);
 
         res.status(201).json({ success: true, data: savedDn });
     } catch (error) {
@@ -700,6 +706,7 @@ export const updateDn = async (req: Request, res: Response) => {
             finalStatus = await calculateDnStatus(dn.jobId.toString(), items, id);
         }
 
+        const previousStatus = dn.status;
         Object.assign(dn, {
             ...req.body,
             status: finalStatus,
@@ -707,6 +714,10 @@ export const updateDn = async (req: Request, res: Response) => {
         });
 
         const updatedDn = await dn.save();
+
+        if (updatedDn.status !== previousStatus) {
+            await logDnAudit(req, updatedDn, 'status-changed', `Delivery note ${updatedDn.dnNo} moved from ${previousStatus} to ${updatedDn.status}`, [{ label: 'Status', from: previousStatus, to: updatedDn.status }]);
+        }
 
         if (dn.jobId && mongoose.Types.ObjectId.isValid(dn.jobId.toString())) {
             await checkAndUpdateJobCompletionStatus(dn.jobId.toString());
@@ -745,6 +756,7 @@ export const dispatchDn = async (req: Request, res: Response) => {
             dn.status = 'Dispatched';
             dn.updatedDate = new Date();
             const updatedDn = await dn.save();
+            await logDnAudit(req, updatedDn, 'dispatched', `Delivery note ${updatedDn.dnNo} dispatched${updatedDn.deliveryType === 'Drop Ship' ? ' (drop ship)' : ' and stock deducted'}`);
             await checkAndUpdateJobCompletionStatus(dn.jobId.toString());
             return res.status(200).json({ success: true, data: updatedDn });
         } catch (saveError) {
@@ -796,6 +808,7 @@ export const cancelDn = async (req: Request, res: Response) => {
             }
         }
 
+        const statusBeforeCancel = dn.status;
         dn.status = 'Cancelled';
         dn.updatedDate = new Date();
         await dn.save();
@@ -804,6 +817,8 @@ export const cancelDn = async (req: Request, res: Response) => {
             const employee = await getEmployeeData((req as any).user);
             await reverseInventoryDeductions(dn, employee?._id);
         }
+
+        await logDnAudit(req, dn, 'cancelled', `Delivery note ${dn.dnNo} cancelled${stockWasDeducted ? '; stock put back' : ''}`, [{ label: 'Status', from: statusBeforeCancel, to: 'Cancelled' }]);
 
         return res.status(200).json({ message: 'Delivery Note cancelled successfully', dn });
     } catch (error) {
@@ -855,6 +870,11 @@ export const completeDnPod = async (req: Request, res: Response) => {
         dn.status = 'Delivered';
         dn.updatedDate = new Date();
         const updatedDn = await dn.save();
+
+        await logDnAudit(req, updatedDn, 'delivered', `Delivery note ${updatedDn.dnNo} delivered${receivedBy ? `, received by ${receivedBy}` : ''}`);
+        if (attachments.length) {
+            await logDnAudit(req, updatedDn, 'pod-files', `${attachments.length} proof-of-delivery file${attachments.length > 1 ? 's' : ''} attached`);
+        }
 
         return res.status(200).json({ success: true, data: updatedDn });
     } catch (error) {
@@ -916,7 +936,7 @@ export interface RejectDnItemInput {
  * and the invoice rejection cascade (rejectInvoiceByCustomer).
  * Throws an Error with a user-facing message on validation failure.
  */
-export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[], fallbackReason: string | undefined, userId?: string, socket?: Server): Promise<string[]> => {
+export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[], fallbackReason: string | undefined, userId?: string, socket?: Server, req?: Request): Promise<string[]> => {
     if (dn.status === 'Cancelled') {
         throw new Error('Cannot reject items on a cancelled Delivery Note');
     }
@@ -971,6 +991,9 @@ export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[],
     dn.updatedDate = new Date();
     await dn.save();
 
+    const rejectedUnits = items.reduce((sum, i) => sum + (Number(i.rejectedQty) || 0), 0);
+    await logDnAudit(req, dn, 'items-rejected', `${rejectedUnits} unit${rejectedUnits === 1 ? '' : 's'} rejected on delivery note ${dn.dnNo}${fallbackReason ? `: ${fallbackReason}` : ''}`, [{ label: 'Status', to: dn.status }]);
+
     await createNotificationWithPrivileges(
         {
             type: 'DnItemsRejected',
@@ -1007,7 +1030,7 @@ export const rejectDnItems = async (req: Request, res: Response) => {
 
         const socket = req.app.get('io') as Server;
         const employee = await getEmployeeData((req as any).user);
-        const warnings = await applyDnItemRejections(dn, items, reason, employee?._id, socket);
+        const warnings = await applyDnItemRejections(dn, items, reason, employee?._id, socket, req);
 
         return res.status(200).json({ success: true, data: dn, warnings });
     } catch (error: any) {
