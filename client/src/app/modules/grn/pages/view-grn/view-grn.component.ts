@@ -15,6 +15,10 @@ import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/d
 import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { DetailDocument } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
 
 type Fact = { label: string; value: string; tone?: DetailTone | null };
@@ -32,6 +36,7 @@ type Fact = { label: string; value: string; tone?: DetailTone | null };
     DetailSectionComponent,
     DetailFieldComponent,
     DetailDocumentsComponent,
+    DetailTimelineComponent,
   ],
   templateUrl: './view-grn.component.html',
   styleUrl: './view-grn.component.css'
@@ -42,6 +47,8 @@ export class ViewGrnComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private toastr = inject(ToastrService);
   private dialog = inject(MatDialog);
+  private auditLog = inject(AuditLogService);
+  auditEntries: DetailTimelineEntry[] = [];
 
   grnId!: string;
   grn: any = null;
@@ -53,6 +60,7 @@ export class ViewGrnComponent implements OnInit {
     { id: 'overview', label: 'Overview' },
     { id: 'items', label: 'Items' },
     { id: 'documents', label: 'Documents' },
+    { id: 'history', label: 'History' },
   ];
   tab = 'overview';
 
@@ -91,6 +99,7 @@ export class ViewGrnComponent implements OnInit {
           this.purchaseId = this.grn.purchaseOrderId?._id || this.grn.purchaseOrderId || '';
           this.buildDetails();
           this.isLoading.set(false);
+          this.auditLog.getHistory('grn', this.grnId).subscribe({ next: (e) => (this.auditEntries = toTimelineEntries(e)), error: () => (this.auditEntries = []) });
         } else {
           this.toastr.error('GRN not found');
           this.isLoading.set(false);

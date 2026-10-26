@@ -1,65 +1,134 @@
-<div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="flex h-full flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-detail-view-shell
     class="min-h-0 flex-1"
+    headerTone="contrast"
     [loading]="isLoading"
     [empty]="!isLoading && !purchase"
     emptyTitle="Purchase request not found"
     emptyMessage="It may have been deleted, or you may not have access to it."
     [emptyLink]="['/purchase/pr']"
     emptyLinkLabel="Back to purchase requests"
-    [breadcrumbs]="breadcrumbs"
-    [avatarText]="avatarText"
-    [title]="purchase?.purchaseNo || ''"
-    [badges]="badges"
-    [subtitle]="subtitle"
+    customTitle
     [stats]="stats"
-    [tabs]="tabs"
-    [activeTab]="tab"
-    (activeTabChange)="tab = $event"
-    [sections]="sidebarSections"
+    statsLayout="fields"
+    statsTitle="Summary"
+    statsStorageKey="purchase-summary"
+    tabParam=""
+    bodyBare
+    [hasSidebar]="true"
+    [(panelOpen)]="panelOpen"
+    sidebarBare
+    sectioned
   >
-    <ng-container footerLeft *ngIf="purchase as p">
+    <div headerTitle class="flex min-w-0 flex-col gap-0.5" *ngIf="purchase as p">
+      <!-- line 1: identity; line 2: who it's for and who buys it -->
+      <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+        <h1 class="dvs-strong truncate text-lg font-semibold text-gray-900 dark:text-gray-50">{{ p.purchaseNo || 'Purchase request' }}</h1>
+      </div>
+      <div class="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] font-normal text-gray-900 dark:text-gray-100">
+        <span *ngIf="subtitle" class="truncate">{{ subtitle }}</span>
+        <span *ngIf="subtitle && owner" class="text-gray-300 dark:text-gray-600">·</span>
+        <span *ngIf="owner">Buyer {{ owner }}</span>
+      </div>
+    </div>
+
+    <!-- overview facts, left of the metrics -->
+    <app-detail-section beforeStats title="Details" class="lg:col-span-2 lg:border-r lg:border-gray-200 lg:pr-8 dark:lg:border-gray-800">
+      <app-detail-fields-menu sectionActions [items]="detailItems" storageKey="purchase-details" (hiddenChange)="hiddenDetail = $event" (orderChange)="detailOrder = $event"></app-detail-fields-menu>
+      <div class="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
+        <app-detail-field *ngFor="let f of visibleDetail; trackBy: trackFact" [label]="f.label" stacked>
+          <span *ngIf="f.state" class="inline-flex items-center gap-1.5">
+            <span class="h-1.5 w-1.5 rounded-full" [ngClass]="f.state.dot"></span>
+            <span class="font-medium" [ngClass]="f.state.text">{{ f.value }}</span>
+          </span>
+          <a *ngIf="f.link" [routerLink]="f.link" class="font-medium text-violet-600 hover:underline dark:text-violet-400">{{ f.value }}</a>
+          <ng-container *ngIf="!f.state && !f.link">{{ f.value }}</ng-container>
+        </app-detail-field>
+      </div>
+    </app-detail-section>
+
+    <ng-container headerActions *ngIf="purchase as p">
       <app-action-button variant="outline" *ngIf="p.status === 'Rejected' && p.rejectedReason?.length" (click)="showStatusHistory()" icon="view">View reason</app-action-button>
-      <ng-container *ngIf="p.status === 'Pending'">
-        <app-action-button variant="outline" *ngIf="!isManual && hasNewItemsToMerge()" [disabled]="isMerging" (click)="onMergeItems()">
+      <ng-container *ngIf="p.status === 'Pending' && !isManual">
+        <app-action-button variant="outline" *ngIf="hasNewItemsToMerge()" [disabled]="isMerging" (click)="onMergeItems()">
           {{ isMerging ? 'Merging…' : 'Merge items' }}
         </app-action-button>
-        <app-action-button variant="outline" *ngIf="!isManual && hasMergedItems()" [disabled]="isRevoking" (click)="onRevokeMerge()">
+        <app-action-button variant="outline" *ngIf="hasMergedItems()" [disabled]="isRevoking" (click)="onRevokeMerge()">
           {{ isRevoking ? 'Revoking…' : 'Revoke merge' }}
         </app-action-button>
       </ng-container>
-    </ng-container>
-
-    <ng-container footerRight *ngIf="purchase as p">
+      <app-action-button variant="outline" *ngIf="purchaseId !== 'none' && p.status !== 'Pending'" (click)="onEdit()" icon="edit">Edit PR</app-action-button>
       <ng-container *ngIf="p.status === 'Pending' && canApproveOrReject()">
-        <app-action-button [disabled]="isRejecting" (click)="onReject()">{{ isRejecting ? 'Rejecting…' : 'Reject' }}</app-action-button>
+        <app-action-button variant="outline" [disabled]="isRejecting" (click)="onReject()">{{ isRejecting ? 'Rejecting…' : 'Reject' }}</app-action-button>
         <app-action-button variant="primary" [disabled]="isApproving" (click)="onApprove()">{{ isApproving ? 'Approving…' : 'Approve' }}</app-action-button>
       </ng-container>
-
-      <app-action-button *ngIf="purchaseId !== 'none' && p.status !== 'Pending'" variant="primary" (click)="onEdit()" icon="edit">Edit</app-action-button>
     </ng-container>
 
-    <div tabBody [ngSwitch]="tab">
-      <div *ngSwitchCase="'items'">
-        <app-detail-table
-          title="Line items"
-          [columns]="itemColumns"
-          [rows]="itemRows"
-          [currency]="purchase?.currency || 'QAR'"
-          numbered
-          showTotals
-          spread
-          emptyMessage="No supplier selected"
-        ></app-detail-table>
-      </div>
+    <!-- right panel: same tab strip look as the quotation view's side panel -->
+    <div sidebar class="flex min-h-0 flex-1 flex-col">
+      <nav role="tablist"
+        class="dv-tabs sticky top-0 z-10 flex h-11 shrink-0 flex-nowrap items-center gap-x-4 overflow-x-auto overflow-y-hidden border-b border-gray-300 bg-white px-5 dark:border-neutral-700 dark:bg-[#111111]">
+        <button *ngFor="let t of panelTabs" type="button" role="tab" (click)="panelTab = t.id"
+          [attr.aria-selected]="panelTab === t.id"
+          class="-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 py-2.5 text-sm transition-colors"
+          [ngClass]="panelTab === t.id ? 'border-violet-600 dark:border-gray-100 text-gray-900 dark:text-gray-100 font-medium' : 'border-transparent text-gray-500 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'">
+          {{ t.label }}
+        </button>
+      </nav>
 
-      <div *ngSwitchCase="'summary'" class="space-y-6">
-        <app-detail-metrics [items]="summaryMetrics"></app-detail-metrics>
-      </div>
+      <div class="dv-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel" [ngSwitch]="panelTab">
+        <ng-container *ngSwitchCase="'pricing'">
+          <app-detail-section title="Cost">
+            <ng-container *ngTemplateOutlet="pricingList; context: { $implicit: pricingCost }"></ng-container>
+          </app-detail-section>
+          <app-detail-section *ngIf="pricingProfit.length" title="Profit" class="block border-t border-gray-200 pt-5 dark:border-erp-border-dark">
+            <ng-container *ngTemplateOutlet="pricingList; context: { $implicit: pricingProfit }"></ng-container>
+          </app-detail-section>
+        </ng-container>
 
-      <div *ngSwitchCase="'history'">
-        <app-detail-timeline [entries]="historyEntries" emptyMessage="No approval history yet."></app-detail-timeline>
+        <app-detail-timeline *ngSwitchCase="'approval'" [entries]="historyEntries" emptyMessage="No approval history yet."></app-detail-timeline>
+        <app-detail-timeline *ngSwitchCase="'history'" [entries]="auditEntries" emptyMessage="No history recorded yet."></app-detail-timeline>
       </div>
+    </div>
+
+    <div tabBody class="h-full">
+      <app-detail-table class="block h-full"
+        [columns]="itemColumns"
+        [rows]="itemRows"
+        [currency]="purchase?.currency || 'QAR'"
+        [footRows]="itemFootRows"
+        groupStyle="band"
+        centerGroups
+        numbered
+        groupTotals
+        [striped]="false"
+        spread
+        bare
+        tools
+        storageKey="purchase-items-v3"
+        searchKey="detail"
+        searchTextKey="detailText"
+        emptyMessage="No supplier selected"></app-detail-table>
     </div>
   </app-detail-view-shell>
 </div>
+
+<ng-template #pricingList let-lines>
+  <dl class="text-[13px]">
+    <div *ngFor="let l of lines" class="flex items-baseline justify-between gap-3 py-1"
+      [ngClass]="l.total ? 'mt-1 border-t border-gray-200 pt-2 dark:border-erp-border-dark' : ''">
+      <dt [ngClass]="l.total ? 'font-semibold text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400'">{{ l.label }}</dt>
+      <dd *ngIf="l.sign" class="shrink-0 tabular-nums"
+        [ngClass]="l.value < 0 ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400'">
+        {{ l.value < 0 ? '−' : '+' }} {{ (l.value < 0 ? -l.value : l.value) | number: '1.2-2' }}
+      </dd>
+      <dd *ngIf="!l.sign" class="tabular-nums"
+        [ngClass]="l.total ? (l.label === 'Profit' ? 'font-semibold text-violet-600 dark:text-violet-400' : 'font-semibold text-gray-900 dark:text-gray-100') : 'text-gray-900 dark:text-gray-100'">
+        {{ l.value | number: '1.2-2' }}<ng-container *ngIf="l.total"> {{ purchase?.currency }}</ng-container>
+      </dd>
+    </div>
+  </dl>
+</ng-template>
+
+<app-create-purchase *ngIf="editDrawerOpen" [drawer]="true" [editPurchaseId]="purchase?._id ?? null" [sourceLocked]="true"
+  (saved)="onEditDrawerSaved()" (closed)="editDrawerOpen = false"></app-create-purchase>

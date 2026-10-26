@@ -84,7 +84,7 @@
       (uploadLpo)="onUploadLpo()"></app-quotation-side-panel>
 
     <div tabBody class="h-full">
-      <app-detail-table class="block h-full" [columns]="itemCols" [rows]="itemRows" groupStyle="band" centerGroups numbered groupTotals spread bare tools storageKey="quotation-items" searchKey="detail" searchTextKey="detailText" [footRows]="itemFootRows" emptyMessage="No items in this option."></app-detail-table>
+      <app-detail-table class="block h-full" [columns]="itemCols" [rows]="itemRows" groupStyle="band" centerGroups numbered groupTotals [striped]="false" spread bare tools storageKey="quotation-items" searchKey="detail" searchTextKey="detailText" [footRows]="itemFootRows" emptyMessage="No items in this option."></app-detail-table>
 
       <!-- revisions (shown in the side panel) -->
       <ng-template #revisionsTpl><div>

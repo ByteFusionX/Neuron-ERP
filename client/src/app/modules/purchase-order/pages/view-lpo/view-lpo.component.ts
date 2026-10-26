@@ -9,6 +9,8 @@ import { PurchaseService } from 'src/app/core/services/purchase/purchase.service
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { PlaceOrderModalComponent, PlaceOrderModalResult } from '../place-order-modal/place-order-modal.component';
 import { buildApprovalTimeline } from 'src/app/shared/utils/approval-timeline.util';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ActionMenuComponent, ActionMenuItem } from 'src/app/shared/components/action-menu/action-menu.component';
@@ -54,7 +56,10 @@ export class ViewLpoComponent implements OnInit {
   private modal = inject(ModalService);
   private confirmDialog = inject(ConfirmDialogService);
   private employeeService = inject(EmployeeService);
+  private auditLog = inject(AuditLogService);
 
+  /** Audit-log events; approve/reject are left out because the Approval history tab already shows them. */
+  auditEntries: DetailTimelineEntry[] = [];
 
   // view model for the shared detail-view shell
   tab = 'items';
@@ -71,6 +76,7 @@ export class ViewLpoComponent implements OnInit {
         { id: 'summary', label: 'Summary' },
         ...(docs ? [{ id: 'documents', label: 'Documents' }] : []),
         { id: 'history', label: 'Approval history' },
+        { id: 'activity', label: 'History' },
       ];
     }
     return this.tabsCache;
@@ -301,6 +307,10 @@ export class ViewLpoComponent implements OnInit {
         if (response.success || response._id) {
           const lpoData = response.success ? response.data : response;
           this.lpo = lpoData;
+          this.auditLog.getHistory('purchaseOrder', this.lpoId).subscribe({
+            next: (entries) => (this.auditEntries = toTimelineEntries((entries || []).filter((e) => e.action !== 'approved' && e.action !== 'rejected'))),
+            error: () => (this.auditEntries = []),
+          });
           this.supplier = lpoData.supplierId;
           this.items.set(lpoData.items || []);
           

@@ -1,0 +1,6 @@
+/* same thin scrollbar as the quotation side panel */
+.dv-tabs, .dv-body { scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
+.dv-tabs::-webkit-scrollbar, .dv-body::-webkit-scrollbar { width: 6px; height: 6px; }
+.dv-tabs::-webkit-scrollbar-thumb, .dv-body::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 9999px; }
+:host-context(html.dark) .dv-tabs, :host-context(html.dark) .dv-body { scrollbar-color: #404040 transparent; }
+:host-context(html.dark) .dv-tabs::-webkit-scrollbar-thumb, :host-context(html.dark) .dv-body::-webkit-scrollbar-thumb { background: #404040; }

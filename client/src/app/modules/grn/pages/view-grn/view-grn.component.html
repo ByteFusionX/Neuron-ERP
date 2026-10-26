@@ -101,6 +101,9 @@
           (open)="openDocument($event)"
         ></app-detail-documents>
       </div>
+
+      <!-- history -->
+      <app-detail-timeline *ngSwitchCase="'history'" [entries]="auditEntries" emptyMessage="No history recorded yet."></app-detail-timeline>
     </div>
   </app-detail-view-shell>
 </div>

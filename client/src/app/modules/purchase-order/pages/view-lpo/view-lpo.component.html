@@ -60,6 +60,10 @@
       <div *ngSwitchCase="'history'">
         <app-detail-timeline [entries]="historyEntries" emptyMessage="No approval steps recorded for this LPO."></app-detail-timeline>
       </div>
+
+      <div *ngSwitchCase="'activity'">
+        <app-detail-timeline [entries]="auditEntries" emptyMessage="No history recorded yet."></app-detail-timeline>
+      </div>
     </div>
   </app-detail-view-shell>
 </div>

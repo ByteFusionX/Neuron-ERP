@@ -81,6 +81,11 @@
         <app-detail-timeline [entries]="historyEntries" emptyMessage="No promotions or transfers recorded yet."></app-detail-timeline>
       </div>
 
+      <!-- account activity (central audit log) -->
+      <div *ngSwitchCase="'activity'">
+        <app-detail-timeline [entries]="activityEntries" emptyMessage="No account activity recorded yet."></app-detail-timeline>
+      </div>
+
       <!-- targets -->
       <div *ngSwitchCase="'targets'" class="space-y-4">
         <div class="flex items-center justify-between gap-3">

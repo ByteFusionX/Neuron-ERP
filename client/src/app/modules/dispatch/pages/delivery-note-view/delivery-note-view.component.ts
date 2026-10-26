@@ -20,6 +20,8 @@ import { DetailDocument, DetailTimelineEntry } from 'src/app/shared/components/d
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 
 @Component({
   selector: 'app-delivery-note-view',
@@ -48,6 +50,7 @@ export class DeliveryNoteViewComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
   private fb = inject(FormBuilder);
+  private auditLog = inject(AuditLogService);
 
   deliveryNote: DeliveryNote | null = null;
   deliveryItems: any[] = [];
@@ -273,7 +276,7 @@ export class DeliveryNoteViewComponent implements OnInit {
       uploadedBy: 'Proof of Delivery',
     }));
     const creator = dn.createdBy ? `${dn.createdBy.firstName || ''} ${dn.createdBy.lastName || ''}`.trim() : '';
-    this.history = [
+    const derivedHistory: DetailTimelineEntry[] = [
       { text: 'Delivery note created', meta: [creator, this.formatDateTime(dn.createdDate)].filter(Boolean).join(' · '), tone: 'info' as const },
       ...(dn.status !== 'Draft' ? [{ text: `Status: ${dn.status}`, meta: this.formatDateTime(dn.updatedDate || dn.createdDate), tone: dn.status === 'Cancelled' ? 'bad' as const : 'good' as const }] : []),
       ...(dn.rejectedHistory || []).map((entry) => ({
@@ -283,6 +286,12 @@ export class DeliveryNoteViewComponent implements OnInit {
       })),
       ...(dn.pod?.receivedBy ? [{ text: `Proof of delivery captured by ${dn.pod.receivedBy}`, meta: this.formatDateTime(dn.pod.receivedDate || dn.updatedDate), tone: 'good' as const }] : []),
     ].filter((entry) => !!entry.meta);
+    // Recorded events win; DNs from before logging keep the timeline derived from their fields.
+    this.history = derivedHistory;
+    this.auditLog.getHistory('deliveryNote', dn._id).subscribe({
+      next: (e) => { if (e?.length) this.history = toTimelineEntries(e); },
+      error: () => { /* keep the derived timeline */ },
+    });
     if (dn.pod) {
       this.podForm.patchValue({
         receivedBy: dn.pod.receivedBy || '',

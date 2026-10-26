@@ -18,9 +18,11 @@ import { DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/component
 import {
   DetailViewBadge, DetailViewBreadcrumb, DetailViewShellComponent, DetailViewStat, DetailViewTab,
 } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { EmployeeFormDrawerComponent } from '../employee-form-drawer/employee-form-drawer.component';
 
-type Tab = 'overview' | 'history' | 'targets';
+type Tab = 'overview' | 'history' | 'activity' | 'targets';
 
 @Component({
   selector: 'app-view-employee',
@@ -44,6 +46,8 @@ export class ViewEmployeeComponent implements OnInit, OnDestroy {
 
   targets: Target[] = [];
   historyEntries: DetailTimelineEntry[] = [];
+  /** Central audit-log events (role, block, approval limit, privileges); separate from the HR employment history above. */
+  activityEntries: DetailTimelineEntry[] = [];
 
   breadcrumbs: DetailViewBreadcrumb[] = [];
   badges: DetailViewBadge[] = [];
@@ -71,6 +75,7 @@ export class ViewEmployeeComponent implements OnInit, OnDestroy {
     private profileService: ProfileService,
     private route: ActivatedRoute,
     private confirm: ConfirmDialogService,
+    private auditLog: AuditLogService,
   ) { }
 
   ngOnInit() {
@@ -137,6 +142,12 @@ export class ViewEmployeeComponent implements OnInit, OnDestroy {
     this.buildTabs(e);
     this.buildTargetRows();
     this.loadHistoryNames(e);
+    if (e._id) {
+      this.subscriptions.add(this.auditLog.getHistory('employee', e._id).subscribe({
+        next: (entries) => (this.activityEntries = toTimelineEntries(entries)),
+        error: () => (this.activityEntries = []),
+      }));
+    }
   }
 
   // --- header ----------------------------------------------------------------
@@ -180,7 +191,7 @@ export class ViewEmployeeComponent implements OnInit, OnDestroy {
   }
 
   private buildTabs(e: getEmployeeDetails): void {
-    const tabs: DetailViewTab[] = [{ id: 'overview', label: 'Overview' }, { id: 'history', label: 'Employment history' }];
+    const tabs: DetailViewTab[] = [{ id: 'overview', label: 'Overview' }, { id: 'history', label: 'Employment history' }, { id: 'activity', label: 'Account activity' }];
     if (e.category?.isSalespersonWithTarget) tabs.push({ id: 'targets', label: 'Targets' });
     this.tabs = tabs;
     if (!tabs.some((t) => t.id === this.tab)) this.tab = 'overview';
