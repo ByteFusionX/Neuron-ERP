@@ -21,3 +21,24 @@ table {
 .no-scrollbar::-webkit-scrollbar {
     display: none;
 }
+
+/* Ids in the Details section that open the linked module (same as the quotation view). */
+.dv-link {
+    padding: 0;
+    font: inherit;
+    font-weight: 500;
+    color: #7c3aed;
+    text-align: left;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+.dv-link:hover { text-decoration: underline; }
+:host-context(.dark) .dv-link { color: #a78bfa; }
+
+/* same thin scrollbar as the quotation side panel */
+.dv-tabs, .dv-body { scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
+.dv-tabs::-webkit-scrollbar, .dv-body::-webkit-scrollbar { width: 6px; height: 6px; }
+.dv-tabs::-webkit-scrollbar-thumb, .dv-body::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 9999px; }
+:host-context(html.dark) .dv-tabs, :host-context(html.dark) .dv-body { scrollbar-color: #404040 transparent; }
+:host-context(html.dark) .dv-tabs::-webkit-scrollbar-thumb, :host-context(html.dark) .dv-body::-webkit-scrollbar-thumb { background: #404040; }

@@ -1,125 +1,138 @@
-<div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="flex h-full flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
     <app-detail-view-shell
         class="min-h-0 flex-1"
+        headerTone="contrast"
         [loading]="false"
         [empty]="!data"
         emptyTitle="Deal sheet not found"
         emptyMessage="Please open the deal sheet again from the list."
         [emptyLink]="[returnPath]"
         emptyLinkLabel="Back to deal sheets"
-        [breadcrumbs]="breadcrumbs"
-        [avatarText]="headerAvatarText"
-        [title]="headerTitle"
-        [subtitle]="headerSubtitle"
-        [badges]="badges"
+        customTitle
         [stats]="stats"
-        [tabs]="tabs"
-        [activeTab]="tab"
-        (activeTabChange)="tab = $any($event)"
+        statsLayout="fields"
+        statsTitle="Summary"
+        statsStorageKey="deal-summary"
+        tabParam=""
+        bodyBare
         [hasSidebar]="true"
+        [(panelOpen)]="panelOpen"
+        sidebarBare
+        sectioned
         *ngIf="data"
     >
-        <ng-container footerLeft>
+        <div headerTitle class="flex min-w-0 flex-col gap-0.5">
+            <!-- line 1: identity (deal ID, mode); line 2: who it's for and who owns it -->
+            <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+                <h1 class="dvs-strong truncate text-lg font-semibold text-gray-900 dark:text-gray-50">{{ headerTitle || 'Deal Sheet' }}</h1>
+                <app-detail-badge *ngIf="viewMode === 'po'" label="Purchase Order" tone="info"></app-detail-badge>
+            </div>
+            <div class="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] font-normal text-gray-900 dark:text-gray-100">
+                <span *ngIf="data.quoteData.client.companyName" class="truncate">{{ data.quoteData.client.companyName }}</span>
+                <span *ngIf="data.quoteData.client.companyName &&salesPersonName !== 'N/A'" class="text-gray-300 dark:text-gray-600">·</span>
+                <span *ngIf="salesPersonName !== 'N/A'">Owner {{ salesPersonName }}</span>
+            </div>
+        </div>
+
+        <!-- overview facts, left of the metrics -->
+        <app-detail-section beforeStats title="Details" class="lg:col-span-2 lg:border-r lg:border-gray-200 lg:pr-8 dark:lg:border-gray-800">
+            <app-detail-fields-menu sectionActions [items]="detailItems" storageKey="deal-details" (hiddenChange)="hiddenDetail = $event" (orderChange)="detailOrder = $event"></app-detail-fields-menu>
+            <div class="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
+                <app-detail-field *ngFor="let f of visibleDetail; trackBy: trackFact" [label]="f.label" stacked>
+                    <span *ngIf="f.state" class="inline-flex items-center gap-1.5">
+                        <span class="h-1.5 w-1.5 rounded-full" [ngClass]="f.state.dot"></span>
+                        <span class="font-medium" [ngClass]="f.state.text">{{ f.value }}</span>
+                    </span>
+                    <a *ngIf="!f.state && f.link" [routerLink]="f.link" [queryParams]="f.queryParams" class="dv-link">{{ f.value }}</a>
+                    <ng-container *ngIf="!f.state && !f.link">{{ f.value }}</ng-container>
+                </app-detail-field>
+            </div>
+        </app-detail-section>
+
+        <ng-container headerActions>
             <app-action-button variant="outline" *ngIf="approvedPo && viewMode === 'deal'" (click)="switchToPoView()" icon="view">View Purchase Order</app-action-button>
             <app-action-button variant="outline" *ngIf="approvedPo && viewMode === 'po'" (click)="switchToDealView()">Back to Deal Sheet</app-action-button>
-        </ng-container>
-        <ng-container footerRight>
-            <app-action-button variant="secondary" (click)="onClose()">Close</app-action-button>
-            <app-action-button variant="primary" *ngIf="data.approval && canRejectDeal && viewMode === 'deal'" [disabled]="isRejecting" (click)="onReject()">
+            <app-action-button variant="outline" *ngIf="data.quoteData.dealData.status !== 'approved' && canUpdate && viewMode === 'deal'" (click)="onUpdate()" icon="edit">Edit deal</app-action-button>
+            <app-action-button variant="warning" *ngIf="canRevokeDeal" [disabled]="isRevoking" (click)="onRevoke()">
+                {{ isRevoking ? 'Revoking...' : 'Revoke' }}
+            </app-action-button>
+            <app-action-button variant="outline" *ngIf="data.approval && canRejectDeal && viewMode === 'deal'" [disabled]="isRejecting" (click)="onReject()">
                 {{ isRejecting ? 'Rejecting...' : 'Reject' }}
             </app-action-button>
             <app-action-button variant="primary" *ngIf="data.approval && canApproveDeal && viewMode === 'deal'" [disabled]="isApproving" (click)="onApprove()">
                 {{ isApproving ? 'Approving...' : 'Approve' }}
             </app-action-button>
-            <app-action-button variant="primary" *ngIf="data.quoteData.dealData.status !== 'approved' && canUpdate && viewMode === 'deal'" (click)="onUpdate()" icon="edit">Edit Deal</app-action-button>
         </ng-container>
 
-        <ng-container sidebar>
-            <app-detail-section title="Quotation">
-                <app-detail-field label="Quote ID" numeric>
-                    <a *ngIf="data.quoteData._id; else noQuote" [routerLink]="['/quotations/view', data.quoteData._id]" class="font-medium text-violet-600 hover:underline dark:text-violet-400">{{ data.quoteData.quoteId || 'N/A' }}</a>
-                    <ng-template #noQuote>{{ data.quoteData.quoteId || 'N/A' }}</ng-template>
-                </app-detail-field>
-                <app-detail-field label="Revision" numeric>{{ data.quoteData.revision ?? 0 }}</app-detail-field>
-                <app-detail-field label="Sales person">{{ salesPersonName }}</app-detail-field>
-                <app-detail-field label="Department">{{ data.quoteData.department.departmentName || 'N/A' }}</app-detail-field>
-            </app-detail-section>
+        <!-- right panel: same tab strip look as the quotation view's side panel -->
+        <div sidebar class="flex min-h-0 flex-1 flex-col">
+            <nav role="tablist"
+                class="dv-tabs sticky top-0 z-10 flex h-11 shrink-0 flex-nowrap items-center gap-x-4 overflow-x-auto overflow-y-hidden border-b border-gray-300 bg-white px-5 dark:border-neutral-700 dark:bg-[#111111]">
+                <button *ngFor="let t of panelTabs" type="button" role="tab" (click)="panelTab = t.id"
+                    [attr.aria-selected]="panelTab === t.id"
+                    class="-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 py-2.5 text-sm transition-colors"
+                    [ngClass]="panelTab === t.id ? 'border-violet-600 dark:border-gray-100 text-gray-900 dark:text-gray-100 font-medium' : 'border-transparent text-gray-500 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'">
+                    {{ t.label }}
+                </button>
+            </nav>
 
-            <app-detail-section title="Customer">
-                <app-detail-field label="Customer ID" numeric>
-                    <a *ngIf="customerRef; else noRef" [routerLink]="['/customers/view', customerRef]" class="font-medium text-violet-600 hover:underline dark:text-violet-400">{{ customerRef }}</a>
-                    <ng-template #noRef>N/A</ng-template>
-                </app-detail-field>
-                <app-detail-field label="Company">{{ data.quoteData.client.companyName || 'N/A' }}</app-detail-field>
-                <app-detail-field label="LPO">{{ data.quoteData.lpoFiles.length ? data.quoteData.lpoFiles.length + ' file(s)' : 'Not uploaded' }}</app-detail-field>
-                <app-detail-field label="Currency">{{ data.quoteData.currency || 'N/A' }}</app-detail-field>
-            </app-detail-section>
-        </ng-container>
+            <div class="dv-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel" [ngSwitch]="panelTab">
+                <!-- approval route and the reviewer's last comment -->
+                <ng-container *ngSwitchCase="'approval'">
+                    <p *ngIf="waitingText" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{{ waitingText }}</p>
+                    <app-detail-section title="Approval route">
+                        <ol *ngIf="approvalStages.length; else noStages" class="space-y-2">
+                            <li *ngFor="let s of approvalStages" class="flex items-center justify-between gap-3 text-[13px]">
+                                <span class="text-gray-700 dark:text-gray-300">{{ s.step }}. {{ s.roleName }}</span>
+                                <app-detail-badge [label]="stageLabel(s)" [tone]="stageTone(s)"></app-detail-badge>
+                            </li>
+                        </ol>
+                        <ng-template #noStages><p class="text-[13px] text-gray-500 dark:text-gray-400">No approval route recorded.</p></ng-template>
+                    </app-detail-section>
+                    <app-detail-section title="Comments">
+                        <ul *ngIf="comments.length; else noComments" class="space-y-2">
+                            <li *ngFor="let c of comments" class="border-l-2 border-gray-200 pl-2.5 text-[13px] text-gray-700 dark:border-erp-border-dark dark:text-gray-300">{{ c }}</li>
+                        </ul>
+                        <ng-template #noComments><p class="text-[13px] text-gray-500 dark:text-gray-400">No comments recorded.</p></ng-template>
+                    </app-detail-section>
+                </ng-container>
 
-        <div tabBody [ngSwitch]="tab">
-            <div *ngSwitchCase="'overview'" class="space-y-6">
-                <app-detail-section title="Deal Details">
-                    <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-                        <app-detail-field label="Customer" stacked>{{ data.quoteData.client.companyName || 'N/A' }}</app-detail-field>
-                        <app-detail-field label="Deal ID" stacked>{{ data.quoteData.dealData.dealId || 'N/A' }}</app-detail-field>
-                        <app-detail-field label="Quote ID" stacked>{{ data.quoteData.quoteId || 'N/A' }}</app-detail-field>
-                        <app-detail-field label="Date" stacked>{{ data.quoteData.dealData.savedDate | date: 'dd MMM yyyy' }}</app-detail-field>
-                        @if (data.quoteData.dealData.approvedDate) {
-                            <app-detail-field label="Approved" stacked>{{ data.quoteData.dealData.approvedDate | date: 'dd MMM yyyy' }}</app-detail-field>
-                        }
-                        @if (data.quoteData.dealData.revokedDate) {
-                            <app-detail-field label="Revoked" stacked>{{ data.quoteData.dealData.revokedDate | date: 'dd MMM yyyy' }}</app-detail-field>
-                        }
-                        @if (data.quoteData.dealData.revokeResubmittedDate) {
-                            <app-detail-field label="Resubmitted After Revoke" stacked>{{ data.quoteData.dealData.revokeResubmittedDate | date: 'dd MMM yyyy' }}</app-detail-field>
-                        }
-                        @if (data.quoteData.dealData.reapprovedDate) {
-                            <app-detail-field label="Re-approved" stacked>{{ data.quoteData.dealData.reapprovedDate | date: 'dd MMM yyyy' }}</app-detail-field>
-                        }
-                        <app-detail-field label="Sales Person" stacked>{{ salesPersonName }}</app-detail-field>
-                        <app-detail-field label="Payment Terms" stacked>{{ data.quoteData.dealData.paymentTerms || 'N/A' }}</app-detail-field>
-                    </div>
-                </app-detail-section>
-
-                <app-detail-section title="Financial summary">
-                    <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-                        <app-detail-field *ngFor="let line of financialSummary" [label]="line.label" [tone]="line.tone ?? null" numeric stacked>{{ line.value }}</app-detail-field>
-                    </div>
-                </app-detail-section>
-            </div>
-
-            <div *ngSwitchCase="'items'">
-                <app-detail-table
-                    [title]="viewMode === 'po' ? 'Purchase order costs' : 'Deal items'"
-                    [columns]="itemColumns"
-                    [rows]="itemRows"
-                    [currency]="data.quoteData.currency"
-                    [footRows]="itemFootRows"
-                    groupStyle="band"
-                    numbered
-                    groupTotals
-                    spread
-                    emptyMessage="No selected deal items."></app-detail-table>
-            </div>
-
-            <div *ngSwitchCase="'costs'">
-                <app-detail-table
-                    title="Additional costs and discounts"
+                <app-detail-table *ngSwitchCase="'costs'"
                     [columns]="costColumns"
                     [rows]="costRows"
                     [currency]="data.quoteData.currency"
-                    showTotals
                     emptyMessage="No additional costs or discounts."></app-detail-table>
-            </div>
 
-            <div *ngSwitchCase="'documents'">
-                <app-detail-documents
+                <app-detail-documents *ngSwitchCase="'documents'"
                     title="Customer LPO"
                     [documents]="documents"
                     emptyMessage="No customer LPO files available."
                     (open)="onDocumentOpen($event)"
                     (download)="onDocumentDownload($event)"></app-detail-documents>
+
+                <app-detail-timeline *ngSwitchCase="'history'"
+                    [entries]="historyEntries"
+                    emptyMessage="No history recorded yet."></app-detail-timeline>
             </div>
+        </div>
+
+        <div tabBody class="h-full">
+            <app-detail-table class="block h-full"
+                [columns]="itemColumns"
+                [rows]="itemRows"
+                [currency]="data.quoteData.currency"
+                [footRows]="itemFootRows"
+                groupStyle="band"
+                centerGroups
+                numbered
+                groupTotals
+                spread
+                bare
+                tools
+                storageKey="deal-items"
+                searchKey="detail"
+                searchTextKey="detailText"
+                emptyMessage="No selected deal items."></app-detail-table>
         </div>
     </app-detail-view-shell>
 </div>
