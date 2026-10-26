@@ -10,6 +10,8 @@ import { findSupplierDuplicates, supplierContactPoints, supplierKeys } from '../
 import { Server } from 'socket.io';
 import { createNotificationWithPrivileges } from './notification.controller';
 import { getNextSequence } from '../models/counter.model';
+import { logAudit } from '../services/audit.service';
+import { AuditLogChange } from '../models/auditLog.model';
 
 
 const MAX_PAGE_SIZE = 5000;
@@ -656,6 +658,8 @@ export const createSupplier = async (req: Request, res: Response) => {
       // Save the supplier to database
       const savedSupplier = await newSupplier.save();
 
+      await logAudit(req, { entityType: 'supplier', entityId: savedSupplier._id, entityLabel: savedSupplier.supplierId, action: 'created', summary: `Supplier ${savedSupplier.supplierName} created` });
+
       // Populate the createdBy field before returning
       const populatedSupplier = await Supplier.findById(savedSupplier._id)
          .populate({
@@ -793,6 +797,15 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
       // Save the updated supplier
       const updatedSupplier = await supplier.save();
 
+      await logAudit(req, {
+         entityType: 'supplier',
+         entityId: updatedSupplier._id,
+         entityLabel: updatedSupplier.supplierId,
+         action: statusToUpdate === supplierStatus.approved ? 'approved' : 'rejected',
+         summary: statusToUpdate === supplierStatus.approved ? 'Supplier approved' : 'Supplier rejected',
+         changes: String(comment ?? '').trim() ? [{ label: 'Reason', to: String(comment).trim() }] : undefined,
+      });
+
       const socket = req.app.get('io') as Server;
       const supplierIdStr = updatedSupplier._id.toString();
       if (statusToUpdate === supplierStatus.approved) {
@@ -921,6 +934,8 @@ export const deleteSupplier = async (req: Request, res: Response) => {
             message: 'Supplier not found'
          });
       }
+
+      await logAudit(req, { entityType: 'supplier', entityId: updatedSupplier._id, entityLabel: updatedSupplier.supplierId, action: 'deleted', summary: `Supplier ${updatedSupplier.supplierName} deleted` });
 
       return res.status(200).json({
          success: true,
@@ -1096,6 +1111,45 @@ export const updateSupplier = async (req: Request, res: Response) => {
             },
          });
 
+      if (updatedSupplier) {
+         const changes: AuditLogChange[] = [];
+         const diff = (label: string, from: unknown, to: unknown) => {
+            const a = String(from ?? '').trim();
+            const b = String(to ?? '').trim();
+            if (a !== b) changes.push({ label, from: a || '—', to: b || '—' });
+         };
+         diff('Supplier name', existingSupplier.supplierName, supplierName);
+         diff('Type', existingSupplier.supplierType, supplierType);
+         diff('Category', existingSupplier.category, category);
+         diff('Company email', existingSupplier.companyEmail, companyEmail);
+         diff('Company phone', existingSupplier.companyPhone, companyPhone);
+         diff('Website', existingSupplier.website, website);
+         diff('Credit days', existingSupplier.creditDays ?? 0, creditDays ?? 0);
+         diff('Credit value', existingSupplier.creditValue ?? 0, creditValue ?? 0);
+         diff('Supplier ID', existingSupplier.supplierId, supplierId);
+         diff('Status', existingSupplier.status, newStatus);
+         const noIds = (_k: string, v: unknown) => (_k === '_id' ? undefined : v);
+         diff('Contacts', JSON.stringify(existingSupplier.toObject().contacts ?? [], noIds), JSON.stringify(contacts ?? [], noIds));
+         diff('Addresses', JSON.stringify(existingSupplier.toObject().addresses ?? [], noIds), JSON.stringify(addresses ?? [], noIds));
+         diff('Documents', (existingSupplier.documents ?? []).map((d) => d.fileName).join(','), documents.map((d) => d.fileName).join(','));
+         // Bank details are sensitive: record that they changed, never the values.
+         if (bankSet !== undefined && JSON.stringify(storedBankAccounts(existingSupplier)) !== JSON.stringify(bankSet?.bankAccounts ?? [])) {
+            changes.push({ label: 'Banking details', to: 'Updated' });
+         }
+         // Contacts/addresses/documents are compared as whole lists; show a readable marker, not raw JSON.
+         for (const c of changes) {
+            if (['Contacts', 'Addresses', 'Documents', 'Category'].includes(c.label)) { c.from = undefined; c.to = 'Updated'; }
+         }
+         await logAudit(req, {
+            entityType: 'supplier',
+            entityId: updatedSupplier._id,
+            entityLabel: updatedSupplier.supplierId,
+            action: 'updated',
+            summary: changes.length ? `Supplier details updated (${changes.map((c) => c.label).join(', ')})` : 'Supplier saved with no changes',
+            changes,
+         });
+      }
+
       return res.status(200).json({
          success: true,
          message: 'Supplier updated successfully',
@@ -1265,6 +1319,14 @@ export const blockSupplier = async (req: Request, res: Response, next: NextFunct
             { isBlocked, updatedDate: new Date(), $push: { blockHistory: { date: new Date(), blocked: isBlocked, reason, byName } } },
             { new: true },
          );
+         await logAudit(req, {
+            entityType: 'supplier',
+            entityId: supplier._id,
+            entityLabel: supplier.supplierId,
+            action: isBlocked ? 'blocked' : 'unblocked',
+            summary: isBlocked ? 'Supplier blocked' : 'Supplier unblocked',
+            changes: reason ? [{ label: 'Reason', to: reason }] : undefined,
+         });
          return res.status(200).json({ isBlocked });
       } else {
          return res.status(404).json({ message: "Supplier not found" });

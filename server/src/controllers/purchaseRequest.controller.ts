@@ -14,8 +14,16 @@ import Employee from "../models/employee.model";
 import { recordPrices, findPrices } from "../services/supplierPrice.service";
 import { SupplierPriceSource } from "../models/supplierPrice.model";
 import { applyLineAward, LineAward } from "../services/purchaseAward.service";
+import { logAudit } from "../services/audit.service";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
+
+/** Records a PR event; a general (manual) PR is kept under its own entity type so the audit page can tell them apart. */
+const logPrAudit = (req: Request, pr: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
+    logAudit(req, {
+        entityType: pr.sourceType === 'manual' ? 'generalPurchaseRequest' : 'purchaseRequest',
+        entityId: pr._id, entityLabel: pr.purchaseNo, action, summary, changes,
+    });
 
 const prLines = (items: any[]) => (items || []).flatMap((item: any) => item.itemDetails || []);
 
@@ -282,6 +290,9 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
         const savedPurchaseRequest = await newPurchaseRequest.save();
 
         if (status && !isDraft) await recordComparisonPrices(savedPurchaseRequest, employee._id);
+
+        await logPrAudit(req, savedPurchaseRequest, 'created', `${isManual ? 'General purchase request' : 'Purchase request'} ${savedPurchaseRequest.purchaseNo} created`);
+        if (!isDraft) await logPrAudit(req, savedPurchaseRequest, 'submitted', `Sent for approval${savedPurchaseRequest.status === PurchaseRequestStatus.Approved ? ' (no approval needed)' : ''}`);
 
         if (!isManual) {
             // A job a user put On Hold stays there until they resume it.
@@ -2012,6 +2023,16 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
             },
             { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
             {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'allocatedBy',
+                    foreignField: '_id',
+                    as: 'allocatedBy',
+                    pipeline: [{ $project: { firstName: 1, lastName: 1 } }]
+                }
+            },
+            { $unwind: { path: '$allocatedBy', preserveNullAndEmptyArrays: true } },
+            {
                 $addFields: {
                     lpoValue: {
                         $cond: [
@@ -2498,6 +2519,10 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
         purchaseRequest.updatedAt = new Date();
 
         await purchaseRequest.save();
+
+        await logPrAudit(req, purchaseRequest, status === 'rejected' ? 'rejected' : 'approved',
+            `${status === 'rejected' ? 'Rejected' : isAllApproved ? 'Approved (final step)' : 'Approved (step)'}${comment ? ` — ${comment}` : ''}`,
+            [{ label: 'Status', from: PurchaseRequestStatus.Pending, to: String(purchaseRequest.status) }]);
 
         const updatedPurchaseRequest = await PurchaseRequest.findById(id)
             .populate('createdBy', '-password')
@@ -3036,6 +3061,8 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
 
         if (isStatusChangingFromDraft || isStatusChangingFromRejected) {
             await recordComparisonPrices(updatedPurchaseRequest, employee._id);
+            await logPrAudit(req, updatedPurchaseRequest, isStatusChangingFromRejected ? 'resubmitted' : 'submitted',
+                `${isStatusChangingFromRejected ? 'Resubmitted' : 'Sent'} for approval${updatedPurchaseRequest.status === PurchaseRequestStatus.Approved ? ' (no approval needed)' : ''}`);
         }
 
         if (updateData.status === PurchaseRequestStatus.Pending) {
@@ -3391,6 +3418,7 @@ export const resetPurchaseWorkflow = async (req: Request, res: Response, next: N
         purchaseRequest.updatedBy = me._id;
         purchaseRequest.updatedAt = new Date();
         await purchaseRequest.save();
+        await logPrAudit(req, purchaseRequest, 'workflow-reset', 'Approval workflow reset');
         return res.status(200).json({ success: true, message: 'Purchase approval workflow reset' });
     } catch (error) {
         next(error);
