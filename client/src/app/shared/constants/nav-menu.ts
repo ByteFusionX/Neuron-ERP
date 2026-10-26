@@ -76,7 +76,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'customers',
-        label: 'Customers',
+        label: 'Customer',
         icon: 'heroUserGroup',
         route: '/customers',
         privilegeKey: 'customer',
@@ -102,7 +102,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       },
       {
         id: 'quotations',
-        label: 'Quotations',
+        label: 'Quotation',
         icon: 'heroNewspaper',
         route: '/quotations',
         privilegeKey: 'quotation',
@@ -142,7 +142,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'salesProducts',
-        label: 'Products',
+        label: 'Product',
         icon: 'heroCube',
         route: '/products',
         privilegeKey: 'inventory',
@@ -151,7 +151,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       },
       {
         id: 'salesSuppliers',
-        label: 'Suppliers',
+        label: 'Supplier',
         icon: 'heroBuildingOffice',
         route: '/suppliers',
         privilegeKey: 'supplier',
@@ -213,7 +213,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'grnList',
-        label: 'GRNs',
+        label: 'GRN',
         icon: 'heroInboxArrowDown',
         route: '/grn/grn-list',
         privilegeKey: 'grn',
@@ -228,7 +228,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'stockOverview',
-        label: 'Stock Overview',
+        label: 'Stock Balance',
         icon: 'heroCube',
         route: '/stock/overview',
         privilegeKey: 'inventory',
@@ -237,7 +237,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       },
       {
         id: 'stockLedger',
-        label: 'Stock Entries',
+        label: 'Stock Movement',
         icon: 'heroCube',
         route: '/stock/ledger',
         privilegeKey: 'inventory',
@@ -268,7 +268,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'purchaseProducts',
-        label: 'Products',
+        label: 'Product',
         icon: 'heroCube',
         route: '/products',
         privilegeKey: 'inventory',
@@ -277,7 +277,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       },
       {
         id: 'suppliers',
-        label: 'Suppliers',
+        label: 'Supplier',
         icon: 'heroBuildingOffice',
         route: '/suppliers',
         privilegeKey: 'supplier',
@@ -336,7 +336,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'vendor-bills',
-        label: 'Vendor Bills',
+        label: 'Vendor Bill',
         icon: 'heroClipboardDocumentList',
         route: '/finance/vendor-bills',
         privilegeKey: 'invoice',
@@ -359,7 +359,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'claims',
-        label: 'Expenses',
+        label: 'Expense',
         icon: 'heroDocumentPlus',
         route: '/claims/expenses',
         privilegeKey: 'claims',
@@ -368,7 +368,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         children: [
           {
             id: 'expenses',
-            label: 'Expenses',
+            label: 'Expense',
             route: '/claims/expenses',
             privilegeKey: 'claims',
             privilegeValue: 'none',
@@ -376,7 +376,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
           },
           {
             id: 'approvalRequests',
-            label: 'Approval Requests',
+            label: 'Approval Request',
             route: '/claims/approval-requests',
             privilegeKey: 'claims',
             privilegeValue: 'canApprove',
@@ -406,7 +406,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'employees',
-        label: 'Employees',
+        label: 'Employee',
         icon: 'heroIdentification',
         route: '/hr/employees',
         privilegeKey: 'employee',
@@ -414,7 +414,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       },
       {
         id: 'hr-departments',
-        label: 'Departments',
+        label: 'Department',
         icon: 'heroBuildingLibrary',
         route: '/hr/departments',
         privilegeKey: 'departments',

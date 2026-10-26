@@ -24,6 +24,7 @@ import { ActiveItemEntryService } from './core/services/active-item-entry.servic
 import { CommandPaletteComponent } from './shared/components/command-palette/command-palette.component';
 import { BugReportLauncherService } from './core/diagnostics/bug-report-launcher.service';
 import { clearSessionStorage } from './shared/utils/clear-session.util';
+import { ThemeService } from './core/services/theme.service';
 
 import { AlertHostComponent } from './shared/components/alert-host/alert-host.component';
 
@@ -61,7 +62,8 @@ export class AppComponent implements OnDestroy, OnInit {
     public layout: LayoutService,
     private palette: CommandPaletteService,
     private activeItemEntry: ActiveItemEntryService,
-    private bugReportLauncher: BugReportLauncherService
+    private bugReportLauncher: BugReportLauncherService,
+    private themeService: ThemeService
   ) { }
 
 
@@ -161,8 +163,15 @@ export class AppComponent implements OnDestroy, OnInit {
     }
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase();
-    if (key !== 'b' && key !== 'k') return;
+    if (key !== 'b' && key !== 'k' && key !== 'l') return;
     if (this.isLoginRoute()) return;
+    if (key === 'l' && event.shiftKey) {
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || target?.matches('input, textarea, select')) return;
+      event.preventDefault();
+      this.themeService.toggleTheme();
+      return;
+    }
     if (key === 'k') {
       event.preventDefault();
       this.palette.toggle();

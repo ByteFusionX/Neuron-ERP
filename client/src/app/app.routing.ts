@@ -148,7 +148,8 @@ export const routes: Routes = [
       { path: 'dealsheets', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'all' } },
       { path: 'pendings', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'pending' } },
       { path: 'approved', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'approved' } },
-      { path: 'rejecteds', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'rejected' } },
+      { path: 'rejected', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'rejected' } },
+      { path: 'rejecteds', redirectTo: 'rejected', pathMatch: 'full' },
       { path: 'revokeds', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'revoked' } },
       { path: 'view/:id', canActivate: [RoleGuard], component: ViewDealsheetComponent },
     ]
