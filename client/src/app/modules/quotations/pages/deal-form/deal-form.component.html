@@ -1,6 +1,6 @@
 <app-sf-drawer title="Convert to Deal Sheet"
     [subtitle]="q ? ((q.quoteId || '') + ' · ' + (q.client.companyName || '') + ' · ' + q.currency) : ''"
-    [width]="step === 2 ? 'min(720px, 96vw)' : 'min(1400px, 96vw)'" [open]="open" [dirty]="!!form.dirty" (closed)="onDrawerClosed()">
+    [width]="step === 2 ? 'min(720px, 96vw)' : 'min(1400px, 96vw)'" [open]="open" [dirty]="!!form?.dirty" (closed)="onDrawerClosed()">
 
     <form *ngFor="let f of forms" id="deal-form" [formGroup]="f" (ngSubmit)="onSubmit()" novalidate>
 
