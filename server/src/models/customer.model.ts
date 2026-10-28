@@ -68,7 +68,7 @@ export interface Customer extends Document {
   statusReason?: string;
   paymentTerms?: string;
   creditLimit?: number;
-  creditStatus?: CreditStatus;
+  creditStatus?: string;
   taxExempt?: boolean;
   currency?: string;
   source?: string;
@@ -141,7 +141,7 @@ const customerSchema = new Schema<Customer>({
   // Free string: values come from the Settings → Master Data "paymentTerms" list.
   paymentTerms: { type: String },
   creditLimit: { type: Number },
-  creditStatus: { type: String, enum: CREDIT_STATUSES, default: "Good Standing" },
+  creditStatus: { type: String, default: "Good Standing", trim: true },
   taxExempt: { type: Boolean, default: false },
   currency: { type: String, default: "QAR" },
   source: { type: String },
