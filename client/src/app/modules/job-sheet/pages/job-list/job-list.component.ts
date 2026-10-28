@@ -83,7 +83,7 @@ const PAGE_SIZES = [5, 15, 30, 50];
 })
 export class JobListComponent {
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'item', label: 'Item', wrap: true, clamp: true, tooltipKey: 'item' },
+    { key: 'item', label: 'Item', type: 'html', truncate: true },
     { key: 'qty', label: 'Qty', type: 'number' },
     { key: 'price', label: 'Price', type: 'currency' },
     { key: 'sellingPrice', label: 'Selling Price', type: 'currency' },
@@ -96,7 +96,7 @@ export class JobListComponent {
       (item.itemDetails ?? [])
         .filter((d: any) => d.dealSelected)
         .map((d: any) => ({
-          item: d.detail,
+          item: String(d.detail ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
           qty: d.quantity,
           price: d.unitCost,
           sellingPrice: d.unitSellingPrice,
@@ -260,7 +260,7 @@ export class JobListComponent {
         filterOptions: Object.values(JobStatus).map((s) => ({ value: s, label: jobStatusLabel(s) })),
       },
       { key: 'customerName', label: 'Customer', sortable: true, valueGetter: (r) => r.clientDetails?.companyName },
-      { key: 'description', label: 'Description', sortable: true, valueGetter: (r) => r.quotation?.subject },
+      { key: 'description', label: 'Subject', sortable: true, valueGetter: (r) => r.quotation?.subject },
       { key: 'procurementPerson', label: 'Allocated To', sortable: true, visible: false, locked: true, valueGetter: (r) => this.fullName(r.procurementPerson) },
       { key: 'lpoValue', label: 'LPO Value (QAR)', type: 'currency', currencyCode: 'QAR', sortable: true, valueGetter: (r) => r.lpoValue ?? 0 },
       { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (r) => this.fullName(r.salesPersonDetails?.[0]) },
@@ -615,7 +615,7 @@ export class JobListComponent {
         fields: [
           { type: 'field', label: 'Quote Id', value: row.quotation?.quoteId, numeric: true },
           { type: 'field', label: 'Deal Id', value: (row.quotation?.dealData as any)?.dealId || '—' },
-          { type: 'field', label: 'Description', value: row.quotation?.subject },
+          { type: 'field', label: 'Subject', value: row.quotation?.subject },
           { type: 'field', label: 'LPO Value', value: `${this.numberFormat.transform(row.lpoValue ?? 0)} QAR`, numeric: true },
         ],
       },

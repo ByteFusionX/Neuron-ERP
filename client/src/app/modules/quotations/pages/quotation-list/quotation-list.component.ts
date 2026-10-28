@@ -133,7 +133,7 @@ export class QuotationListComponent implements AfterViewInit {
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'item', label: 'Item', type: 'html', wrap: true, clamp: true, tooltipKey: 'itemTooltip', width: '22rem' },
+    { key: 'item', label: 'Item', type: 'html', truncate: true, width: '22rem' },
     { key: 'qty', label: 'Qty', type: 'number' },
     { key: 'price', label: 'Price', type: 'currency' },
     { key: 'amount', label: 'Amount', type: 'currency', total: true },
@@ -144,7 +144,7 @@ export class QuotationListComponent implements AfterViewInit {
     (row.optionalItems ?? []).forEach((opt) => {
       (opt.items ?? []).forEach((item) => {
         (item.itemDetails ?? []).forEach((d) => {
-          rows.push({ item: d.detail, itemTooltip: d.detail, qty: d.quantity, price: d.unitSellingPrice, amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0) });
+          rows.push({ item: String(d.detail ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'), qty: d.quantity, price: d.unitSellingPrice, amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0) });
         });
       });
     });

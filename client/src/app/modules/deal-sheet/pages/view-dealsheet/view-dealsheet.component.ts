@@ -178,7 +178,7 @@ export class ViewDealsheetComponent implements OnInit {
   // Same column set as the quotation view's item table, plus the deal-only supplier column.
   private readonly allItemColumns: DetailTableColumn[] = [
     { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
-    { key: 'detail', label: 'Item Details', type: 'html', wrap: true, clamp: true, tooltipKey: 'detailText' },
+    { key: 'detail', label: 'Item Details', type: 'html', truncate: true, tooltipKey: 'detailText' },
     { key: 'partNo', label: 'Part No', hiddenByDefault: true },
     { key: 'image', label: 'Image', type: 'image', imagePreview: true, align: 'center', width: '5rem' },
     { key: 'quantity', label: 'Qty', type: 'number', align: 'center' },
@@ -537,6 +537,7 @@ export class ViewDealsheetComponent implements OnInit {
     const facts: DealFact[] = [
       { label: 'Status', value: statusLabel(d.status || 'pending'), state: { dot: tone.dot, text: tone.text } },
       { label: 'Quote ID', value: q.quoteId || '', link: q._id ? ['/quotations/view', q._id] : undefined },
+      { label: 'Subject', value: (q as any).subject || '' },
       { label: 'Revision', value: `Rev ${q.revision ?? 0}` },
       { label: 'Customer ID', value: this.customerRef, link: this.customerRef ? ['/customers'] : undefined, queryParams: { search: q.client?.companyName } },
       { label: 'Company', value: q.client?.companyName || '' },
@@ -826,6 +827,22 @@ export class ViewDealsheetComponent implements OnInit {
           unitCost,
           totalCost: this.viewMode === 'po' ? this.getPoItemTotalCost(detail) : detail.quantity * detail.unitCost,
           supplier: detail.supplierName || (detail.supplierId ? this.getSupplierName(detail.supplierId) : '-') || '-',
+        });
+        // Parts of a split line follow it as sub rows (1.1, 1.2 ...); the line's own cost already covers them.
+        (d.components || []).forEach((c: any) => {
+          const qty = (Number(c.quantity) || 0) * (Number(detail.quantity) || 0);
+          rows.push({
+            _sub: true,
+            detail: this.boldPipe.transform(this.bracketsPipe.transform(c.description || '') as string),
+            detailText: c.description,
+            itemCode: c.itemCode || '—',
+            partNo: c.partNo || '—',
+            uom: c.uom || '—',
+            quantity: qty,
+            unitCost: c.unitCost,
+            totalCost: qty * (Number(c.unitCost) || 0),
+            supplier: (c.supplierId ? this.getSupplierName(c.supplierId) : '') || '-',
+          });
         });
       });
     });

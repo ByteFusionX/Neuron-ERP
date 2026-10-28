@@ -141,8 +141,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   readonly acceptedFiles = ALLOWED_UPLOAD_TYPES;
 
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'item', label: 'Item' },
-    { key: 'description', label: 'Description' },
+    { key: 'description', label: 'Description', type: 'html', truncate: true },
     { key: 'quantity', label: 'Qty', type: 'number' },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
     { key: 'amount', label: 'Amount', type: 'currency', total: true },
@@ -557,8 +556,8 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
         const quantity = detail.quantity ?? detail.qty ?? item.quantity ?? item.qty ?? 0;
         const unitCost = detail.unitCost ?? detail.price ?? item.unitCost ?? item.price ?? 0;
         rows.push({
-          item: detail.item ?? detail.detail ?? item.item ?? item.itemName ?? '-',
-          description: detail.description ?? item.description ?? '-',
+          description: String(detail.description ?? detail.detail ?? item.description ?? item.detail ?? detail.item ?? item.item ?? item.itemName ?? '-')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
           quantity,
           unitCost,
           amount: (Number(quantity) || 0) * (Number(unitCost) || 0),

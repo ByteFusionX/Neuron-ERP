@@ -54,7 +54,7 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'items'">
-                    <app-detail-table title="Deal items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" [currency]="row.currency"></app-detail-table>
+                    <app-detail-table title="Items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" [currency]="row.currency"></app-detail-table>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'costs'">

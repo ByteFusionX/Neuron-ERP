@@ -26,6 +26,9 @@ interface DetailTableLine {
   groupCount?: number;
   /** kind 'data' only: this is the final item row in its group. */
   groupEnd?: boolean;
+  /** kind 'data' only: a sub row (e.g. a part of the item above), numbered 1.1, 1.2 under its parent and left out of totals. */
+  sub?: boolean;
+  label?: string;
 }
 
 /**
@@ -69,7 +72,7 @@ interface DetailTableLine {
           </tr>
         </thead>
         <tbody class="bg-white dark:bg-erp-surface-dark">
-          <ng-container *ngFor="let line of lines">
+          <ng-container *ngFor="let line of lines; trackBy: trackLine">
             <!-- a row with _group set spans every column as a sub-heading: { _group: true, label, badge?, note? } -->
             <tr *ngIf="line.kind === 'group' && groupStyle !== 'band'" class="border-t border-b border-gray-200 bg-gray-50/70 dark:border-erp-border-dark dark:bg-white/[0.04]">
               <td *ngIf="groupLead > 0" [attr.colspan]="groupLead"></td>
@@ -102,22 +105,22 @@ interface DetailTableLine {
               </td>
             </tr>
 
-            <tr *ngIf="line.kind === 'data'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos" [class.bg-gray-50]="striped && line.stripe" [class.opacity-60]="line.excluded"
+            <tr *ngIf="line.kind === 'data'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos" [class.bg-gray-50]="striped && line.stripe" [class.opacity-60]="line.excluded" [class.dt-sub]="line.sub"
               [ngClass]="[(striped && line.stripe ? 'dark:bg-white/[0.02]' : ''), (groupDividers && line.groupEnd ? 'border-b-2 border-gray-300 dark:border-gray-700' : '')]"
               class="border-b border-gray-100 transition-colors last:border-0 hover:bg-violet-50/60 dark:border-white/5 dark:hover:bg-white/[0.06]">
-              <td *ngIf="numbered" class="px-3 py-2.5 text-right align-top text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{{ line.index }}</td>
+              <td *ngIf="numbered" class="px-3 py-2.5 text-right align-top text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{{ line.sub ? line.label : line.index }}</td>
               <td *ngFor="let c of columns" [class.text-right]="isRight(c)" [class.text-center]="c.align === 'center'" [class.tabular-nums]="isRight(c) || c.type === 'date'"
-                [ngClass]="[c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap', c.truncate ? 'max-w-0 truncate' : '', c.emphasis ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-800 dark:text-gray-100']"
-                [matTooltip]="c.truncate ? line.row[c.key] : ''" matTooltipPosition="above" matTooltipClass="dt-tooltip"
+                [ngClass]="[c.wrap || isExpanded(line.pos, c) ? 'whitespace-normal break-words' : 'whitespace-nowrap', c.truncate ? (isExpanded(line.pos, c) ? 'max-w-0' : 'max-w-0 truncate') : '', c.emphasis ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-800 dark:text-gray-100']"
+                [matTooltip]="c.truncate && c.type !== 'html' ? line.row[c.key] : ''" matTooltipPosition="above" matTooltipClass="dt-tooltip"
                 class="px-3 py-2.5 align-top">
                 <ng-container [ngSwitch]="c.type">
                   <ng-container *ngSwitchCase="'currency'">{{ line.row[c.key] | number: '1.2-2' }}</ng-container>
                   <ng-container *ngSwitchCase="'number'">{{ line.row[c.key] | number }}</ng-container>
                   <ng-container *ngSwitchCase="'date'">{{ line.row[c.key] | date: 'dd MMM yyyy' }}</ng-container>
                   <app-detail-badge *ngSwitchCase="'badge'" [label]="line.row[c.key]" [tone]="badgeTone(c, line.row)"></app-detail-badge>
-                  <div #htmlCell *ngSwitchCase="'html'" [innerHTML]="line.row[c.key]" [class.dt-clamp]="c.clamp"
-                    [matTooltip]="c.tooltipKey ? line.row[c.tooltipKey] : ''" [matTooltipDisabled]="!isOverflowing(htmlCell)"
-                    matTooltipPosition="above" matTooltipClass="dt-tooltip"></div>
+                  <div *ngSwitchCase="'html'" [innerHTML]="line.row[c.key]" [class.dt-clamp]="c.clamp && !isExpanded(line.pos, c)" [class.truncate]="c.truncate && !isExpanded(line.pos, c)"
+                    [class.cursor-pointer]="c.truncate" [attr.title]="c.truncate ? (isExpanded(line.pos, c) ? 'Click to collapse' : 'Click to expand') : null"
+                    (click)="c.truncate && toggleExpanded(line.pos, c)"></div>
                   <ng-container *ngSwitchCase="'image'">
                     <button *ngIf="line.row[c.key] && c.imagePreview" type="button" (click)="openImage(line.row[c.key], line.row[c.key + 'Alt'])"
                       class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 text-gray-600 transition-colors hover:border-violet-400 hover:bg-violet-50 hover:text-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500/40 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-violet-500/10"
@@ -242,6 +245,7 @@ interface DetailTableLine {
     /* the 3-dot button sits in the last header cell's right gutter; every row reserves the same gutter so values line up under their headers */
     ':host(.dt-col) tr>*:last-child:not([colspan]){padding-right:2.5rem}',
     '.dt-dots:hover{background:rgba(124,58,237,.1);color:#6d28d9}',
+    'tr.dt-sub>td{font-size:12px;color:#6b7280}',
     'tr.dt-hit>td{background:rgba(124,58,237,.14)!important;box-shadow:inset 0 1px 0 #a78bfa,inset 0 -1px 0 #a78bfa}',
     '.dt-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}',
   ],
@@ -475,8 +479,9 @@ export class DetailTableComponent implements OnInit {
     let sums: Record<string, number> = {};
     let groupHasRows = false;
     let groupLine: DetailTableLine | null = null;
-    let lastDataLine: DetailTableLine | null = null;
+    let lastDataLine = null as DetailTableLine | null;
     let group = -1;
+    let subIndex = 0;
 
     const closeGroup = () => {
       // the band heading shows the group's count and total on its own bar, so it needs them attached here
@@ -500,6 +505,14 @@ export class DetailTableComponent implements OnInit {
         lastDataLine = null;
         continue;
       }
+      if (r['_sub']) {
+        const prevStripe = (lastDataLine as DetailTableLine | null)?.stripe ?? false;
+        lastDataLine = { kind: 'data', row: r, index, pos: lines.length, stripe: prevStripe, group, sub: true, label: `${index}.${++subIndex}` };
+        lines.push(lastDataLine);
+        groupHasRows = true;
+        continue;
+      }
+      subIndex = 0;
       const excluded = !!r['_excludeFromTotal'];
       groupCount++;
       lastDataLine = { kind: 'data', row: r, index: ++index, pos: lines.length, stripe: groupCount % 2 === 0, excluded, group };
@@ -512,7 +525,7 @@ export class DetailTableComponent implements OnInit {
     closeGroup();
 
     this.lines = lines;
-    this.count = lines.reduce((n, l) => n + (l.kind === 'data' ? 1 : 0), 0);
+    this.count = lines.reduce((n, l) => n + (l.kind === 'data' && !l.sub ? 1 : 0), 0);
     this.runSearch(false);
   }
 
@@ -573,6 +586,20 @@ export class DetailTableComponent implements OnInit {
     return c.align ? c.align === 'right' : c.type === 'number' || c.type === 'currency';
   }
 
+  private expandedCells = new Set<string>();
+
+  /** Rows are rebuilt on every parent change check, so keep each line's DOM stable or clicks land on a discarded node. */
+  trackLine = (_: number, line: DetailTableLine): string => line.kind + '|' + line.pos;
+
+  isExpanded(pos: unknown, c: DetailTableColumn): boolean {
+    return this.expandedCells.has(pos + '|' + c.key);
+  }
+
+  toggleExpanded(pos: unknown, c: DetailTableColumn): void {
+    const k = pos + '|' + c.key;
+    this.expandedCells.has(k) ? this.expandedCells.delete(k) : this.expandedCells.add(k);
+  }
+
   isOverflowing(element: HTMLElement): boolean {
     return element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight;
   }
@@ -601,6 +628,6 @@ export class DetailTableComponent implements OnInit {
   }
 
   sum(c: DetailTableColumn): number {
-    return this.rows.reduce((s, r) => (r['_group'] || r['_excludeFromTotal'] ? s : s + (Number(r[c.totalKey ?? c.key]) || 0)), 0);
+    return this.rows.reduce((s, r) => (r['_group'] || r['_sub'] || r['_excludeFromTotal'] ? s : s + (Number(r[c.totalKey ?? c.key]) || 0)), 0);
   }
 }

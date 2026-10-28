@@ -180,7 +180,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   private docFiles = new Map<string, any>();
   private readonly allItemCols: DetailTableColumn[] = [
     { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
-    { key: 'detail', label: 'Item Details', type: 'html', wrap: true, clamp: true, tooltipKey: 'detailText' },
+    { key: 'detail', label: 'Item Details', type: 'html', truncate: true, tooltipKey: 'detailText' },
     { key: 'partNo', label: 'Part No', hiddenByDefault: true },
     { key: 'image', label: 'Image', type: 'image', imagePreview: true, align: 'center', width: '5rem' },
     { key: 'quantity', label: 'Qty', type: 'number' },

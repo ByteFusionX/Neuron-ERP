@@ -153,7 +153,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'item', label: 'Item', wrap: true, clamp: true, tooltipKey: 'item' },
+    { key: 'item', label: 'Item', type: 'html', truncate: true, tooltipKey: 'itemText' },
     { key: 'qty', label: 'Qty', type: 'number' },
     { key: 'price', label: 'Price', type: 'currency' },
     { key: 'sellingPrice', label: 'Selling Price', type: 'currency' },
@@ -287,7 +287,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       {
         key: 'description',
         sortable: true,
-        label: 'Description',
+        label: 'Subject',
         valueGetter: (r) => r.subject,
       },
       {
@@ -691,15 +691,27 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
 
   itemRows(row: Quotatation): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
+    const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     (row.dealData?.updatedItems ?? []).forEach((item) => {
       (item.itemDetails ?? []).forEach((d) => {
         if (!d.dealSelected) return;
         rows.push({
-          item: d.detail,
+          item: esc(d.detail),
+          itemText: d.detail,
           qty: d.quantity,
           price: d.unitCost,
           sellingPrice: d.unitSellingPrice,
           amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0),
+        });
+        // parts of the line render as 1.1, 1.2 ... sub rows (not part of the totals)
+        ((d as any).components ?? []).forEach((c: any) => {
+          rows.push({
+            _sub: true,
+            item: esc(c.description),
+            itemText: c.description,
+            qty: (Number(c.quantity) || 0) * (Number(d.quantity) || 0),
+            price: c.unitCost,
+          });
         });
       });
     });

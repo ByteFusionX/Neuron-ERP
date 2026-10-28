@@ -148,7 +148,7 @@ export class ViewJobComponent implements OnInit {
 
   private readonly allItemColumns: DetailTableColumn[] = [
     { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
-    { key: 'detail', label: 'Item Details', type: 'html', wrap: true, clamp: true, tooltipKey: 'detailText' },
+    { key: 'detail', label: 'Item Details', type: 'html', truncate: true, tooltipKey: 'detailText' },
     { key: 'partNo', label: 'Part No', hiddenByDefault: true },
     { key: 'image', label: 'Image', type: 'image', imagePreview: true, align: 'center', width: '5rem' },
     { key: 'quantity', label: 'Qty', type: 'number', align: 'center' },
@@ -407,7 +407,7 @@ export class ViewJobComponent implements OnInit {
       { label: 'Contact', value: contact },
       { label: 'Email', value: attention?.email || q.client?.customerEmailId || '' },
       { label: 'Phone', value: attention?.phoneNo || (q.client?.contactNo ? String(q.client.contactNo) : '') },
-      { label: 'Description', value: q.subject || '' },
+      { label: 'Subject', value: q.subject || '' },
       { label: 'Procurement Person', value: procurement },
       { label: 'LPO Value', value: `${this.formatNumber(job.lpoValue ?? 0)} QAR` },
       { label: 'Department', value: q.department?.departmentName || '' },
@@ -430,7 +430,7 @@ export class ViewJobComponent implements OnInit {
         rows.push({
           image: detail.image?.fileName ? this.quoteService.itemImageUrl(detail.image.fileName) : '',
           imageAlt: detail.image?.originalname || 'Item image',
-          detail: this.boldPipe.transform(this.bracketsPipe.transform(detail.detail) as string),
+          detail: (this.boldPipe.transform(this.bracketsPipe.transform(detail.detail) as string) as string) + this.componentsNote(detail),
           detailText: detail.detail,
           uom: detail.uom || '—',
           availability: detail.availability || '—',
@@ -446,6 +446,15 @@ export class ViewJobComponent implements OnInit {
       });
     });
     return rows;
+  }
+
+  /** The parts the deal split this line into, for the project and procurement teams. Their cost is already inside the line's. */
+  private componentsNote(detail: any): string {
+    const parts: any[] = detail.components ?? [];
+    if (!parts.length) return '';
+    const esc = (s: string) => String(s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]!));
+    const list = parts.map((p) => `${esc(p.description)} × ${Number(p.quantity) * Number(detail.quantity)}`).join(' · ');
+    return `<div style="margin-top:4px;font-size:12px;opacity:.7">Includes: ${list}</div>`;
   }
 
   private buildDocuments(): DetailDocument[] {

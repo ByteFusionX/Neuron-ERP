@@ -306,7 +306,7 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
         return [
           { key: 'jobId', label: 'Job ID', sortable: true, locked: true },
           { key: 'customer', label: 'Customer', sortable: true, valueGetter: (r) => r.clientDetails?.companyName || '-' },
-          { key: 'description', label: 'Description', sortable: true, valueGetter: (r) => r.quotation?.subject || '-' },
+          { key: 'description', label: 'Subject', sortable: true, valueGetter: (r) => r.quotation?.subject || '-' },
           { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (r) => this.personName(r.salesPersonDetails?.[0]) },
           { key: 'department', label: 'Department', sortable: true, valueGetter: (r) => r.departmentDetails?.[0]?.departmentName || '-' },
           { key: 'quotation', label: 'Quotation', sortable: true, valueGetter: (r) => r.quotation?.quoteId || '-' },
@@ -491,7 +491,7 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
         fields: [
           { type: 'field', label: 'Job ID', value: row.jobId || '-' },
           { type: 'field', label: 'Customer', value: row.clientDetails?.companyName || '-' },
-          { type: 'field', label: 'Description', value: row.quotation?.subject || '-' },
+          { type: 'field', label: 'Subject', value: row.quotation?.subject || '-' },
           { type: 'field', label: 'Scope', value: row.allocateType || '-' },
           { type: 'field', label: 'Sales Person', value: this.personName(row.salesPersonDetails?.[0]) },
           { type: 'field', label: 'Department', value: row.departmentDetails?.[0]?.departmentName || '-' },
