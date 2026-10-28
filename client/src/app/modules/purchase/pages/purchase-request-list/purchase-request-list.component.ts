@@ -31,6 +31,8 @@ import { ModalService } from 'src/app/shared/components/modal';
 import { ResetWorkflowComponent, ResetWorkflowModalData } from 'src/app/modules/presales/pages/reset-workflow/reset-workflow.component';
 import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
+import { JobStatus } from 'src/app/shared/interfaces/job.interface';
+import { STATUS_TONE_CLASSES, StatusTone } from 'src/app/shared/components/status-indicator/status-tone';
 
 type SourceType = 'job' | 'manual';
 
@@ -41,6 +43,18 @@ const APPROVED_STATUSES = ['Approved'];
 const NEW_STATUSES = ['New', 'In Progress'];
 const IN_PROGRESS_STATUSES = ['In Progress'];
 const REJECTED_STATUSES = ['Rejected'];
+
+/** Same tones as the Job Sheet list's Job Status badge. */
+const JOB_STATUS_TONES: Record<string, StatusTone> = {
+  [JobStatus.WorkInProgress]: 'progress',
+  [JobStatus.Delivered]: 'info',
+  [JobStatus.partiallyDelivered]: 'warning',
+  [JobStatus.partiallyInvoiced]: 'warning',
+  [JobStatus.invoiced]: 'info',
+  [JobStatus.completed]: 'success',
+  [JobStatus.onHold]: 'warning',
+  [JobStatus.cancelled]: 'danger',
+};
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
@@ -100,8 +114,7 @@ export class PurchaseRequestListComponent {
   }
 
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'item', label: 'Item', truncate: true },
-    { key: 'award', label: 'Award', type: 'badge', badgeTones: { Awarded: 'good', 'Not awarded': 'neutral' } },
+    { key: 'item', label: 'Item', type: 'html', truncate: true },
     { key: 'qty', label: 'Qty', type: 'number' },
     { key: 'price', label: 'Price', type: 'currency' },
     { key: 'amount', label: 'Amount', type: 'currency', total: true },
@@ -193,6 +206,32 @@ export class PurchaseRequestListComponent {
   }
 
   private buildColumns(): void {
+    // New-tab rows are allocated jobs, so they show the Job Sheet list's columns.
+    if (this.activeViewId === 'new') {
+      const jobStatusLabel = (v: unknown): string => (v === JobStatus.WorkInProgress ? 'In Progress' : v ? String(v) : '—');
+      this.columns = [
+        { key: 'date', label: 'Last Updated', type: 'date', sortable: true, width: '120px', valueGetter: (r) => r.jobId?.updatedDate ?? r.createdAt },
+        { key: 'jobId', label: 'Job Id', sortable: true, valueGetter: (r) => r.jobId?.jobId },
+        {
+          key: 'jobStatus', label: 'Job Status', type: 'badge', valueGetter: (r) => r.jobStatus ?? r.jobId?.status ?? '',
+          badgeClasses: Object.fromEntries(Object.entries(JOB_STATUS_TONES).map(([s, tone]) => [s, STATUS_TONE_CLASSES[tone].pill + ' border'])),
+          badgeLabel: jobStatusLabel,
+        },
+        { key: 'customerName', label: 'Customer', sortable: true, valueGetter: (r) => r.customerId?.companyName },
+        { key: 'description', label: 'Subject', valueGetter: (r) => r.description ?? r.jobId?.quoteId?.subject },
+        { key: 'lpoValue', label: 'LPO Value (QAR)', type: 'currency', currencyCode: 'QAR', valueGetter: (r) => r.lpoValue ?? 0 },
+        { key: 'salesPerson', label: 'Sales Person', valueGetter: (r) => r.salesPerson },
+        { key: 'department', label: 'Department', valueGetter: (r) => r.department },
+        {
+          key: 'procurementPerson', label: 'Assigned To',
+          valueGetter: (r) => r.procurementPerson?.firstName ? `${r.procurementPerson.firstName} ${r.procurementPerson.lastName}` : '-',
+        },
+        { key: 'allocatedBy', label: 'Allocated By', valueGetter: (r) => r.allocatedBy?.firstName ? `${r.allocatedBy.firstName} ${r.allocatedBy.lastName}` : '-' },
+        { key: 'quoteId', label: 'Quote Id', valueGetter: (r) => r.quoteNo ?? r.jobId?.quoteId?.quoteId },
+        { key: 'dealId', label: 'Deal Id', valueGetter: (r) => r.dealNo ?? r.jobId?.quoteId?.dealData?.dealId },
+      ];
+      return;
+    }
     this.columns = [
       { key: 'date', label: 'Date', type: 'date', sortable: true, width: '120px', valueGetter: (r) => r.approvedDate || r.createdAt },
       { key: 'customerName', label: 'Customer Name', sortable: true, valueGetter: (r) => r.customerId?.companyName },
@@ -211,7 +250,6 @@ export class PurchaseRequestListComponent {
       { key: 'remainingPoQuantity', label: 'Remaining', align: 'right', width: '110px', valueGetter: (r) => r.remainingPoQuantity ?? '-' },
       { key: 'awarded', label: 'Awarded', align: 'right', valueGetter: (r) => { const a = this.awardStats(r); return a.total ? `${a.awarded}/${a.total}` : '-'; } },
       { key: 'createdBy', label: 'Created By', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '-' },
-      { key: 'supplier', label: 'Supplier', valueGetter: (r) => this.supplierLabel(r) },
       {
         key: 'procurementPerson', label: 'Assigned To',
         valueGetter: (r) => r.procurementPerson?.firstName ? `${r.procurementPerson.firstName} ${r.procurementPerson.lastName}` : '-',
@@ -619,7 +657,7 @@ export class PurchaseRequestListComponent {
     source.forEach((item: any) => {
       (item.itemDetails ?? []).forEach((d: any) => {
         const won = (d.comparisons ?? []).find((c: any) => c.selected);
-        rows.push({ item: d.detail, award: won ? 'Awarded' : 'Not awarded', qty: d.quantity, price: d.unitCost, amount: (d.quantity ?? 0) * (d.unitCost ?? 0) });
+        rows.push({ item: String(d.detail ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'), award: won ? 'Awarded' : 'Not awarded', qty: d.quantity, price: d.unitCost, amount: (d.quantity ?? 0) * (d.unitCost ?? 0) });
       });
     });
     return rows;

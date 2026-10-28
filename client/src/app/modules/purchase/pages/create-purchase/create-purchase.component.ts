@@ -1,4 +1,5 @@
 import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/form-prompt.service';
+import { expandDealComponents } from 'src/app/shared/utils/deal-pricing.util';
 import { CommonModule } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { AfterViewInit, Component, computed, effect, EventEmitter, HostBinding, inject, Input, OnDestroy, OnInit, Output, signal, untracked, ViewChild } from '@angular/core';
@@ -207,7 +208,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   /** For the item form's "Not awarded" filter: the line's saved copy says whether a supplier won it. */
   lineAwarded = (line: any): boolean => {
     const saved = line?.lineKey ? this.originalsByKey().get(line.lineKey) : undefined;
-    return !!saved && this.isAwardedLine(saved);
+    return !!saved && (this.isAwardedLine(saved) || this.isResolvedLine(saved));
   };
 
   private isAwardedLine(detail: any): boolean {
@@ -284,6 +285,16 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
           qty: c.selected && c.awardedQty ? Number(c.awardedQty) : undefined,
         });
       });
+      // Nobody awarded yet: the line's own (deal sheet) supplier is the default award until the user awards another.
+      const ownId = String(d?.supplierId?._id || d?.supplierId || '');
+      if (ownId && !(d?.comparisons || []).some((c: any) => c.selected)) {
+        const own = list.find((o) => o.supplierId === ownId);
+        if (own) own.state = 'awarded';
+        else {
+          const cost = Number(d.unitCost) > 0 ? Number(d.unitCost) : null;
+          list.push({ supplierId: ownId, supplierName: d.supplierDetails?.supplierName || d.supplierName || this.supplierOptions().find((o) => o.value === ownId)?.label || 'Supplier', state: 'awarded', price: cost });
+        }
+      }
       map.set(key, list);
     });
     return map;
@@ -1138,7 +1149,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     }
 
     if (!this.isEditing) {
-      const updatedItems = job.quotation?.dealData?.updatedItems || [];
+      const updatedItems = expandDealComponents(job.quotation?.dealData?.updatedItems);
       const itemsWithComparisons = this.patchComparisonsData(updatedItems, job.quotation?.dealData);
       this.itemsList.set(itemsWithComparisons);
       this.patchItemsValuesWithPartNoIds(itemsWithComparisons);
@@ -1208,6 +1219,31 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       this.purchaseForm.addControl('mrRequest', this.createMrGroup());
     }
     (this.purchaseForm.get('mrRequest') as FormGroup).patchValue(data);
+  }
+
+  /** A discount typed on a supplier tab is stored with the request's supplier discounts. */
+  onSupplierDiscountEdited(e: { supplierId: string; discount: number }): void {
+    const idOf = (s: any) => String(s?.supplierId?._id ?? s?.supplierId ?? '');
+    const ctrl = this.purchaseForm.get('supplierDiscounts');
+    if (!ctrl) this.purchaseForm.addControl('supplierDiscounts', this.createSupplierGroup());
+    const target = this.purchaseForm.get('supplierDiscounts')!;
+    const arr = target.get('suppliers') as FormArray | null;
+    if (arr) {
+      const row = arr.controls.find((c) => idOf(c.value) === e.supplierId);
+      if (row) row.get('discount')?.setValue(e.discount);
+      else arr.push(this.fb.group({ supplierId: [e.supplierId], discount: [e.discount], discountType: ['amount'] }));
+      const total = arr.controls.reduce((sum, c) => sum + (Number(c.get('discount')?.value) || 0), 0);
+      target.get('totalDiscount')?.setValue(total.toString());
+      return;
+    }
+    // Loaded from a saved request: the control holds a plain object.
+    const value = { ...(target.value ?? {}) };
+    const suppliers = [...(value.suppliers ?? [])];
+    const at = suppliers.findIndex((s: any) => idOf(s) === e.supplierId);
+    if (at >= 0) suppliers[at] = { ...suppliers[at], discount: e.discount };
+    else suppliers.push({ supplierId: e.supplierId, discount: e.discount, discountType: 'amount' });
+    const total = suppliers.reduce((sum: number, s: any) => sum + (Number(s.discount) || 0), 0);
+    target.setValue({ ...value, suppliers, totalDiscount: total.toString() });
   }
 
   patchSupplierDiscounts(supplierDiscounts: any) {
@@ -1370,7 +1406,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   /** Deal sheet quantities and prices of the job, for the compare step's deal columns and margins. */
   private refreshDealQty(): void {
     const deal = new Map<string, { itemName: string; detail: string; quantity: number; sellPrice: number | null; cost: number | null; supplierName: string; supplierId: string | null }>();
-    const updated = (this.selectedJobSheet as any)?.quotation?.dealData?.updatedItems || [];
+    const updated = expandDealComponents((this.selectedJobSheet as any)?.quotation?.dealData?.updatedItems);
     updated.forEach((item: any) => (item.itemDetails || []).forEach((d: any) => {
       const key = CreatePurchaseComponent.dealKey(item.itemName, d.detail);
       const prev = deal.get(key);

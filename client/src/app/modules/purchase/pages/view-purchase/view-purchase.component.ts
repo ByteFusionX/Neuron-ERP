@@ -53,6 +53,7 @@ interface PricingLine {
   value: number;
   sign?: boolean;
   total?: boolean;
+  pct?: boolean;
 }
 
 @Component({
@@ -116,8 +117,8 @@ export class ViewPurchaseComponent {
   itemColumns: DetailTableColumn[] = [];
   itemRows: Record<string, any>[] = [];
   itemFootRows: DetailFootRow[] = [];
-  pricingCost: PricingLine[] = [];
-  pricingProfit: PricingLine[] = [];
+  pricingDeal: PricingLine[] = [];
+  pricingPr: PricingLine[] = [];
   historyEntries: DetailTimelineEntry[] = [];
 
   get isManual(): boolean {
@@ -205,7 +206,32 @@ export class ViewPurchaseComponent {
     if (!p) return;
 
     const manual = this.isManual;
-    const prCost = (p.totalPRCost || 0) - (p.totalDiscountReceived || 0);
+    // Cost follows what is awarded; a line with no awarded comparison stands on its deal sheet supplier.
+    // A supplier's discount counts only while that supplier still carries a line.
+    const effective = this.getSelectedRows(p.items);
+    const grossCost = effective.reduce(
+      (sum: number, r: any) => sum + (Number(r.selectedSupplier.unitPrice) || 0) * (Number(r.detail.quantity) || 0), 0);
+    const idOf = (ref: any): string => String(ref && typeof ref === 'object' ? ref._id : ref ?? '');
+    const activeSuppliers = new Set<string>();
+    for (const item of p.items || []) {
+      for (const detail of item.itemDetails || []) {
+        const awarded = detail.comparisons?.find((c: any) => c.selected);
+        const id = idOf(awarded ? awarded.supplierId : detail.supplierId);
+        if (id) activeSuppliers.add(id);
+      }
+    }
+    const savedDiscounts: any[] = p.supplierDiscounts?.suppliers || [];
+    const dealDiscounts: any[] = (p.jobId?.quoteId?.dealData?.additionalCosts || [])
+      .filter((c: any) => c.type === 'Supplier Discount' && c.supplierId)
+      .map((c: any) => ({ supplierId: c.supplierId, discount: c.value }));
+    const discountRows = savedDiscounts.length ? savedDiscounts : dealDiscounts;
+    const discountReceived = discountRows
+      .filter((d: any) => activeSuppliers.has(idOf(d.supplierId)))
+      .reduce((sum: number, d: any) => sum + (Number(d.discount) || 0), 0);
+    const dealAdditionalCosts = (p.jobId?.quoteId?.dealData?.additionalCosts || [])
+      .filter((c: any) => c.type !== 'Supplier Discount')
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+    const prCost = grossCost - discountReceived;
     const profit = this.getProfitMargin(p.lpoValue || 0, prCost);
     const diff = (profit || 0) - (p.dealProfit || 0);
 
@@ -216,11 +242,13 @@ export class ViewPurchaseComponent {
       ? [{ label: 'Total LPO value', value: this.money(p.totalLpo) }]
       : [
           { label: 'LPO value', value: this.money(p.lpoValue) },
-          { label: 'Cost as per PR', value: this.money(prCost) },
           { label: 'Cost as per deal sheet', value: this.money(p.totalDealCost) },
-          { label: 'Profit', value: this.money(profit), danger: profit < 0 },
+          { label: 'Additional costs in deal', value: this.money(dealAdditionalCosts) },
+          { label: 'Total discount', value: this.money(discountReceived) },
+          { label: 'Cost as per PR', value: this.money(prCost) },
+          { label: 'Margin %', value: `${((p.lpoValue || 0) > 0 ? (profit / p.lpoValue) * 100 : 0).toFixed(2)}%`, danger: profit < 0 },
+          { label: 'Margin value', value: this.money(profit), danger: profit < 0 },
           { label: 'Difference in profit', value: this.money(diff), danger: diff < 0 },
-          { label: 'Discount received', value: this.money(p.totalDiscountReceived), hiddenByDefault: true },
         ];
 
     const tone = DETAIL_TONE[STATUS_TONES[p.status] ?? 'neutral'];
@@ -254,15 +282,17 @@ export class ViewPurchaseComponent {
 
     this.itemColumns = [
       { key: 'itemCode', label: 'Item code', hiddenByDefault: true },
-      { key: 'detail', label: 'Description', truncate: true },
+      { key: 'detail', label: 'Description', type: 'html', truncate: true, tooltipKey: 'detailText' },
       { key: 'partNo', label: 'Part No', hiddenByDefault: true },
       { key: 'qty', label: 'Qty', type: 'number', align: 'right' },
       { key: 'uom', label: 'UOM' },
       { key: 'unitCost', label: 'Unit cost', type: 'currency' },
       { key: 'totalCost', label: 'Total cost', type: 'currency', emphasis: true },
       ...(manual ? [] : [
-        { key: 'unitSelling', label: 'Unit selling', type: 'currency' },
-        { key: 'totalSelling', label: 'Total selling', type: 'currency' },
+        { key: 'margin', label: 'Margin %', align: 'right' },
+        { key: 'marginValue', label: 'Margin value', type: 'currency' },
+        { key: 'unitSelling', label: 'Unit price', type: 'currency' },
+        { key: 'totalSelling', label: 'Total price', type: 'currency' },
         { key: 'eta', label: 'ETA terms', wrap: true, hiddenByDefault: true },
       ] as DetailTableColumn[]),
     ];
@@ -299,6 +329,8 @@ export class ViewPurchaseComponent {
         totalCost,
         unitSelling: row.detail.unitSellingPrice,
         totalSelling,
+        margin: totalSelling > 0 ? `${(((totalSelling - totalCost) / totalSelling) * 100).toFixed(2)}%` : '-',
+        marginValue: totalSelling - totalCost,
         eta: row.selectedSupplier.etaTerms || '-',
       });
     }
@@ -313,20 +345,42 @@ export class ViewPurchaseComponent {
     }];
 
     // Pricing tab: how line costs become the PR cost, then the profit against the deal sheet
-    this.pricingCost = manual
+    const sellingPrice = Number(p.lpoValue) || 0;
+    const marginPct = sellingPrice > 0 ? (profit / sellingPrice) * 100 : 0;
+    const dealCosts: any[] = p.jobId?.quoteId?.dealData?.additionalCosts || [];
+    const costLines = dealCosts.filter((c: any) => c.type === 'Additional Cost' && Number(c.value));
+    const discLines = dealCosts.filter((c: any) => c.type === 'Supplier Discount' && Number(c.value));
+    const dealTotalCost = Number(p.totalDealCost) || 0;
+    const dealItemsCost = dealTotalCost
+      - costLines.reduce((s: number, c: any) => s + Number(c.value), 0)
+      + discLines.reduce((s: number, c: any) => s + Number(c.value), 0);
+    const dealSelling = Number(p.totalDealSellingPrice) || sellingPrice;
+    const dealProfit = dealSelling - dealTotalCost;
+    this.pricingDeal = manual ? [] : [
+      { label: 'Selling price (LPO value)', value: dealSelling },
+      { label: 'Items cost', value: dealItemsCost },
+      ...costLines.map((c: any) => ({ label: c.name || 'Additional cost', value: Number(c.value), sign: true })),
+      ...discLines.map((c: any) => ({ label: `${c.supplierDetails?.supplierName || c.name || 'Supplier'} discount`, value: -Number(c.value), sign: true })),
+      { label: 'Total cost', value: dealTotalCost, total: true },
+      { label: 'Margin value', value: dealProfit },
+      { label: 'Margin %', value: dealSelling > 0 ? (dealProfit / dealSelling) * 100 : 0, pct: true },
+    ];
+    this.pricingPr = manual
       ? [{ label: 'Total LPO value', value: Number(p.totalLpo) || 0, total: true }]
       : [
-          { label: 'Cost as per PR', value: Number(p.totalPRCost) || 0 },
-          { label: 'Discount received', value: -(Number(p.totalDiscountReceived) || 0), sign: true },
-          { label: 'Net PR cost', value: prCost, total: true },
+          { label: 'Selling price (LPO value)', value: sellingPrice },
+          { label: 'Items cost', value: grossCost },
+          ...discountRows
+            .filter((d: any) => activeSuppliers.has(idOf(d.supplierId)) && Number(d.discount))
+            .map((d: any) => ({
+              label: `${d.supplierName || d.supplierDetails?.supplierName || d.supplierId?.supplierName || 'Supplier'} discount`,
+              value: -Number(d.discount),
+              sign: true,
+            })),
+          { label: 'Total cost', value: prCost, total: true },
+          { label: 'Margin value', value: profit },
+          { label: 'Margin %', value: marginPct, pct: true },
         ];
-    this.pricingProfit = manual ? [] : [
-      { label: 'LPO value', value: Number(p.lpoValue) || 0 },
-      { label: 'Net PR cost', value: -prCost, sign: true },
-      { label: 'Profit', value: profit, total: true },
-      { label: 'Deal profit', value: Number(p.dealProfit) || 0 },
-      { label: 'Difference in profit', value: diff, sign: true },
-    ];
 
     this.historyEntries = buildApprovalTimeline(p.approvalStatus);
   }
@@ -513,6 +567,13 @@ export class ViewPurchaseComponent {
     if (!Array.isArray(items) || items.length === 0) return [];
 
     const rows: any[] = [];
+    // ids may arrive plain or populated
+    const nameOf = (ref: any): string | null => {
+      if (!ref) return null;
+      if (typeof ref === 'object' && ref.supplierName) return ref.supplierName;
+      const id = String(typeof ref === 'object' ? ref._id : ref);
+      return this.suppliersList().find((s: any) => String(s._id) === id)?.supplierName ?? null;
+    };
     for (const item of items) {
       if (!item.itemDetails?.length) continue;
 
@@ -520,15 +581,12 @@ export class ViewPurchaseComponent {
         const selected = detail.comparisons?.find((c: any) => c.selected);
 
         if (selected) {
-          const supplier = this.suppliersList().find(
-            (s: any) => s._id === selected.supplierId
-          );
-
           rows.push({
             itemName: item.itemName,
             detail,
             selectedSupplier: {
-              supplierName: supplier?.supplierName ?? 'Unknown Supplier',
+              // a deal-sheet supplier on the line stands in when the comparison's own supplier is not found
+              supplierName: nameOf(selected.supplierId) ?? nameOf(detail.supplierId) ?? detail.supplierName ?? 'Unknown Supplier',
               unitPrice: selected.unitPrice,
               quantity: selected.quantity,
               etaTerms: selected.etaTerms,
@@ -539,7 +597,7 @@ export class ViewPurchaseComponent {
             itemName: item.itemName,
             detail,
             selectedSupplier: {
-              supplierName: detail.supplierName ?? 'Unknown Supplier',
+              supplierName: nameOf(detail.supplierId) ?? detail.supplierName ?? 'Unknown Supplier',
               unitPrice: detail.unitCost,
               quantity: detail.quantity,
               etaTerms: detail.availability,

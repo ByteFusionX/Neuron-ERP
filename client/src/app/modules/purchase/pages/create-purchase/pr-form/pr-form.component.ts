@@ -101,6 +101,7 @@ export class PrFormComponent {
   /** Lines handed to the active supplier tab. */
   /** Lines ticked inside a supplier tab to add to it. */
   @Output() linesAddedToTab = new EventEmitter<string[]>();
+  @Output() supplierDiscountEdited = new EventEmitter<{ supplierId: string; discount: number }>();
   @Input() tabLineKeys: string[] = [];
   @Input() tabExcludedKeys: string[] = [];
   @Output() linesRemovedFromTab = new EventEmitter<string[]>();

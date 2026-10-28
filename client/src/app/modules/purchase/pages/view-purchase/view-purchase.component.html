@@ -28,7 +28,7 @@
       <div class="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] font-normal text-gray-900 dark:text-gray-100">
         <span *ngIf="subtitle" class="truncate">{{ subtitle }}</span>
         <span *ngIf="subtitle && owner" class="text-gray-300 dark:text-gray-600">·</span>
-        <span *ngIf="owner">Buyer {{ owner }}</span>
+        <span *ngIf="owner">Owner {{ owner }}</span>
       </div>
     </div>
 
@@ -78,11 +78,11 @@
 
       <div class="dv-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel" [ngSwitch]="panelTab">
         <ng-container *ngSwitchCase="'pricing'">
-          <app-detail-section title="Cost">
-            <ng-container *ngTemplateOutlet="pricingList; context: { $implicit: pricingCost }"></ng-container>
+          <app-detail-section *ngIf="pricingDeal.length" title="As per deal">
+            <ng-container *ngTemplateOutlet="pricingList; context: { $implicit: pricingDeal }"></ng-container>
           </app-detail-section>
-          <app-detail-section *ngIf="pricingProfit.length" title="Profit" class="block border-t border-gray-200 pt-5 dark:border-erp-border-dark">
-            <ng-container *ngTemplateOutlet="pricingList; context: { $implicit: pricingProfit }"></ng-container>
+          <app-detail-section title="As per PR" [ngClass]="pricingDeal.length ? 'block border-t border-gray-200 pt-5 dark:border-erp-border-dark' : ''">
+            <ng-container *ngTemplateOutlet="pricingList; context: { $implicit: pricingPr }"></ng-container>
           </app-detail-section>
         </ng-container>
 
@@ -123,8 +123,8 @@
         {{ l.value < 0 ? '−' : '+' }} {{ (l.value < 0 ? -l.value : l.value) | number: '1.2-2' }}
       </dd>
       <dd *ngIf="!l.sign" class="tabular-nums"
-        [ngClass]="l.total ? (l.label === 'Profit' ? 'font-semibold text-violet-600 dark:text-violet-400' : 'font-semibold text-gray-900 dark:text-gray-100') : 'text-gray-900 dark:text-gray-100'">
-        {{ l.value | number: '1.2-2' }}<ng-container *ngIf="l.total"> {{ purchase?.currency }}</ng-container>
+        [ngClass]="l.total ? (l.label === 'Margin value' ? 'font-semibold text-violet-600 dark:text-violet-400' : 'font-semibold text-gray-900 dark:text-gray-100') : 'text-gray-900 dark:text-gray-100'">
+        {{ l.value | number: '1.2-2' }}<ng-container *ngIf="l.pct">%</ng-container><ng-container *ngIf="l.total"> {{ purchase?.currency }}</ng-container>
       </dd>
     </div>
   </dl>

@@ -104,23 +104,57 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
         // A super admin oversees every buyer's allocated jobs; everyone else sees only their own.
         ...(isSuperAdmin ? { procurementPerson: { $exists: true, $ne: null } } : { procurementPerson: new ObjectId(String(employeeId)) }),
         _id: { $nin: withPr },
-    }).populate({ path: 'quoteId', select: 'client currency dealData.updatedItems', populate: { path: 'client', select: 'companyName' } })
+    }).populate({
+        path: 'quoteId',
+        select: 'client currency quoteId subject department createdBy dealData.dealId dealData.totalDiscount dealData.updatedItems',
+        populate: [
+            { path: 'client', select: 'companyName' },
+            { path: 'department', select: 'departmentName' },
+            { path: 'createdBy', select: 'firstName lastName' },
+        ],
+    })
         .populate('procurementPerson', 'firstName lastName')
         .populate('allocatedBy', 'firstName lastName')
         .sort({ updatedDate: -1, _id: -1 })
         .lean();
 
+    const qatarUsdRate = await getUSDRated();
+    // Same LPO value the Job Sheet list shows: deal selling total less discount, in QAR.
+    const lpoValueOf = (quote: any): number => {
+        const lines = (quote?.dealData?.updatedItems ?? []).flatMap((item: any) => item.itemDetails ?? []);
+        const total = lines.reduce((sum: number, d: any) => sum + (Number(d.unitSellingPrice) || 0) * (Number(d.quantity) || 0), 0) - (Number(quote?.dealData?.totalDiscount) || 0);
+        return quote?.currency === 'USD' ? total * qatarUsdRate : total;
+    };
+    const fullName = (e: any) => e?.firstName ? `${e.firstName} ${e.lastName ?? ''}`.trim() : '';
+
     const needle = searchText.toLowerCase();
     const rows = jobs
         .map((job) => ({
             _id: job._id,
+            // Job Sheet list columns, so the New tab reads like the job list it comes from.
+            jobStatus: job.status,
+            description: job.quoteId?.subject,
+            lpoValue: lpoValueOf(job.quoteId),
+            salesPerson: fullName(job.quoteId?.createdBy),
+            department: job.quoteId?.department?.departmentName ?? '',
+            quoteNo: job.quoteId?.quoteId,
+            dealNo: job.quoteId?.dealData?.dealId ?? '',
             status: 'New',
             overallStatus: 'new',
             items: [],
             // No PR lines exist yet, so the details panel shows the deal sheet's lines the buyer will work from.
             dealItems: (job.quoteId?.dealData?.updatedItems ?? []).map((item: any) => ({
                 itemName: item.itemName,
-                itemDetails: (item.itemDetails ?? []).map((d: any) => ({ detail: d.detail, quantity: d.quantity, unitCost: d.unitCost })),
+                // A line with a cost breakdown is bought part by part, so list the parts (and what the parts leave).
+                itemDetails: (item.itemDetails ?? []).flatMap((d: any) => {
+                    const parts = (d.components ?? []).filter((c: any) => Number(c.quantity) > 0);
+                    if (!parts.length) return [{ detail: d.detail, quantity: d.quantity, unitCost: d.unitCost }];
+                    const rest = (Number(d.unitCost) || 0) - parts.reduce((s: number, c: any) => s + Number(c.quantity) * (Number(c.unitCost) || 0), 0);
+                    return [
+                        ...(rest > 0.005 ? [{ detail: d.detail, quantity: d.quantity, unitCost: rest }] : []),
+                        ...parts.map((c: any) => ({ detail: c.description, quantity: Number(c.quantity) * (Number(d.quantity) || 0), unitCost: c.unitCost })),
+                    ];
+                }),
             })),
             jobId: job,
             customerId: job.quoteId?.client,
