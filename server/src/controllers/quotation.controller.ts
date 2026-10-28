@@ -1703,7 +1703,7 @@ const dealHandoffReadinessIssues = (quote: any): string[] => {
         if (!isNonNegativeNumber(line?.unitCost)) {
             issues.push(`line ${label} unit cost`);
         }
-        if (!isPositiveNumber(line?.unitSellingPrice)) {
+        if (!isNonNegativeNumber(line?.unitSellingPrice)) {
             issues.push(`line ${label} selling price`);
         }
         if (!hasReferenceValue(line?.supplierId) && !String(line?.supplierName ?? '').trim()) {
@@ -2363,9 +2363,9 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
             return res.status(400).json({ message: "Select at least one deal line before raising a deal sheet" });
         }
         const badLine = selectedDealLines(items).find((l: any) =>
-            !(Number(l?.quantity) > 0) || !(Number(l?.unitCost) >= 0) || !(Number(l?.unitSellingPrice) > 0));
+            !(Number(l?.quantity) > 0) || !(Number(l?.unitCost) >= 0) || !(Number(l?.unitSellingPrice) >= 0) || !(Number(l?.profit ?? 0) >= 0));
         if (badLine) {
-            return res.status(400).json({ message: "Every selected line needs a quantity above 0, a cost of 0 or more and a selling price above 0" });
+            return res.status(400).json({ message: "Every selected line needs a quantity above 0, a cost, margin and selling price of 0 or more" });
         }
         if ((Array.isArray(costs) ? costs : []).some((c: any) => !(Number(c?.value) >= 0))) {
             return res.status(400).json({ message: "Additional costs and discounts cannot be negative" });
