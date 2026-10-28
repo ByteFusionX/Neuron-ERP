@@ -16,6 +16,8 @@ interface QuoteItemDetail {
     supplierId?: Types.ObjectId;
     dealSelected?: boolean;
     purchaseItemDetailId?: Types.ObjectId;
+    /** Deal only: how the line's cost is made up (RAM, warranty, OS...). Already inside unitCost, never added to it. */
+    components?: { productId?: Types.ObjectId; itemCode?: string; partNo?: string; uom?: string; description: string; quantity: number; unitCost: number; supplierId?: Types.ObjectId }[];
     uom?: string;
     itemCode?: string;
     partNo?: string;
@@ -167,6 +169,8 @@ interface Quotation extends Document {
     departments: Types.ObjectId[];
     subject: string;
     currency: string;
+    exchangeRate?: number;
+    exchangeRateAt?: Date;
     quoteCompany: string;
     optionalItems: OptionalItems[];
     customerNote: string;
@@ -223,6 +227,18 @@ const quoteItemImageSchema = new Schema({
     mimetype: { type: String, required: false },
 }, { _id: false });
 
+const lineComponentSchema = new Schema({
+    productId: { type: Schema.Types.ObjectId, ref: 'Product', required: false },
+    itemCode: { type: String, required: false, trim: true },
+    partNo: { type: String, required: false, trim: true },
+    uom: { type: String, required: false, trim: true },
+    description: { type: String, required: true, trim: true },
+    // Per one unit of the parent line.
+    quantity: { type: Number, required: true, min: 0 },
+    unitCost: { type: Number, required: true, min: 0 },
+    supplierId: { type: Schema.Types.ObjectId, ref: 'Supplier', required: false },
+}, { _id: false });
+
 const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
     // Durable link back to the inventory catalogue. itemCode/partNo below remain plain-string
     // snapshots on purpose: a saved quote must not change if the product is later renamed.
@@ -256,6 +272,11 @@ const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
     availability: {
         type: String,
         required: false,
+    },
+    components: {
+        type: [lineComponentSchema],
+        required: false,
+        default: undefined,
     },
     supplierName: {
         type: String,
@@ -527,6 +548,9 @@ const quotationSchema = new Schema<Quotation>({
         type: String,
         required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
     },
+    // QAR per 1 USD when the quote was saved; informational and never required.
+    exchangeRate: { type: Number },
+    exchangeRateAt: { type: Date },
     quoteCompany: {
         type: String,
     },

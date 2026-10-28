@@ -229,6 +229,7 @@ const quotePayloadProblem = (quoteData: any, isCreate: boolean): string | null =
                 if (!(Number(detail?.quantity ?? 0) >= 0)) return 'Quantity cannot be negative';
                 if (!(Number(detail?.unitCost ?? 0) >= 0)) return 'Unit cost cannot be negative';
                 if (!(Number(detail?.unitSellingPrice ?? 0) >= 0)) return 'Unit price cannot be negative';
+                if (!(Number(detail?.profit ?? 0) >= 0)) return 'Margin cannot be negative';
             }
             const discount = Number(option?.totalDiscount ?? 0);
             if (!(discount >= 0)) return 'Discount cannot be negative';
@@ -312,6 +313,10 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
             action: 'Created',
             toStatus: quoteData.status,
         }];
+
+        delete quoteData.exchangeRate;
+        delete quoteData.exchangeRateAt;
+        Object.assign(quoteData, await currentRateFields());
 
         const quote = new Quotation(quoteData)
 
@@ -1659,7 +1664,17 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
 
 /** Statuses before the quote has gone to the customer: edits there don't create revisions. */
 const UNSENT_QUOTE_STATUSES: string[] = [quoteStatus.Draft, quoteStatus.WorkInProgress, quoteStatus.ReadyForSubmission];
-const REVISION_FIELDS = ['optionalItems', 'customerNote', 'termsAndCondition', 'paymentTerms', 'deliveryTerms', 'deliveryLocation', 'validityDate', 'currency'];
+// The live USD→QAR rate to store on a quote; a failed lookup leaves the quote without one rather than blocking the save.
+const currentRateFields = async (): Promise<{ exchangeRate?: number; exchangeRateAt?: Date }> => {
+    try {
+        const rate = Number(await getUSDRated());
+        return rate > 0 ? { exchangeRate: rate, exchangeRateAt: new Date() } : {};
+    } catch {
+        return {};
+    }
+};
+
+const REVISION_FIELDS =['optionalItems', 'customerNote', 'termsAndCondition', 'paymentTerms', 'deliveryTerms', 'deliveryLocation', 'validityDate', 'currency'];
 
 const selectedDealLines = (items: any[]): any[] => (Array.isArray(items) ? items : [])
     .flatMap((item: any) => Array.isArray(item?.itemDetails) ? item.itemDetails : [])
@@ -1703,10 +1718,12 @@ const dealHandoffReadinessIssues = (quote: any): string[] => {
         if (!isNonNegativeNumber(line?.unitCost)) {
             issues.push(`line ${label} unit cost`);
         }
-        if (!isPositiveNumber(line?.unitSellingPrice)) {
+        if (!isNonNegativeNumber(line?.unitSellingPrice)) {
             issues.push(`line ${label} selling price`);
         }
-        if (!hasReferenceValue(line?.supplierId) && !String(line?.supplierName ?? '').trim()) {
+        // A line split into parts is bought through the parts' suppliers.
+        const hasParts = Array.isArray(line?.components) && line.components.length > 0;
+        if (!hasParts && !hasReferenceValue(line?.supplierId) && !String(line?.supplierName ?? '').trim()) {
             issues.push(`line ${label} supplier`);
         }
     });
@@ -1936,6 +1953,8 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         delete quoteData.editHistory;
         delete quoteData.revision;
         delete quoteData.revisions;
+        delete quoteData.exchangeRate;
+        delete quoteData.exchangeRateAt;
         // The created date never changes after the quote is saved.
         delete quoteData.date;
         delete quoteData.createdBy;
@@ -2017,6 +2036,8 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
 
         const push: any = { editHistory: historyEntry };
         const set: any = { ...quoteData };
+        // Quotes saved before the rate was stored pick it up on their first edit; later edits keep the saved rate.
+        if (existingQuote && !existingQuote.exchangeRate) Object.assign(set, await currentRateFields());
         if (createsRevision && existingQuote) {
             historyEntry.revision = nextRevision;
             set.revision = nextRevision;
@@ -2363,12 +2384,22 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
             return res.status(400).json({ message: "Select at least one deal line before raising a deal sheet" });
         }
         const badLine = selectedDealLines(items).find((l: any) =>
-            !(Number(l?.quantity) > 0) || !(Number(l?.unitCost) >= 0) || !(Number(l?.unitSellingPrice) > 0));
+            !(Number(l?.quantity) > 0) || !(Number(l?.unitCost) >= 0) || !(Number(l?.unitSellingPrice) >= 0) || !(Number(l?.profit ?? 0) >= 0));
         if (badLine) {
-            return res.status(400).json({ message: "Every selected line needs a quantity above 0, a cost of 0 or more and a selling price above 0" });
+            return res.status(400).json({ message: "Every selected line needs a quantity above 0, a cost, margin and selling price of 0 or more" });
         }
         if ((Array.isArray(costs) ? costs : []).some((c: any) => !(Number(c?.value) >= 0))) {
             return res.status(400).json({ message: "Additional costs and discounts cannot be negative" });
+        }
+        // Components only split a line's cost; they are inside unitCost, so they can never add up to more than it.
+        const badComponents = selectedDealLines(items).find((l: any) => {
+            const parts = Array.isArray(l?.components) ? l.components : [];
+            if (parts.some((p: any) => !String(p?.description ?? '').trim() || !(Number(p?.quantity) > 0) || !(Number(p?.unitCost) >= 0))) return true;
+            const total = parts.reduce((s: number, p: any) => s + Number(p.quantity) * Number(p.unitCost), 0);
+            return total > Number(l.unitCost) + 0.005;
+        });
+        if (badComponents) {
+            return res.status(400).json({ message: `Cost breakdown of "${badComponents.detail}" needs a description, a quantity above 0, and cannot add up to more than the line's cost` });
         }
         {
             const gross = sumSelectedDealSelling(selectedDealLines(items));
