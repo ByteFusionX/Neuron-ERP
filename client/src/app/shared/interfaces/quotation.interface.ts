@@ -31,6 +31,8 @@ export interface QuoteItemDetail {
     profit: number;
     availability: string;
     dealSelected: boolean;
+    /** Deal only: how the line's cost is made up. Already inside unitCost. */
+    components?: { productId?: string | null; itemCode?: string; partNo?: string; uom?: string | null; description: string; quantity: number; unitCost: number; supplierId?: string | null }[];
     supplierName: string;
     supplierId?: string;
     phoneNo: string;
@@ -107,6 +109,9 @@ export interface Quotatation {
     departments?: getDepartment[];
     subject: string;
     currency: string;
+    /** QAR per 1 USD when the quote was saved; absent on quotes not edited since the rate was added. */
+    exchangeRate?: number;
+    exchangeRateAt?: string | Date;
     quoteCompany: string;
     optionalItems: OptionalItems[];
     customerNote: DefaultAndText;
@@ -165,6 +170,9 @@ export interface getQuotatation {
     departments?: getDepartment[];
     subject: string;
     currency: string;
+    /** QAR per 1 USD when the quote was saved; absent on quotes not edited since the rate was added. */
+    exchangeRate?: number;
+    exchangeRateAt?: string | Date;
     quoteCompany: string;
     optionalItems: OptionalItems[];
     customerNote: DefaultAndText;

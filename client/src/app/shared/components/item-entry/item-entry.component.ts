@@ -1,5 +1,5 @@
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { Component, ElementRef, EventEmitter, HostListener, Inject, Input, OnChanges, OnDestroy, OnInit, Optional, Output, SimpleChanges, TemplateRef, ViewChild } from '@angular/core';
+import { Component, DoCheck, ElementRef, EventEmitter, HostListener, Inject, Input, OnChanges, OnDestroy, OnInit, Optional, Output, SimpleChanges, TemplateRef, ViewChild } from '@angular/core';
 import { CommandPaletteService } from '../../../core/services/command-palette.service';
 import { CommonModule } from '@angular/common';
 import { AbstractControl, FormArray, FormBuilder, FormControl, FormGroup, FormsModule, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
@@ -114,7 +114,7 @@ export interface LineShare {
     :host-context(html.dark) .ie-labels { color: #6b7280; }
   `],
 })
-export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
+export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy {
   /** The host form's items FormArray. Owned by the host, mutated here. */
   @Input({ required: true }) optionalItems!: FormArray;
   /** Existing options to patch in (enquiry estimations, or an edited record). */
@@ -161,6 +161,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   @Input() allowCreateProduct = true;
   /** The host renders Add item / Add optional item itself (e.g. in a drawer footer), so the toolbar omits them. */
   @Input() externalAddButtons = false;
+  /** Deal mode: lets the user add items and lines the quotation did not have. */
+  @Input() dealAllowAdd = false;
   /** Plain list of lines: no item group header (name, category, collapse), the lines just stack. Bulk actions stay. */
   @Input() flat = false;
 
@@ -387,11 +389,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     return this.baseCosts.get(d) ?? null;
   }
 
-  /** The deal's cost, but only for the deal's supplier: it is not another supplier's price. */
-  private dealCostFor(d: AbstractControl, supplierId: string): number | null {
-    const deal = this.dealCost(d);
-    const base = this.baseSuppliers.get(d) ?? '';
-    return !base || base === supplierId ? deal : null;
+  /** The deal's cost, the starting price of any supplier added to the line (no last price or quote): the buyer changes it later. */
+  private dealCostFor(d: AbstractControl, _supplierId: string): number | null {
+    return this.dealCost(d);
   }
 
   /** A supplier's unit cost for the line: typed on its tab, else its quote, else the deal cost when it is the deal's supplier. */
@@ -541,7 +541,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     if (this.seedOptionalItems?.length && !alreadyFilled) this.patchOptions(this.seedOptionalItems);
     else if (!this.optionalItems.length) this.addOption();
 
-    this.subs.add(this.optionalItems.valueChanges.subscribe(() => this.emitTotals()));
+    this.subs.add(this.optionalItems.valueChanges.subscribe(() => { this.captureDiscountEdit(); this.emitTotals(); }));
+    this.syncPurchaseDiscount();
 
     if (!this.isDeal) {
       const self = this;
@@ -696,8 +697,74 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     if (changes['lineLocked'] && !changes['lineLocked'].isFirstChange()) this.applyLineLocks();
 
     const seed = changes['seedOptionalItems'];
-    if (!seed || seed.isFirstChange() || !this.seedOptionalItems?.length) return;
-    this.patchOptions(this.seedOptionalItems);
+    if (seed && !seed.isFirstChange() && this.seedOptionalItems?.length) this.patchOptions(this.seedOptionalItems);
+    if (changes['supplierDiscounts'] || changes['supplierScope'] || seed) this.syncPurchaseDiscount();
+  }
+
+  /** Purchase: the deal's per-supplier discounts carried onto the PR. A supplier tab shows that supplier's; Items shows the sum. */
+  @Input() supplierDiscounts: { supplierId: any; discount?: number | string }[] | null = null;
+
+  /** A supplier's discount is edited on its tab; the host stores it with the request. */
+  @Output() supplierDiscountEdited = new EventEmitter<{ supplierId: string; discount: number }>();
+  /** Discounts typed on a supplier tab, over the deal's. */
+  private discountEdits = new Map<string, number>();
+
+  private discountSupplierId = (s: any): string => String(s?.supplierId?._id ?? s?.supplierId ?? '');
+
+  private discountFor(id: string): number {
+    if (this.discountEdits.has(id)) return this.discountEdits.get(id)!;
+    return (this.supplierDiscounts ?? []).filter((s) => this.discountSupplierId(s) === id)
+      .reduce((sum, s) => sum + (Number(s.discount) || 0), 0);
+  }
+
+  /** Suppliers awarded on some line (or carried as the line's supplier when it has no comparisons). */
+  private awardedSupplierIds(): Set<string> {
+    const ids = new Set<string>();
+    const option = this.optionalItems?.at(this.selectedOption);
+    ((option?.get('items') as FormArray | null)?.getRawValue() ?? []).forEach((item: any) =>
+      (item.itemDetails ?? []).forEach((v: any) => {
+        const offers = this.lineOffers?.(v) ?? [];
+        const won = offers.filter((o) => o.state === 'awarded');
+        won.forEach((o) => ids.add(String(o.supplierId)));
+        // Nobody awarded: the line's own supplier is the default award.
+        if (!won.length && v.supplierId) ids.add(String(v.supplierId));
+      }));
+    return ids;
+  }
+
+  private purchaseDiscount(): number | null {
+    if (!this.isPurchase) return null;
+    if (!this.supplierDiscounts?.length && !this.discountEdits.size) return null;
+    if (this.supplierScope) return this.discountFor(this.supplierScope);
+    const all = new Set([...(this.supplierDiscounts ?? []).map(this.discountSupplierId), ...this.discountEdits.keys()]);
+    const awarded = this.awardedSupplierIds();
+    return [...all].filter((id) => awarded.has(id)).reduce((sum, id) => sum + this.discountFor(id), 0);
+  }
+
+  /** Mirrors the supplier's discount into the banner field: editable on a supplier tab, the awarded total on Items. */
+  private syncPurchaseDiscount(): void {
+    const ctrl = this.optionalItems?.at(this.selectedOption)?.get('totalDiscount');
+    const value = this.purchaseDiscount();
+    if (!ctrl || value === null) return;
+    if (Number(ctrl.value) !== value) ctrl.setValue(value, { emitEvent: false });
+    if (this.supplierScope) { if (ctrl.disabled) ctrl.enable({ emitEvent: false }); }
+    else if (ctrl.enabled) ctrl.disable({ emitEvent: false });
+  }
+
+  /** A typed discount on a supplier tab is kept for that supplier. */
+  private captureDiscountEdit(): void {
+    if (!this.isPurchase || !this.supplierScope) return;
+    const ctrl = this.optionalItems?.at(this.selectedOption)?.get('totalDiscount');
+    if (!ctrl || ctrl.disabled) return;
+    const value = Number(ctrl.value) || 0;
+    if (value === this.discountFor(this.supplierScope)) return;
+    this.discountEdits.set(this.supplierScope, value);
+    this.supplierDiscountEdited.emit({ supplierId: this.supplierScope, discount: value });
+  }
+
+  /** Awards change outside this form, so the Items tab's awarded total is refreshed on every check. */
+  ngDoCheck(): void {
+    if (this.isPurchase && !this.supplierScope && this.supplierDiscounts?.length) this.syncPurchaseDiscount();
   }
 
   ngOnDestroy(): void {
@@ -1020,6 +1087,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     }
     if (deal) {
       (group as FormGroup).addControl('dealSelected', this._fb.control(false));
+      (group as FormGroup).addControl('dealAdded', this._fb.control(false));
       // Every line is listed read-only; ticking it unlocks just that row for editing.
       const editable = ['quantity', 'unitCost', 'profit', 'unitSellingPrice', 'supplierId'];
       const lock = (on: boolean) => editable.forEach((name) =>
@@ -1100,12 +1168,55 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private createItem(isOptional = false): FormGroup {
-    return this._fb.group({
+    const group: FormGroup = this._fb.group({
       itemName: ['', this.flat ? [] : Validators.required],
       isOptional: [isOptional],
       includeInTotal: [false],
       itemDetails: this._fb.array([this.createDetail()]),
     });
+    if (this.isDeal) group.addControl('dealAdded', this._fb.control(false));
+    return group;
+  }
+
+  /** Deal mode: true for an item or line added in the deal, whose text fields are editable. */
+  dealAdded(control: AbstractControl | null | undefined): boolean {
+    return !!control?.get('dealAdded')?.value;
+  }
+
+  /** Deal mode: a line added here starts ticked into the deal, with a description to fill in. */
+  private markDealLine(line: AbstractControl): void {
+    line.get('dealAdded')?.setValue(true, { emitEvent: false });
+    line.get('detail')?.addValidators(Validators.required);
+    line.get('dealSelected')?.setValue(true);
+  }
+
+  /** Deal mode: adds a new item (with one new line) the quotation never had. */
+  addDealItem(): void {
+    const i = this.selectedOption;
+    if (this.filterActive) this.clearFilters();
+    this.addItem(i);
+    const j = this.itemsAt(i).length - 1;
+    this.itemsAt(i).at(j).get('dealAdded')?.setValue(true, { emitEvent: false });
+    this.markDealLine(this.detailsAt(i, j)!.at(0));
+    this.jumpTo(String(j));
+  }
+
+  /** Deal mode: removes an item or line added in the deal. */
+  removeDealItem(i: number, j: number): void {
+    this.itemsAt(i).removeAt(j);
+  }
+
+  removeDealLine(i: number, j: number, k: number): void {
+    const details = this.detailsAt(i, j);
+    if (!details) return;
+    details.removeAt(k);
+    if (!details.length) this.removeDealItem(i, j);
+  }
+
+  /** Deal mode: adds a new line under an existing item. */
+  addDealLine(i: number, j: number): void {
+    this.addDetail(i, j);
+    this.markDealLine(this.detailsAt(i, j)!.at(this.detailsAt(i, j)!.length - 1));
   }
 
   /** Back to a single blank option. The host calls this when its form is reset. */
@@ -1236,6 +1347,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
         const itemGroup = this.createItem(!!item.isOptional);
         itemGroup.setControl('itemDetails', this._fb.array(details.length ? details : [this.createDetail()]));
         itemGroup.patchValue({ itemName: item.itemName ?? '', includeInTotal: !!item.includeInTotal });
+        if (this.isDeal && item.dealAdded) itemGroup.get('dealAdded')?.setValue(true, { emitEvent: false });
         if (this.autoCollapseLines != null && details.length > this.autoCollapseLines) this.collapsed.add(itemGroup);
         return itemGroup;
       });
@@ -1290,6 +1402,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       ...(this.isRfq && d.lineKey ? { lineKey: d.lineKey } : {}),
     }, { emitEvent: false });
     this.deriving = false;
+    if (this.isDeal && d.dealAdded) {
+      group.get('dealAdded')?.setValue(true, { emitEvent: false });
+      group.get('detail')?.addValidators(Validators.required);
+    }
     if (this.isDeal && d.dealSelected) group.get('dealSelected')?.setValue(true);
     group.updateValueAndValidity();
   }
@@ -1996,6 +2112,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   discount(): number {
     if (this.isDeal) return Number(this.discountAdjustment) || 0;
+    const fromDeal = this.purchaseDiscount();
+    if (fromDeal !== null) return fromDeal;
     return Number(this.optionalItems.value[this.selectedOption]?.totalDiscount) || 0;
   }
 
@@ -2039,11 +2157,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   /** Purchase: the PR's margin — current selling price against the cost of the chosen suppliers. */
   prMarginValue(): number {
-    return this.sellingPrice() - this.totalCost();
+    return this.finalTotal() - this.totalCost();
   }
 
   prMarginPercent(): number {
-    const selling = this.sellingPrice();
+    const selling = this.finalTotal();
     return selling > 0 ? (this.prMarginValue() / selling) * 100 : 0;
   }
 

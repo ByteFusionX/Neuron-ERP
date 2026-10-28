@@ -64,6 +64,9 @@
           <button *ngIf="lineSearch.trim() || lineFilter" type="button" (click)="clearFilters()" class="text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-400">Clear</button>
 
           <div class="ml-auto flex items-center gap-1">
+            <app-action-button *ngIf="isDeal && dealAllowAdd" variant="secondary" (click)="addDealItem()">
+              <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add item
+            </app-action-button>
             <ng-container *ngIf="!isDeal && !isPurchase && !externalAddButtons">
               <app-action-button variant="secondary" (click)="addItemAndJump()">
                 <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add item
@@ -163,8 +166,8 @@
           </button>
           <span class="grid h-6 w-6 shrink-0 place-content-center rounded-md bg-gray-100 dark:bg-gray-800 text-[11px] font-semibold text-gray-600 dark:text-gray-400">{{ j + 1 }}</span>
 
-          <span *ngIf="isDeal" class="min-w-0 flex-1 truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{{ item.get('itemName')?.value }}</span>
-          <div *ngIf="!isDeal" class="relative min-w-0 flex-1">
+          <span *ngIf="isDeal && !dealAdded(item)" class="min-w-0 flex-1 truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{{ item.get('itemName')?.value }}</span>
+          <div *ngIf="!isDeal || dealAdded(item)" class="relative min-w-0 flex-1">
             <app-sf-input formControlName="itemName" placeholder="Item name (e.g. CCTV Cameras)"
               (input)="onItemNameInput(i, j)" (keydown)="onSuggestionKeydown($event, i + '-' + j, i, j, null)"
               (focusout)="closeSuggestions()"></app-sf-input>
@@ -200,6 +203,10 @@
             {{ (isRfq ? itemCost(i, j) : itemTotal(i, j)) | number: '1.2-2' }} {{ currency }}
           </span>
 
+          <button *ngIf="isDeal && dealAdded(item)" type="button" aria-label="Remove item" (click)="removeDealItem(i, j)"
+            class="grid h-7 w-7 shrink-0 place-content-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40">
+            <ng-icon name="heroTrash" class="h-3.5 w-3.5"></ng-icon>
+          </button>
           <button *ngIf="!isDeal && !isItemLocked(i, j)" type="button" aria-label="Remove item" [disabled]="itemsAt(i).length <= 1" (click)="removeItem(i, j)"
             class="grid h-7 w-7 shrink-0 place-content-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-400 dark:hover:bg-red-950/40">
             <ng-icon name="heroTrash" class="h-3.5 w-3.5"></ng-icon>
@@ -247,15 +254,15 @@
               <!-- Inert while the line is not on this supplier's tab; the pills below stay clickable so the line can be handed over -->
               <div class="contents" [class.space-y-1.5]="!compact" [attr.inert]="supplierScope && !lineActive(i, j, k) ? '' : null" [class.pointer-events-none]="supplierScope && !lineActive(i, j, k)">
               <!-- Description spans the full width; the numbers sit underneath (compact: beside them) -->
-              <div *ngIf="isDeal && dealDescriptionTextarea" [ngClass]="compact ? 'min-[1400px]:w-[24%] min-[1400px]:shrink-0' : ''"
+              <div *ngIf="isDeal && !dealAdded(detail) && dealDescriptionTextarea" [ngClass]="compact ? 'min-[1400px]:w-[24%] min-[1400px]:shrink-0' : ''"
                 (mousedown)="$event.stopPropagation()" (touchstart)="$event.stopPropagation()">
                 <app-sf-textarea formControlName="detail" readonly expandOnFocus [rows]="compact ? 1 : 2"></app-sf-textarea>
               </div>
-              <div *ngIf="isDeal && !dealDescriptionTextarea" class="whitespace-pre-line text-[13px]"
+              <div *ngIf="isDeal && !dealAdded(detail) && !dealDescriptionTextarea" class="whitespace-pre-line text-[13px]"
                 [ngClass]="[detail.get('dealSelected')?.value ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500', compact ? 'min-[1400px]:w-[24%] min-[1400px]:shrink-0' : '']"
                 [innerHTML]="detail.get('detail')?.value | parseBracketsText | parseBoldText"></div>
               <!-- Pointer-downs stop here so dragging the textarea's resize grip never starts a line reorder. -->
-              <div *ngIf="!isDeal" class="relative" [ngClass]="compact ? 'min-[1400px]:w-[24%] min-[1400px]:shrink-0' : ''"
+              <div *ngIf="!isDeal || dealAdded(detail)" class="relative" [ngClass]="compact ? 'min-[1400px]:w-[24%] min-[1400px]:shrink-0' : ''"
                 (mousedown)="$event.stopPropagation()" (touchstart)="$event.stopPropagation()">
                 <app-sf-textarea formControlName="detail" expandOnFocus [rows]="compact ? 1 : 2"
                   placeholder="Description — **bold** and {highlight} are supported"
@@ -308,10 +315,10 @@
 
               <div *ngIf="!isRfq" class="ie-strip"[class.min-w-0]="compact" [class.flex-1]="compact" [class.opacity-60]="isDeal && !detail.get('dealSelected')?.value" [class.ie-strip-purchase]="dropsMargin"
                 [class.ring-1]="!!detail.get('productId')?.value" [class.ring-emerald-400]="!!detail.get('productId')?.value">
-                <span *ngIf="isDeal" class="ie-cell ie-x">{{ detail.get('itemCode')?.value || '—' }}</span>
-                <span *ngIf="isDeal" class="ie-cell ie-x">{{ detail.get('partNo')?.value || '—' }}</span>
-                <app-sf-input *ngIf="!isDeal && !dropsMargin" class="ie-x" formControlName="itemCode" placeholder="Item code" (input)="queueCodeLookup(i, j, k, 'itemCode')" (focusout)="lookupByCode(i, j, k, 'itemCode')" (keydown.enter)="lookupByCode(i, j, k, 'itemCode')"></app-sf-input>
-                <app-sf-input *ngIf="!isDeal && !dropsMargin" class="ie-x" formControlName="partNo" placeholder="Part no" (input)="queueCodeLookup(i, j, k, 'partNo')" (focusout)="lookupByCode(i, j, k, 'partNo')" (keydown.enter)="lookupByCode(i, j, k, 'partNo')"></app-sf-input>
+                <span *ngIf="isDeal && !dealAdded(detail)" class="ie-cell ie-x">{{ detail.get('itemCode')?.value || '—' }}</span>
+                <span *ngIf="isDeal && !dealAdded(detail)" class="ie-cell ie-x">{{ detail.get('partNo')?.value || '—' }}</span>
+                <app-sf-input *ngIf="(!isDeal || dealAdded(detail)) && !dropsMargin" class="ie-x" formControlName="itemCode" placeholder="Item code" (input)="queueCodeLookup(i, j, k, 'itemCode')" (focusout)="lookupByCode(i, j, k, 'itemCode')" (keydown.enter)="lookupByCode(i, j, k, 'itemCode')"></app-sf-input>
+                <app-sf-input *ngIf="(!isDeal || dealAdded(detail)) && !dropsMargin" class="ie-x" formControlName="partNo" placeholder="Part no" (input)="queueCodeLookup(i, j, k, 'partNo')" (focusout)="lookupByCode(i, j, k, 'partNo')" (keydown.enter)="lookupByCode(i, j, k, 'partNo')"></app-sf-input>
                 <span *ngIf="dropsMargin" class="ie-cell ie-x">{{ detail.get('itemCode')?.value || '—' }}</span>
                 <div *ngIf="dropsMargin" class="ie-x flex min-w-0 gap-1">
                   <app-sf-input class="min-w-0 flex-1" formControlName="partNo" placeholder="Part no" (input)="queueCodeLookup(i, j, k, 'partNo')" (focusout)="lookupByCode(i, j, k, 'partNo')" (keydown.enter)="lookupByCode(i, j, k, 'partNo')"></app-sf-input>
@@ -328,8 +335,8 @@
                     [ngClass]="left > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'">{{ left > 0 ? left + ' left to award' : -left + ' over line qty' }}</p>
                 </div>
                 <app-sf-number *ngIf="!(isPurchase && quoteLayout)" formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
-                <span *ngIf="isDeal" class="ie-cell">{{ detail.get('uom')?.value || '—' }}</span>
-                <div *ngIf="!isDeal" class="min-w-0">
+                <span *ngIf="isDeal && !dealAdded(detail)" class="ie-cell">{{ detail.get('uom')?.value || '—' }}</span>
+                <div *ngIf="!isDeal || dealAdded(detail)" class="min-w-0">
                   <app-sf-combobox formControlName="uom" [options]="resolvedUomOptions" placeholder="UoM *" footerLabel="Add unit" (footerAction)="openAddMasterOption('unit', detail.get('uom'))"></app-sf-combobox>
                   <p *ngIf="detail.get('uom')?.hasError('required') && detail.get('uom')?.touched" class="mt-1 text-xs text-red-600 dark:text-red-400">Required</p>
                 </div>
@@ -374,8 +381,8 @@
                   <app-sf-combobox formControlName="supplierId" [options]="resolvedSupplierOptions" placeholder="Supplier"></app-sf-combobox>
                   <p *ngIf="isDeal && detail.get('supplierId')?.hasError('supplierRequired') && detail.get('supplierId')?.touched" class="mt-1 text-xs text-red-600 dark:text-red-400">Required</p>
                 </div>
-                <span *ngIf="isDeal" class="ie-cell ie-x">{{ detail.get('availability')?.value || '—' }}</span>
-                <app-sf-combobox *ngIf="!isDeal" class="ie-x" formControlName="availability" [options]="resolvedAvailabilityOptions" placeholder="Availability" footerLabel="Add availability" (footerAction)="openAddMasterOption('availability', detail.get('availability'))"></app-sf-combobox>
+                <span *ngIf="isDeal && !dealAdded(detail)" class="ie-cell ie-x">{{ detail.get('availability')?.value || '—' }}</span>
+                <app-sf-combobox *ngIf="!isDeal || dealAdded(detail)" class="ie-x" formControlName="availability" [options]="resolvedAvailabilityOptions" placeholder="Availability" footerLabel="Add availability" (footerAction)="openAddMasterOption('availability', detail.get('availability'))"></app-sf-combobox>
               </div>
               </div>
 
@@ -418,6 +425,12 @@
                 [ngTemplateOutletContext]="{ $implicit: detail, i: i, j: j, k: k }"></ng-container>
             </div>
 
+            <div *ngIf="isDeal && dealAdded(detail)" class="flex shrink-0 flex-col items-end gap-1 pt-1.5">
+              <button type="button" aria-label="Remove line" (click)="removeDealLine(i, j, k)"
+                class="grid h-6 w-6 place-content-center rounded text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40">
+                <ng-icon name="heroXMark" class="h-3.5 w-3.5"></ng-icon>
+              </button>
+            </div>
             <div *ngIf="!isDeal" class="flex shrink-0 flex-col items-end gap-1 pt-1.5" [attr.inert]="supplierScope && !lineActive(i, j, k) ? '' : null" [class.pointer-events-none]="supplierScope && !lineActive(i, j, k)">
               <button *ngIf="isPurchase && showCompareButton" type="button" (click)="compareClicked.emit({ i: i, j: j, k: k })" [attr.aria-label]="compareLabelFor(i, j, k)"
                 class="grid h-6 w-6 place-content-center rounded text-violet-600 hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-950/40">
@@ -439,11 +452,11 @@
           </div>
         </div>
 
-        <div *ngIf="!isDeal" class="flex items-center gap-1 border-t border-gray-100 dark:border-erp-border-dark px-3 py-1.5">
-          <app-action-button variant="ghost" (click)="addDetail(i, j)">
+        <div *ngIf="!isDeal || dealAllowAdd" class="flex items-center gap-1 border-t border-gray-100 dark:border-erp-border-dark px-3 py-1.5">
+          <app-action-button variant="ghost" (click)="isDeal ? addDealLine(i, j) : addDetail(i, j)">
             <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add line
           </app-action-button>
-          <app-action-button *ngIf="!isItemLocked(i, j)" class="ml-auto" variant="ghost" (click)="trackItem(i, j); openPalette(i, j)">
+          <app-action-button *ngIf="!isDeal && !isItemLocked(i, j)" class="ml-auto" variant="ghost" (click)="trackItem(i, j); openPalette(i, j)">
             <ng-icon name="heroMagnifyingGlass" class="h-3.5 w-3.5"></ng-icon> Search catalogue
             <kbd class="ml-1 rounded border border-gray-200 px-1 text-[10px] font-medium text-gray-400 dark:border-erp-border-dark">Ctrl K</kbd>
           </app-action-button>
@@ -460,19 +473,23 @@
         [ngClass]="{ 'border border-gray-200 dark:border-erp-border-dark': !isDeal }">
         <div class="flex flex-wrap items-end justify-between gap-4">
           <div *ngIf="isPurchase" class="flex flex-wrap items-end gap-5 text-left">
+            <div class="w-28">
+              <app-sf-number formControlName="totalDiscount" placeholder="Discount" [stepper]="false" [min]="0"></app-sf-number>
+              <p *ngIf="option.errors?.['discountExceedsTotal']" class="mt-1 text-[11px] text-red-600">Discount is more than the selling total</p>
+            </div>
             <div>
               <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">
-                {{ supplierScope ? (supplierScopeName || 'Supplier') + ' price (this tab)' : 'Total PR price' }}
+                Total PR price
               </p>
               <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ totalCost() | number: '1.2-2' }}</p>
             </div>
             <div>
-              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">{{ supplierScope ? 'Margin value (this tab)' : 'PR margin value' }}</p>
-              <p class="text-sm font-semibold tabular-nums" [ngClass]="marginTone(prMarginPercent())">{{ supplierScope && !(totalCost() > 0) ? '—' : (prMarginValue() | number: '1.2-2') }}</p>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">PR margin</p>
+              <p class="text-sm font-semibold tabular-nums" [ngClass]="marginTone(prMarginPercent())">{{ prMarginValue() | number: '1.2-2' }}</p>
             </div>
             <div>
-              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">{{ supplierScope ? 'Margin % (this tab)' : 'PR margin %' }}</p>
-              <p class="text-sm font-semibold tabular-nums" [ngClass]="marginTone(prMarginPercent())">{{ supplierScope && !(totalCost() > 0) ? '— (no prices yet)' : (prMarginPercent() | number: '1.1-1') + '%' }}</p>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">PR margin %</p>
+              <p class="text-sm font-semibold tabular-nums" [ngClass]="marginTone(prMarginPercent())">{{ prMarginPercent() | number: '1.1-1' }}%</p>
             </div>
           </div>
           <div *ngIf="isPurchase" class="flex flex-wrap items-end gap-5">
@@ -482,7 +499,7 @@
                 <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dl.cost | number: '1.2-2' }}</p>
               </div>
               <div>
-                <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Deal margin value</p>
+                <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Deal margin</p>
                 <p class="text-sm font-semibold tabular-nums" [ngClass]="marginTone(dl.marginPercent)">{{ dl.marginValue | number: '1.2-2' }}</p>
               </div>
               <div>
@@ -490,7 +507,7 @@
                 <p class="text-sm font-semibold tabular-nums" [ngClass]="marginTone(dl.marginPercent)">{{ dl.marginPercent | number: '1.1-1' }}%</p>
               </div>
               <div>
-                <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Total selling price</p>
+                <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Total price</p>
                 <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dl.selling | number: '1.2-2' }}</p>
               </div>
             </ng-container>
