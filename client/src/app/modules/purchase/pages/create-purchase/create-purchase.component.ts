@@ -444,6 +444,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     if (!this.addedSuppliers().includes(id)) this.addedSuppliers.update((l) => [...l, id]);
     if (e.lineKeys.length) {
       this.tabLines.update((m) => ({ ...m, [id]: [...new Set([...(m[id] ?? []), ...e.lineKeys])] }));
+      this.tabExcluded.update((m) => ({ ...m, [id]: (m[id] ?? []).filter((k) => !e.lineKeys.includes(k)) }));
     }
     this.activeTab = id;
     if (e.lineKeys.length) this.entryItems.markAsDirty();
@@ -551,7 +552,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     // A line added in this edit has no key yet: its own supplier and cost are its only comparison.
     if (entry && !key && d.supplierId && Number(d.unitCost) > 0 && !list.some((c) => String(c.supplierId) === String(d.supplierId))) {
       const supplierId = String(d.supplierId);
-      list.push({ supplierId, supplierName: this.supplierOptions().find((o) => o.value === supplierId)?.label || '', quantity: lineQty, unitPrice: Number(d.unitCost), paymentTerms: 'Not specified', selected: false });
+      list.push({ supplierId, supplierName: this.supplierOptions().find((o) => o.value === supplierId)?.label || '', quantity: lineQty, unitPrice: Number(d.unitCost), uom: d.uom || '', etaTerms: d.availability || '', paymentTerms: 'Not specified', selected: false });
     }
     if (!entry || !key) return list;
     const nameOf = (id: string) => this.supplierOptions().find((o) => o.value === id)?.label || '';
@@ -559,7 +560,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       let c = list.find((x) => String(x.supplierId) === supplierId);
       if (!c) {
         if (price == null) return null;
-        c = { supplierId, supplierName: nameOf(supplierId), quantity: qty || lineQty, unitPrice: price, paymentTerms: 'Not specified', selected: false };
+        // A new comparison starts from the line's own quantity, UoM and availability; the buyer changes them per supplier later.
+        c = { supplierId, supplierName: nameOf(supplierId), quantity: qty || lineQty, unitPrice: price, uom: d.uom || '', etaTerms: d.availability || '', paymentTerms: 'Not specified', selected: false };
         list.push(c);
       } else if (price != null) c.unitPrice = price;
       return c;
@@ -569,7 +571,11 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       // The line's own supplier, unsplit, is priced by the line's cost; any other supplier by its tab.
       const own = String(d.supplierId || '') === p.id && !(shares && shares.length > 1);
       const price = own ? (Number(d.unitCost) > 0 ? Number(d.unitCost) : null) : entry.scopePrice(key, p.id);
-      upsert(p.id, price, entry.scopeEdit(key, p.id).quantity);
+      const edit = entry.scopeEdit(key, p.id);
+      const c = upsert(p.id, price, edit.quantity);
+      // What the buyer set on this supplier's tab is the supplier's own UoM and availability.
+      if (c && edit.uom) c.uom = edit.uom;
+      if (c && edit.availability) c.etaTerms = edit.availability;
     });
     if (shares) {
       list.forEach((c) => { c.selected = false; c.awardedQty = undefined; });

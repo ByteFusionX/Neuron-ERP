@@ -12,6 +12,7 @@ export interface SupplierComparison extends Document {
     totalCost?: Number;
     netAmount?: Number;
     landedCost?: Number;
+    uom?: String;
     etaTerms: String;
     paymentTerms: String;
     validityDate?: Date;
@@ -69,6 +70,9 @@ export const supplierComparisonSchema = new Schema<SupplierComparison>({
     landedCost: {
         type: Number,
         default: 0
+    },
+    uom: {
+        type: String,
     },
     etaTerms: {
         type: String,

@@ -95,6 +95,8 @@ export interface LineShare {
       .ie-strip { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 5.5fr) minmax(0, 6.5fr) minmax(0, 8.5fr) minmax(0, 9fr) minmax(0, 10fr) minmax(0, 9fr); }
       /* Purchase drops the margin column (no customer-facing margin for supplier lines), so it's one column short of the default strip. */
       .ie-strip.ie-strip-purchase { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 6.5fr) minmax(0, 8.5fr) minmax(0, 9fr) minmax(0, 10fr) minmax(0, 9fr); }
+      /* A supplier tab already names its supplier, so the column goes. */
+      .ie-strip.ie-strip-purchase.ie-strip-nosup { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 6.5fr) minmax(0, 8.5fr) minmax(0, 9fr) minmax(0, 9fr); }
       /* RFQ asks suppliers for prices: identifiers, quantity and unit; the supplier's price only once it replies. */
       .ie-strip.ie-strip-rfq { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
       .ie-strip.ie-strip-rfq.ie-strip-rfq-priced { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr); }
@@ -411,6 +413,18 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     if (!d || base == null) return null;
     const diff = this.shownUnitCost(i, j, k) - base;
     return Math.abs(diff) < 0.005 ? null : diff;
+  }
+
+  /** Supplier tab: its quantity minus the line's requested quantity (positive = more, negative = less); 0 when equal, or when lower and the supplier holds no award. */
+  qtyVsLine(i: number, j: number, k: number): number {
+    const d = this.detailsAt(i, j)?.at(k);
+    const total = Number(d?.get('quantity')?.value) || 0;
+    if (!d || !total || !this.usesScopeQty(i, j, k)) return 0;
+    const diff = this.shownQty(i, j, k) - total;
+    if (Math.abs(diff) < 0.0001) return 0;
+    // A supplier without an award is only flagged when it quotes more than the line needs.
+    if (diff < 0 && !this.sharesOf(d).some((s) => s.supplierId === this.supplierScope)) return 0;
+    return Math.round(diff * 10000) / 10000;
   }
 
   /** Supplier tab: quantity still to award (positive) or over-awarded (negative) for the line, counting this tab's typed quantity; 0 when settled. */
@@ -741,6 +755,24 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     return [...all].filter((id) => awarded.has(id)).reduce((sum, id) => sum + this.discountFor(id), 0);
   }
 
+  /** The deal's own discount for the same scope, before any PR edit. Supplier compare prices already include it. */
+  dealDiscountBaseline(): number {
+    const sum = (id: string) => (this.supplierDiscounts ?? []).filter((s) => this.discountSupplierId(s) === id)
+      .reduce((t, s) => t + (Number(s.discount) || 0), 0);
+    if (this.supplierScope) return sum(this.supplierScope);
+    const awarded = this.awardedSupplierIds();
+    const ids = new Set((this.supplierDiscounts ?? []).map(this.discountSupplierId));
+    return [...ids].filter((id) => awarded.has(id)).reduce((t, id) => t + sum(id), 0);
+  }
+
+  /** Purchase: discount added or removed in the PR against the deal's. Only this moves the PR cost. */
+  discountDiff(): number {
+    if (!this.isPurchase) return 0;
+    const ctrl = this.optionalItems?.at(this.selectedOption)?.get('totalDiscount');
+    const now = this.purchaseDiscount() ?? (Number(ctrl?.value) || 0);
+    return now - this.dealDiscountBaseline();
+  }
+
   /** Mirrors the supplier's discount into the banner field: editable on a supplier tab, the awarded total on Items. */
   private syncPurchaseDiscount(): void {
     const ctrl = this.optionalItems?.at(this.selectedOption)?.get('totalDiscount');
@@ -883,12 +915,17 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   private scopeCostSeeds = new Map<string, number | null>();
 
   /** What a supplier tab holds for a line, for saving it as that supplier's RFQ: the tab's quantity, and its cost only once typed over. */
-  scopeEdit(lineKey: string, supplierId: string): { quantity: number | null; unitCost: number | null } {
+  scopeEdit(lineKey: string, supplierId: string): { quantity: number | null; unitCost: number | null; uom: string | null; availability: string | null } {
     const key = `${lineKey}|${supplierId}`;
     const qty = Number(this.scopeQtys.get(key)?.value);
     const cost = this.scopeCosts.get(key);
     const typed = cost?.value != null && Number(cost.value) >= 0 && Number(cost.value) !== (this.scopeCostSeeds.get(key) ?? null);
-    return { quantity: qty > 0 ? qty : null, unitCost: typed ? Number(cost!.value) : null };
+    return {
+      quantity: qty > 0 ? qty : null,
+      unitCost: typed ? Number(cost!.value) : null,
+      uom: this.scopeUoms.get(key)?.value || null,
+      availability: this.scopeAvails.get(key)?.value || null,
+    };
   }
 
   /** The unit cost shown on the row: the tab's own figure in a supplier tab, otherwise the line's. */
@@ -921,10 +958,36 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       const scope = this.supplierScope ?? '';
       const own = this.sharesOf(d).find((s) => s.supplierId === scope)?.qty;
       const open = full == null ? null : Math.max(0, (Number(raw) || full) - this.claimedElsewhere(d, scope));
-      c = new FormControl<number | null>(own ?? (this.sharesOf(d).length ? open : full));
+      // Nothing open to award leaves the field blank; the line's own quantity then shows as its placeholder.
+      c = new FormControl<number | null>(own ?? (this.sharesOf(d).length ? open || null : full));
       this.scopeQtys.set(key, c);
     }
     return c;
+  }
+
+  private scopeUoms = new Map<string, FormControl<string | null>>();
+  private scopeAvails = new Map<string, FormControl<string | null>>();
+
+  /** A supplier's UoM / availability on a line: starts from the saved comparison, else the line's own value; the buyer changes it per supplier. */
+  private scopeText(map: Map<string, FormControl<string | null>>, i: number, j: number, k: number, field: 'uom' | 'availability'): FormControl<string | null> {
+    const d = this.detailsAt(i, j)!.at(k);
+    const key = `${d.get('lineKey')?.value}|${this.supplierScope}`;
+    let c = map.get(key);
+    if (!c) {
+      const saved = (d.get('comparisons')?.value as any[] | undefined)?.find((x) => String(x.supplierId) === this.supplierScope);
+      const own = field === 'uom' ? saved?.uom : saved?.etaTerms;
+      c = new FormControl<string | null>(own || d.get(field)?.value || null);
+      map.set(key, c);
+    }
+    return c;
+  }
+
+  scopeUomControl(i: number, j: number, k: number): FormControl<string | null> {
+    return this.scopeText(this.scopeUoms, i, j, k, 'uom');
+  }
+
+  scopeAvailControl(i: number, j: number, k: number): FormControl<string | null> {
+    return this.scopeText(this.scopeAvails, i, j, k, 'availability');
   }
 
   /** The quantity shown on the row: the tab's own figure in a supplier tab, otherwise the line's. */
@@ -951,6 +1014,42 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     const c = this.shownUnitCost(i, j, k);
     const p = Number(d?.get('unitSellingPrice')?.value) || 0;
     return c && p ? ((p - c) / p) * 100 : null;
+  }
+
+  /** Placeholders on an empty supplier-tab field: the line's own default qty, unit cost and margin. */
+  defaultHint(i: number, j: number, k: number, field: 'quantity' | 'unitCost' | 'margin'): string {
+    const d = this.detailsAt(i, j)?.at(k);
+    if (!d) return '';
+    const qty = this.dealQty(d);
+    const cost = Number(this.dealCost(d) ?? d.get('unitCost')?.value);
+    const price = Number(d.get('unitSellingPrice')?.value) || 0;
+    if (field === 'quantity') return qty == null ? 'Qty' : String(qty);
+    if (field === 'unitCost') return Number.isFinite(cost) && cost > 0 ? String(cost) : 'Cost';
+    return cost > 0 && price > 0 ? (Math.round(((price - cost) / price) * 10000) / 100).toString() : 'Margin';
+  }
+
+  private marginDrafts = new WeakMap<AbstractControl, number>();
+
+  /** The margin field's value: what was typed while it still matches the line, else the computed margin to 2 places. */
+  marginShown(i: number, j: number, k: number): number | null {
+    const d = this.detailsAt(i, j)?.at(k);
+    const now = this.lineMargin(i, j, k);
+    if (now === null) return null;
+    const draft = d ? this.marginDrafts.get(d) : undefined;
+    return draft !== undefined && Math.abs(draft - now) < 0.01 ? draft : Math.round(now * 100) / 100;
+  }
+
+  /** Purchase: the margin typed on a line moves its cost (price stays); cost = price x (1 - margin). */
+  setLineMargin(i: number, j: number, k: number, value: number | string | null): void {
+    const d = this.detailsAt(i, j)?.at(k);
+    const price = Number(d?.get('unitSellingPrice')?.value) || 0;
+    const m = Number(value);
+    if (!d || value === null || value === '' || !Number.isFinite(m) || price <= 0 || m >= 100) return;
+    this.marginDrafts.set(d, m);
+    const cost = Math.round(price * (1 - m / 100) * 10000) / 10000;
+    const ctrl = this.usesScopeCost(i, j, k) ? this.scopeCostControl(i, j, k) : d.get('unitCost');
+    ctrl?.setValue(cost);
+    ctrl?.markAsDirty();
   }
 
   /** The margin a purchase line started with (the deal's), kept to colour it once a supplier's cost moves it. */
@@ -2101,13 +2200,36 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     return sum;
   }
 
+  /** Supplier tab banners: a line another supplier won has no share or cost here, so fall back to its full quantity and this supplier's offer. */
+  private bannerQty(i: number, j: number, k: number): number {
+    const shown = this.shownQty(i, j, k);
+    if (shown > 0) return shown;
+    const d = this.detailsAt(i, j)?.at(k);
+    return (d && this.dealQty(d)) ?? (Number(d?.get('quantity')?.value) || 0);
+  }
+
+  private bannerUnitCost(i: number, j: number, k: number): number {
+    const shown = this.shownUnitCost(i, j, k);
+    if (shown > 0) return shown;
+    const d = this.detailsAt(i, j)?.at(k);
+    if (!d) return 0;
+    const offer = this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === this.supplierScope)?.price;
+    return Number(offer) || Number(d.get('unitCost')?.value) || this.dealCostFor(d, this.supplierScope ?? '') || 0;
+  }
+
   totalCost(): number {
-    const lines = this.sumOption((j, k) => this.lineCost(this.selectedOption, j, k));
+    const scoped = this.isPurchase && !!this.supplierScope;
+    const lines = this.sumOption((j, k) => scoped
+      ? this.bannerQty(this.selectedOption, j, k) * this.bannerUnitCost(this.selectedOption, j, k)
+      : this.lineCost(this.selectedOption, j, k));
+    if (this.isPurchase) return lines - this.discountDiff();
     return this.isDeal ? lines + (Number(this.costAdjustment) || 0) : lines;
   }
 
   sellingPrice(): number {
-    return this.sumOption((j, k) => this.lineTotal(this.selectedOption, j, k));
+    return this.sumOption((j, k) => this.supplierScope
+      ? this.bannerQty(this.selectedOption, j, k) * (Number(this.detailsAt(this.selectedOption, j)?.at(k)?.get('unitSellingPrice')?.value) || 0)
+      : this.lineTotal(this.selectedOption, j, k));
   }
 
   discount(): number {
@@ -2118,6 +2240,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   finalTotal(): number {
+    // A PR discount is a supplier discount: it lowers cost (see totalCost), not the selling price.
+    if (this.isPurchase) return this.sellingPrice();
     return this.sellingPrice() - this.discount();
   }
 
@@ -2355,6 +2479,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   @Input() scopeLineKeys: string[] = [];
   @Input() supplierScopeName = '';
 
+  /** Name of the supplier whose tab is open. */
+  get scopeSupplierLabel(): string {
+    return this.supplierScopeName || String(this.resolvedSupplierOptions?.find((o: any) => String(o.value) === String(this.supplierScope))?.label ?? '');
+  }
+
   /** The lineKeys of the ticked lines. */
   selectedLineKeys(): string[] {
     return this.selectedLines().map((l) => l.get('lineKey')?.value).filter((k): k is string => !!k);
@@ -2554,6 +2683,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   lineVisible(i: number, j: number, k: number): boolean {
+    // A supplier tab lists only the lines under that supplier; the rest are added from the Items tab.
+    if (this.supplierScope && !this.lineActive(i, j, k)) return false;
     if (!this.filterActive) return true;
     const line = this.detailsAt(i, j)?.at(k);
     if (!line) return false;
@@ -2567,7 +2698,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   itemVisible(i: number, j: number): boolean {
-    if (!this.filterActive) return true;
+    if (!this.filterActive && !this.supplierScope) return true;
     return (this.detailsAt(i, j)?.controls || []).some((_, k) => this.lineVisible(i, j, k));
   }
 

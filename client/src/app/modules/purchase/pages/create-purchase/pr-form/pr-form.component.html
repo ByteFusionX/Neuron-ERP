@@ -40,7 +40,17 @@
           <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="activeTab === t.id ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ t.count }}<ng-container *ngIf="t.total != null">/{{ t.total }}</ng-container></span>
         </button>
         <button
-          *ngIf="t.closable"
+          *ngIf="selectedKeys.length && activeTab === 'items' && !readOnly"
+          type="button"
+          class="-mr-1 grid h-4 w-4 place-content-center rounded hover:bg-black/10"
+          [attr.aria-label]="'Add ' + selectedKeys.length + ' selected item(s) to ' + t.name"
+          [title]="'Add ' + selectedKeys.length + ' selected to ' + t.name"
+          (click)="addToSupplier(t.id)"
+        >
+          <ng-icon name="heroPlus" class="h-3 w-3"></ng-icon>
+        </button>
+        <button
+          *ngIf="t.closable && !(selectedKeys.length && activeTab === 'items' && !readOnly)"
           type="button"
           class="-mr-1 grid h-4 w-4 place-content-center rounded hover:bg-black/10"
           aria-label="Close supplier tab"

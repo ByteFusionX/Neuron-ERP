@@ -95,7 +95,15 @@ export class PrFormComponent {
     this.itemEntry?.clearSelection();
   }
 
-  @Output() tabSelected = new EventEmitter<string>();
+  /** Ticked lines go into a supplier tab that already exists. */
+  addToSupplier(supplierId: string): void {
+    const keys = this.selectedKeys;
+    if (!keys.length) return;
+    this.supplierAdded.emit({ supplierId, lineKeys: keys });
+    this.itemEntry?.clearSelection();
+  }
+
+  @Output() tabSelected =new EventEmitter<string>();
   /** A new supplier tab: the supplier and its lines. */
   @Output() supplierAdded = new EventEmitter<{ supplierId: string; lineKeys: string[] }>();
   /** Lines handed to the active supplier tab. */
@@ -116,7 +124,7 @@ export class PrFormComponent {
     const s = this.itemEntry?.scopePriceStatus(this.activeTab, this.tabLineKeys, this.tabExcludedKeys);
     if (!s?.lines) return 'Tick lines on Items and click Compare to add them here';
     if (s.priced < s.lines) return `${s.lines - s.priced} of ${s.lines} line${s.lines === 1 ? '' : 's'} need${s.lines - s.priced === 1 ? 's' : ''} a price`;
-    return 'Prices entered. Award a line with its supplier pill, or tick lines and Assign';
+    return 'Prices entered. Award lines to suppliers in the next step';
   }
 
   @Output() jobLessChange = new EventEmitter<boolean>();

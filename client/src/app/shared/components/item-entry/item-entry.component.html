@@ -121,10 +121,6 @@
           </span>
           <app-action-button *ngIf="bulkSupplierAsksRfq && bulkSupplierControl.value" variant="secondary" (click)="bulkAddToRfq()">Add to RFQ</app-action-button>
           <app-action-button *ngIf="supplierScope && selectedInactiveKeys().length" variant="secondary" (click)="bulkAddToTab()">List</app-action-button>
-          <span *ngIf="supplierScope && selectedActiveCount()" [matTooltip]="selectedExceedCount() > 0 || selectedFullCount() > 0 ? awardBlockedReason() : ''">
-            <app-action-button variant="primary" [disabled]="selectedExceedCount() > 0 || selectedFullCount() > 0" (click)="bulkAwardToTab()">Assign to this supplier</app-action-button>
-          </span>
-          <app-action-button *ngIf="supplierScope && selectedHeldCount()" variant="secondary" (click)="bulkReleaseFromTab()">Release</app-action-button>
           <span *ngIf="supplierScope && selectedActiveCount() && !selectedInactiveKeys().length" [matTooltip]="selectedProtectedCount() > 0 ? unlistBlockedReason() : ''">
             <app-action-button variant="secondary" [disabled]="selectedProtectedCount() > 0" (click)="bulkRemoveFromTab()">Unlist</app-action-button>
           </span>
@@ -330,13 +326,15 @@
                 </div>
                 <div *ngIf="isPurchase && quoteLayout" class="relative min-w-0">
                   <app-sf-number *ngIf="!usesScopeQty(i, j, k)" formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
-                  <app-sf-number *ngIf="usesScopeQty(i, j, k)" [formControl]="scopeQtyControl(i, j, k)" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
-                  <p *ngIf="scopeRemaining(i, j, k) as left" class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] font-medium tabular-nums"
-                    [ngClass]="left > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'">{{ left > 0 ? left + ' left to award' : -left + ' over line qty' }}</p>
+                  <app-sf-number *ngIf="usesScopeQty(i, j, k)" [formControl]="scopeQtyControl(i, j, k)" [placeholder]="defaultHint(i, j, k, 'quantity')" [stepper]="false" [min]="0"></app-sf-number>
+                  <p *ngIf="qtyVsLine(i, j, k) as diff" class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-amber-600 dark:text-amber-400">{{ diff > 0 ? diff + ' above line qty' : -diff + ' below line qty' }}</p>
                 </div>
                 <app-sf-number *ngIf="!(isPurchase && quoteLayout)" formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
-                <span *ngIf="isDeal && !dealAdded(detail)" class="ie-cell">{{ detail.get('uom')?.value || '—' }}</span>
-                <div *ngIf="!isDeal || dealAdded(detail)" class="min-w-0">
+                <span *ngIf="isDeal && !dealAdded(detail) && !usesScopeQty(i, j, k)" class="ie-cell">{{ detail.get('uom')?.value || '—' }}</span>
+                <div *ngIf="usesScopeQty(i, j, k)" class="min-w-0">
+                  <app-sf-combobox [formControl]="scopeUomControl(i, j, k)" [options]="resolvedUomOptions" placeholder="UoM" footerLabel="Add unit" (footerAction)="openAddMasterOption('unit', scopeUomControl(i, j, k))"></app-sf-combobox>
+                </div>
+                <div *ngIf="!usesScopeQty(i, j, k) && (!isDeal || dealAdded(detail))" class="min-w-0">
                   <app-sf-combobox formControlName="uom" [options]="resolvedUomOptions" placeholder="UoM *" footerLabel="Add unit" (footerAction)="openAddMasterOption('unit', detail.get('uom'))"></app-sf-combobox>
                   <p *ngIf="detail.get('uom')?.hasError('required') && detail.get('uom')?.touched" class="mt-1 text-xs text-red-600 dark:text-red-400">Required</p>
                 </div>
@@ -345,7 +343,7 @@
                   <p *ngIf="isPurchase && unitCostDiff(i, j, k) as ud" class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums" [ngClass]="ud < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">{{ ud > 0 ? '+' : '-' }}{{ (ud < 0 ? -ud : ud) | number: '1.2-2' }}</p>
                 </div>
                 <div *ngIf="usesScopeCost(i, j, k)" class="relative min-w-0">
-                  <app-sf-number [formControl]="scopeCostControl(i, j, k)" placeholder="Cost" [stepper]="false" [min]="0"></app-sf-number>
+                  <app-sf-number [formControl]="scopeCostControl(i, j, k)" [placeholder]="defaultHint(i, j, k, 'unitCost')" [stepper]="false" [min]="0"></app-sf-number>
                   <ng-container *ngIf="previousQuote(i, j, k) as pq">
                     <p class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
                       {{ pq.awarded ? 'Awarded ' + (pq.awardedAt | date: 'dd MMM yyyy') : 'Quoted ' + (pq.quotedAt | date: 'dd MMM yyyy') }} · {{ pq.unitPrice | number: '1.2-2' }} {{ pq.currency }} · {{ pq.rfqNo }}
@@ -358,7 +356,8 @@
                   </p>
                 </div>
                 <div *ngIf="isPurchase && quoteLayout" class="ie-x relative min-w-0">
-                  <span class="ie-cell justify-end font-medium tabular-nums">{{ lineMargin(i, j, k) !== null ? (lineMargin(i, j, k) | number: '1.1-1') + '%' : '—' }}</span>
+                  <app-sf-number [ngModel]="marginShown(i, j, k)" [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="setLineMargin(i, j, k, $event)" [disabled]="isLineLocked(i, j, k) || readonlyCost" [placeholder]="defaultHint(i, j, k, 'margin')" suffix="%" [stepper]="false"></app-sf-number>
                   <p *ngIf="lineMarginDiff(i, j, k) as diff" class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums" [ngClass]="diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'" title="Margin change against the deal">{{ diff > 0 ? '+' : '' }}{{ diff | number: '1.1-1' }}% vs deal</p>
                 </div>
                 <div *ngIf="!isPurchase" class="ie-x relative min-w-0" [ngClass]="lineMarginRing(i, j, k)">
@@ -376,17 +375,18 @@
                 </div>
                 <ng-template #plainCost><span class="ie-total ie-x">{{ lineCost(i, j, k) | number: '1.2-2' }}</span></ng-template>
                 <span class="ie-total ie-x">{{ lineTotal(i, j, k) | number: '1.2-2' }}</span>
-                <span *ngIf="supplierScope && supplierScopeName && lineActive(i, j, k)" class="ie-cell min-w-0 truncate">{{ supplierScopeName }}</span>
-                <div class="min-w-0" [class.hidden]="supplierScope && supplierScopeName && lineActive(i, j, k)">
+                <span *ngIf="isPurchase && supplierScope" class="ie-cell ie-x truncate" [matTooltip]="scopeSupplierLabel">{{ scopeSupplierLabel || '—' }}</span>
+                <div *ngIf="!(isPurchase && supplierScope)" class="min-w-0">
                   <app-sf-combobox formControlName="supplierId" [options]="resolvedSupplierOptions" placeholder="Supplier"></app-sf-combobox>
                   <p *ngIf="isDeal && detail.get('supplierId')?.hasError('supplierRequired') && detail.get('supplierId')?.touched" class="mt-1 text-xs text-red-600 dark:text-red-400">Required</p>
                 </div>
-                <span *ngIf="isDeal && !dealAdded(detail)" class="ie-cell ie-x">{{ detail.get('availability')?.value || '—' }}</span>
-                <app-sf-combobox *ngIf="!isDeal || dealAdded(detail)" class="ie-x" formControlName="availability" [options]="resolvedAvailabilityOptions" placeholder="Availability" footerLabel="Add availability" (footerAction)="openAddMasterOption('availability', detail.get('availability'))"></app-sf-combobox>
+                <span *ngIf="isDeal && !dealAdded(detail) && !usesScopeQty(i, j, k)" class="ie-cell ie-x">{{ detail.get('availability')?.value || '—' }}</span>
+                <app-sf-combobox *ngIf="usesScopeQty(i, j, k)" class="ie-x" [formControl]="scopeAvailControl(i, j, k)" [options]="resolvedAvailabilityOptions" placeholder="Availability" footerLabel="Add availability" (footerAction)="openAddMasterOption('availability', scopeAvailControl(i, j, k))"></app-sf-combobox>
+                <app-sf-combobox *ngIf="!usesScopeQty(i, j, k) && (!isDeal || dealAdded(detail))" class="ie-x" formControlName="availability" [options]="resolvedAvailabilityOptions" placeholder="Availability" footerLabel="Add availability" (footerAction)="openAddMasterOption('availability', detail.get('availability'))"></app-sf-combobox>
               </div>
               </div>
 
-              <div *ngIf="isPurchase && linePills" class="flex w-full basis-full flex-wrap items-center gap-1" [class.mt-4]="quoteLayout && scopeRemaining(i, j, k) !== 0">
+              <div *ngIf="isPurchase && linePills" class="flex w-full basis-full flex-wrap items-center gap-1" [class.mt-4]="quoteLayout && qtyVsLine(i, j, k) !== 0">
                 <button *ngFor="let p of pillsFor(i, j, k); trackBy: trackPill" type="button" (click)="pickPill(i, j, k, p.id)"
                   [disabled]="pillBlocked(i, j, k, p.id)" [attr.title]="pillBlocked(i, j, k, p.id) ? 'The whole quantity is already assigned. Release a supplier first.' : pillTitle(i, j, k, p)"
                   class="max-w-[9rem] truncate rounded-full border px-2 py-0.5 text-[10px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
@@ -473,9 +473,15 @@
         [ngClass]="{ 'border border-gray-200 dark:border-erp-border-dark': !isDeal }">
         <div class="flex flex-wrap items-end justify-between gap-4">
           <div *ngIf="isPurchase" class="flex flex-wrap items-end gap-5 text-left">
-            <div class="w-28">
-              <app-sf-number formControlName="totalDiscount" placeholder="Discount" [stepper]="false" [min]="0"></app-sf-number>
-              <p *ngIf="option.errors?.['discountExceedsTotal']" class="mt-1 text-[11px] text-red-600">Discount is more than the selling total</p>
+            <div class="flex items-center gap-2">
+              <span *ngIf="discountDiff() !== 0" class="text-xs font-semibold tabular-nums"
+                [ngClass]="discountDiff() > 0 ? 'text-green-600' : 'text-red-600'">
+                {{ discountDiff() > 0 ? '+' : '' }}{{ discountDiff() | number: '1.2-2' }}
+              </span>
+              <div class="w-28">
+                <app-sf-number formControlName="totalDiscount" placeholder="Discount" [stepper]="false" [min]="0"></app-sf-number>
+                <p *ngIf="option.errors?.['discountExceedsTotal']" class="mt-1 text-[11px] text-red-600">Discount is more than the selling total</p>
+              </div>
             </div>
             <div>
               <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">
@@ -494,6 +500,10 @@
           </div>
           <div *ngIf="isPurchase" class="flex flex-wrap items-end gap-5">
             <ng-container *ngIf="dealFigures() as dl">
+              <div *ngIf="dealDiscountBaseline() > 0">
+                <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Deal discount</p>
+                <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dealDiscountBaseline() | number: '1.2-2' }}</p>
+              </div>
               <div>
                 <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Deal cost</p>
                 <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dl.cost | number: '1.2-2' }}</p>
