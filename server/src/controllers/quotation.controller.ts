@@ -2353,6 +2353,12 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         // The deal is built from the quote's first option and the discount isn't editable here, so the quote is the
         // source of truth: it is never dropped or tampered with by the payload.
         const totalDiscount = Number(quote.optionalItems?.[0]?.totalDiscount) || 0;
+        // Unselected lines carry no supplier; an empty string can't cast to ObjectId.
+        for (const item of Array.isArray(items) ? items : []) {
+            for (const d of item?.itemDetails ?? []) {
+                if (!d.supplierId) delete d.supplierId;
+            }
+        }
         if (!String(paymentTerms ?? '').trim()) {
             return res.status(400).json({ message: "Payment terms are required before raising a deal sheet" });
         }

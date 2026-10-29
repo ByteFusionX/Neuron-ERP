@@ -339,7 +339,7 @@ export class DealFormComponent implements OnInit, OnChanges {
           unitSellingPrice: d.unitSellingPrice,
           availability: d.availability,
           uom: d.uom,
-          supplierId: d.supplierId ?? '',
+          supplierId: d.supplierId || null,
         })),
       })),
       costs: (value.costs as any[]).map((c) => {
