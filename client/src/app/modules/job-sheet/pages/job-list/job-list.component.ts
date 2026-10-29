@@ -92,16 +92,26 @@ export class JobListComponent {
 
   itemRows(row: getJob): Record<string, any>[] {
     const items = ((row.quotation?.dealData as any)?.updatedItems ?? []) as any[];
+    const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     return items.flatMap((item) =>
       (item.itemDetails ?? [])
         .filter((d: any) => d.dealSelected)
-        .map((d: any) => ({
-          item: String(d.detail ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
-          qty: d.quantity,
-          price: d.unitCost,
-          sellingPrice: d.unitSellingPrice,
-          amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0),
-        })),
+        .flatMap((d: any) => [
+          {
+            item: esc(d.detail),
+            qty: d.quantity,
+            price: d.unitCost,
+            sellingPrice: d.unitSellingPrice,
+            amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0),
+          },
+          // Parts of a split line follow it as sub rows; their cost is already inside the line's.
+          ...(d.components ?? []).map((c: any) => ({
+            _sub: true,
+            item: esc(c.description),
+            qty: (Number(c.quantity) || 0) * (Number(d.quantity) || 0),
+            price: c.unitCost,
+          })),
+        ]),
     );
   }
 

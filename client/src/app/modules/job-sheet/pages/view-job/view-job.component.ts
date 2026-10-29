@@ -443,6 +443,22 @@ export class ViewJobComponent implements OnInit {
           totalCost: detail.quantity * detail.unitCost,
           supplier: detail.supplierName || detail.supplierDetails?.supplierName || '-',
         });
+        // Parts of a split line follow it as sub rows; the line's own cost already covers them.
+        (detail.components ?? []).forEach((c: any) => {
+          const qty = (Number(c.quantity) || 0) * (Number(detail.quantity) || 0);
+          rows.push({
+            _sub: true,
+            detail: this.boldPipe.transform(this.bracketsPipe.transform(c.description || '') as string),
+            detailText: c.description,
+            itemCode: c.itemCode || '—',
+            partNo: c.partNo || '—',
+            uom: c.uom || '—',
+            quantity: qty,
+            unitCost: c.unitCost,
+            totalCost: qty * (Number(c.unitCost) || 0),
+            supplier: c.supplierId?.supplierName || c.supplierName || '-',
+          });
+        });
       });
     });
     return rows;
