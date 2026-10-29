@@ -140,7 +140,6 @@
 
                 <div *ngIf="partsOpen.has(key)" class="mt-1.5 rounded-md border border-dashed border-gray-200 p-2 dark:border-erp-border-dark"
                     (mousedown)="$event.stopPropagation()" (touchstart)="$event.stopPropagation()">
-                    <p class="mb-1.5 text-[11px] text-gray-500">Split this line into parts bought separately (RAM, warranty, OS). Tick a part to connect it to the deal and the PR; untick to leave it out. While any part is connected, the item line is locked and the parts must add up to its unit cost.</p>
                     <div *ngFor="let c of componentsOf(key); let n = index" class="mb-2 flex flex-wrap items-start gap-2 sm:flex-nowrap" [class.opacity-50]="c.included === false">
                         <input type="checkbox" class="mt-2 h-3.5 w-3.5 shrink-0 cursor-pointer accent-violet-600" aria-label="Connect part to the deal"
                             [checked]="c.included !== false" (change)="togglePart(c)">
