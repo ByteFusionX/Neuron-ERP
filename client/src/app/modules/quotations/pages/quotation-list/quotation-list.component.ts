@@ -14,6 +14,7 @@ import { getQuotation, Quotatation, QuoteStatus, quoteStatusLabel } from 'src/ap
 import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/follow-up-create-modal.component';
 import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/follow-up-panel/follow-up-panel.component';
 import { FollowUpViewModel, followUpCellClass, followUpViewer } from 'src/app/shared/utils/follow-up.util';
+import { dealSheetPriceDetails, selectedDealItems } from 'src/app/shared/utils/deal-pricing.util';
 import { BehaviorSubject, Observable, Subscription, catchError, filter, forkJoin, of, shareReplay, switchMap, take } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
@@ -402,6 +403,10 @@ export class QuotationListComponent implements AfterViewInit {
       {
         id: 'viewLpo', label: 'View Lpo', icon: 'eye',
         hidden: (r) => this.isCreatorOnlyView(r) || !(r.status === 'Won' && !!r.lpoFiles?.length),
+      },
+      {
+        id: 'viewDeal', label: 'View Dealsheet', icon: 'clipboardCheck', quick: true,
+        hidden: (r) => this.isCreatorOnlyView(r) || !(r.dealData as any)?._id,
       },
       {
         id: 'convertToDealSheet', label: 'Convert To Deal Sheet', icon: 'refresh', quick: true,
@@ -1270,10 +1275,21 @@ export class QuotationListComponent implements AfterViewInit {
     return view;
   }
 
-  /** The full deal sheet: items, costs and attachments open on the quotation view page. */
+  /** The full deal sheet detail view; the page reads its data from router state, like the deal sheet list sends it. */
   openDealSheet(row: Quotatation, event?: Event): void {
     event?.stopPropagation();
-    this._router.navigate(['/quotations/view', row._id]);
+    if (!row?._id || !row.dealData) return;
+    this._router.navigate(['/deal-sheet/view', row._id], {
+      state: {
+        approval: row.dealData.status === 'pending',
+        quoteData: row,
+        quoteItems: selectedDealItems(row.dealData.updatedItems),
+        priceDetails: dealSheetPriceDetails(row.dealData.updatedItems, row.dealData.additionalCosts, row.dealData.totalDiscount),
+        jobId: (row as any).job?._id,
+        quoteView: false,
+        returnUrl: this._router.url,
+      },
+    });
   }
 
   /** Light deal summary for the Deal Sheet tab: status, price, terms and approver, with no tables. */
