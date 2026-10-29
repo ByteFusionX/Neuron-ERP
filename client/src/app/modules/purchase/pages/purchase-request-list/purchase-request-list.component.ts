@@ -360,7 +360,8 @@ export class PurchaseRequestListComponent {
   // Each action shows only where it applies, so a row never lists buttons it cannot use.
   private buildRowActions(): void {
     this.rowActions = [
-      { id: 'view', label: 'View PR', icon: 'eye', quick: true },
+      { id: 'view', label: 'View PR', icon: 'eye', quick: true, hidden: () => this.activeViewId === 'new' },
+      { id: 'viewJob', label: 'View Job', icon: 'eye', quick: true, hidden: (r) => this.activeViewId !== 'new' || !this.jobIdOf(r) },
       { id: 'edit', label: 'Edit', icon: 'pencil', quick: true, hidden: (r) => !this.canEdit(r) },
       { id: 'createPr', label: 'Create PR', icon: 'plus', quick: true, hidden: (r) => !this.canCreateFromJob(r) },
       { id: 'sendApproval', label: 'Send for approval', icon: 'send', quick: true, hidden: (r) => !['New', 'In Progress'].includes(r.status) || !this.hasItems(r) || !this.allAwarded(r) },
@@ -514,6 +515,9 @@ export class PurchaseRequestListComponent {
     switch (action.id) {
       case 'view':
         this.openFullPurchase(row);
+        break;
+      case 'viewJob':
+        this.router.navigate(['/job-sheet/view', this.jobIdOf(row)], { state: { returnUrl: this.router.url } });
         break;
       case 'initiateLpo':
         this.openInitiateLpo(row._id);
