@@ -287,12 +287,12 @@ export class ViewPurchaseComponent {
       { key: 'qty', label: 'Qty', type: 'number', align: 'right' },
       { key: 'uom', label: 'UOM' },
       { key: 'unitCost', label: 'Unit cost', type: 'currency' },
-      { key: 'totalCost', label: 'Total cost', type: 'currency', emphasis: true },
+      { key: 'totalCost', label: 'Total cost', type: 'currency', emphasis: true, total: true },
       ...(manual ? [] : [
         { key: 'margin', label: 'Margin %', align: 'right' },
-        { key: 'marginValue', label: 'Margin value', type: 'currency' },
+        { key: 'marginValue', label: 'Margin value', type: 'currency', total: true },
         { key: 'unitSelling', label: 'Unit price', type: 'currency' },
-        { key: 'totalSelling', label: 'Total price', type: 'currency' },
+        { key: 'totalSelling', label: 'Total price', type: 'currency', total: true },
         { key: 'eta', label: 'ETA terms', wrap: true, hiddenByDefault: true },
       ] as DetailTableColumn[]),
     ];
