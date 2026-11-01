@@ -110,13 +110,14 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
             };
         }).map((r) => ({ ...r, warehouseText: r.warehouses.map((w) => `${w.warehouseName}: ${w.quantity}`).join(', ') }));
 
-        const isLow = (r: any) => r.availableQuantity <= 0 || r.shortfallQuantity > 0 || (r.reorderPoint > 0 && r.availableQuantity <= r.reorderPoint);
         const summary = {
             totalItems: rows.length,
-            exceptionCount: rows.filter(isLow).length,
+            availableCount: rows.filter((r) => r.availableQuantity > 0).length,
+            reservedCount: rows.filter((r) => r.reservedQuantity > 0).length,
             quarantineCount: rows.filter((r) => r.quarantinedQuantity > 0).length,
         };
-        if (view === 'exceptions') rows = rows.filter(isLow);
+        if (view === 'available') rows = rows.filter((r) => r.availableQuantity > 0);
+        if (view === 'reserved') rows = rows.filter((r) => r.reservedQuantity > 0);
         if (view === 'quarantine') rows = rows.filter((r) => r.quarantinedQuantity > 0);
 
         const key = typeof sortKey === 'string' && sortKey ? sortKey : 'partNo';

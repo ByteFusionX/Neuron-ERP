@@ -6,9 +6,10 @@ import { ProductCategoryService } from 'src/app/core/services/product-category/p
 import { StockOverviewParams, StockReservationRow, StockRow, StockService } from 'src/app/core/services/stock/stock.service';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { DataGridBreadcrumb, DataGridColumn, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
+import { DetailMetaComponent } from 'src/app/shared/components/detail-panel/detail-meta.component';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailMetaItem, DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/form-prompt.service';
 import { StockAdjustDrawerComponent } from '../stock-adjust-drawer/stock-adjust-drawer.component';
 
@@ -19,7 +20,7 @@ import { StockAdjustDrawerComponent } from '../stock-adjust-drawer/stock-adjust-
 @Component({
   selector: 'app-stock-overview',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, StockAdjustDrawerComponent],
+  imports: [CommonModule, DataGridComponent, DetailMetaComponent, DetailOverviewComponent, DetailTableComponent, StockAdjustDrawerComponent],
   templateUrl: './stock-overview.component.html',
   styleUrl: './stock-overview.component.css'
 })
@@ -38,7 +39,7 @@ export class StockOverviewComponent implements OnInit {
   columns: DataGridColumn<StockRow>[] = [];
   isLoading = signal<boolean>(false);
   totalItems = signal<number>(0);
-  summary = signal({ totalItems: 0, exceptionCount: 0, quarantineCount: 0 });
+  summary = signal({ totalItems: 0, availableCount: 0, reservedCount: 0, quarantineCount: 0 });
   reservations = signal<StockReservationRow[]>([]);
 
   adjustOpen = false;
@@ -46,7 +47,8 @@ export class StockOverviewComponent implements OnInit {
 
   views: DataGridView<StockRow>[] = [
     { id: 'all', label: 'All' },
-    { id: 'exceptions', label: 'Low / short' },
+    { id: 'available', label: 'Available' },
+    { id: 'reserved', label: 'Reserved' },
     { id: 'quarantine', label: 'Quarantine' },
   ];
 
@@ -137,6 +139,9 @@ export class StockOverviewComponent implements OnInit {
         const startIndex = (pagination.page - 1) * pagination.limit;
         this.tableData.set(response.data.overview.map((item, index) => ({ ...item, rowNo: startIndex + index + 1 })));
         this.summary.set(response.data.summary);
+        // On hand adds nothing when it equals available on every row, so the column is dropped.
+        const onHandRedundant = this.tableData().length > 0 && this.tableData().every((r) => r.onHandQuantity === r.availableQuantity);
+        this.columns = this.columns.map((c) => (c.key === 'onHandQuantity' ? { ...c, visible: !onHandRedundant } : c));
         this.totalItems.set(pagination.total);
         this.page = pagination.page;
         this.row = pagination.limit;
@@ -197,6 +202,15 @@ export class StockOverviewComponent implements OnInit {
 
   closeAdjust(): void {
     this.adjustOpen = false;
+  }
+
+  metaFor(row: StockRow): DetailMetaItem[] {
+    return [
+      { label: 'On hand', value: row.onHandQuantity },
+      { label: 'Reserved', value: row.reservedQuantity, tone: row.reservedQuantity > 0 ? 'warn' : undefined },
+      { label: 'Available', value: row.availableQuantity, tone: row.availableQuantity > 0 ? 'good' : 'bad' },
+      { label: 'Stock value', value: row.stockValue, format: 'currency' },
+    ];
   }
 
   overviewSections(row: StockRow): DetailOverviewSection[] {
@@ -277,7 +291,7 @@ export class StockOverviewComponent implements OnInit {
     const s = this.summary();
     this.views = this.views.map((v) => ({
       ...v,
-      count: v.id === 'all' ? s.totalItems : v.id === 'exceptions' ? s.exceptionCount : s.quarantineCount,
+      count: v.id === 'all' ? s.totalItems : v.id === 'available' ? s.availableCount : v.id === 'reserved' ? s.reservedCount : s.quarantineCount,
     }));
   }
 }

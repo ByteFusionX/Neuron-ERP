@@ -1,21 +1,25 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import { StockLedgerParams, StockMovement, StockService } from 'src/app/core/services/stock/stock.service';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
+import { DetailMetaComponent } from 'src/app/shared/components/detail-panel/detail-meta.component';
+import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
+import { DetailMetaItem, DetailOverviewSection } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DataGridBreadcrumb, DataGridColumn, DataGridQuery, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 
 /** Read-only history of every stock movement: receipts, deliveries, returns and adjustments, newest first. */
 @Component({
   selector: 'app-stock-ledger',
   standalone: true,
-  imports: [CommonModule, DataGridComponent],
+  imports: [CommonModule, DataGridComponent, DetailMetaComponent, DetailOverviewComponent],
   templateUrl: './stock-ledger.component.html',
   styleUrl: './stock-ledger.component.css'
 })
 export class StockLedgerComponent implements OnInit, OnDestroy {
+  @ViewChild('grid') grid!: DataGridComponent<StockMovement>;
   private stockService = inject(StockService);
   private toastr = inject(ToastrService);
   private route = inject(ActivatedRoute);
@@ -49,11 +53,54 @@ export class StockLedgerComponent implements OnInit, OnDestroy {
     { key: 'createdBy', label: 'By', valueGetter: (r) => [r.createdBy?.firstName, r.createdBy?.lastName].filter(Boolean).join(' ') },
   ];
 
+  readonly detailTabs = [{ id: 'overview', label: 'Movement', icon: 'info' }];
+  detailTitle = (r: StockMovement) => [r.movementType, r.referenceNo].filter(Boolean).join(' · ');
+  detailSubtitle = (r: StockMovement) => [r.product?.itemCode || r.product?.partNo, r.product?.productDescription].filter(Boolean).join(' - ');
+
   page = 1;
   row = 15;
   private searchTerm = '';
   private movementType = '';
   private product = '';
+
+  metaFor(r: StockMovement): DetailMetaItem[] {
+    return [
+      { label: 'Type', value: r.movementType },
+      { label: 'In', value: r.quantityIn || 0, tone: r.quantityIn ? 'good' : undefined },
+      { label: 'Out', value: r.quantityOut || 0, tone: r.quantityOut ? 'bad' : undefined },
+      { label: 'Stock', value: r.stockStatus === 'Quarantine' ? 'Quarantine' : 'Available' },
+    ];
+  }
+
+  overviewSections(r: StockMovement): DetailOverviewSection[] {
+    const by = [r.createdBy?.firstName, r.createdBy?.lastName].filter(Boolean).join(' ');
+    return [
+      {
+        title: 'Item',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Item code', value: r.product?.itemCode || '-' },
+          { type: 'field', label: 'Part no', value: r.product?.partNo || '-' },
+          { type: 'field', label: 'UOM', value: r.product?.unitOfMeasure || '-' },
+          { type: 'field', label: 'Warehouse', value: r.warehouse?.wareHouseName || '-' },
+        ],
+      },
+      {
+        title: 'Movement',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Date', value: r.movementDate ? new Date(r.movementDate).toLocaleString() : '-' },
+          { type: 'field', label: 'Document', value: [r.referenceType, r.referenceNo].filter(Boolean).join(' ') || '-' },
+          { type: 'field', label: 'Quantity in', value: r.quantityIn || 0, numeric: true },
+          { type: 'field', label: 'Quantity out', value: r.quantityOut || 0, numeric: true },
+          { type: 'field', label: 'Unit cost', value: r.unitCost != null ? r.unitCost.toFixed(2) : '-', numeric: true },
+          { type: 'field', label: 'Recorded by', value: by || '-' },
+          { type: 'field', label: 'Reason', value: r.reason || '-' },
+          { type: 'field', label: 'Remarks', value: r.remarks || '-' },
+        ],
+      },
+    ];
+  }
 
   ngOnInit(): void {
     this.subscription.add(this.route.queryParamMap.subscribe((params) => {

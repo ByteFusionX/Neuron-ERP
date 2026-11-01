@@ -55,7 +55,7 @@ export interface StockOverviewResponse {
   success: boolean;
   data: {
     overview: StockRow[];
-    summary: { totalItems: number; exceptionCount: number; quarantineCount: number };
+    summary: { totalItems: number; availableCount: number; reservedCount: number; quarantineCount: number };
     pagination: StockPagination;
   };
 }

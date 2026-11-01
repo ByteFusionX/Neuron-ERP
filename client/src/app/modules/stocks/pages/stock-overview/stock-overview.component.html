@@ -1,4 +1,4 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-5 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-data-grid
     #grid
     class="flex-1 min-h-0"
@@ -29,6 +29,10 @@
     (rowOpen)="onRowOpen($event)"
     (rowAction)="onRowAction($event)"
     (create)="openAdjust()">
+
+    <ng-template #detailMetaTemplate let-row>
+      <app-detail-meta [items]="metaFor(row)"></app-detail-meta>
+    </ng-template>
 
     <ng-template #detailTemplate let-row let-tab="tab">
       <ng-container [ngSwitch]="tab">
