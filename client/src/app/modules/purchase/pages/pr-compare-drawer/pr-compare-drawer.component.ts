@@ -1,5 +1,6 @@
 import { Component, computed, EventEmitter, Input, OnChanges, Output, SimpleChanges, inject, signal, viewChild } from '@angular/core';
 import { ToastrService } from 'ngx-toastr';
+import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog/confirm-dialog.service';
@@ -8,7 +9,7 @@ import { SmartFormModule } from 'src/app/shared/components/smart-form';
 import { SalesRfqCompareColumn, SalesRfqCompareRow, SalesRfqComparison, SalesRfqEnquiryAward } from 'src/app/shared/interfaces/sales-rfq.interface';
 
 /** Statuses in which a purchase request still takes awards (it freezes once it is with the approvers). */
-const EDITABLE_STATUSES = ['New', 'In Progress', 'Rejected'];
+const EDITABLE_STATUSES = ['New', 'In Progress', 'Rejected', 'Revoked'];
 
 export interface PrCompareDraftLine { key: string; itemName: string; detail: string; quantity: number; uom?: string; itemCode?: string }
 /** Supplier tabs of the request form (with the lines under each) that may not have an RFQ yet. */
@@ -42,6 +43,13 @@ export class PrCompareDrawerComponent implements OnChanges {
   private firstLoad = true;
 
   private service = inject(SalesRfqService);
+  private purchaseService = inject(PurchaseService);
+  /** Product lines already on a live PO (line key -> "PO no (status)"); they cannot be awarded again. */
+  readonly lockedLines = signal<Record<string, string>>({});
+  readonly lockedRows = computed(() => {
+    const map = this.lockedLines();
+    return (this.data()?.rows || []).filter((r) => map[r.key]).map((r) => ({ key: r.key, detail: r.detail, po: map[r.key] }));
+  });
   private toaster = inject(ToastrService);
   private confirm = inject(ConfirmDialogService);
 
@@ -138,6 +146,10 @@ export class PrCompareDrawerComponent implements OnChanges {
     if (!this.purchaseId) return;
     this.loading.set(!this.data());
     this.loadError.set(null);
+    this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
+      next: (res) => this.lockedLines.set(res?.data?.lockedLines || {}),
+      error: () => this.lockedLines.set({}),
+    });
     this.service.comparePurchase(this.purchaseId).subscribe({
       next: (res) => {
         this.loaded.set(res.data);

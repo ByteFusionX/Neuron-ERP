@@ -51,12 +51,6 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
   Rejected: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
 };
 
-const RECEIPT_BADGE_CLASSES: Record<string, string> = {
-  'Not Received': 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700',
-  'Partially Received': 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
-  Received: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
-};
-
 const BILLING_BADGE_CLASSES: Record<string, string> = {
   'Not Billed': 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700',
   'Invoice Uploaded': 'bg-indigo-50 text-indigo-700 ring-indigo-200 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-900 dark:border-indigo-900',
@@ -143,6 +137,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   readonly itemColumns: DetailTableColumn[] = [
     { key: 'description', label: 'Description', type: 'html', truncate: true },
     { key: 'quantity', label: 'Qty', type: 'number' },
+    { key: 'unitPrice', label: 'Unit Price', type: 'currency' },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
     { key: 'amount', label: 'Amount', type: 'currency', total: true },
   ];
@@ -183,7 +178,6 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
       { key: 'poDate', label: 'Date', type: 'date', sortable: true, width: '120px' },
       { key: 'poNo', label: 'PO No', sortable: true, locked: true },
       { key: 'poStatus', label: 'Status', type: 'badge', align: 'center', badgeClasses: STATUS_BADGE_CLASSES, badgeLabel: statusLabel },
-      { key: 'receiptStatus', label: 'Receipt', type: 'badge', align: 'center', badgeClasses: RECEIPT_BADGE_CLASSES },
       { key: 'supplier', label: 'Supplier', sortable: true, valueGetter: (row) => row.supplierId?.supplierName || '-' },
       { key: 'jobId', label: 'Job ID', sortable: true, valueGetter: (row) => row.jobId?.jobId || '-' },
       {
@@ -200,9 +194,10 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
 
   private buildRowActions(): void {
     this.rowActions = [
-      { id: 'openFullLpo', label: 'Open full PO', icon: 'eye', quick: true, panel: true },
+      { id: 'openFullLpo', label: 'Details View', icon: 'eye', quick: true, panel: true },
       { id: 'approve', label: 'Approve', icon: 'check', quick: true, hidden: (r) => !this.canApproveOrReject(r) },
       { id: 'reject', label: 'Reject', icon: 'close', quick: true, hidden: (r) => !this.canApproveOrReject(r) },
+      { id: 'resend', label: 'Resend for approval', icon: 'refresh', quick: true, hidden: (r) => !this.canResend(r) },
       { id: 'previewPdf', label: 'Preview PDF', icon: 'eye' },
       { id: 'downloadPdf', label: 'Download PDF', icon: 'download' },
       { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', quick: true, hidden: (r) => r.poStatus !== 'Pending for Approval' || !this.isSuperAdmin },
@@ -319,6 +314,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     if (event.action.id === 'uploadDocuments') this.uploadDocuments(event.row);
     if (event.action.id === 'approve') this.approve(event.row);
     if (event.action.id === 'reject') this.reject(event.row);
+    if (event.action.id === 'resend') this.resend(event.row);
     if (event.action.id === 'previewPdf') this.openPdf(event.row, true);
     if (event.action.id === 'downloadPdf') this.openPdf(event.row, false);
   }
@@ -336,6 +332,37 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     return pending.filter((a: any) => a.step === pending[0]?.step).some((a: any) =>
       a.managerApproval ? String(a.approver) === this.currentEmployeeId : String(a.role?._id || a.role) === this.currentCategoryId
     );
+  }
+
+  /** A rejected PO can go back for approval by whoever raised it (or a Super Admin). */
+  canResend(row: any): boolean {
+    if (row?.poStatus !== 'Rejected') return false;
+    if (this.isSuperAdmin) return true;
+    const createdById = row.createdBy?._id || row.createdBy;
+    return this.canInitiateLPO && !!createdById && createdById === this.currentEmployeeId;
+  }
+
+  async resend(row: any): Promise<void> {
+    if (!this.canResend(row)) return;
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Resend PO for approval',
+      message: 'This PO will go through the approval workflow again.',
+      details: [
+        { label: 'PO no', value: row.poNo || '-' },
+        { label: 'Supplier', value: row.supplierId?.supplierName || '-' },
+        { label: 'Total', value: this.formatAmount(row) },
+      ],
+      confirmLabel: 'Resend',
+    });
+    if (!confirmed) return;
+    this.purchaseOrderService.resendPurchaseOrder(row._id).subscribe({
+      next: () => {
+        this.notificationService.success('PO sent for approval again');
+        this.loadData();
+      },
+      error: (error) => this.notificationService.error(error.error?.message || 'Failed to resend the PO'),
+    });
   }
 
   async approve(row: any): Promise<void> {
@@ -549,6 +576,14 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   itemRows(row: any): Record<string, any>[] {
     const sourceItems = row?.items ?? row?.purchaseId?.items ?? [];
     const rows: Record<string, any>[] = [];
+    // Unit Price is the job's selling price; Unit Cost is the price awarded to the supplier on the PO.
+    const key = (v: any) => String(v?._id ?? v ?? '').trim().toLowerCase();
+    const jobDetails: any[] = (row?.purchaseId?.items || []).flatMap((i: any) => i?.itemDetails || []);
+    const jobSellingPrice = (item: any) => {
+      const match = jobDetails.find((d) => item?.partNo && key(d.partNo) === key(item.partNo))
+        || jobDetails.find((d) => key(d.detail) === key(item?.detail));
+      return Number(match?.unitSellingPrice) || 0;
+    };
 
     sourceItems.forEach((item: any) => {
       const details = item.itemDetails?.length ? item.itemDetails : [item];
@@ -559,7 +594,8 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
           description: String(detail.description ?? detail.detail ?? item.description ?? item.detail ?? detail.item ?? item.item ?? item.itemName ?? '-')
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
           quantity,
-          unitCost,
+          unitPrice: jobSellingPrice(item),
+          unitCost: Number(unitCost) || 0,
           amount: (Number(quantity) || 0) * (Number(unitCost) || 0),
         });
       });
@@ -571,7 +607,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   overviewSections(row: any): DetailOverviewSection[] {
     return [
       {
-        title: 'General',
+        title: 'Overview',
         columns: '2',
         fields: [
           { type: 'field', label: 'PO No', value: row.poNo, numeric: true },
@@ -586,7 +622,35 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
           { type: 'dg', key: 'billingStatus', label: 'Billing Status' },
         ],
       },
+      this.summarySection(row),
     ];
+  }
+
+  /** Cost is the job's (deal sheet) cost, Price is what the PO pays; both for this PO's items only. */
+  private summarySection(row: any): DetailOverviewSection {
+    const lines: any[] = row?.items || [];
+    const details: any[] = (row?.purchaseId?.items || []).flatMap((i: any) => i?.itemDetails || []);
+    const key = (v: any) => String(v?._id ?? v ?? '').trim().toLowerCase();
+    const jobUnitCost = (line: any) => {
+      const match = details.find((d) => line?.partNo && key(d.partNo) === key(line.partNo))
+        || details.find((d) => key(d.detail) === key(line?.detail));
+      return Number(match?.dealUnitCost) || Number(match?.unitCost) || Number(line?.unitCost) || 0;
+    };
+    const totalCost = lines.reduce((s, l) => s + jobUnitCost(l) * (Number(l.quantity) || 0), 0);
+    const totalPrice = lines.reduce((s, l) => s + (Number(l.totalCost) || (Number(l.unitCost) || 0) * (Number(l.quantity) || 0)), 0);
+    const discount = Number(row?.discount) || 0;
+    const currency = row?.currency || row?.quoteId?.currency || 'QAR';
+    const fmt = (n: number) => `${currency} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return {
+      title: 'Summary',
+      columns: '2',
+      fields: [
+        { type: 'field', label: 'Total Price', value: fmt(totalPrice), numeric: true },
+        { type: 'field', label: 'Total Cost', value: fmt(totalCost), numeric: true },
+        { type: 'field', label: 'Total Discount', value: fmt(discount), numeric: true },
+        { type: 'field', label: 'Net Total', value: fmt(Math.max(totalPrice - discount, 0)), numeric: true },
+      ],
+    };
   }
 
   private personName(person: any): string {

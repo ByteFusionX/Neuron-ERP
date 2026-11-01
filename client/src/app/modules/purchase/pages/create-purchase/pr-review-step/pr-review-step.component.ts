@@ -1,9 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { NgIconComponent, provideIcons } from '@ng-icons/core';
-import { heroCheckCircle, heroClock, heroExclamationTriangle, heroTrophy } from '@ng-icons/heroicons/outline';
+import { heroCheckCircle, heroClock, heroExclamationTriangle, heroMagnifyingGlass, heroTrophy, heroXMark } from '@ng-icons/heroicons/outline';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { SfCheckboxComponent } from 'src/app/shared/components/smart-form/sf-checkbox.component';
+import { SfComboboxComponent } from 'src/app/shared/components/smart-form/sf-combobox.component';
+import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
 import { PurchaseLineAward } from 'src/app/shared/interfaces/purchase.interface';
 
 export type ReviewSupplierState = 'awarded' | 'default' | 'priced' | 'waiting' | 'option';
@@ -20,6 +24,8 @@ export interface ReviewSupplier {
   rfqId?: string;
   quoteId?: string;
   leadTimeDays?: number | null;
+  /** The supplier's availability on the line (the line's availability label, e.g. "Ex-Stock"). */
+  availability?: string;
 }
 
 export interface ReviewRow {
@@ -62,78 +68,93 @@ export type ReviewAward = PurchaseLineAward;
 @Component({
   selector: 'app-pr-review-step',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgIconComponent, ActionButtonComponent],
-  providers: [provideIcons({ heroCheckCircle, heroClock, heroExclamationTriangle, heroTrophy })],
+  imports: [CommonModule, FormsModule, MatTooltipModule, NgIconComponent, ActionButtonComponent, SfCheckboxComponent, SfComboboxComponent],
+  providers: [provideIcons({ heroCheckCircle, heroClock, heroExclamationTriangle, heroMagnifyingGlass, heroTrophy, heroXMark })],
   template: `
-    <div class="space-y-4">
-      <div class="flex flex-wrap items-center gap-2 text-xs">
-        <span class="rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ rows.length }} item{{ rows.length === 1 ? '' : 's' }}</span>
-        <span class="rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ columns.length }} supplier{{ columns.length === 1 ? '' : 's' }}</span>
-        <span class="rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">{{ count('awarded') }} awarded</span>
-        <span *ngIf="count('open') + count('partial') > 0" class="rounded-full bg-amber-50 px-3 py-1 font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">{{ count('open') + count('partial') }} need award</span>
-        <span *ngIf="count('short') > 0" class="rounded-full bg-orange-50 px-3 py-1 font-medium text-orange-700 dark:bg-orange-950/40 dark:text-orange-300">{{ count('short') }} short</span>
-        <span class="ml-auto font-medium text-gray-500 dark:text-gray-400">Total cost <b class="tabular-nums text-gray-900 dark:text-gray-100">{{ totalCost | number: '1.2-2' }} {{ currency }}</b>
-          <ng-container *ngIf="totalMargin != null"> · margin <b class="tabular-nums" [ngClass]="marginTone(totalMargin)">{{ totalMargin | number: '1.1-1' }}%</b></ng-container>
-        </span>
+    <div class="space-y-2">
+      <!-- Work toolbar: search and filters. Becomes the bulk bar while lines are selected; each action fills only what is still open on a line. -->
+      <div *ngIf="rows.length" class="sticky top-0 z-20 -mx-1 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm dark:border-erp-border-dark dark:bg-erp-surface-dark">
+        <div *ngIf="locked || !selectedRows().length" class="flex flex-wrap items-center gap-2">
+          <app-sf-checkbox *ngIf="!locked" aria-label="Select shown items" [ngModel]="allShownSelected()" [ngModelOptions]="{ standalone: true }" (ngModelChange)="toggleShown()"></app-sf-checkbox>
+          <div class="relative w-full sm:w-56">
+            <ng-icon name="heroMagnifyingGlass" class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"></ng-icon>
+            <input type="text" [(ngModel)]="search" [ngModelOptions]="{ standalone: true }" placeholder="Search items…" aria-label="Search items"
+              class="h-8 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-2 text-xs text-gray-900 outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400 dark:border-erp-border-dark dark:bg-gray-800/60 dark:text-gray-100" />
+          </div>
+          <button *ngFor="let f of filters" type="button" (click)="filter = filter === f.id ? 'all' : f.id"
+            class="inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors"
+            [ngClass]="filter === f.id
+              ? 'border-violet-600 bg-violet-600 text-white'
+              : 'border-gray-200 text-gray-600 hover:bg-gray-100 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-gray-800'">
+            {{ f.label }}
+            <span class="rounded-full px-1.5 tabular-nums" [ngClass]="filter === f.id ? 'bg-white/20' : f.id === 'waiting' && filterCount(f.id) ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800'">{{ filterCount(f.id) }}</span>
+          </button>
+          <button *ngIf="search.trim() || filter !== 'all'" type="button" (click)="search = ''; filter = 'all'" class="text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-400">Clear</button>
+          <span *ngIf="visibleRows().length !== rows.length" class="ml-auto text-[11px] text-gray-500">{{ visibleRows().length }} of {{ rows.length }} shown</span>
+        </div>
+
+        <div *ngIf="!locked && selectedRows().length" class="flex flex-wrap items-center gap-2">
+          <span class="rounded-md bg-violet-600 px-2 py-1 text-xs font-semibold text-white tabular-nums">{{ selectedRows().length }} selected</span>
+          <button *ngIf="!allShownSelected()" type="button" (click)="toggleShown()" class="text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-400">Select all{{ visibleRows().length !== rows.length ? ' matching' : '' }}</button>
+          <span class="mx-1 h-5 w-px bg-gray-200 dark:bg-erp-border-dark"></span>
+
+          <app-sf-combobox class="w-56" [(ngModel)]="bulkSupplier" [ngModelOptions]="{ standalone: true }"
+            [options]="bulkSupplierOptions()" placeholder="Award to supplier…"></app-sf-combobox>
+          <app-action-button *ngIf="bulkSupplier" variant="secondary" [disabled]="busy || !supplierAwards(bulkSupplier).length" (click)="bulkToSupplier()">Award</app-action-button>
+          <app-action-button variant="primary" [disabled]="busy || !bulkAwards('price').length" (click)="bulkFill('price')">
+            Award lowest price ({{ bulkLines('price') }})
+          </app-action-button>
+          <app-action-button variant="secondary" [disabled]="busy || !unawardAwards().length" (click)="bulkUnaward()">
+            Unaward ({{ unawardAwards().length }})
+          </app-action-button>
+
+          <div class="ml-auto flex items-center gap-1">
+            <button type="button" aria-label="Clear selection" (click)="selected.clear(); bulkSupplier = ''"
+              class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><ng-icon name="heroXMark" class="h-4 w-4"></ng-icon></button>
+          </div>
+        </div>
       </div>
 
       <ng-container *ngIf="view === 'line'">
-      <article *ngFor="let r of rows" class="overflow-hidden rounded-2xl border bg-white shadow-sm dark:bg-erp-surface-dark"
+      <article *ngFor="let r of visibleRows(); trackBy: trackRow" class="overflow-hidden rounded-xl border bg-white shadow-sm dark:bg-erp-surface-dark"
         [ngClass]="kind(r) === 'open' || kind(r) === 'partial' ? 'border-amber-200 dark:border-amber-900/50' : 'border-gray-200 dark:border-erp-border-dark'">
         <div class="flex flex-col lg:flex-row">
           <!-- Product -->
-          <div class="flex w-full shrink-0 flex-col gap-3 border-b border-gray-100 bg-gray-50/70 p-4 dark:border-erp-border-dark dark:bg-gray-900/30 lg:w-72 lg:border-b-0 lg:border-r">
+          <div class="flex w-full shrink-0 flex-col gap-1.5 border-b border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-erp-border-dark dark:bg-gray-900/30 lg:w-64 lg:border-b-0 lg:border-r">
             <div class="min-w-0">
               <div class="flex items-start justify-between gap-2">
-                <p class="line-clamp-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ r.detail || r.itemName }}</p>
+                <app-sf-checkbox *ngIf="!locked" class="shrink-0" [ngModel]="selected.has(r.key)" [ngModelOptions]="{ standalone: true }" (ngModelChange)="toggle(r.key)"></app-sf-checkbox>
+                <p #desc class="line-clamp-2 min-w-0 flex-1 text-xs font-semibold text-gray-900 dark:text-gray-100" [matTooltip]="desc.scrollHeight > desc.clientHeight ? (r.detail || r.itemName) : ''">{{ r.detail || r.itemName }}</p>
                 <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium" [ngClass]="rowChip(r)">{{ rowLabel(r) }}</span>
               </div>
-              <p class="mt-0.5 truncate text-xs text-gray-500">{{ r.itemName }}</p>
+              <p class="truncate text-[11px] text-gray-500">{{ r.itemName }}</p>
             </div>
-            <dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+            <dl class="grid grid-cols-3 gap-x-2 gap-y-1 text-[11px] leading-tight">
               <div><dt class="text-gray-500">Deal qty</dt>
                 <dd class="font-semibold tabular-nums" [ngClass]="mismatch(r) ? 'text-amber-600' : 'text-gray-900 dark:text-gray-100'">{{ r.dealQty != null ? r.dealQty : 'Not in deal' }}</dd></div>
               <div><dt class="text-gray-500">Sell price</dt><dd class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ r.sellPrice != null ? (r.sellPrice | number: '1.2-2') : '-' }}</dd></div>
+              <div><dt class="text-gray-500">Awarded</dt>
+                <dd class="font-semibold tabular-nums" [ngClass]="open(r) > 0 ? 'text-amber-600' : 'text-gray-900 dark:text-gray-100'">{{ awardedQty(r) }}/{{ awardedQty(r) + open(r) }}</dd></div>
               <div><dt class="text-gray-500">Margin</dt>
-                <dd class="font-semibold tabular-nums" [ngClass]="margin(r) != null ? marginTone(margin(r)!) : 'text-gray-400'">{{ margin(r) != null ? (margin(r) | number: '1.1-1') + '%' : '-' }}</dd></div>
-              <div><dt class="text-gray-500">Margin value</dt>
-                <dd class="font-semibold tabular-nums" [ngClass]="margin(r) != null ? marginTone(margin(r)!) : 'text-gray-400'">{{ margin(r) != null ? (marginValue(r) | number: '1.2-2') : '-' }}</dd></div>
+                <dd class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ margin(r) != null ? (marginValue(r) | number: '1.2-2') : '-' }}</dd></div>
+              <div><dt class="text-gray-500">Margin %</dt>
+                <dd class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ margin(r) != null ? (margin(r) | number: '1.1-1') + '%' : '-' }}</dd></div>
             </dl>
             <p *ngIf="r.remaining > 0 && r.allocated > 0" class="text-[11px] font-medium text-amber-600">{{ r.remaining }} still to award</p>
 
-            <!-- Quote chips: click one to award what is left of the line from that quote -->
-            <div *ngIf="quotes(r).length" class="flex flex-wrap gap-1.5">
-              <button *ngFor="let s of quotes(r)" type="button"
-                class="inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors disabled:cursor-default"
-                [ngClass]="s.state === 'awarded'
-                  ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                  : 'border-gray-200 text-gray-700 hover:border-violet-400 hover:bg-violet-50 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-violet-950/30'"
-                [disabled]="locked || busy || s.state === 'awarded'"
-                (click)="chipAward(r, s)">
-                <span class="max-w-[6rem] truncate">{{ s.name }}</span>
-                <span class="tabular-nums">{{ s.price | number: '1.2-2' }}</span>
-                <span *ngIf="s.state === 'awarded'" class="tabular-nums">×{{ s.qty }}</span>
-                <span *ngIf="s.leadTimeDays != null" class="text-gray-400">{{ s.leadTimeDays }}d</span>
-              </button>
-            </div>
-
             <p *ngIf="r.short" class="rounded-lg bg-orange-50 px-2 py-1 text-[11px] text-orange-800 dark:bg-orange-950/30 dark:text-orange-200"><b>Short:</b> {{ r.shortReason }}</p>
 
-            <div *ngIf="!locked" class="mt-auto flex flex-wrap gap-1.5">
-              <app-action-button *ngIf="!r.short && r.remaining > 0" variant="ghost" [disabled]="busy" (click)="shortToggled.emit({ key: r.key, detail: r.detail || r.itemName, short: true })">Mark short</app-action-button>
-              <app-action-button *ngIf="r.short" variant="ghost" [disabled]="busy" (click)="shortToggled.emit({ key: r.key, detail: r.detail || r.itemName, short: false })">Clear short</app-action-button>
-            </div>
           </div>
 
           <!-- Supplier columns -->
-          <div class="min-w-0 flex-1 overflow-x-auto p-3">
-            <div class="grid gap-3" [style.grid-template-columns]="'repeat(' + (columns.length || 1) + ', minmax(13rem, 1fr))'">
-              <div *ngFor="let c of orderedColumns(r)" class="flex flex-col gap-3 rounded-xl p-3 transition-shadow"
+          <div class="flex min-w-0 flex-1 flex-col overflow-x-auto p-2">
+            <div class="grid flex-1 gap-2"[style.grid-template-columns]="'repeat(' + (orderedColumns(r).length || 1) + ', minmax(15rem, 1fr))'">
+              <div *ngFor="let c of orderedColumns(r)" class="relative flex flex-col gap-1.5 rounded-lg px-2.5 py-2 transition-shadow"
                 [ngClass]="cellClass(r, cell(r, c))">
                 <ng-container *ngIf="cell(r, c) as s; else notAsked">
                   <div class="min-w-0">
-                    <div class="flex items-start justify-between gap-2">
-                      <p class="line-clamp-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ c.name }}</p>
+                    <div class="flex items-start justify-between gap-2 pr-6">
+                      <p #sup class="min-w-0 flex-1 truncate text-xs font-semibold text-gray-900 dark:text-gray-100" [matTooltip]="sup.scrollWidth > sup.clientWidth ? c.name : ''">{{ c.name }}</p>
                       <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium" [ngClass]="statusChip(s)">{{ statusLabel(s) }}</span>
                     </div>
                     <p class="mt-0.5 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">
@@ -143,36 +164,37 @@ export type ReviewAward = PurchaseLineAward;
                       </span>
                     </p>
                   </div>
-                  <dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                  <dl class="flex flex-wrap gap-x-2 gap-y-1 text-[11px] leading-tight [&>div]:max-w-full [&>div]:shrink-0 [&>div]:grow">
                     <div><dt class="text-gray-500">Price</dt>
-                      <dd class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ s.price != null ? (s.price | number: '1.2-2') + ' ' + currency : '-' }}</dd></div>
+                      <dd class="font-semibold tabular-nums" [ngClass]="priceTone(r, s)" [matTooltip]="r.dealCost != null ? 'Deal sheet cost: ' + (r.dealCost | number: '1.2-2') : ''">{{ s.price != null ? (s.price | number: '1.2-2') : '-' }}</dd></div>
                     <div><dt class="text-gray-500">Qty</dt>
-                      <dd class="font-semibold tabular-nums" [ngClass]="partial(r, s) ? 'text-amber-600' : 'text-gray-900 dark:text-gray-100'">{{ s.offerQty != null ? s.offerQty : '-' }} / {{ r.prQty }}</dd></div>
+                      <dd class="font-semibold tabular-nums" [ngClass]="partial(r, s) ? 'text-amber-600' : 'text-gray-900 dark:text-gray-100'">
+                        {{ (s.state === 'awarded' ? s.qty : s.offerQty) ?? '-' }} / {{ r.prQty }}
+                      </dd></div>
+                    <div><dt class="text-gray-500">Margin</dt>
+                      <dd class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ supplierMargin(r, s) != null ? (supplierMargin(r, s)! | number: '1.2-2') : '-' }}</dd></div>
+                    <div><dt class="text-gray-500">Margin %</dt>
+                      <dd class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ supplierMarginPct(r, s) != null ? (supplierMarginPct(r, s)! | number: '1.1-1') + '%' : '-' }}</dd></div>
                     <div><dt class="text-gray-500">Availability</dt>
-                      <dd class="font-semibold" [ngClass]="availability(r, s) === 'Partial' ? 'text-amber-600' : availability(r, s) === 'Full' ? 'text-emerald-600' : 'text-gray-400'">{{ availability(r, s) }}</dd></div>
-                    <div><dt class="text-gray-500">Awarded qty</dt>
-                      <dd class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ s.state === 'awarded' || s.state === 'default' ? s.qty : '-' }}</dd></div>
+                      <dd #avail class="truncate font-semibold text-gray-900 dark:text-gray-100" [matTooltip]="avail.scrollWidth > avail.clientWidth ? (s.availability ?? '') : ''">{{ s.availability || '-' }}</dd></div>
                   </dl>
-                  <div class="mt-auto flex items-center gap-1.5">
-                    <ng-container *ngIf="s.state !== 'awarded'">
-                      <input *ngIf="canAward(s) && partial(r, s)" type="number" min="1" [max]="r.prQty"
-                        class="h-8 w-14 rounded-lg border border-gray-300 px-1.5 text-right text-xs tabular-nums dark:border-gray-700 dark:bg-transparent"
-                        [ngModel]="qtyFor(r, s)" (ngModelChange)="qtyDraft[r.key + '|' + s.supplierId] = $event" [ngModelOptions]="{ standalone: true }" />
-                      <app-action-button *ngIf="canAward(s)" class="flex-1" variant="primary" [disabled]="busy" (click)="award(r, s)">Award</app-action-button>
-                    </ng-container>
-                  </div>
+                  <input *ngIf="s.state === 'awarded' ? (s.supplierId && !locked) : canAward(s)" type="radio" [checked]="s.state === 'awarded'" [disabled]="busy"
+                    class="absolute right-2 top-2 h-4 w-4 cursor-pointer accent-emerald-600"
+                    [matTooltip]="s.state === 'awarded' ? 'Awarded: click to unaward' : 'Award to ' + s.name"
+                    (click)="$event.preventDefault(); s.state === 'awarded' ? unaward(r, s) : award(r, s)" />
                 </ng-container>
                 <ng-template #notAsked>
-                  <p class="truncate text-sm font-semibold text-gray-400">{{ c.name }}</p>
+                  <p #sup2 class="truncate text-xs font-semibold text-gray-400" [matTooltip]="sup2.scrollWidth > sup2.clientWidth ? c.name : ''">{{ c.name }}</p>
                   <p class="my-auto py-3 text-center text-xs text-gray-400">Not asked for this item</p>
                 </ng-template>
               </div>
             </div>
-            <p *ngIf="!columns.length" class="py-6 text-center text-xs text-gray-400">Add a supplier in Items to compare prices.</p>
+            <p *ngIf="!orderedColumns(r).length" class="py-2 text-center text-xs text-gray-400">No supplier added for this item. Add one in Items to compare prices.</p>
           </div>
         </div>
       </article>
 
+      <p *ngIf="rows.length && !visibleRows().length" class="py-6 text-center text-xs text-gray-500">No items match.</p>
       <p *ngIf="!rows.length" class="rounded-2xl border border-dashed border-gray-200 px-3 py-10 text-center text-sm text-gray-500 dark:border-erp-border-dark">No items to compare.</p>
       </ng-container>
     </div>
@@ -188,13 +210,147 @@ export class PrReviewStepComponent {
   @Output() awarded = new EventEmitter<ReviewAward>();
   /** Several awards saved together (Fill remaining), in order. */
   @Output() awardedMany = new EventEmitter<ReviewAward[]>();
-  @Output() shortToggled = new EventEmitter<{ key: string; detail: string; short: boolean }>();
 
-  qtyDraft: Record<string, number> = {};
   view: 'line' | 'supplier' = 'line';
   /** Order Fill remaining takes the quotes in. */
   fillBy: 'price' | 'lead' = 'price';
   private static readonly MAX_CHIPS = 5;
+
+  /** Lines picked for a bulk action, by row key. */
+  selected = new Set<string>();
+  filter: 'all' | 'todo' | 'done' | 'waiting' | 'nosupplier' = 'all';
+  search = '';
+  bulkSupplier = '';
+  readonly filters = [
+    { id: 'nosupplier' as const, label: 'No supplier' },
+    { id: 'waiting' as const, label: 'Waiting' },
+    { id: 'done' as const, label: 'Covered' },
+    { id: 'todo' as const, label: 'To award' },
+  ];
+
+  trackRow = (_: number, r: ReviewRow) => r.key;
+
+  /** Waiting: a supplier on the line has not quoted yet, so the comparison is incomplete. */
+  isWaiting(r: ReviewRow): boolean {
+    return r.suppliers.some((s) => s.state === 'waiting');
+  }
+
+  /** Covered: every supplier on the line has its comparison details. To award: the line's full qty is not awarded yet. */
+  matches(r: ReviewRow, id: 'waiting' | 'done' | 'todo' | 'nosupplier'): boolean {
+    if (id === 'nosupplier') return this.noSupplier(r);
+    if (id === 'waiting') return this.isWaiting(r);
+    if (id === 'done') return !this.isWaiting(r);
+    return r.remaining > 0;
+  }
+
+  /** No supplier: the deal sheet picked none for the line and none is awarded yet. */
+  noSupplier(r: ReviewRow): boolean {
+    return !r.suppliers.some((s) => s.state === 'default' || s.state === 'awarded');
+  }
+
+  filterCount(id: 'waiting' | 'done' | 'todo' | 'nosupplier'): number {
+    return this.rows.filter((r) => this.matches(r, id)).length;
+  }
+
+  visibleRows(): ReviewRow[] {
+    const q = this.search.trim().toLowerCase();
+    return this.rows.filter((r) => {
+      if (this.filter !== 'all' && !this.matches(r, this.filter)) return false;
+      return !q || `${r.detail} ${r.itemName}`.toLowerCase().includes(q);
+    });
+  }
+
+  /** Selected lines still on the page (rows may change after a save). */
+  selectedRows(): ReviewRow[] {
+    return this.rows.filter((r) => this.selected.has(r.key));
+  }
+
+  toggle(key: string): void {
+    this.selected.has(key) ? this.selected.delete(key) : this.selected.add(key);
+  }
+
+  allShownSelected(): boolean {
+    const shown = this.visibleRows();
+    return shown.length > 0 && shown.every((r) => this.selected.has(r.key));
+  }
+
+  someShownSelected(): boolean {
+    return !this.allShownSelected() && this.visibleRows().some((r) => this.selected.has(r.key));
+  }
+
+  toggleShown(): void {
+    const all = this.allShownSelected();
+    this.visibleRows().forEach((r) => (all ? this.selected.delete(r.key) : this.selected.add(r.key)));
+  }
+
+  bulkAwards(by: 'price' | 'lead'): ReviewAward[] {
+    const keep = this.fillBy;
+    this.fillBy = by;
+    const out = this.selectedRows().flatMap((r) => this.fillAwards(r));
+    this.fillBy = keep;
+    return out;
+  }
+
+  /** How many selected lines the action would award. */
+  bulkLines(by: 'price' | 'lead'): number {
+    return new Set(this.bulkAwards(by).map((a) => a.lineKey)).size;
+  }
+
+  bulkFill(by: 'price' | 'lead'): void {
+    const awards = this.bulkAwards(by);
+    if (awards.length) this.awardedMany.emit(awards);
+  }
+
+  /** Every award on the selected lines, as removals. */
+  unawardAwards(): ReviewAward[] {
+    return this.selectedRows().flatMap((r) => r.suppliers
+      .filter((s) => s.state === 'awarded' && !!s.supplierId)
+      .map((s) => ({ lineKey: r.key, supplierId: s.supplierId!, supplierName: s.name, clear: true })));
+  }
+
+  bulkUnaward(): void {
+    const awards = this.unawardAwards();
+    if (awards.length) this.awardedMany.emit(awards);
+  }
+
+  /** Suppliers that have quoted at least one selected line. */
+  bulkSuppliers(): ReviewColumn[] {
+    return this.columns.filter((c) => this.supplierAwards(c.id).length);
+  }
+
+  private supplierOptionsKey = '';
+  private supplierOptions: SfOption<string>[] = [];
+
+  /** Combobox options for the bulk supplier, rebuilt only when they change so the dropdown keeps its state. */
+  bulkSupplierOptions(): SfOption<string>[] {
+    const next = this.bulkSuppliers().map((c) => {
+      const n = this.supplierAwards(c.id).length;
+      return { value: c.id, label: c.name, description: `${n} line${n === 1 ? '' : 's'} to award`, disabled: !n };
+    });
+    const key = JSON.stringify(next);
+    if (key !== this.supplierOptionsKey) {
+      this.supplierOptionsKey = key;
+      this.supplierOptions = next;
+    }
+    return this.supplierOptions;
+  }
+
+  /** What is open on each selected line goes to this supplier, up to what it quoted. */
+  supplierAwards(supplierId: string): ReviewAward[] {
+    return this.selectedRows().flatMap((r) => {
+      const s = this.quotes(r).find((q) => q.supplierId === supplierId && q.state !== 'awarded');
+      const room = this.open(r);
+      if (!s || r.short || !(room > 0)) return [];
+      const qty = Math.min(s.offerQty ?? room, room);
+      return qty > 0 ? [this.awardOf(r, s, qty)] : [];
+    });
+  }
+
+  bulkToSupplier(): void {
+    const awards = this.supplierAwards(this.bulkSupplier);
+    if (awards.length) this.awardedMany.emit(awards);
+    this.bulkSupplier = '';
+  }
 
   /** Priced suppliers of the line: the chips. */
   quotes(r: ReviewRow): ReviewSupplier[] {
@@ -204,7 +360,7 @@ export class PrReviewStepComponent {
   }
 
   /** Quantity chosen (the deal sheet default does not count: a choice replaces it). */
-  private awardedQty(r: ReviewRow): number {
+  awardedQty(r: ReviewRow): number {
     return r.suppliers.filter((s) => s.state === 'awarded').reduce((n, s) => n + s.qty, 0);
   }
 
@@ -227,6 +383,12 @@ export class PrReviewStepComponent {
     const qty = Math.min(s.offerQty ?? room, room);
     if (!(qty > 0)) return;
     this.awarded.emit(this.awardOf(r, s, qty));
+  }
+
+  /** Takes the supplier off the line; its quantity goes back to unawarded. */
+  unaward(r: ReviewRow, s: ReviewSupplier): void {
+    if (this.locked || !s.supplierId) return;
+    this.awarded.emit({ lineKey: r.key, supplierId: s.supplierId, supplierName: s.name, clear: true });
   }
 
   private awardOf(r: ReviewRow, s: ReviewSupplier, qty: number): ReviewAward {
@@ -298,13 +460,13 @@ export class PrReviewStepComponent {
     return r.suppliers.find((s) => s.supplierId === c.id) ?? r.suppliers.find((s) => s.name === c.name);
   }
 
-  /** Columns for the row, with the deal sheet's default supplier first. */
+  /** Only the suppliers added against this item, with the deal sheet's default supplier first. */
   orderedColumns(r: ReviewRow): ReviewColumn[] {
     const rank = (c: ReviewColumn) => {
       const st = this.cell(r, c)?.state;
       return st === 'default' ? 0 : st === 'awarded' ? 1 : 2;
     };
-    return [...this.columns].sort((a, b) => rank(a) - rank(b));
+    return this.columns.filter((c) => !!this.cell(r, c)).sort((a, b) => rank(a) - rank(b));
   }
 
   statusLabel(s: ReviewSupplier): string {
@@ -321,9 +483,15 @@ export class PrReviewStepComponent {
     }[s.state];
   }
 
-  availability(r: ReviewRow, s: ReviewSupplier): string {
-    if (s.offerQty == null) return '-';
-    return s.offerQty >= r.prQty ? 'Full' : 'Partial';
+  /** Margin per unit if this supplier's price were the cost. */
+  supplierMargin(r: ReviewRow, s: ReviewSupplier): number | null {
+    if (!r.sellPrice || s.price == null) return null;
+    return r.sellPrice - s.price;
+  }
+
+  supplierMarginPct(r: ReviewRow, s: ReviewSupplier): number | null {
+    const m = this.supplierMargin(r, s);
+    return m == null || !r.sellPrice ? null : (m / r.sellPrice) * 100;
   }
 
   /** Cheapest priced supplier on the line. */
@@ -368,6 +536,12 @@ export class PrReviewStepComponent {
   get totalMargin(): number | null {
     const sell = this.rows.reduce((n, r) => n + (r.sellPrice ?? 0) * r.prQty, 0);
     return sell ? ((sell - this.totalCost) / sell) * 100 : null;
+  }
+
+  /** A supplier's price against the deal sheet's default cost: at or under it is green, over it is orange. */
+  priceTone(r: ReviewRow, s: ReviewSupplier): string {
+    if (s.price == null || r.dealCost == null) return 'text-gray-900 dark:text-gray-100';
+    return s.price <= r.dealCost ? 'text-emerald-600' : 'text-amber-600';
   }
 
   marginTone(m: number): string {
@@ -415,8 +589,7 @@ export class PrReviewStepComponent {
   }
 
   qtyFor(r: ReviewRow, s: ReviewSupplier): number {
-    const draft = this.qtyDraft[r.key + '|' + s.supplierId];
-    if (draft != null) return draft;
+    if (s.state === 'awarded') return s.qty;
     const room = r.allocated > 0 && r.remaining > 0 ? r.remaining : r.prQty;
     return Math.min(s.offerQty ?? r.prQty, room);
   }

@@ -55,6 +55,7 @@ export class PrFormComponent {
   @Input() isJobLess = false;
   @Input() selectedJobSheet: unknown;
   @Input() lineLocked: (i: number, j: number, k: number) => boolean = () => false;
+  @Input() lineHardLocked: (i: number, j: number, k: number) => boolean = () => false;
   @Input() lineAwarded: (line: any) => boolean = () => true;
   @Input() lineBadge: (i: number, j: number, k: number) => string | null = () => null;
   @Input() linePills: ((line: any) => { id: string; name: string }[]) | null = null;
@@ -109,6 +110,7 @@ export class PrFormComponent {
   /** Lines handed to the active supplier tab. */
   /** Lines ticked inside a supplier tab to add to it. */
   @Output() linesAddedToTab = new EventEmitter<string[]>();
+  @Input() dealSupplierDiscounts: { supplierId: any; discount?: number | string }[] | null = null;
   @Output() supplierDiscountEdited = new EventEmitter<{ supplierId: string; discount: number }>();
   @Input() tabLineKeys: string[] = [];
   @Input() tabExcludedKeys: string[] = [];

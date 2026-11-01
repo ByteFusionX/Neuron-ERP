@@ -1,3 +1,4 @@
+import { cancelInBlock, completeInBlock, followUpActor, followUpViewFilter, readCompleteBody, readScheduleBody, scheduleInBlock } from '../services/followUpTasks.service';
 import { NextFunction, Request, Response } from "express";
 import { PurchaseRequestStatus } from "../models/purchaseRequest.model";
 import PurchaseRequest from '../models/purchaseRequest.model'
@@ -9,12 +10,14 @@ import { getWorkflowSteps, updateApprovalStatus, rebuildPendingRoute } from "../
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { getNextSequence } from "../models/counter.model";
+import { issueDocNo } from "../services/docNumber.service";
 import technicalModel from "../models/technical.model";
 import Employee from "../models/employee.model";
 import { recordPrices, findPrices } from "../services/supplierPrice.service";
 import { SupplierPriceSource } from "../models/supplierPrice.model";
 import { applyLineAward, LineAward } from "../services/purchaseAward.service";
 import { logAudit } from "../services/audit.service";
+import PurchaseOrder from "../models/purchaseOrder.model";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
 
@@ -39,6 +42,23 @@ const unallocatedLines = (lines: any[]) => lines.filter((detail: any) => {
     if (!won.some((c: any) => c.awardedQty)) return false;
     return won.reduce((sum: number, c: any) => sum + (Number(c.awardedQty) || Number(detail.quantity) || 0), 0) + 0.0001 < Number(detail.quantity);
 });
+
+/**
+ * Request lines already on a live PO (anything but Rejected or Cancelled), keyed by line id.
+ * Such a line is fixed: the PO has to be rejected (pending) or cancelled (placed/approved) before it can change.
+ */
+const poLockedLines = async (purchaseId: any): Promise<Map<string, string>> => {
+    const pos: any[] = await PurchaseOrder.find({ purchaseId, isDeleted: { $ne: true }, poStatus: { $nin: ['Draft', 'Rejected', 'Cancelled'] } })
+        .select('poNo poStatus items.prLineKey items.quantity').lean();
+    const locked = new Map<string, string>();
+    for (const po of pos) for (const item of po.items || []) {
+        if (item.prLineKey && Number(item.quantity) > 0 && !locked.has(String(item.prLineKey))) locked.set(String(item.prLineKey), `${po.poNo} (${po.poStatus})`);
+    }
+    return locked;
+};
+
+const LOCKED_LINE_FIELDS = ['quantity', 'detail', 'uom', 'unitCost', 'supplierId', 'partNo'];
+const lockedValue = (v: any) => (v && typeof v === 'object' ? String(v._id ?? v) : String(v ?? ''));
 
 const SUBMIT_GATE_MESSAGE = (open: number) =>
     `${open} product(s) are not fully allocated. Choose suppliers for the full quantity, each with a price, or mark the product short with a reason.`;
@@ -65,6 +85,7 @@ const PURCHASE_SORT_FIELDS: Record<string, string> = {
     date: 'sortDate',
     customerName: 'customerId.companyName',
     purchaseNo: 'purchaseNo',
+    nextFollowUpDate: 'followUp.nextFollowUpDate',
     jobId: 'jobId.jobId',
     totalLpo: 'totalLpo',
     selectedPrQuantity: 'selectedPrQuantity',
@@ -596,7 +617,7 @@ const poProgressStages = (poProgress?: string): any[] => [
 
 export const getPurchaseRequests = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName, sourceType, poProgress, rfqStatus, allocation, search, sortKey, sortDir } = req.body;
+        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName, sourceType, poProgress, rfqStatus, allocation, search, sortKey, sortDir, followUpView } = req.body;
         const pageNumber = Math.max(1, Math.floor(Number(page)) || 1);
         const pageSize = Math.min(10000, Math.max(1, Math.floor(Number(row)) || 10));
         // The grid's search box sends `search`: it matches the PR number, supplier, customer or job id.
@@ -627,6 +648,7 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
         }
 
         const matchStage: any = {
+            ...followUpViewFilter('followUp.nextFollowUpDate', followUpView),
             isDeleted: false,
             ...accessFilter
         };
@@ -1047,7 +1069,7 @@ export const getPurchaseRequestCounts = async (req: Request, res: Response, next
                 return (await getNewTabJobs(employee._id, isSuperAdmin, searchText, 1, 1)).total;
             }
 
-            const matchStage: any = { isDeleted: false, ...accessFilter };
+            const matchStage: any = { isDeleted: false, ...accessFilter, ...followUpViewFilter('followUp.nextFollowUpDate', view.followUpView) };
             matchStage.status = Array.isArray(view.status) ? { $in: view.status } : view.status;
             if (view.sourceType === 'manual') matchStage.sourceType = 'manual';
             else if (view.sourceType === 'job') matchStage.sourceType = { $ne: 'manual' };
@@ -2395,6 +2417,8 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
             }
         }
 
+        populatedPurchaseRequest.lockedLines = Object.fromEntries(await poLockedLines(populatedPurchaseRequest._id));
+
         return res.status(200).json({
             success: true,
             message: "Purchase request fetched successfully",
@@ -2405,30 +2429,10 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
     }
 };
 
-const seedPurchaseNoSequence = async (): Promise<number> => {
-    const latestPR = await PurchaseRequest.findOne().sort({ purchaseNo: -1 });
-    if (latestPR) {
-        const parts = latestPR.purchaseNo.split('-');
-        const lastCounter = parseInt(parts[3]);
-        if (!isNaN(lastCounter)) {
-            return lastCounter;
-        }
-    }
-    return 0;
-};
-
 // Generate a new purchase number
 export const generatePurchaseNumber = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const now = new Date();
-        const year = now.getFullYear().toString().slice(-2);
-        const month = (now.getMonth() + 1).toString().padStart(2, '0');
-
-        const nextNumber = await getNextSequence('purchaseNo', seedPurchaseNoSequence);
-
-        const newPurchaseNumber = `NRN/PR-${year}-${month}-${nextNumber
-            .toString()
-            .padStart(4, '0')}`;
+        const newPurchaseNumber = await issueDocNo('PR');
 
         return res.status(200).json({
             success: true,
@@ -2993,7 +2997,29 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
         if (wasUnsubmitted && !isStatusChangingFromDraft) updateData.status = PurchaseRequestStatus.InProgress;
 
 
-        const isStatusChangingFromRejected = existingPurchaseRequest.status === PurchaseRequestStatus.Rejected && 
+        // A product already on a PO cannot change here; its PO is rejected (pending) or cancelled (placed/approved) first.
+        if (Array.isArray(updateData.items)) {
+            const locked = await poLockedLines(existingPurchaseRequest._id);
+            if (locked.size) {
+                const incoming = new Map<string, any>();
+                prLines(updateData.items).forEach((d: any) => d?._id && incoming.set(String(d._id), d));
+                for (const existingLine of prLines(existingPurchaseRequest.items as any[])) {
+                    const po = locked.get(String((existingLine as any)._id));
+                    if (!po) continue;
+                    const next = incoming.get(String((existingLine as any)._id));
+                    const changed = !next || LOCKED_LINE_FIELDS.some((f) => lockedValue((existingLine as any)[f]) !== lockedValue(next[f]) && !(next[f] === undefined));
+                    if (changed) {
+                        return res.status(409).json({
+                            success: false,
+                            message: `"${(existingLine as any).detail || 'A product'}" is already on ${po}. Reject that PO if it is pending, or cancel it if it is placed or approved, before changing this product.`,
+                            status: 409
+                        });
+                    }
+                }
+            }
+        }
+
+        const isStatusChangingFromRejected = (existingPurchaseRequest.status === PurchaseRequestStatus.Rejected || existingPurchaseRequest.status === PurchaseRequestStatus.Revoked) && 
                                             updateData.status && 
                                             updateData.status === PurchaseRequestStatus.Pending;
 
@@ -3459,7 +3485,41 @@ export const resetPurchaseWorkflow = async (req: Request, res: Response, next: N
     }
 };
 
-const EDITABLE_PR_STATUSES = [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress, PurchaseRequestStatus.Rejected] as string[];
+/** Takes an approved request back out of approval: it becomes Revoked, editable in full and can be sent for approval again. */
+export const revokePurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const employee = await getEmployeeData(req.user);
+        if (!employee) return res.status(401).json({ success: false, message: 'Employee not found' });
+        const comment = String(req.body?.comment || '').trim();
+        if (!comment) return res.status(400).json({ success: false, message: 'Give a reason for revoking' });
+        const purchaseRequest = await PurchaseRequest.findById(req.params.id);
+        if (!purchaseRequest || purchaseRequest.isDeleted) {
+            return res.status(404).json({ success: false, message: 'Purchase request not found' });
+        }
+        if (purchaseRequest.status !== PurchaseRequestStatus.Approved) {
+            return res.status(400).json({ success: false, message: `Only an approved purchase request can be revoked (this one is ${purchaseRequest.status})` });
+        }
+        const livePos = await PurchaseOrder.countDocuments({
+            purchaseId: purchaseRequest._id,
+            isDeleted: { $ne: true },
+            poStatus: { $nin: ['Draft', 'Rejected', 'Cancelled'] },
+        });
+        if (livePos) {
+            return res.status(400).json({ success: false, message: `${livePos} purchase order(s) already exist for this request. Cancel them before revoking.` });
+        }
+        purchaseRequest.status = PurchaseRequestStatus.Revoked;
+        purchaseRequest.rejectedReason.push({ rejectedBy: employee._id, comment, rejectedAt: new Date() } as any);
+        purchaseRequest.updatedBy = employee._id;
+        purchaseRequest.updatedAt = new Date();
+        await purchaseRequest.save();
+        await logPrAudit(req, purchaseRequest, 'revoked', `Revoked — ${comment}`);
+        return res.status(200).json({ success: true, message: 'Purchase request revoked' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const EDITABLE_PR_STATUSES = [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress, PurchaseRequestStatus.Rejected, PurchaseRequestStatus.Revoked] as string[];
 
 /**
  * Chooses suppliers for request lines, straight on the lines' comparisons.
@@ -3475,6 +3535,11 @@ export const awardPurchaseLines = async (req: Request, res: Response, next: Next
         }
         const awards: LineAward[] = Array.isArray(req.body?.awards) ? req.body.awards : [];
         if (!awards.length) return res.status(400).json({ success: false, message: "Nothing to award." });
+        const locked = await poLockedLines(purchase._id);
+        const clash = awards.find((a: any) => locked.has(String(a?.lineKey)));
+        if (clash) {
+            return res.status(409).json({ success: false, message: `That product is already on ${locked.get(String((clash as any).lineKey))}. Reject that PO if it is pending, or cancel it if it is placed or approved, to change the supplier.` });
+        }
         for (const award of awards) {
             if (!award?.supplierId || !ObjectId.isValid(String(award.supplierId))) {
                 return res.status(400).json({ success: false, message: "Pick a supplier." });
@@ -3505,4 +3570,31 @@ export const getSupplierPrices = async (req: Request, res: Response, next: NextF
     } catch (error) {
         next(error);
     }
+};
+
+/** Follow-ups use the same record visibility as the PR list. */
+export const changePurchaseFollowUp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        if (!ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid purchase request id' });
+        const employee = await getEmployeeData(req.user);
+        if (!employee) return res.status(401).json({ message: 'Employee not found' });
+        const scope = employee.category?.privileges?.purchase?.viewReport
+            ? await buildPrivilegeAccessFilter(employee._id, employee.category.privileges.purchase.viewReport, 'createdBy') : {};
+        const purchase = await PurchaseRequest.findOne({ _id: req.params.id, isDeleted: false, ...scope });
+        if (!purchase) return res.status(404).json({ message: 'Purchase request not found' });
+        let block: any;
+        if (req.params.action === 'schedule') {
+            const body = readScheduleBody(req, res); if (!body) return;
+            block = scheduleInBlock(purchase.followUp, body.dueDate, body.note, await followUpActor(req));
+        } else if (req.params.action === 'complete') {
+            const body = readCompleteBody(req, res); if (!body) return;
+            block = completeInBlock(purchase.followUp, body, await followUpActor(req));
+        } else if (req.params.action === 'cancel') {
+            block = cancelInBlock(purchase.followUp, String(req.body.reason ?? '').trim());
+            if (!block) return res.status(400).json({ message: 'No follow-up is scheduled.' });
+        } else return res.status(400).json({ message: 'Invalid follow-up action' });
+        purchase.followUp = block;
+        await purchase.save({ validateModifiedOnly: true });
+        return res.json({ success: true, followUp: purchase.followUp });
+    } catch (error) { next(error); }
 };

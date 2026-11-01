@@ -12,6 +12,15 @@
         {{ readOnly ? 'For reference only. Awards are made on the purchase request.' : 'This request is with the approvers, so the awards are final.' }}
       </p>
     }
+    @if (lockedRows().length) {
+      <section class="mb-4 rounded-xl border border-sky-200 bg-sky-50/60 px-4 py-3 text-xs text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/20 dark:text-sky-200">
+        <p class="font-semibold">{{ lockedRows().length }} product{{ lockedRows().length === 1 ? ' is' : 's are' }} already on a purchase order and cannot be awarded again</p>
+        <p class="mt-0.5 opacity-80">To change {{ lockedRows().length === 1 ? 'it' : 'them' }}, reject the PO if it is pending approval, or cancel it if it is approved or placed.</p>
+        <ul class="mt-1.5 list-disc pl-5">
+          @for (l of lockedRows(); track l.key) { <li><span class="font-medium">{{ l.detail }}</span> · {{ l.po }}</li> }
+        </ul>
+      </section>
+    }
     @if (d.unasked?.length) {
       <section class="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20">
         <header class="flex flex-wrap items-center gap-3 px-4 py-3">

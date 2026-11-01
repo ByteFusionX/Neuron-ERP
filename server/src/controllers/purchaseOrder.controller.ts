@@ -10,6 +10,7 @@ import mongoose from "mongoose";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { getNextSequence } from "../models/counter.model";
+import { issueDocNo } from "../services/docNumber.service";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
@@ -1026,7 +1027,7 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
         : [];
     const normalizedStatusFilters = statusFilters.map((value) => value.trim()).filter(Boolean);
 
-    // Vendor bills "Upcoming": placed orders that do not have any active GRN yet.
+    // Supplier bills "Upcoming": placed orders that do not have any active GRN yet.
     if (isVendorBillsView && normalizedStatusFilters.length === 1 && normalizedStatusFilters[0] === 'Placed') {
       finalMatchStage.poStatus = 'Placed';
       finalMatchStage['grns.0'] = { $exists: false };
@@ -1039,7 +1040,8 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
     }
 
     if (receiptStatus) {
-      finalMatchStage.receiptStatus = receiptStatus;
+      const receiptStatuses = String(receiptStatus).split(",").map((s) => s.trim()).filter(Boolean);
+      finalMatchStage.receiptStatus = receiptStatuses.length > 1 ? { $in: receiptStatuses } : receiptStatuses[0];
     }
 
     if (isVendorBillsView && readyToDeliver === 'true') {
@@ -1270,27 +1272,9 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
   }
 };
 
-const seedLpoSequence = (year: string) => async (): Promise<number> => {
-  const lastOrder = await PurchaseOrder.findOne(
-    { poNo: { $regex: `^NTP-LP-\\d{4}-${year}$` } }
-  ).sort({ poNo: -1 });
-
-  if (lastOrder && lastOrder.poNo) {
-    const parts = lastOrder.poNo.split("-");
-    if (parts.length >= 3 && !isNaN(parseInt(parts[2]))) {
-      return parseInt(parts[2]);
-    }
-  }
-  return 0;
-};
-
 export const generateLpoNo = async (req: Request, res: Response) => {
   try {
-    const now = new Date();
-    const year = now.getFullYear().toString().slice(-2);
-
-    const nextNumber = await getNextSequence(`poNo-${year}`, seedLpoSequence(year));
-    const poNo = `NTP-LP-${nextNumber.toString().padStart(4, "0")}-${year}`;
+    const poNo = await issueDocNo('PO');
 
     return res.status(200).json({
       success: true,
@@ -1433,7 +1417,7 @@ export const placePurchaseOrder = async (req: Request, res: Response) => {
     const grnFilter = { privilegeKey: 'grn' as any, checkFunction: (p: any) => !!p.grn?.viewReport && p.grn.viewReport !== 'none' };
     const base = { referenceModel: 'PurchaseOrder', sentBy: employee._id, referenceId: placed._id, additionalData: { purchaseOrderId: placed._id.toString() } };
     await notifyByPrivilege({ ...base, type: 'LpoPlaced', title: 'LPO arriving', message: `${placed.poNo} from ${supplierName} is expected on ${dateText}` }, grnFilter);
-    // Finance sees the commitment early in Vendor Bills > Upcoming.
+    // Finance sees the commitment early in Supplier Bills > Upcoming.
     const billFilter = { privilegeKey: 'invoice' as any, checkFunction: (p: any) => !!p.invoice?.viewReport && p.invoice.viewReport !== 'none' };
     await notifyByPrivilege({ ...base, type: 'LpoPlacedBilling', title: 'LPO placed', message: `${placed.poNo} to ${supplierName} was placed, delivery expected ${dateText}` }, billFilter);
     const dueAt = new Date(expected);
@@ -1866,6 +1850,77 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
       message: "Failed to reject purchase order",
       error: error.message,
     });
+  }
+};
+
+/** Sends a rejected LPO back through the PO approval workflow; the route is rebuilt from the current settings. */
+export const resendPurchaseOrder = async (req: Request, res: Response) => {
+  try {
+    const employee = await getEmployeeData(req.user);
+    if (!employee) return res.status(401).json({ success: false, message: "Employee not found" });
+    const isSuper = /^superadmin$/i.test(employee.category?.role ?? "");
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: "Invalid Purchase Order ID" });
+    }
+    const purchaseOrder = await PurchaseOrder.findById(req.params.id);
+    if (!purchaseOrder) return res.status(404).json({ success: false, message: "Purchase order not found" });
+    if (purchaseOrder.poStatus !== 'Rejected') {
+      return res.status(400).json({ success: false, message: `Only a rejected LPO can be resent (this one is ${purchaseOrder.poStatus})` });
+    }
+    if (!isSuper && purchaseOrder.createdBy?.toString() !== employee._id?.toString()) {
+      return res.status(403).json({ success: false, message: "Only the person who raised this LPO can resend it" });
+    }
+
+    // Rejected LPOs stop reserving PR quantity, so make sure it is still free before it counts again.
+    const pr = await purchaseRequest.findById(purchaseOrder.purchaseId);
+    if (!pr || pr.status !== 'Approved') {
+      return res.status(409).json({ success: false, message: "The purchase request is no longer approved, so this LPO cannot be resent" });
+    }
+    const allowedByLine = new Map<string, number>();
+    (pr.items || []).forEach((item: any) => (item.itemDetails || []).forEach((detail: any) => {
+      const selected = lineSuppliers(detail).find((entry) => String(entry.supplierId) === String(purchaseOrder.supplierId));
+      if (selected) allowedByLine.set(String(detail._id), (allowedByLine.get(String(detail._id)) || 0) + selected.quantity);
+    }));
+    const others = await PurchaseOrder.find({
+      _id: { $ne: purchaseOrder._id },
+      purchaseId: purchaseOrder.purchaseId,
+      supplierId: purchaseOrder.supplierId,
+      poStatus: { $nin: ['Draft', 'Rejected', 'Cancelled'] },
+    });
+    const reserved = new Map<string, number>();
+    others.forEach((po: any) => (po.items || []).forEach((item: any) => {
+      if (item.prLineKey) reserved.set(String(item.prLineKey), (reserved.get(String(item.prLineKey)) || 0) + (Number(item.quantity) || 0));
+    }));
+    for (const item of (purchaseOrder.items || []) as any[]) {
+      if (!item.prLineKey) continue;
+      const key = String(item.prLineKey);
+      if ((Number(item.quantity) || 0) > Math.max(0, (allowedByLine.get(key) || 0) - (reserved.get(key) || 0))) {
+        return res.status(409).json({ success: false, message: "Part of this LPO's quantity has since been used on another LPO, so it cannot be resent" });
+      }
+    }
+
+    let workflowSteps: any[];
+    try {
+      workflowSteps = await getWorkflowSteps(PO_WORKFLOW, String(purchaseOrder.createdBy), lpoApprovalContext(purchaseOrder));
+    } catch (workflowError) {
+      console.error('Error rebuilding LPO workflow steps:', workflowError);
+      return res.status(500).json({ success: false, message: "Could not start the PO approval workflow. Check Settings > Workflow > PO Approval." });
+    }
+    const poStatus = workflowSteps.length === 0 ? 'Approved' : 'Pending for Approval';
+    const updated = await PurchaseOrder.findByIdAndUpdate(
+      purchaseOrder._id,
+      { $set: { poStatus, approvalStatus: workflowSteps, updatedAt: new Date() } },
+      { new: true }
+    );
+
+    await logPoAudit(req, purchaseOrder, 'submitted', 'Resent for approval');
+    if (updated && poStatus === 'Pending for Approval') {
+      await notifyLpoApprovers(updated, employee._id, req.app.get('io') as Server);
+    }
+    return res.status(200).json({ success: true, message: "Purchase order sent for approval again", data: updated });
+  } catch (error: any) {
+    console.error("Resend purchase order error:", error);
+    return res.status(500).json({ success: false, message: "Failed to resend purchase order", error: error.message });
   }
 };
 

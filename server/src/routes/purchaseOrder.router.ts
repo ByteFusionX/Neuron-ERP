@@ -14,6 +14,7 @@ import {
   getItemsForPurchaseRequest,
   approvePurchaseOrder,
   rejectPurchaseOrder,
+  resendPurchaseOrder,
   revokePurchaseOrder,
   resetPurchaseOrderWorkflow,
   placePurchaseOrder,
@@ -35,6 +36,7 @@ router.put("/:id/reissue", requirePrivilege("purchaseOrder", "canReissueAndRevok
 router.patch("/:id/status", updatePurchaseOrderStatus);
 router.patch("/:id/approve", requirePrivilege("purchaseOrder", "canApprovePOs"), approvePurchaseOrder);
 router.patch("/:id/reject", requirePrivilege("purchaseOrder", "canApprovePOs"), rejectPurchaseOrder);
+router.patch("/:id/resend", requirePrivilege("purchaseOrder", "canInitiateLPO"), resendPurchaseOrder);
 router.patch("/:id/place", requirePrivilege("purchaseOrder", "canInitiateLPO"), placePurchaseOrder);
 router.patch("/:id/documents", requirePrivilege("purchaseOrder", "canInitiateLPO"), upload.array('files'), addPurchaseOrderDocuments);
 router.delete("/:id/documents/:fileName", requirePrivilege("purchaseOrder", "canInitiateLPO"), removePurchaseOrderDocument);

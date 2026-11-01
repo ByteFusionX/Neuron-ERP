@@ -2,6 +2,7 @@ import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/f
 import { expandDealComponents } from 'src/app/shared/utils/deal-pricing.util';
 import { CommonModule } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { AfterViewInit, Component, computed, effect, EventEmitter, HostBinding, inject, Input, OnDestroy, OnInit, Output, signal, untracked, ViewChild } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -12,7 +13,7 @@ import { getJob } from 'src/app/shared/interfaces/job.interface';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { ToastrService } from 'ngx-toastr';
 import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
-import { firstValueFrom, Subscription } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber, SupplierLastPrice } from 'src/app/shared/interfaces/purchase.interface';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
 import { PrReviewStepComponent, ReviewAward, ReviewRow, ReviewSupplier } from './pr-review-step/pr-review-step.component';
@@ -25,7 +26,7 @@ import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form'
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
-import { LineSupplierOffer } from 'src/app/shared/components/item-entry/item-entry.component';
+import { ItemEntryComponent, LineSupplierOffer } from 'src/app/shared/components/item-entry/item-entry.component';
 import { PurchaseOrderStatusRow, PurchaseOrderStatusSupplier, SalesRfqCompareColumn } from 'src/app/shared/interfaces/sales-rfq.interface';
 import { PoCancelModalComponent } from './po-cancel-modal/po-cancel-modal.component';
 import { PoReassignModalComponent } from './po-reassign-modal/po-reassign-modal.component';
@@ -58,6 +59,7 @@ interface PartNumberDropdownOption {
     DetailViewShellComponent,
     ActionButtonComponent,
     NgIcon,
+    MatTooltipModule,
     DetailBadgeComponent,
     PrFormComponent,
     PrReviewStepComponent,
@@ -78,7 +80,9 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   /** Drawer mode: an existing PR to edit (replaces the `/purchase/edit/:id` route param). */
   @Input() editPurchaseId: string | null = null;
   /** Drawer mode: the step to open on; when absent it follows the PR status (Approved opens POs, Pending opens Compare & award). */
-  @Input() initialStep: 1 | 2 | 3 | 4 | null = null;
+  @Input() initialStep: 1 | 2 | 3 | 4 | 5 | null = null;
+  /** Drawer mode: look-only view of items, compare & award and additional costs, with just a Close button. */
+  @Input() viewOnly = false;
   /** Drawer mode: a PR was created or saved as a draft, so the list should reload. */
   @Output() saved = new EventEmitter<void>();
   /** Drawer mode: the slide-out animation finished; the host can unmount. */
@@ -141,12 +145,17 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   entryForm: FormGroup = this.fb.group({ optionalItems: this.fb.array([]) });
   get entryItems(): FormArray { return this.entryForm.get('optionalItems') as FormArray; }
+  /** The form array's own dirty flag is cleared whenever a child control is marked pristine, so supplier-tab changes are tracked here too. */
+  private extraDirty = false;
+  get entryDirty(): boolean { return this.extraDirty || this.entryItems.dirty; }
+  private markEntryDirty(): void { this.extraDirty = true; this.entryItems.markAsDirty(); }
+  private markEntryPristine(): void { this.extraDirty = false; this.entryItems.markAsPristine(); }
   liveTotalLpo = signal<number>(0);
 
   /** A new list means the editor reseeds from it, so whatever it held is no longer unsaved work. */
   private resetEntryDirty = effect(() => {
     this.itemsList();
-    untracked(() => this.entryItems.markAsPristine());
+    untracked(() => this.markEntryPristine());
   });
 
   entrySeed = computed<ItemEntryOptionValue[]>(() => [{
@@ -204,6 +213,16 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** Awarded lines stay editable; nothing is locked in the PR item entry. */
   lineLocked = (_i: number, _j: number, _k: number): boolean => false;
+
+  /** Lines already on a live PO, by line id -> the PO holding them. They change only after that PO is rejected or cancelled. */
+  poLockedLines: Record<string, string> = {};
+
+  lineHardLocked = (i: number, j: number, k: number): boolean => {
+    const items = this.entryItems.at(i)?.get('items') as FormArray | null;
+    const details = items?.at(j)?.get('itemDetails') as FormArray | null;
+    const key = details?.at(k)?.get('lineKey')?.value;
+    return !!key && !!this.poLockedLines[key];
+  };
 
   /** For the item form's "Not awarded" filter: the line's saved copy says whether a supplier won it. */
   lineAwarded = (line: any): boolean => {
@@ -283,17 +302,14 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
           state: c.selected ? 'awarded' : price != null ? 'priced' : 'none',
           price,
           qty: c.selected && c.awardedQty ? Number(c.awardedQty) : undefined,
+          savedQty: Number(c.offeredQty) > 0 ? Number(c.offeredQty) : Number(c.quantity) > 0 ? Number(c.quantity) : undefined,
         });
       });
-      // Nobody awarded yet: the line's own (deal sheet) supplier is the default award until the user awards another.
+      // Nobody awarded: the line's own (deal sheet) supplier is listed as an option only; nothing reads as selected.
       const ownId = String(d?.supplierId?._id || d?.supplierId || '');
-      if (ownId && !(d?.comparisons || []).some((c: any) => c.selected)) {
-        const own = list.find((o) => o.supplierId === ownId);
-        if (own) own.state = 'awarded';
-        else {
-          const cost = Number(d.unitCost) > 0 ? Number(d.unitCost) : null;
-          list.push({ supplierId: ownId, supplierName: d.supplierDetails?.supplierName || d.supplierName || this.supplierOptions().find((o) => o.value === ownId)?.label || 'Supplier', state: 'awarded', price: cost });
-        }
+      if (ownId && !list.some((o) => o.supplierId === ownId)) {
+        const cost = Number(d.unitCost) > 0 ? Number(d.unitCost) : null;
+        list.push({ supplierId: ownId, supplierName: d.supplierDetails?.supplierName || d.supplierName || this.supplierOptions().find((o) => o.value === ownId)?.label || 'Supplier', state: cost != null ? 'priced' : 'none', price: cost });
       }
       map.set(key, list);
     });
@@ -340,13 +356,13 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   });
 
   onOfferPicked(_event: { lineKey: string; offer: LineSupplierOffer }): void {
-    this.entryItems.markAsDirty();
+    this.markEntryDirty();
     this.recomputeLiveTotal();
   }
 
   /** A supplier pill on a line: the line (already patched with the supplier and its price) is that supplier's; kept on Save. */
   onPillPicked(_e: { lineKey: string; supplierId: string; price: number | null }): void {
-    this.entryItems.markAsDirty();
+    this.markEntryDirty();
     this.recomputeLiveTotal();
   }
 
@@ -393,8 +409,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       if (d.supplierId) ids.add(String(d.supplierId));
       const excluded = this.tabExcluded();
       const shared = d.lineKey ? this.prFormCmp?.itemEntry?.lineShares(d.lineKey) : null;
-      // A supplier that is a line's default, or holds an award on any line, stays on the PR.
-      if (d.supplierId) inUse.add(String(d.supplierId));
+      // A supplier that holds an award on any line stays on the PR; a line's default supplier (e.g. from the deal) can be closed.
       shared?.forEach((s) => s.qty > 0 && inUse.add(s.supplierId));
       this.lineOffers(d).forEach((o) => o.supplierId && o.state === 'awarded' && inUse.add(o.supplierId));
       removed.forEach((id) => ids.delete(id));
@@ -431,10 +446,16 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   onSupplierTabClosed(id: string): void {
     this.addedSuppliers.update((l) => l.filter((x) => x !== id));
     this.removedSuppliers.update((l) => [...new Set([...l, id])]);
+    // Lines that defaulted to this supplier (e.g. from the deal) lose that default, or the tab would come straight back.
+    const entry = this.prFormCmp?.itemEntry;
+    entry?.itemsAt(0).controls.forEach((_, j) => (entry.detailsAt(0, j)?.controls || []).forEach((c) => {
+      const ctl = c.get('supplierId');
+      if (String(ctl?.value || '') === id) ctl!.setValue('');
+    }));
     this.tabLines.update(({ [id]: _, ...rest }) => rest);
     if (this.activeTab === id) this.activeTab = 'items';
     this.lineTick.update((n) => n + 1);
-    this.entryItems.markAsDirty();
+    this.markEntryDirty();
   }
 
   onSupplierTabAdded(e: { supplierId: string; lineKeys: string[] }): void {
@@ -447,7 +468,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       this.tabExcluded.update((m) => ({ ...m, [id]: (m[id] ?? []).filter((k) => !e.lineKeys.includes(k)) }));
     }
     this.activeTab = id;
-    if (e.lineKeys.length) this.entryItems.markAsDirty();
+    if (e.lineKeys.length) this.markEntryDirty();
   }
 
   onLinesAddedToTab(lineKeys: string[]): void {
@@ -455,6 +476,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     if (id === 'items' || !lineKeys.length) return;
     this.tabLines.update((m) => ({ ...m, [id]: [...new Set([...(m[id] ?? []), ...lineKeys])] }));
     this.tabExcluded.update((m) => ({ ...m, [id]: (m[id] ?? []).filter((k) => !lineKeys.includes(k)) }));
+    this.lineTick.update((n) => n + 1);
+    this.markEntryDirty();
   }
 
   /** Lines taken out of a supplier tab by hand (a line's only supplier cannot be taken out). */
@@ -470,6 +493,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     this.tabLines.update((m) => ({ ...m, [id]: (m[id] ?? []).filter((k) => !lineKeys.includes(k)) }));
     this.tabExcluded.update((m) => ({ ...m, [id]: [...new Set([...(m[id] ?? []), ...lineKeys])] }));
     this.lineTick.update((n) => n + 1);
+    this.markEntryDirty();
   }
 
   /** Chooses the active supplier for the ticked lines. The item entry already set the line's supplier, shares and cost; they are kept on Save. */
@@ -479,7 +503,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     // The chosen supplier keeps the line under its tab even when another supplier leads the line.
     this.tabLines.update((m) => ({ ...m, [id]: [...new Set([...(m[id] ?? []), ...lines.map((l) => l.lineKey)])] }));
     this.lineTick.update((n) => n + 1);
-    this.entryItems.markAsDirty();
+    this.markEntryDirty();
   }
 
   private recomputeLiveTotal(): void {
@@ -499,6 +523,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     const byKey = this.originalsByKey();
     const groups = this.groupByKey();
     let invalid = false;
+    let overName = '';
     const items: any[] = [];
     const groupOf = (name: string) => {
       let g = items.find((x) => x.itemName === name);
@@ -516,12 +541,15 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
           ...(original ?? { isNewlyAdded: true, merged: false, comparisons: [] }),
           ...fields,
           partNo: productId || '',
-          supplierId: fields.supplierId || original?.supplierId || '',
+          supplierId: fields.supplierId || (this.removedSuppliers().includes(String(original?.supplierId)) ? '' : original?.supplierId) || '',
         };
         // The deal's cost stays the baseline; the line's own cost is the award.
         const deal = this.dealHit(groups.get(lineKey) ?? formName, fields.detail);
         if (deal?.cost != null) line.dealUnitCost = deal.cost;
         line.comparisons = this.lineComparisons({ ...d, ...line });
+        // A supplier cannot be offered more than the deal asks for on the line.
+        const over = line.comparisons.find((c: any) => Number(c.quantity) > Number(line.quantity) + 0.0001);
+        if (over && !overName) overName = `${over.supplierName || 'A supplier'} quantity (${over.quantity}) is above the line quantity (${line.quantity}) for ${line.detail}`;
         // A deal line goes under its deal item, a saved line back to its own group, a new line under the group it was added to.
         const name = deal?.itemName || (lineKey && groups.get(lineKey)) || formName || line.detail || 'Item';
         groupOf(name).itemDetails.push(line);
@@ -531,6 +559,10 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     if (invalid) {
       if (quiet) return items;
       this.toaster.warning('Please fill all required fields!');
+      return null;
+    }
+    if (overName && !quiet) {
+      this.toaster.warning(`${overName}. Reduce it to continue.`);
       return null;
     }
     return items;
@@ -559,9 +591,9 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     const upsert = (supplierId: string, price: number | null, qty: number | null) => {
       let c = list.find((x) => String(x.supplierId) === supplierId);
       if (!c) {
-        if (price == null) return null;
+        // A supplier added to the line with no price yet is still saved (price 0 = not quoted), so the comparison is not lost.
         // A new comparison starts from the line's own quantity, UoM and availability; the buyer changes them per supplier later.
-        c = { supplierId, supplierName: nameOf(supplierId), quantity: qty || lineQty, unitPrice: price, uom: d.uom || '', etaTerms: d.availability || '', paymentTerms: 'Not specified', selected: false };
+        c = { supplierId, supplierName: nameOf(supplierId), quantity: qty || lineQty, unitPrice: price ?? 0, uom: d.uom || '', etaTerms: d.availability || '', paymentTerms: 'Not specified', selected: false };
         list.push(c);
       } else if (price != null) c.unitPrice = price;
       return c;
@@ -574,6 +606,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       const edit = entry.scopeEdit(key, p.id);
       const c = upsert(p.id, price, edit.quantity);
       // What the buyer set on this supplier's tab is the supplier's own UoM and availability.
+      if (c && edit.quantity) c.quantity = edit.quantity;
       if (c && edit.uom) c.uom = edit.uom;
       if (c && edit.availability) c.etaTerms = edit.availability;
     });
@@ -592,12 +625,12 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** Pulls unsaved editor changes into `itemsList` before a whole-form save. */
   private syncEntryToList(): boolean {
-    if (!this.entryItems.dirty) return true;
+    if (!this.entryDirty) return true;
     const items = this.collectEntryItems();
     if (!items) return false;
     this.itemsList.set(items);
     this.updateTotalLpo();
-    this.entryItems.markAsPristine();
+    this.markEntryPristine();
     return true;
   }
 
@@ -606,7 +639,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     if (!items) return;
     this.itemsList.set(items);
     this.updateTotalLpo();
-    this.entryItems.markAsPristine();
+    this.markEntryPristine();
     this.saveItemsToBackend(items);
   }
 
@@ -747,6 +780,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   formTitle(): string {
+    if (this.viewOnly) return this.isJobLess ? 'View general purchase' : 'View purchase requisition';
     if (this.isJobLess) return this.isEditing ? 'Edit general purchase' : 'New general purchase';
     return this.isEditing ? 'Edit purchase requisition' : 'New purchase requisition';
   }
@@ -763,7 +797,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** Items auto-save to a server draft, so only an unsaved pick or a half-typed row counts as dirty. */
   isDrawerDirty(): boolean {
-    return this.entryItems.dirty || (!this.purchaseId && (!!this.requestedJobId() || this.itemCount() > 0));
+    return this.entryDirty || (!this.purchaseId && (!!this.requestedJobId() || this.itemCount() > 0));
   }
 
   closeDrawer(): void {
@@ -867,6 +901,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
               job: purchase.jobId?._id || purchase.jobId
             });
 
+            this.poLockedLines = purchase.lockedLines || {};
             if (purchase.items) {
               this.itemsList.set(purchase.items);
               this.patchItemsValuesWithPartNoIds(purchase.items);
@@ -884,6 +919,10 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
             if (purchase.supplierDiscounts?.suppliers) {
               this.patchSupplierDiscounts(purchase.supplierDiscounts);
+            }
+            // Older PRs never stored their own costs: those fall back to the deal sheet's.
+            if (Array.isArray(purchase.additionalCosts)) {
+              this.prCosts = purchase.additionalCosts.map((c: any) => ({ name: c.name || '', value: Number(c.value) || 0 }));
             }
 
             this.openFirstStep(purchase.status);
@@ -967,6 +1006,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** Save is offered on a new request and on one still being prepared, never on a submitted or rejected one. */
   get canSaveDraft(): boolean {
+    if (this.viewOnly) return false;
     return !this.isEditing || ['New', 'In Progress'].includes(this.purchaseForm.get('status')?.value);
   }
 
@@ -1073,6 +1113,9 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     }
     const itemsWithPartNoObjects = this.convertPartNoIdsToObjects(this.itemsList());
     formValue.items = itemsWithPartNoObjects;
+    formValue.additionalCosts = this.extraCosts
+      .filter((c) => c.name?.trim() && Number(c.value) > 0)
+      .map((c) => ({ name: c.name.trim(), value: Number(c.value) }));
     delete formValue.job;
 
     formValue.sourceType = this.isJobLess ? 'manual' : 'job';
@@ -1160,6 +1203,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       this.itemsList.set(itemsWithComparisons);
       this.patchItemsValuesWithPartNoIds(itemsWithComparisons);
       this.loadLastPrices();
+      this.prCosts = null;
 
       if (job.quotation?.dealData?.additionalCosts) {
         this.convertAdditionalCostsToSupplierDiscounts(job.quotation.dealData.additionalCosts);
@@ -1228,7 +1272,29 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   /** A discount typed on a supplier tab is stored with the request's supplier discounts. */
+  /** A supplier discount typed since the last save. Items are saved on their own route, so these go separately. */
+  private discountsUnsaved = false;
+
+  /** Saves the supplier discounts typed on the Items step; runs `next` once they are stored (or when there is nothing to store). */
+  private saveDiscountsThen(next: () => void): void {
+    const v = this.purchaseForm.get('supplierDiscounts')?.value;
+    if (!this.discountsUnsaved || !this.purchaseId || !v?.suppliers) { next(); return; }
+    const payload = {
+      suppliers: v.suppliers.map((s: any) => ({ supplierId: s.supplierId?._id ?? s.supplierId, discount: Number(s.discount) || 0 })),
+      totalDiscount: Number(v.totalDiscount) || 0,
+    };
+    this.subscriptions.add(this.purchaseService.updatePurchase(this.purchaseId, { supplierDiscounts: payload } as any).subscribe({
+      next: (res) => { if (res.success) this.discountsUnsaved = false; next(); },
+      error: () => { this.toaster.error('Failed to save supplier discounts'); },
+    }));
+  }
+
+  /** Suppliers whose discount was typed in this session, so a typed 0 is kept instead of falling back to the deal's figure. */
+  private typedDiscountIds = new Set<string>();
+
   onSupplierDiscountEdited(e: { supplierId: string; discount: number }): void {
+    this.discountsUnsaved = true;
+    this.typedDiscountIds.add(e.supplierId);
     const idOf = (s: any) => String(s?.supplierId?._id ?? s?.supplierId ?? '');
     const ctrl = this.purchaseForm.get('supplierDiscounts');
     if (!ctrl) this.purchaseForm.addControl('supplierDiscounts', this.createSupplierGroup());
@@ -1334,7 +1400,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     const now = new Date();
     const year = now.getFullYear().toString().slice(-2);
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    return `NRN/PR-${year}-${month}-${this.prSequence}`;
+    return `NT/PR-${year}-${month}-${this.prSequence}`;
   }
 
 
@@ -1347,7 +1413,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   /** Awarded vs total product lines, for the Compare & award counter and the submit hint. */
   get awardStats(): { awarded: number; total: number } {
     // Unsaved awards and releases count too, so the counter moves as the pills are clicked.
-    const source = this.entryItems.dirty ? (this.collectEntryItems(true) ?? this.itemsList()) : this.itemsList();
+    const source = this.entryDirty ? (this.collectEntryItems(true) ?? this.itemsList()) : this.itemsList();
     const lines = source.flatMap((item: any) => item.itemDetails || []).filter((d: any) => Number(d.quantity) > 0);
     return { awarded: lines.filter((d: any) => this.isResolvedLine(d)).length, total: lines.length };
   }
@@ -1367,7 +1433,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       return;
     }
     const proceed = () => this.ensurePurchaseId().then(next).catch(() => {});
-    if (!this.entryItems.dirty) {
+    if (!this.entryDirty) {
       proceed();
       return;
     }
@@ -1375,16 +1441,23 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     if (!items) return;
     this.itemsList.set(items);
     this.updateTotalLpo();
-    this.entryItems.markAsPristine();
+    this.markEntryPristine();
     this.saveItemsToBackend(items, (ok) => { if (ok) proceed(); });
   }
 
   /** 2 = items (the lines and their suppliers, one RFQ each), 3 = compare & award, 4 = POs once approved. Step 1 (Need) was merged into Items. */
-  step: 1 | 2 | 3 | 4 = 2;
-  readonly steps: { n: 1 | 2 | 3 | 4; label: string }[] = [
+  step: 1 | 2 | 3 | 4 | 5 = 2;
+  /** The view-only drawer shows items, compare & award and additional costs; its POs are a tab on Items. */
+  get shownSteps(): { n: 1 | 2 | 3 | 4 | 5; label: string }[] {
+    if (!this.viewOnly) return this.steps;
+    return this.steps.filter((s) => s.n >= 2 && s.n <= 4);
+  }
+
+  readonly steps: { n: 1 | 2 | 3 | 4 | 5; label: string }[] = [
     { n: 2, label: 'Items' },
     { n: 3, label: 'Compare & award' },
-    { n: 4, label: 'POs' },
+    { n: 4, label: 'Additional costs' },
+    { n: 5, label: 'POs' },
   ];
   private dealQty = signal<Map<string, { itemName: string; detail: string; quantity: number; sellPrice: number | null; cost: number | null; supplierName: string; supplierId: string | null }>>(new Map());
 
@@ -1431,7 +1504,12 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   private openFirstStep(status: string): void {
     if (this.stepChosen) return;
     this.stepChosen = true;
-    const step = this.initialStep ?? (status === 'Approved' ? 4 : status === 'Pending' ? 3 : null);
+    // The view opens on Items; once approved, its POs tab sits next to the supplier tabs.
+    if (this.viewOnly) {
+      if (status === 'Approved') this.loadPos();
+      return;
+    }
+    const step = this.initialStep ?? (status === 'Approved' ? 5 : status === 'Pending' ? 3 : null);
     if (step) this.goToStep(step === 1 ? 2 : step);
   }
 
@@ -1442,40 +1520,205 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   /** A step is done when the next one has what it needs. */
   stepDone(n: number): boolean {
     const status = this.f['status']?.value;
-    const submitted = !!status && !['New', 'In Progress', 'Rejected'].includes(status);
+    const submitted = !!status && !['New', 'In Progress', 'Rejected', 'Revoked'].includes(status);
     if (n === 2) return this.supplierTabs().length > 0 || submitted;
     if (n === 3) return submitted || (this.awardStats.total > 0 && !this.submitBlockedReason);
+    if (n === 4) return this.stepDone(3);
     return this.poCards().length > 0 && this.poCards().every((c) => c.lpos.some((l) => ['Placed', 'Closed'].includes(l.poStatus)));
   }
 
   stepLocked(n: number): boolean {
-    return n === 4 && !this.isApproved;
+    return n === 5 && !this.isApproved;
   }
 
-  goToStep(n: 1 | 2 | 3 | 4): void {
+  goToStep(n: 1 | 2 | 3 | 4 | 5): void {
     if (this.stepLocked(n) || n === this.step) return;
     if (n === 1 || n === 2) {
       this.activeTab = 'items';
       this.step = 2;
       return;
     }
-    if (n === 3) { this.onNextClicks(); return; }
-    this.loadPos();
-    this.step = 4;
+    // Leaving Items by the stepper saves like Save & compare does, so nothing typed there is lost.
+    if (this.step === 2 && this.canSaveDraft) { this.onNextClicks(n); return; }
+    this.openStep(n);
   }
 
-  onNextClicks(): void {
+  private openStep(n: 3 | 4 | 5): void {
+    if (n === 3) { this.onNextClicks(); return; }
+    if (n === 4) { this.step = 4; return; }
+    this.loadPos();
+    this.step = 5;
+  }
+
+  // --- Additional costs step -------------------------------------------------
+  // Same three kinds as the deal sheet: extra costs and supplier discounts are the PR's own and can be
+  // edited here; the customer discount was agreed on the deal and is only shown.
+
+  readonly costReasonOptions: SfOption<string>[] = ['Shipping Charges', 'Transportation charges', 'Man power changes', 'CP', 'Other'].map((v) => ({ label: v, value: v }));
+  /** The fixed reasons, plus the cost's own name when older data used one that isn't in the list, so it still shows. */
+  costOptionsFor(name: string): SfOption<string>[] {
+    return name && !this.costReasonOptions.some((o) => o.value === name) ? [{ label: name, value: name }, ...this.costReasonOptions] : this.costReasonOptions;
+  }
+
+  /** The PR's extra costs. Null until loaded or edited: until then the deal sheet's are used. */
+  prCosts: { name: string; value: number | null }[] | null = null;
+
+  private get dealCostList(): any[] {
+    const costs = (this.selectedJobSheet as any)?.quotation?.dealData?.additionalCosts;
+    return Array.isArray(costs) ? costs : [];
+  }
+
+  get extraCosts(): { name: string; value: number | null }[] {
+    return (this.prCosts ??= this.dealCostList
+      .filter((c) => (c.type || 'Additional Cost') === 'Additional Cost')
+      .map((c) => ({ name: c.name || '', value: Number(c.value) || 0 })));
+  }
+
+  /** The deal's amount for a cost type, or null when the deal has no such cost (a cost added in this PR). */
+  dealCostFor(name: string): number | null {
+    const hits = this.dealCostList.filter((c) => (c.type || 'Additional Cost') === 'Additional Cost' && c.name && c.name === name);
+    return hits.length ? hits.reduce((s, c) => s + (Number(c.value) || 0), 0) : null;
+  }
+
+  private dealDiscountsSource: any[] | null = null;
+  private dealDiscountsCache: { supplierId: string; discount: number }[] = [];
+  /** The deal's own supplier discounts: the baseline the PR cost is measured against. Cached so the input only changes with the deal. */
+  get dealSupplierDiscounts(): { supplierId: string; discount: number }[] {
+    const list = this.dealCostList;
+    if (list !== this.dealDiscountsSource) {
+      this.dealDiscountsSource = list;
+      this.dealDiscountsCache = list.filter((c) => c.type === 'Supplier Discount')
+        .map((c) => ({ supplierId: String(c.supplierId?._id ?? c.supplierId ?? ''), discount: Number(c.value) || 0 }));
+    }
+    return this.dealDiscountsCache;
+  }
+
+  get customerDiscounts():{ value: number }[] {
+    return this.dealCostList.filter((c) => c.type === 'Customer Discount').map((c) => ({ value: Number(c.value) || 0 }));
+  }
+
+  /** `value` is the discount this PR uses for the supplier; `deal` is what the deal sheet agreed (never changed here). `pr` is the PR's own figure, used when it differs from the deal. */
+  get supplierDiscountRows(): { supplierId: string; name: string; value: number; deal: number; pr: number; awarded: boolean }[] {
+    const awarded = this.awardedSupplierIds();
+    const v = this.purchaseForm.get('supplierDiscounts')?.value;
+    return (v?.suppliers ?? []).map((s: any) => {
+      const id = String(s?.supplierId?._id ?? s?.supplierId ?? '');
+      const dealCosts = this.dealCostList.filter((c) => c.type === 'Supplier Discount' && String(c.supplierId?._id ?? c.supplierId ?? '') === id);
+      const deal = dealCosts.reduce((sum, c) => sum + (Number(c.value) || 0), 0);
+      // The deal's discount is the default: a stored 0 only counts once the user typed it here.
+      const value = Number(s.discount) || (this.typedDiscountIds.has(id) ? 0 : deal);
+      return {
+        supplierId: id,
+        name: s?.supplierId?.supplierName || dealCosts[0]?.supplierDetails?.supplierName || this.supplierOptions().find((o) => o.value === id)?.label || 'Supplier',
+        value,
+        deal,
+        pr: value,
+        awarded: awarded.has(id),
+      };
+    });
+  }
+  get dealDiscountRows() { return this.supplierDiscountRows.filter((r) => r.deal > 0); }
+  /** Suppliers whose PR discount differs from the deal (more or less), or that have none on the deal. The merge into the deal overwrites the deal with these. */
+  get prDiscountRows() { return this.supplierDiscountRows.filter((r) => r.pr !== r.deal || r.deal === 0 || this.pinnedPrSuppliers.has(r.supplierId)); }
+  /** One row per supplier with a discount on the deal or the PR, each showing its deal figure and the difference. */
+  get discountRows() { return this.supplierDiscountRows.filter((r) => r.deal > 0 || r.pr > 0 || this.pinnedPrSuppliers.has(r.supplierId)); }
+  /** Suppliers the user added to the PR list, kept visible even while their figure equals the deal's. */
+  private pinnedPrSuppliers = new Set<string>();
+
+  /** Suppliers that supply a line: awarded in Compare & award, or the line's default supplier when nobody is awarded. */
+  private awardedSupplierIds(): Set<string> {
+    const ids = new Set<string>();
+    this.itemsList().forEach((item: any) => (item.itemDetails || []).forEach((d: any) => {
+      const won = (d.comparisons || []).filter((c: any) => c.selected && c.supplierId);
+      won.forEach((c: any) => ids.add(String(c.supplierId?._id ?? c.supplierId)));
+      if (!won.length && d.supplierId) ids.add(String(d.supplierId?._id ?? d.supplierId));
+    }));
+    return ids;
+  }
+
+  /** Deal cost and margin sit in the totals bar on Compare & award only; Additional costs is too narrow for them. */
+  get showDealFigures(): boolean {
+    return this.step === 3;
+  }
+
+  /** Suppliers that can still get a discount: awarded and not already listed. */
+  get discountSupplierChoices(): SfOption[] {
+    const used = new Set(this.discountRows.map((r) => r.supplierId));
+    const awarded = this.awardedSupplierIds();
+    return this.supplierOptions().filter((o) => awarded.has(String(o.value)) && !used.has(String(o.value)));
+  }
+
+  newDiscountSupplier: string | null = null;
+  trackBySupplierId = (_: number, r: { supplierId: string }) => r.supplierId;
+
+  addExtraCost(): void { this.extraCosts.push({ name: '', value: null }); }
+  removeExtraCost(i: number): void { this.extraCosts.splice(i, 1); }
+
+  addSupplierDiscount(): void {
+    if (!this.newDiscountSupplier) return;
+    const id = String(this.newDiscountSupplier);
+    this.pinnedPrSuppliers.add(id);
+    // A supplier already on the deal starts from the deal's figure; others start at 0.
+    const existing = this.supplierDiscountRows.find((r) => r.supplierId === id);
+    this.onSupplierDiscountEdited({ supplierId: id, discount: existing ? existing.value : 0 });
+    this.newDiscountSupplier = null;
+  }
+
+  /** Sets the discount this PR uses for the supplier; the deal's own figure is untouched. */
+  setPrDiscount(r: { supplierId: string }, pr: number): void {
+    this.onSupplierDiscountEdited({ supplierId: r.supplierId, discount: pr });
+  }
+
+  /** Removes the PR's figure. A supplier with a deal discount goes back to the deal amount. */
+  removeSupplierDiscount(supplierId: string): void {
+    const target = this.purchaseForm.get('supplierDiscounts');
+    if (!target) return;
+    this.pinnedPrSuppliers.delete(supplierId);
+    this.typedDiscountIds.delete(supplierId);
+    const suppliers = this.supplierDiscountRows
+      .filter((r) => r.supplierId !== supplierId || r.deal > 0)
+      .map((r) => ({ supplierId: r.supplierId, discount: r.supplierId === supplierId ? r.deal : r.value, discountType: 'amount' }));
+    const totalDiscount = suppliers.reduce((sum, s) => sum + s.discount, 0).toString();
+    // Swap in a plain control: the saved shape may be a FormGroup or a plain object.
+    this.purchaseForm.setControl('supplierDiscounts', this.fb.control({ suppliers, totalDiscount }));
+  }
+
+  get extraCostsTotal(): number { return this.extraCosts.reduce((s, c) => s + (Number(c.value) || 0), 0); }
+  private get dealExtraCostsTotal(): number {
+    return this.dealCostList.filter((c) => (c.type || 'Additional Cost') === 'Additional Cost').reduce((s, c) => s + (Number(c.value) || 0), 0);
+  }
+
+  /** Totals bar: the lines' cost plus how far the PR's extra costs moved from the deal's (already in the deal baseline, like the discount). */
+  prTotalCost(ie: ItemEntryComponent): number { return ie.totalCost() + (this.extraCostsTotal - this.dealExtraCostsTotal); }
+  prMarginValue(ie: ItemEntryComponent): number { return ie.finalTotal() - this.prTotalCost(ie); }
+  prMarginPercent(ie: ItemEntryComponent): number {
+    const selling = ie.finalTotal();
+    return selling > 0 ? (this.prMarginValue(ie) / selling) * 100 : 0;
+  }
+  /** Against the deal's margin after the deal's own extra costs, so unchanged costs read as no change. */
+  prMarginTone(ie: ItemEntryComponent): string {
+    const diff = this.prMarginValue(ie) - (ie.dealFigures().marginValue - this.dealExtraCostsTotal);
+    if (Math.abs(diff) <= 0.005) return 'text-gray-900 dark:text-gray-100';
+    return diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+  }
+  get supplierDiscountTotal(): number { return this.supplierDiscountRows.filter((r) => r.awarded).reduce((s, r) => s + r.value, 0); }
+  get customerDiscountTotal(): number { return this.customerDiscounts.reduce((s, c) => s + c.value, 0); }
+
+  onNextClicks(target: 3 | 4 | 5 = 3): void {
     // Submitted or approved: nothing to save, the compare step is read-only.
     // The totals bar of this step reads the item entry, so it must be on Items, not a supplier tab. The step opens a tick
     // later so the item entry has left the supplier tab before the bar reads it.
-    const open = () => {
+    const open = () => this.saveDiscountsThen(() => {
       this.activeTab = 'items';
       this.refreshDealQty();
-      setTimeout(() => (this.step = 3));
-    };
+      setTimeout(() => {
+        this.step = 3;
+        if (target !== 3) this.openStep(target);
+      });
+    });
     if (!this.canSaveDraft) { open(); return; }
     // Choices made in the item form (pills, supplier tabs) are saved first, so the compare step starts from them.
-    const dirty = this.entryItems.dirty;
+    const dirty = this.entryDirty;
     if (!this.syncEntryToList()) return;
     if (dirty && this.purchaseId) {
       this.saveItemsToBackend(this.itemsList(), (ok) => { if (ok) open(); });
@@ -1486,7 +1729,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   onBackClicks(): void {
     if (this.step <= 2) return;
-    this.goToStep((this.step - 1) as 1 | 2 | 3);
+    this.goToStep((this.step - 1) as 1 | 2 | 3 | 4);
   }
 
   /** Items step counters: lines with no supplier yet. */
@@ -1510,40 +1753,44 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       const suppliers: ReviewSupplier[] = [];
       let allocated = 0;
       const nameOf = (id?: string) => (id ? this.supplierOptions().find((o) => o.value === id)?.label : undefined);
+      // The quantity follows the line entered in step 1: a sole winner takes the whole line, and split shares never exceed it.
+      const winners = (d.comparisons || []).filter((c: any) => c.selected).length;
       (d.comparisons || []).forEach((c: any) => {
         const id = c.supplierId?._id || c.supplierId;
         if (!id || suppliers.some((s) => s.supplierId === String(id))) return;
         const won = !!c.selected;
-        const qty = won ? (Number(c.awardedQty) || Number(c.quantity) || prQty) : 0;
+        const qty = won ? (winners === 1 ? prQty : Math.min(Number(c.awardedQty) || Number(c.quantity) || prQty, Math.max(0, prQty - allocated))) : 0;
         const price = Number(c.unitPrice) > 0 ? Number(c.unitPrice) : null;
         allocated += qty;
         suppliers.push({
           supplierId: String(id), name: c.supplierName || nameOf(String(id)) || 'Supplier',
           state: won ? 'awarded' : price != null ? 'priced' : 'waiting', price,
-          qty, offerQty: price != null ? (Number(c.quantity) || prQty) : null,
+          qty, offerQty: price != null ? Math.min(Number(c.quantity) > 0 ? Number(c.quantity) : prQty, prQty) : null, availability: c.etaTerms || undefined,
         });
       });
       // Suppliers on the line in step 1 (its supplier, its tabs) are options too, at their last price when they have one.
-      const addOption = (id: string | undefined, name: string | undefined, price: number | null = null) => {
+      const addOption = (id: string | undefined, name: string | undefined, price: number | null = null, offered?: number) => {
         if (!id || !name || suppliers.some((s) => s.supplierId === id)) return;
-        suppliers.push({ supplierId: id, name, state: price != null ? 'priced' : 'waiting', price, qty: 0, offerQty: price != null ? prQty : null });
+        suppliers.push({ supplierId: id, name, state: price != null ? 'priced' : 'waiting', price, qty: 0, offerQty: price != null ? Math.min(offered && offered > 0 ? offered : prQty, prQty) : null });
       };
       const offers = this.lineOffers({ ...d, lineKey: key, partNo: this.getPartNumberValue(d.partNo), supplierId: this.lineSupplierId(d) });
-      offers.filter((o) => !o.pastOnly).forEach((o) => addOption(o.supplierId, o.supplierName, o.price ?? null));
+      offers.filter((o) => !o.pastOnly).forEach((o) => addOption(o.supplierId, o.supplierName, o.price ?? null, o.savedQty));
       Object.entries(this.tabLines()).forEach(([sid, keys]) => {
-        if (keys.includes(key)) addOption(sid, nameOf(sid), offers.find((o) => o.supplierId === sid)?.price ?? null);
+        const o = offers.find((x) => x.supplierId === sid);
+        if (keys.includes(key)) addOption(sid, nameOf(sid), o?.price ?? null, o?.savedQty);
       });
       // The line's own supplier (from the deal sheet): with nobody chosen it supplies the whole line at the line's cost.
       const defaultId = String(d.supplierId?._id || d.supplierId || '');
       const defaultName = d.supplierDetails?.supplierName || d.supplierName || nameOf(defaultId) || '';
+      // It is only a default: it does not count as awarded, so the line still shows as to award.
       if (defaultId && !allocated) {
-        allocated = prQty;
         const hit = suppliers.find((s) => s.supplierId === defaultId);
         if (hit) {
           hit.state = 'default'; hit.qty = prQty;
           hit.price ??= Number(d.unitCost) || null;
           hit.offerQty ??= prQty;
-        } else suppliers.unshift({ supplierId: defaultId, name: defaultName || 'Supplier', state: 'default', price: Number(d.unitCost) || null, qty: prQty, offerQty: prQty });
+          hit.availability ||= d.availability || undefined;
+        } else suppliers.unshift({ supplierId: defaultId, name: defaultName || 'Supplier', state: 'default', price: Number(d.unitCost) || null, qty: prQty, offerQty: prQty, availability: d.availability || undefined });
       }
       const dealHit = deal.get(CreatePurchaseComponent.dealKey(item.itemName, d.detail)) ?? this.dealHit(item.itemName, d.detail);
       rows.push({
@@ -1583,35 +1830,19 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     if (!this.purchaseId || !awards.length) return;
     this.reviewBusy.set(true);
     this.subscriptions.add(this.purchaseService.awardLines(this.purchaseId, awards).subscribe({
-      next: () => { this.reviewBusy.set(false); this.loadPurchaseData(); this.saved.emit(); },
+      next: () => {
+        this.reviewBusy.set(false);
+        // Step 1 keeps its own copy of each line's awards; drop it so the pills follow what was just saved.
+        this.prFormCmp?.itemEntry?.forgetShares(awards.map((a) => a.lineKey));
+        // A line whose award was taken back goes back to the deal's supplier and cost in step 1.
+        this.prFormCmp?.itemEntry?.releaseLines(awards.filter((a) => a.clear).map((a) => a.lineKey));
+        this.loadPurchaseData();
+        this.saved.emit();
+      },
       error: (err) => {
         this.reviewBusy.set(false);
         this.toaster.error(err?.error?.message || 'Could not save the award.');
       },
-    }));
-  }
-
-  /** Short asks for the reason; clearing needs no confirmation. */
-  async onReviewShort(e: { key: string; detail: string; short: boolean }): Promise<void> {
-    if (!this.purchaseId) return;
-    let reason: string | undefined;
-    if (e.short) {
-      const result = await this.confirm.open({
-        tone: 'approve',
-        title: `Mark "${e.detail}" short?`,
-        message: 'The request can go for approval without this product fully awarded. Only the awarded quantity is ordered.',
-        reason: true,
-        reasonLabel: 'Why is it short?',
-        confirmLabel: 'Mark short',
-        cancelLabel: 'Cancel',
-      });
-      if (!result.confirmed || !result.reason?.trim()) return;
-      reason = result.reason.trim();
-    }
-    this.reviewBusy.set(true);
-    this.subscriptions.add(this.salesRfqService.markPurchaseShort(this.purchaseId, e.key, e.short, reason).subscribe({
-      next: () => { this.reviewBusy.set(false); this.loadPurchaseData(); },
-      error: (err) => { this.reviewBusy.set(false); this.toaster.error(err?.error?.message || 'Could not save the short mark.'); },
     }));
   }
 
@@ -1711,7 +1942,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** One card per awarded supplier: what it was awarded and the POs raised for it. */
   poCards = computed(() => {
-    type Card = { supplierId: string; name: string; lines: number; value: number; lpos: { _id: string; poNo: string; poStatus: string }[] };
+    type Card = { supplierId: string; name: string; lines: number; value: number; lpos: { _id: string; poNo: string; poStatus: string; discount: number }[] };
     const cards = new Map<string, Card>();
     // On an approved request the order status is the truth: shares moved after approval show up here.
     if (this.orderRows().length) {
@@ -1737,11 +1968,16 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       const id = String(l.supplierId?._id ?? l.supplierId ?? '');
       const c: Card | null = cards.get(id) ?? (id ? { supplierId: id, name: l.supplierId?.supplierName || l.supplierName || 'Supplier', lines: 0, value: 0, lpos: [] } : null);
       if (!c) return;
-      c.lpos.push({ _id: l._id, poNo: l.poNo, poStatus: l.poStatus });
+      c.lpos.push({ _id: l._id, poNo: l.poNo, poStatus: l.poStatus, discount: Number(l.discount) || 0 });
       cards.set(id, c);
     });
     return [...cards.values()].sort((a, b) => a.name.localeCompare(b.name));
   });
+
+  /** The discount this request uses for a supplier, shown on its PO card. */
+  poCardDiscount(supplierId: string): number {
+    return this.supplierDiscountRows.find((r) => r.supplierId === supplierId)?.value ?? 0;
+  }
 
   poTone(status: string): string {
     return ['Placed', 'Closed'].includes(status)
@@ -1759,76 +1995,6 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     this.createPoSupplierId = supplierId;
   }
 
-  makingPos = signal(false);
-
-  /** Suppliers with quantity still to order: the ones Make POs raises a PO for. */
-  get suppliersToOrder(): { supplierId: string; name: string }[] {
-    return this.poCards()
-      .filter((c) => this.poCardTotals(c.supplierId).toOrder > 0 || (!this.orderRows().length && !c.lpos.length))
-      .map((c) => ({ supplierId: c.supplierId, name: c.name }));
-  }
-
-  /** One PO per supplier for everything it still has to order, at its chosen prices; each PO then goes for approval. */
-  async onMakeAllPos(): Promise<void> {
-    const purchaseId = this.purchaseId;
-    const targets = this.suppliersToOrder;
-    if (!purchaseId || !targets.length || this.makingPos()) return;
-    const { confirmed } = await this.confirm.open({
-      tone: 'approve',
-      title: `Make ${targets.length} PO${targets.length === 1 ? '' : 's'}?`,
-      message: 'Each supplier gets one PO for the quantity it still has to supply, at its chosen price. The POs go for approval.',
-      details: targets.map((t) => ({ label: 'Supplier', value: t.name })),
-      confirmLabel: 'Make POs',
-      cancelLabel: 'Cancel',
-    });
-    if (!confirmed) return;
-
-    this.makingPos.set(true);
-    const purchaseNo = this.f['purchaseNo']?.value || '';
-    const jobId = this.purchaseForm.get('job')?.value || undefined;
-    const quoteId = (this.selectedJobSheet as any)?.quotation?._id || undefined;
-    let made = 0;
-    for (const t of targets) {
-      try {
-        const items: any[] = ((await firstValueFrom(this.purchaseOrderService.getItemsForPurchaseRequest(purchaseId, t.supplierId)))?.data || [])
-          .filter((it: any) => Number(it.remainingQuantity) > 0);
-        if (!items.length) continue;
-        const poNo = (await firstValueFrom(this.purchaseOrderService.generatePONumber()))?.data;
-        const terms = items[0]?.comparisons || {};
-        const payload: any = {
-          poNo,
-          poStatus: 'Pending for Approval',
-          items: items.map((it: any) => {
-            const unitCost = Number(it.unitPrice) || 0;
-            const quantity = Number(it.remainingQuantity) || 0;
-            return { detail: it.detail, partNo: it.partNo?._id || it.partNo || null, prLineKey: it._id, quantity, uom: it.uom || it.comparisons?.uom || '', unitCost, totalCost: quantity * unitCost };
-          }),
-          supplierId: t.supplierId,
-          purchaseId,
-          jobId,
-          quoteId,
-          etaTerms: terms.etaTerms || 'As per terms',
-          paymentTerms: terms.paymentTerms || 'As per terms',
-          deliveryTerms: terms.etaTerms || terms.paymentTerms || 'As per terms',
-          // Both are required on a PO; the supplier's comparison terms when given, otherwise left for the approver to edit.
-          shippingTerms: terms.shippingTerms || 'As per terms',
-          placeOfDelivery: terms.deliveryLocation || terms.placeOfDelivery || 'As per terms',
-          subject: purchaseNo ? `Purchase order for ${purchaseNo}` : 'Purchase order',
-          poDate: new Date(),
-          discount: 0,
-        };
-        await firstValueFrom(this.purchaseOrderService.createPurchaseOrder(payload));
-        made++;
-      } catch (err: any) {
-        this.toaster.error(err?.error?.message || `Could not make the PO for ${t.name}.`);
-      }
-    }
-    this.makingPos.set(false);
-    if (made) this.toaster.success(`${made} PO${made === 1 ? '' : 's'} sent for approval`);
-    this.loadPos();
-    this.saved.emit();
-  }
-
   onCreatePoClosed(): void {
     this.createPoSupplierId = null;
   }
@@ -1840,6 +2006,25 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   onViewPo(id: string): void {
     this.router.navigate(['/purchase/view-lpo', id]);
+  }
+
+  cancellingId: string | null = null;
+
+  /** Cancels a placed PO whole (everything not yet received); the reason is required. */
+  async onCancelPlacedPo(lpo: { _id: string; poNo: string }): Promise<void> {
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'reject',
+      title: `Cancel ${lpo.poNo}?`,
+      message: 'The order stops here and the quantities not yet received go back to be ordered. This cannot be undone.',
+      confirmLabel: 'Cancel PO',
+      reason: true,
+    });
+    if (!confirmed || !reason?.trim()) return;
+    this.cancellingId = lpo._id;
+    this.subscriptions.add(this.purchaseOrderService.cancelPurchaseOrder(lpo._id, reason.trim()).subscribe({
+      next: () => { this.cancellingId = null; this.toaster.success(`${lpo.poNo} cancelled`); this.loadPos(); this.saved.emit(); },
+      error: (err) => { this.cancellingId = null; this.toaster.error(err?.error?.message || 'Could not cancel the PO.'); },
+    }));
   }
 
   async onPlacePo(lpo: { _id: string; poNo: string }): Promise<void> {

@@ -20,6 +20,10 @@ export class PurchaseService {
   api: string = environment.api
   constructor(private http: HttpClient) { }
 
+  schedulePurchaseFollowUp(id: string, body: any): Observable<any> { return this.http.post<any>(`${this.api}/purchase/purchase-request/${id}/follow-up/schedule`, body, { context: context() }); }
+  completePurchaseFollowUp(id: string, body: any): Observable<any> { return this.http.post<any>(`${this.api}/purchase/purchase-request/${id}/follow-up/complete`, body, { context: context() }); }
+  cancelPurchaseFollowUp(id: string, reason?: string): Observable<any> { return this.http.post<any>(`${this.api}/purchase/purchase-request/${id}/follow-up/cancel`, { reason }, { context: context() }); }
+
   getPurchaseNo(): any {
     return this.http.get<any>(`${this.api}/purchase/purchase-request/generate-purchase-no`)
   }
@@ -37,6 +41,7 @@ export class PurchaseService {
     poProgress?: 'ready' | 'remaining' | 'completed';
     rfqStatus?: 'not-started' | 'quoted' | 'awarded';
     allocation?: 'new';
+    followUpView?: string;
   }): Observable<any> {
     return this.http.post<any>(`${this.api}/purchase/purchase-requests`, params, { context: context() });
   }
@@ -44,7 +49,7 @@ export class PurchaseService {
   /** Tab totals for several PR list views in one call; each view carries the same filters as a list query. */
   getPurchaseCounts(params: {
     search?: string;
-    views: { id: string; status?: string[]; sourceType?: string; poProgress?: string; allocation?: string }[];
+    views: { id: string; status?: string[]; sourceType?: string; poProgress?: string; allocation?: string; followUpView?: string }[];
   }): Observable<{ counts: Record<string, number> }> {
     return this.http.post<{ counts: Record<string, number> }>(`${this.api}/purchase/purchase-requests/counts`, params, { context: context() });
   }
@@ -64,6 +69,11 @@ export class PurchaseService {
   /** Super Admin restarts a pending PR's approval route; `stepRoleIds` are the stages that get another chance. */
   resetPurchaseWorkflow(purchaseId: string, stepRoleIds: string[]): Observable<{ success: true; message: string }> {
     return this.http.post<{ success: true; message: string }>(`${this.api}/purchase/purchase-request/reset-workflow/${purchaseId}`, { stepRoleIds }, { context: context() });
+  }
+
+  /** Takes an approved PR back out of approval; it becomes Revoked and can be edited and resubmitted. */
+  revokePurchase(purchaseId: string, comment: string): Observable<{ success: true; message: string }> {
+    return this.http.post<{ success: true; message: string }>(`${this.api}/purchase/purchase-request/revoke/${purchaseId}`, { comment }, { context: context() });
   }
 
   getApprovalsByEmployee(filters?: any): Observable<any> {
@@ -188,6 +198,9 @@ export class PurchaseService {
       ]);
     });
 
+    const discount = Number(data.discount) || 0;
+    const netTotal = totalCost - discount;
+
     const itemsTable = {
       table: {
         headerRows: 1,
@@ -201,9 +214,13 @@ export class PurchaseService {
             { text: `Total Cost${currency ? `\n(${currency})` : ''}`, style: 'tableHeader' },
           ],
           ...tableBody,
+          ...(discount ? [
+            [{ text: 'Sub total', style: 'tableFooter', colSpan: 4, alignment: 'right' }, '', '', '', { text: money(totalCost), style: 'tableFooter', alignment: 'right' }],
+            [{ text: 'Discount', style: 'tableFooter', colSpan: 4, alignment: 'right' }, '', '', '', { text: `-${money(discount)}`, style: 'tableFooter', alignment: 'right' }],
+          ] : []),
           [
-            { text: `TOTAL${currency ? `(${currency})` : ''}: ${this.amountInWords(totalCost, currency)}`, style: 'tableFooter', colSpan: 4 }, '', '', '',
-            { text: money(totalCost), style: 'tableFooter', alignment: 'right' }
+            { text: `TOTAL${currency ? `(${currency})` : ''}: ${this.amountInWords(netTotal, currency)}`, style: 'tableFooter', colSpan: 4 }, '', '', '',
+            { text: money(netTotal), style: 'tableFooter', alignment: 'right' }
           ]
         ]
       }

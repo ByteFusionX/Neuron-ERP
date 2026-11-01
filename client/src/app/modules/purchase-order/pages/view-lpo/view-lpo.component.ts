@@ -1,11 +1,13 @@
 import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
+import { NgIcon } from '@ng-icons/core';
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
+import { GrnService } from 'src/app/core/services/grn/grn.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { PlaceOrderModalComponent, PlaceOrderModalResult } from '../place-order-modal/place-order-modal.component';
 import { buildApprovalTimeline } from 'src/app/shared/utils/approval-timeline.util';
@@ -16,39 +18,62 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { ActionMenuComponent, ActionMenuItem } from 'src/app/shared/components/action-menu/action-menu.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailMetricsComponent } from 'src/app/shared/components/detail-panel/detail-metrics.component';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
+import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
+import { DetailFieldsMenuComponent, DetailFieldsMenuItem } from 'src/app/shared/components/detail-panel/detail-fields-menu.component';
+import { DETAIL_TONE, DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
 import saveAs from 'file-saver';
 import { ModalService } from 'src/app/shared/components/modal';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { DocumentUploadModalComponent, DocumentUploadModalResult } from 'src/app/shared/components/detail-panel/document-upload-modal/document-upload-modal.component';
-import { DetailDocument, DetailMetric, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
-import { DetailViewBadge, DetailViewBreadcrumb, DetailViewShellComponent, DetailViewStat, DetailViewTab } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
+import { DetailDocument, DetailFootRow, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailViewShellComponent, DetailViewStat } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
+
+/** A label/value in the Details section; ids link out, the status shows as dot + text. */
+interface LpoFact {
+  label: string;
+  value: string;
+  link?: any[];
+  state?: { dot: string; text: string };
+}
+
+type LpoPanelTab = 'pricing' | 'grn' | 'terms' | 'documents' | 'approval' | 'history';
 
 @Component({
   selector: 'app-view-lpo',
   standalone: true,
   imports: [
     CommonModule,
+    RouterLink,
     ActionButtonComponent,
     ActionMenuComponent,
     DetailTableComponent,
-    DetailMetricsComponent,
     DetailTimelineComponent,
     DetailDocumentsComponent,
-    DetailViewShellComponent
+    DetailSectionComponent,
+    DetailFieldComponent,
+    DetailFieldsMenuComponent,
+    DetailViewShellComponent,
+    NgIcon
   ],
   templateUrl: './view-lpo.component.html'
 })
 export class ViewLpoComponent implements OnInit {
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'description', label: 'Item', type: 'stack', subKey: 'partNo' },
+    { key: 'detail', label: 'Description', truncate: true, tooltipKey: 'detailText' },
+    { key: 'itemCode', label: 'Item code', hiddenByDefault: true },
+    { key: 'partNo', label: 'Part No', hiddenByDefault: true },
     { key: 'quantity', label: 'Qty', type: 'number', align: 'right' },
+    { key: 'uom', label: 'UOM' },
+    { key: 'receivedQty', label: 'Received', type: 'number', align: 'right', hiddenByDefault: true },
+    { key: 'cancelledQty', label: 'Cancelled', type: 'number', align: 'right', hiddenByDefault: true },
     { key: 'unitCost', label: 'Unit cost', type: 'currency' },
-    { key: 'totalCost', label: 'Total', type: 'currency', total: true, emphasis: true },
+    { key: 'totalCost', label: 'Total cost', type: 'currency', emphasis: true, total: true },
   ];
   private purchaseOrderService = inject(PurchaseOrderService);
   private purchaseService = inject(PurchaseService);
+  private grnService = inject(GrnService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -61,26 +86,24 @@ export class ViewLpoComponent implements OnInit {
   /** Audit-log events; approve/reject are left out because the Approval history tab already shows them. */
   auditEntries: DetailTimelineEntry[] = [];
 
-  // view model for the shared detail-view shell
-  tab = 'items';
-  // Cached: a getter returning a fresh array every change detection makes the shell's ngOnChanges
-  // re-sync from the URL on each cycle and snap the tab back to the default.
-  private tabsCache: DetailViewTab[] = [];
-  private tabsCacheDocs: boolean | null = null;
-  get tabs(): DetailViewTab[] {
-    const docs = this.showDocuments;
-    if (this.tabsCacheDocs !== docs) {
-      this.tabsCacheDocs = docs;
-      this.tabsCache = [
-        { id: 'items', label: 'Items' },
-        { id: 'summary', label: 'Summary' },
-        ...(docs ? [{ id: 'documents', label: 'Documents' }] : []),
-        { id: 'history', label: 'Approval history' },
-        { id: 'activity', label: 'History' },
-      ];
-    }
-    return this.tabsCache;
+  // view model, same layout as the PR view; rebuilt by buildView() when the LPO or its PR loads
+  panelOpen = true;
+  panelTab: LpoPanelTab = 'pricing';
+  panelTabs: { id: LpoPanelTab; label: string }[] = [];
+  stats: DetailViewStat[] = [];
+  subtitle = '';
+  detailFacts: LpoFact[] = [];
+  detailItems: DetailFieldsMenuItem[] = [];
+  hiddenDetail = new Set<string>();
+  detailOrder: string[] = [];
+  pricingLines: { label: string; value: number; sign?: boolean; total?: boolean }[] = [];
+  historyEntries: DetailTimelineEntry[] = [];
+  /** Detail fields that are switched on, in the user's order. */
+  get visibleDetail(): LpoFact[] {
+    const pos = (k: string) => { const i = this.detailOrder.indexOf(k); return i < 0 ? this.detailOrder.length : i; };
+    return this.detailFacts.filter((f) => !this.hiddenDetail.has(f.label)).sort((a, b) => pos(a.label) - pos(b.label));
   }
+  trackFact = (_: number, f: LpoFact) => f.label;
 
   /** Documents are kept once the order is approved. */
   get showDocuments(): boolean {
@@ -175,83 +198,154 @@ export class ViewLpoComponent implements OnInit {
     this.fetchDocument(doc, (blob) => saveAs(blob, doc.name));
   }
 
-  private static readonly STATUS_TONES: Record<string, 'good' | 'warn' | 'bad' | 'neutral'> = {
+  private static readonly STATUS_TONES: Record<string, DetailTone> = {
     'Approved': 'good', 'Placed': 'good', 'Closed': 'good', 'Cancelled': 'bad', 'Pending for Approval': 'warn', 'Rejected': 'bad', 'Draft': 'neutral',
   };
 
-  get breadcrumbs(): DetailViewBreadcrumb[] {
-    return [
-      { label: 'Purchase', link: ['/purchase/pr'] },
-      { label: 'PO', link: ['/purchase/po'] },
-      { label: this.lpo?.poNo || 'LPO' },
-    ];
+  private fullName(person: any): string {
+    return person?.firstName ? `${person.firstName} ${person.lastName ?? ''}`.trim() : '-';
   }
 
-  get badges(): DetailViewBadge[] {
-    const status = this.lpo?.poStatus;
-    return status ? [{ label: status, tone: ViewLpoComponent.STATUS_TONES[status] ?? 'neutral' }] : [];
-  }
-
-  get subtitle(): string {
-    return [this.supplier?.supplierName, this.lpo?.subject].filter(Boolean).join(' · ');
-  }
-
-  get stats(): DetailViewStat[] {
-    if (!this.lpo) return [];
-    return [
-      { label: 'Total after discount', value: this.formatCurrency(this.getTotalAfterDiscount()) },
-      { label: 'Subtotal', value: this.formatCurrency(this.getSubTotal()) },
-      { label: 'Discount', value: this.formatCurrency(this.lpo.discount || 0) },
-      { label: 'Items', value: String(this.items().length) },
-    ];
-  }
-
-  get summaryMetrics(): DetailMetric[] {
-    return [
-      { label: 'Subtotal', value: this.formatCurrency(this.getSubTotal()) },
-      { label: 'Discount', value: this.formatCurrency(this.lpo?.discount || 0) },
-      { label: 'Total after discount', value: this.formatCurrency(this.getTotalAfterDiscount()) },
-    ];
-  }
-
-  get historyEntries(): DetailTimelineEntry[] {
-    return buildApprovalTimeline(this.lpo?.approvalStatus);
-  }
-
-  get sidebarSections(): DetailOverviewSection[] {
+  private buildView(): void {
     const l = this.lpo;
-    if (!l) return [];
-    return [
-      {
-        title: 'Order',
-        fields: [
-          { type: 'field', label: 'PO no', value: l.poNo, numeric: true },
-          { type: 'field', label: 'PO date', value: this.formatDate(l.poDate) },
-          { type: 'field', label: 'PR no', value: this.purchase?.purchaseNo || '-', numeric: true },
-          { type: 'field', label: 'Job no', value: this.purchase?.jobId?.jobId || l.jobId?.jobId || '-', numeric: true },
-          { type: 'field', label: 'Quote ref', value: this.purchase?.jobId?.quoteId?.quoteId || l.quoteId?.quoteId || '-' },
-        ],
-      },
-      {
-        title: 'Supplier',
-        fields: [
-          { type: 'field', label: 'Supplier', value: this.supplier?.supplierName || '-' },
-          { type: 'field', label: 'Contact', value: this.supplier?.contactDetails?.name || '-' },
-          { type: 'field', label: 'Phone', value: this.supplier?.contactDetails?.phoneNumber || '-' },
-          { type: 'field', label: 'Email', value: this.supplier?.contactDetails?.email || '-' },
-        ],
-      },
-      {
-        title: 'Delivery & payment',
-        fields: [
-          { type: 'field', label: 'Delivery terms', value: l.etaTerms || '-' },
-          { type: 'field', label: 'Payment terms', value: l.paymentTerms || '-' },
-          { type: 'field', label: 'Place of delivery', value: l.placeOfDelivery || '-' },
-          { type: 'field', label: 'Shipping terms', value: l.shippingTerms || '-' },
-          ...(l.expectedDeliveryDate ? [{ type: 'field' as const, label: 'Expected delivery', value: new Date(l.expectedDeliveryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }] : []),
-        ],
-      },
+    if (!l) return;
+    const s = this.supplier;
+    const pr = this.purchase;
+    const date = (v: any) => v ? new Date(v).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+    const subtotal = this.getSubTotal();
+    const discount = Number(l.discount) || 0;
+
+    this.subtitle = [s?.supplierName, l.subject].filter(Boolean).join(' · ');
+
+    this.stats = [
+      { label: 'Subtotal', value: this.formatCurrency(subtotal) },
+      { label: 'Discount', value: this.formatCurrency(discount) },
+      { label: 'Total after discount', value: this.formatCurrency(subtotal - discount) },
     ];
+
+    // the supplier's first contact, or the legacy single contact block
+    const contact = s?.contacts?.[0] || s?.contactDetails || {};
+    const job = pr?.jobId || l.jobId;
+    const quote = pr?.jobId?.quoteId || l.quoteId;
+    const tone = DETAIL_TONE[ViewLpoComponent.STATUS_TONES[l.poStatus] ?? 'neutral'];
+    const facts: (LpoFact | false)[] = [
+      { label: 'Supplier', value: s?.supplierName || '-' },
+      { label: 'PO Date', value: date(l.poDate) },
+      { label: 'PR No', value: pr?.purchaseNo || '-', link: pr?._id ? ['/purchase/view-purchase', pr._id] : undefined },
+      { label: 'Job ID', value: job?.jobId || '-', link: job?._id && job?.jobId ? ['/job-sheet/view', job._id] : undefined },
+      { label: 'Quotation', value: quote?.quoteId || '-', link: quote?._id && quote?.quoteId ? ['/quotations/view', quote._id] : undefined },
+      { label: 'Contact', value: contact.name || '-' },
+      { label: 'Phone', value: contact.phoneNumber || '-' },
+      { label: 'Email', value: contact.email || '-' },
+      { label: 'Delivery Terms', value: l.etaTerms || '-' },
+      { label: 'Payment Terms', value: l.paymentTerms || '-' },
+      { label: 'Shipping Terms', value: l.shippingTerms || '-' },
+      { label: 'Place of Delivery', value: l.placeOfDelivery || '-' },
+      !!l.expectedDeliveryDate && { label: 'Expected Delivery', value: date(l.expectedDeliveryDate) },
+      !!l.placedAt && { label: 'Placed On', value: date(l.placedAt) },
+      { label: 'Created By', value: this.fullName(l.createdBy) },
+      { label: 'Created On', value: date(l.createdAt) },
+      { label: 'Currency', value: this.currency() },
+      { label: 'Status', value: l.poStatus === 'Pending for Approval' ? 'Pending' : (l.poStatus || '-'), state: { dot: tone.dot, text: tone.text } },
+    ];
+    this.detailFacts = facts.filter((f): f is LpoFact => !!f);
+    const hidden = ['Phone', 'Email', 'Shipping Terms', 'Currency', 'Created On'];
+    this.detailItems = this.detailFacts.map((f) => ({ key: f.label, label: f.label, hiddenByDefault: hidden.includes(f.label) }));
+
+    // Cost is the job's (deal sheet) cost, Price is what the PO pays; both for this PO's items only.
+    const key = (v: any) => String(v?._id ?? v ?? '').trim().toLowerCase();
+    const details: any[] = (pr?.items || []).flatMap((i: any) => i?.itemDetails || []);
+    const jobUnitCost = (line: any) => {
+      const match = details.find((d) => line?.partNo && key(d.partNo) === key(line.partNo))
+        || details.find((d) => key(d.detail) === key(line?.detail));
+      return Number(match?.dealUnitCost) || Number(match?.unitCost) || Number(line?.unitCost) || 0;
+    };
+    const totalCost = this.items().reduce((sum, i) => sum + jobUnitCost(i) * (Number(i.quantity) || 0), 0);
+    this.pricingLines = [
+      { label: 'Total Price', value: subtotal },
+      { label: 'Total Cost', value: totalCost },
+      { label: 'Total Discount', value: discount },
+      { label: 'Net Total', value: Math.max(subtotal - discount, 0) },
+    ];
+
+    this.panelTabs = [
+      { id: 'pricing', label: 'Costs' },
+      ...(l.termsAndCondition ? [{ id: 'terms' as const, label: 'Terms' }] : []),
+      ...(this.showDocuments ? [{ id: 'documents' as const, label: 'Documents' }] : []),
+      { id: 'approval', label: 'Approval' },
+      { id: 'history', label: 'History' },
+    ];
+    this.panelTabs.splice(1, 0, { id: 'grn', label: 'GRN' });
+    if (!this.panelTabs.some((t) => t.id === this.panelTab)) this.panelTab = 'pricing';
+
+    this.historyEntries = buildApprovalTimeline(l.approvalStatus);
+    // cached so the table does not reset on every change detection
+    this.lineRows = this.itemRows();
+    this.lineFootRows = this.itemFootRows();
+  }
+
+  lineRows: Record<string, any>[] = [];
+  lineFootRows: DetailFootRow[] = [];
+
+  /** GRNs raised against this PO, one row per received line. */
+  readonly grnColumns: DetailTableColumn[] = [
+    { key: 'docNo', label: 'GRN No', type: 'text', width: '1%' },
+    { key: 'description', label: 'Item Description', type: 'text', truncate: true, hoverOnly: true, width: '100%' },
+    { key: 'receivedQty', label: 'Received', type: 'number', align: 'right' },
+    { key: 'acceptedQty', label: 'Accepted', type: 'number', align: 'right' },
+    { key: 'rejectedQty', label: 'Rejected', type: 'number', align: 'right' },
+    { key: 'value', label: 'Cost', type: 'currency', align: 'right', total: true },
+    { key: 'status', label: 'Status', type: 'badge' },
+    { key: 'date', label: 'Date', type: 'date' },
+  ];
+  grnRows: Record<string, any>[] = [];
+  grnFootRows: DetailFootRow[] = [];
+  grnStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
+
+  selectPanelTab(tab: LpoPanelTab): void {
+    this.panelTab = tab;
+    if (tab === 'grn') this.loadGrns();
+  }
+
+  private loadGrns(): void {
+    if (this.grnStatus === 'loading' || this.grnStatus === 'ready') return;
+    this.grnStatus = 'loading';
+    this.grnService.getAllGRNsByLpoId(this.lpoId).subscribe({
+      next: (res: any) => {
+        const key = (v: any) => String(v ?? '').trim().toLowerCase();
+        const lines = this.items();
+        const unitCost = (item: any) => {
+          const part = key(item?.partNo?.partNo ?? item?.partNo);
+          const line = lines.find((l) => part && part !== '-' && key(l.partNo?.partNo ?? l.partNo) === part)
+            || lines.find((l) => key(l.detail) === key(item?.itemDescription));
+          return Number(line?.unitCost) || 0;
+        };
+        const rows: Record<string, any>[] = [];
+        for (const g of res?.data ?? []) {
+          for (const i of g.items ?? []) {
+            const received = Number(i.receivedQty) || 0;
+            const accepted = Number(i.acceptedQty) || 0;
+            rows.push({
+              docNo: g.grnNo,
+              _link: ['/grn/view-grn', g._id],
+              description: i.itemDescription || '-',
+              receivedQty: received,
+              acceptedQty: accepted,
+              rejectedQty: Math.max(received - accepted, 0),
+              value: accepted * unitCost(i),
+              status: g.outcomeStatus || '-',
+              date: g.grnDate,
+            });
+          }
+        }
+        this.grnRows = rows;
+        this.grnFootRows = [{ label: 'Total', emphasis: true, cells: {
+          value: { value: rows.reduce((s, r) => s + r['value'], 0), format: 'currency' },
+        } }];
+        this.grnStatus = 'ready';
+      },
+      error: () => (this.grnStatus = 'error'),
+    });
   }
 
   lpoId!: string;
@@ -265,6 +359,7 @@ export class ViewLpoComponent implements OnInit {
   isApproving = false;
   isRejecting = false;
   isPlacing = false;
+  isResending = false;
   canApprovePOs = signal<boolean>(false);
   canInitiateLPO = signal<boolean>(false);
   currentEmployeeId: string | null = null;
@@ -327,9 +422,11 @@ export class ViewLpoComponent implements OnInit {
               this.loadPurchase(purchaseId);
             } else {
               this.purchase = lpoData.purchaseId;
+              this.buildView();
               this.isLoading.set(false);
             }
           } else {
+            this.buildView();
             this.isLoading.set(false);
           }
         } else {
@@ -356,10 +453,12 @@ export class ViewLpoComponent implements OnInit {
           const currency = quoteId?.currency || quoteId?.dealData?.currency || 'QAR';
           this.currency.set(currency);
         }
+        this.buildView();
         this.isLoading.set(false);
       },
       error: (error) => {
         console.error('Error loading purchase:', error);
+        this.buildView();
         this.isLoading.set(false);
       }
     });
@@ -520,6 +619,40 @@ export class ViewLpoComponent implements OnInit {
     });
   }
 
+  /** A rejected LPO can go back for approval by whoever raised it (or a Super Admin). */
+  canResend(): boolean {
+    return this.lpo?.poStatus === 'Rejected' && (this.isSuperAdmin || (this.canInitiateLPO() && this.isOwnLpo()));
+  }
+
+  async onResend(): Promise<void> {
+    if (!this.canResend()) return;
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Resend LPO for approval',
+      message: 'This LPO will go through the approval workflow again.',
+      details: [
+        { label: 'PO no', value: this.lpo?.poNo || '-' },
+        { label: 'Supplier', value: this.supplier?.supplierName || '-' },
+        { label: 'Total', value: this.formatCurrency(this.getTotalAfterDiscount()) },
+      ],
+      confirmLabel: 'Resend',
+    });
+    if (!confirmed) return;
+
+    this.isResending = true;
+    this.purchaseOrderService.resendPurchaseOrder(this.lpoId).subscribe({
+      next: () => {
+        this.notificationService.success('LPO sent for approval again');
+        this.isResending = false;
+        this.loadLpo();
+      },
+      error: (error) => {
+        this.notificationService.error(error.error?.message || 'Failed to resend the LPO');
+        this.isResending = false;
+      }
+    });
+  }
+
   /** Placing is manual, by someone who can issue LPOs, once the LPO is approved. */
   canPlace(): boolean {
     return this.lpo?.poStatus === 'Approved' && (this.isSuperAdmin || this.canInitiateLPO());
@@ -587,9 +720,27 @@ export class ViewLpoComponent implements OnInit {
   }
 
   itemRows(): Record<string, any>[] {
-    return this.items().map((item: any) => ({
-      description: item.detail || '-', partNo: (v => v === '-' ? '' : v)(this.formatPartNumber(item.partNo)),
-      quantity: item.quantity || 0, unitCost: item.unitCost || 0, totalCost: item.totalCost || 0,
-    }));
+    return this.items().map((item: any) => {
+      const partNo = this.formatPartNumber(item.partNo);
+      return {
+        detail: item.detail || '-',
+        detailText: `${item.detail ?? ''} ${partNo === '-' ? '' : partNo}`.trim(),
+        itemCode: item.partNo?.itemCode || '-',
+        partNo,
+        quantity: item.quantity || 0,
+        uom: item.uom || '-',
+        receivedQty: item.receivedQty || 0,
+        cancelledQty: item.cancelledQty || 0,
+        unitCost: item.unitCost || 0,
+        totalCost: item.totalCost || 0,
+      };
+    });
+  }
+
+  itemFootRows(): DetailFootRow[] {
+    const totalQty = this.items().reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+    return [
+      { label: 'Total', cells: { quantity: { value: totalQty, format: 'number' }, totalCost: { value: this.getSubTotal(), format: 'currency' } } },
+    ];
   }
 }

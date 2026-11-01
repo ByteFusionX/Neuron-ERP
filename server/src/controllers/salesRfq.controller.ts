@@ -6,7 +6,7 @@ import Supplier, { supplierStatus } from "../models/supplier.model";
 import { getEmployeeData, buildPrivilegeAccessFilter, getQarRates } from "../common/utils/util";
 import { uploadFileToAws } from "../common/aws-connect";
 import { nextRfqNo } from "../services/rfqNumber.service";
-import { findLine, settleLine } from "../services/purchaseAward.service";
+import { findLine } from "../services/purchaseAward.service";
 import { resolveSourceSalesRfqId } from "./rfq.controller";
 import { getAvailability, getLastReceiptCosts } from "../services/stock.service";
 import Product from "../models/products.model";
@@ -2860,7 +2860,6 @@ export const reassignPurchaseLine = async (req: Request, res: Response, next: Ne
         toOffer.selected = true;
         toOffer.awardedQty = Number((toShare + qty).toFixed(4));
         toOffer.quantity = toOffer.awardedQty;
-        settleLine(detail);
 
         purchase.updatedBy = employee._id;
         purchase.updatedAt = new Date();

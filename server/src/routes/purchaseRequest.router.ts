@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import {
+    changePurchaseFollowUp,
     createPurchaseRequest,
     generatePurchaseNumber,
     getPurchaseRequestById,
@@ -17,6 +18,7 @@ import {
     revokeMergedItems,
     getApprovalsByEmployee,
     resetPurchaseWorkflow,
+    revokePurchaseRequest,
     awardPurchaseLines,
     getSupplierPrices
 } from '../controllers/purchaseRequest.controller'
@@ -26,6 +28,7 @@ const purchaseRequestRouter = Router()
 
 purchaseRequestRouter.use(requirePrivilege("purchase"));
 
+purchaseRequestRouter.post('/purchase-request/:id/follow-up/:action', changePurchaseFollowUp)
 purchaseRequestRouter.post('/purchase-request', requirePrivilege("purchase", "create"), createPurchaseRequest)
 purchaseRequestRouter.post('/purchase-requests', getPurchaseRequests)
 purchaseRequestRouter.post('/purchase-requests/counts', getPurchaseRequestCounts)
@@ -38,6 +41,7 @@ purchaseRequestRouter.get('/purchase-request/:id',getPurchaseRequestById)
 purchaseRequestRouter.patch('/purchase-request/award/:id', awardPurchaseLines)
 purchaseRequestRouter.put('/purchase-update/:id', updatePurchaseRequest)
 purchaseRequestRouter.patch('/purchase-request/status/:id', requirePrivilege("purchase", "canApprovePR"), updatePurchaseRequestStatus)
+purchaseRequestRouter.post('/purchase-request/revoke/:id', requirePrivilege("purchase", "canApprovePR"), revokePurchaseRequest)
 purchaseRequestRouter.post('/purchase-request/reset-workflow/:id', resetPurchaseWorkflow)
 purchaseRequestRouter.patch('/purchase-request/items/:id', updatePurchaseItems)
 purchaseRequestRouter.patch('/purchase-request/supplier-offers/:id', updatePurchaseSupplierOffers)

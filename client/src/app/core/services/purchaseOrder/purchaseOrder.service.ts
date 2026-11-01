@@ -122,6 +122,11 @@ export class PurchaseOrderService {
     return this.http.patch<any>(`${this.baseUrl}/${id}/reject`, { comment }, { context: context() });
   }
 
+  /** A rejected LPO goes back through the approval workflow. */
+  resendPurchaseOrder(id: string): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${id}/resend`, {}, { context: context() });
+  }
+
   /** Super Admin restarts a pending PO's approval route; `stepRoleIds` are the stages that get another chance. */
   resetPurchaseOrderWorkflow(id: string, stepRoleIds: string[]): Observable<{ success: true; message: string }> {
     return this.http.post<{ success: true; message: string }>(`${this.baseUrl}/${id}/reset-workflow`, { stepRoleIds }, { context: context() });
