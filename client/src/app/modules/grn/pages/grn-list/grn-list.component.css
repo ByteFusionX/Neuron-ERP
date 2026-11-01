@@ -3,22 +3,24 @@
   min-width: 0;
 }
 
+.grn-meta + .grn-meta {
+  border-left: 1px solid #e5e7eb;
+}
+
 .grn-meta-label {
-  margin: 0 0 0.125rem;
+  margin: 0;
   font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: #64748b;
+  color: #6b7280;
 }
 
 .grn-meta-value {
-  margin: 0;
+  margin: 0.125rem 0 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #0f172a;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #111827;
 }
 
 .grn-document-actions {
@@ -51,12 +53,16 @@
   opacity: 0.45;
 }
 
-:host-context(.dark) .grn-meta-label {
-  color: #94a3b8;
+:host-context(html.dark) .grn-meta + .grn-meta {
+  border-left-color: #262626;
 }
 
-:host-context(.dark) .grn-meta-value {
-  color: #e2e8f0;
+:host-context(html.dark) .grn-meta-label {
+  color: #a1a1a1;
+}
+
+:host-context(html.dark) .grn-meta-value {
+  color: #ededed;
 }
 
 :host-context(.dark) .grn-document-actions button {

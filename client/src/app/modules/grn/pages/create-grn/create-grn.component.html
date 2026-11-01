@@ -92,7 +92,7 @@
             </app-sf-section>
 
             <app-sf-section title="GRN" columns="2">
-                <app-sf-field label="GRN number" [hint]="isEdit ? '' : 'Assigned when the GRN is saved'" [control]="f['grnNo']"><app-sf-input formControlName="grnNo" readonly></app-sf-input></app-sf-field>
+                <app-sf-field label="GRN number" [hint]="isEdit ? '' : 'Confirmed when the GRN is saved'" [control]="f['grnNo']"><app-sf-input formControlName="grnNo" readonly></app-sf-input></app-sf-field>
                 <app-sf-field label="GRN date" required [control]="f['grnDate']"><app-sf-date formControlName="grnDate" typeable displayFormat="dd/MM/yyyy"></app-sf-date></app-sf-field>
             </app-sf-section>
 
@@ -164,7 +164,7 @@
                     </dl>
                 </section>
 
-                <app-grn-item-entry [items]="items" [locked]="isEdit" [disabled]="isFormDisabled()"
+                <app-grn-item-entry [items]="items" [purchaseOrder]="lpo" [locked]="isEdit" [disabled]="isFormDisabled()"
                     [title]="lpo?.poNo ? 'LPO ' + lpo.poNo : 'Items received'"></app-grn-item-entry>
             }
         </ng-container>

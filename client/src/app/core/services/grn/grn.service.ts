@@ -52,7 +52,7 @@ export class GrnService {
   }
 
   /** Placed LPOs still waiting on goods, soonest expected delivery first. */
-  getArrivingPurchaseOrders(params?: { page?: number; row?: number; search?: string; stage?: 'upcoming' | 'arriving' }): Observable<any> {
+  getArrivingPurchaseOrders(params?: { page?: number; row?: number; search?: string; stage?: 'upcoming' | 'arriving' | 'missed' }): Observable<any> {
     return this.http.get<any>(`${this.baseUrl}/arriving`, { params: params as any, context: context() });
   }
 

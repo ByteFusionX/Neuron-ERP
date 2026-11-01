@@ -96,10 +96,10 @@ export class GrnListComponent implements OnInit {
   columns: DataGridColumn<any>[] = [];
   rowActions: DataGridRowAction<any>[] = [];
   views: DataGridView<any>[] = [
-    { id: 'all', label: 'All' },
     { id: 'upcoming', label: 'Upcoming', hideCount: true },
     { id: 'arriving', label: 'Arriving', hideCount: true },
     { id: 'pending', label: 'Nothing received', hideCount: true },
+    { id: 'all', label: 'All' },
     { id: 'partial', label: 'Partly received', hideCount: true },
     { id: 'arrived', label: 'Fully received', hideCount: true },
     { id: 'returns', label: 'Returns', hideCount: true },
@@ -113,12 +113,14 @@ export class GrnListComponent implements OnInit {
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'partNo', label: 'Part No.' },
     { key: 'itemDescription', label: 'Description' },
+    { key: 'unitPrice', label: 'Unit Price', type: 'currency' },
+    { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
     { key: 'orderedQty', label: 'Ordered', type: 'number', total: true },
     { key: 'receivedQty', label: 'Received', type: 'number', total: true },
     { key: 'acceptedQty', label: 'Accepted', type: 'number', total: true },
     { key: 'rejectedQty', label: 'Rejected', type: 'number', total: true },
+    { key: 'amount', label: 'Amount', type: 'currency', total: true },
   ];
 
   constructor(private _dialog: MatDialog) {}
@@ -132,9 +134,9 @@ export class GrnListComponent implements OnInit {
     this.getGRNs();
   }
 
-  /** Upcoming and Arriving both list placed LPOs rather than GRNs. */
+  /** Upcoming, Arriving and Nothing received (missed their date) list placed LPOs rather than GRNs. */
   get isArrivingView(): boolean {
-    return this.activeViewId === 'arriving' || this.activeViewId === 'upcoming';
+    return this.activeViewId === 'arriving' || this.activeViewId === 'upcoming' || this.activeViewId === 'pending';
   }
 
   /** Upcoming: expected after today. Arriving: due today, overdue or undated. Both list LPOs still short of goods. */
@@ -146,13 +148,13 @@ export class GrnListComponent implements OnInit {
     { key: 'jobId', label: 'Job No', valueGetter: (r) => r?.jobId?.jobId || 'N/A' },
     { key: 'orderedQty', label: 'Ordered', type: 'number', align: 'right' },
     { key: 'receivedQty', label: 'Received', type: 'number', align: 'right' },
-    { key: 'acceptedQty', label: 'Accepted', type: 'number', align: 'right' },
+    { key: 'rejectedQty', label: 'Rejected', type: 'number', align: 'right', valueGetter: (r) => Math.max(0, (Number(r?.receivedQty) || 0) - (Number(r?.acceptedQty) || 0)) },
     { key: 'placedBy', label: 'Placed By', valueGetter: (r) => this.formatEmployeeName(r?.placedBy) },
   ];
   private readonly arrivingActions: DataGridRowAction<any>[] = [
     { id: 'receive', label: 'Create GRN', icon: 'plus', quick: true, persistent: true },
+    { id: 'viewPo', label: 'View PO', icon: 'shoppingBag', quick: true },
     { id: 'previewPo', label: 'Preview PO', icon: 'card' },
-    { id: 'viewPurchase', label: 'View Purchase', icon: 'files', hidden: (r) => !this.purchaseId(r) },
   ];
   private grnColumns: DataGridColumn<any>[] = [];
   private grnActions: DataGridRowAction<any>[] = [];
@@ -181,7 +183,7 @@ export class GrnListComponent implements OnInit {
       { key: 'poNo', label: 'LPO No', valueGetter: (r) => r?.purchaseOrderId?.poNo || 'N/A' },
       { key: 'supplier', label: 'Supplier', valueGetter: (r) => r?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
       { key: 'warehouse', label: 'Warehouse', valueGetter: (r) => r?.warehouse?.wareHouseName || 'N/A' },
-      { key: 'acceptedQty', label: 'Accepted Qty', type: 'number', align: 'right', valueGetter: (r) => this.totalAcceptedQty(r) },
+      { key: 'receivedQty', label: 'Received Qty', type: 'number', align: 'right', valueGetter: (r) => this.totalReceivedQty(r) },
       { key: 'rejectedQty', label: 'Rejected Qty', type: 'number', align: 'right', valueGetter: (r) => this.totalRejectedQty(r) },
       {
         key: 'outcomeStatus', label: 'Status', type: 'badge',
@@ -203,6 +205,7 @@ export class GrnListComponent implements OnInit {
     this.grnActions = [
       { id: 'view', label: 'Open GRN', icon: 'eye', quick: true, panel: true },
       { id: 'edit', label: 'Edit GRN', icon: 'pencil', quick: true },
+      { id: 'viewPo', label: 'View PO', icon: 'shoppingBag', quick: true },
       { id: 'previewPo', label: 'Preview PO', icon: 'card' },
       { id: 'viewPurchase', label: 'View Purchase', icon: 'files', hidden: (r) => !this.purchaseId(r) },
       { id: 'previewReceipt', label: 'Preview receipt', icon: 'eye', hidden: () => !['partial', 'arrived'].includes(this.activeViewId) },
@@ -221,7 +224,7 @@ export class GrnListComponent implements OnInit {
       search: query?.search ?? this.searchQuery,
     };
     if (this.activeViewId !== 'all' && !this.isArrivingView) params.status = this.activeViewId;
-    if (this.isArrivingView) params.stage = this.activeViewId;
+    if (this.isArrivingView) params.stage = this.activeViewId === 'pending' ? 'missed' : this.activeViewId;
 
     this.page = params.page;
     this.row = params.row;
@@ -302,6 +305,18 @@ export class GrnListComponent implements OnInit {
       case 'previewPo':
         this.previewPo(event.row);
         break;
+      case 'viewPo': {
+        const r = event.row;
+        const poId = this.isArrivingView
+          ? r?._id
+          : (typeof r?.purchaseOrderId === 'string' ? r.purchaseOrderId : r?.purchaseOrderId?._id);
+        if (!poId) {
+          this.notificationService.warning('No purchase order is linked to this GRN');
+          break;
+        }
+        this.router.navigate(['/purchase-order/view-lpo', poId]);
+        break;
+      }
       case 'viewPurchase':
         this.router.navigate(['/purchase/view-purchase', this.purchaseId(event.row)]);
         break;
@@ -395,7 +410,7 @@ export class GrnListComponent implements OnInit {
   overviewSections(row: any): DetailOverviewSection[] {
     return [
       {
-        title: 'Receipt',
+        title: 'Overview',
         columns: '2',
         fields: [
           { type: 'field', label: 'GRN No', value: row?.grnNo, numeric: true },
@@ -404,12 +419,6 @@ export class GrnListComponent implements OnInit {
           { type: 'field', label: 'Warehouse', value: row?.warehouse?.wareHouseName || 'N/A' },
           { type: 'field', label: 'Received By', value: this.formatEmployeeName(row?.receivedBy) || 'N/A' },
           { type: 'field', label: 'Created By', value: this.formatEmployeeName(row?.createdBy) || 'N/A' },
-        ],
-      },
-      {
-        title: 'Linked Documents',
-        columns: '2',
-        fields: [
           { type: 'field', label: 'Purchase Request', value: row?.purchaseOrderId?.purchaseId?.purchaseNo || 'N/A', pill: !!row?.purchaseOrderId?.purchaseId, tone: 'info' },
           { type: 'field', label: 'LPO No', value: row?.purchaseOrderId?.poNo || 'N/A', pill: !!row?.purchaseOrderId, tone: 'neutral' },
           { type: 'field', label: 'Job No', value: row?.jobId?.jobId || row?.purchaseOrderId?.purchaseId?.jobId?.jobId || 'N/A' },
@@ -418,31 +427,54 @@ export class GrnListComponent implements OnInit {
           { type: 'field', label: 'Delivery Note', value: row?.supplierDeliveryNoteNo || 'N/A' },
         ],
       },
-      {
-        title: 'Quantity Summary',
-        columns: '2',
-        fields: [
-          { type: 'field', label: 'Ordered Qty', value: this.totalOrderedQty(row), numeric: true },
-          { type: 'field', label: 'Received Qty', value: this.totalReceivedQty(row), numeric: true },
-          { type: 'field', label: 'Accepted Qty', value: this.totalAcceptedQty(row), numeric: true, tone: 'good' },
-          { type: 'field', label: 'Rejected Qty', value: this.totalRejectedQty(row), numeric: true, pill: this.totalRejectedQty(row) > 0, tone: this.totalRejectedQty(row) > 0 ? 'warn' : 'neutral' },
-          { type: 'field', label: 'Outcome', value: row?.outcomeStatus || (this.totalRejectedQty(row) > 0 ? 'Return Required' : 'Completed'), pill: true, tone: ['Completed', 'Resolved'].includes(row?.outcomeStatus) ? 'good' : 'warn' },
-          { type: 'field', label: 'Invoice', value: row?.invoiceStatus || (this.totalRejectedQty(row) > 0 ? 'Blocked by Return' : 'Ready for Invoice'), pill: true, tone: row?.invoiceStatus === 'Blocked by Return' ? 'warn' : 'good' },
-        ],
-      },
+      this.costSection(row),
+      this.poSummarySection(row, row?.purchaseOrderId),
     ];
+  }
+
+  private costSection(row: any): DetailOverviewSection {
+    const po = row?.purchaseOrderId || {};
+    const items: any[] = row?.items || [];
+    const sum = (qty: (i: any) => number) => items.reduce((s, i) => s + qty(i) * this.poUnitCost(row, i), 0);
+    const gross = (po.items || []).reduce((s: number, l: any) => s + (Number(l.totalCost) || (Number(l.unitCost) || 0) * (Number(l.quantity) || 0)), 0);
+    const discount = Number(po.discount) || 0;
+    const fmt = (n: number) => `${po.currency || 'QAR'} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const rejected = sum((i) => this.getRejectedQty(i));
+    return {
+      title: 'Cost Details',
+      columns: '2',
+      fields: [
+        { type: 'field', label: 'Received Value', value: fmt(sum((i) => Number(i.receivedQty) || 0)), numeric: true },
+        { type: 'field', label: 'Accepted Value', value: fmt(sum((i) => Number(i.acceptedQty) || 0)), numeric: true, tone: 'good' },
+        { type: 'field', label: 'Rejected Value', value: fmt(rejected), numeric: true, pill: rejected > 0, tone: rejected > 0 ? 'warn' : 'neutral' },
+        { type: 'field', label: 'LPO Discount', value: fmt(discount), numeric: true },
+        { type: 'field', label: 'LPO Total', value: fmt(Math.max(gross - discount, 0)), numeric: true },
+      ],
+    };
   }
 
   itemRows(row: any): Record<string, any>[] {
     return (row?.items || []).map((item: any) => ({
-      partNo: this.formatPartNumber(item?.partNo),
       itemDescription: item?.itemDescription || '-',
+      unitPrice: this.jobSellingPrice(row?.purchaseOrderId?.purchaseId, item?.partNo?._id ?? item?.partNo, item?.itemDescription),
+      unitCost: this.poUnitCost(row, item),
+      amount: this.poUnitCost(row, item) * (Number(item?.receivedQty) || 0),
       orderedQty: item?.orderedQty || 0,
       receivedQty: item?.receivedQty || 0,
       acceptedQty: item?.acceptedQty || 0,
       rejectedQty: this.getRejectedQty(item),
       remarks: item?.remarks || '-',
     }));
+  }
+
+  /** GRN lines carry no price, so take it from the matching LPO line. */
+  private poUnitCost(row: any, item: any): number {
+    const lines: any[] = row?.purchaseOrderId?.items || [];
+    const key = (v: any) => String(v || '').trim().toLowerCase();
+    const part = key(this.formatPartNumber(item?.partNo) === '-' ? '' : this.formatPartNumber(item?.partNo));
+    const line = lines.find((l) => part && key(l.partNo?.partNo ?? l.partNo) === part)
+      || lines.find((l) => key(l.detail) === key(item?.itemDescription));
+    return Number(line?.unitCost) || 0;
   }
 
   /** Files uploaded against the PO; a GRN row carries its LPO, an Arriving row is the LPO. */
@@ -488,7 +520,7 @@ export class GrnListComponent implements OnInit {
   arrivingSections(row: any): DetailOverviewSection[] {
     return [
       {
-        title: 'Delivery',
+        title: 'Overview',
         columns: '2',
         fields: [
           { type: 'field', label: 'LPO No', value: row?.poNo || 'N/A', numeric: true },
@@ -497,40 +529,72 @@ export class GrnListComponent implements OnInit {
           { type: 'field', label: 'Supplier', value: row?.supplierId?.supplierName || 'N/A' },
           { type: 'field', label: 'Placed By', value: this.formatEmployeeName(row?.placedBy) },
           { type: 'field', label: 'Delivery Location', value: row?.placeOfDelivery || 'N/A' },
-        ],
-      },
-      {
-        title: 'Linked',
-        columns: '2',
-        fields: [
           { type: 'field', label: 'Purchase Request', value: row?.purchaseId?.purchaseNo || 'N/A' },
           { type: 'field', label: 'Job No', value: row?.jobId?.jobId || 'N/A' },
         ],
       },
-      {
-        title: 'Quantity Summary',
-        columns: '2',
-        fields: [
-          { type: 'field', label: 'Ordered Qty', value: row?.orderedQty ?? 0, numeric: true },
-          { type: 'field', label: 'Received Qty', value: row?.receivedQty ?? 0, numeric: true },
-          { type: 'field', label: 'Accepted Qty', value: row?.acceptedQty ?? 0, numeric: true, tone: 'good' },
-        ],
-      },
+      this.poSummarySection(row),
     ];
+  }
+
+  /** Cost is the job's (deal sheet) cost, Price is what the PR/LPO actually pays; both for the LPO's items only. */
+  private poSummarySection(row: any, po: any = row): DetailOverviewSection {
+    const pr = this.isArrivingView ? row?.purchaseId : row?.purchaseOrderId?.purchaseId;
+    const lines: any[] = po?.items || [];
+    const totalCost = lines.reduce((s, l) => s + this.jobUnitCost(pr, l) * (Number(l.quantity) || 0), 0);
+    const totalPrice = lines.reduce((s, l) => s + this.linePrice(l), 0);
+    const discount = Number(po?.discount) || 0;
+    const fmt = (n: number) => `${po?.currency || 'QAR'} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return {
+      title: 'Summary',
+      columns: '2',
+      fields: [
+        { type: 'field', label: 'Total Price', value: fmt(totalPrice), numeric: true },
+        { type: 'field', label: 'Total Cost', value: fmt(totalCost), numeric: true },
+        { type: 'field', label: 'Total Discount', value: fmt(discount), numeric: true },
+        { type: 'field', label: 'Net Total', value: fmt(Math.max(totalPrice - discount, 0)), numeric: true },
+      ],
+    };
+  }
+
+  private linePrice(line: any): number {
+    return Number(line?.totalCost) || (Number(line?.unitCost) || 0) * (Number(line?.quantity) || 0);
+  }
+
+  /** The job's unit cost for an LPO line, from the matching PR item (deal sheet cost); falls back to the line's own cost. */
+  private jobUnitCost(pr: any, line: any): number {
+    const key = (v: any) => String(v?._id ?? v ?? '').trim().toLowerCase();
+    const details: any[] = (pr?.items || []).flatMap((i: any) => i?.itemDetails || []);
+    const match = details.find((d) => line?.partNo && key(d.partNo) === key(line.partNo))
+      || details.find((d) => key(d.detail) === key(line?.detail));
+    return Number(match?.dealUnitCost) || Number(match?.unitCost) || Number(line?.unitCost) || 0;
+  }
+
+  /** Unit Price is the job's selling price for the product (matched on the PR's item details). */
+  private jobSellingPrice(pr: any, partNo: any, detail: any): number {
+    const key = (v: any) => String(v?._id ?? v ?? '').trim().toLowerCase();
+    const details: any[] = (pr?.items || []).flatMap((i: any) => i?.itemDetails || []);
+    const match = details.find((d) => partNo && key(d.partNo) === key(partNo))
+      || details.find((d) => key(d.detail) === key(detail));
+    return Number(match?.unitSellingPrice) || 0;
   }
 
   arrivingItemRows(row: any): Record<string, any>[] {
     return (row?.items || []).map((item: any) => ({
-      partNo: this.formatPartNumber(item?.partNo),
       itemDescription: item?.detail || item?.itemDescription || '-',
       orderedQty: item?.quantity || 0,
+      unitPrice: this.jobSellingPrice(row?.purchaseId, item?.partNo, item?.detail),
+      unitCost: Number(item?.unitCost) || 0,
+      totalCost: this.linePrice(item),
     }));
   }
 
   readonly arrivingItemColumns: DetailTableColumn[] = [
-    { key: 'partNo', label: 'Part No.' },
     { key: 'itemDescription', label: 'Description' },
-    { key: 'orderedQty', label: 'Ordered', type: 'number', total: true },
+    { key: 'orderedQty', label: 'Qty', type: 'number', total: true },
+    { key: 'unitPrice', label: 'Unit Price', type: 'currency' },
+    { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
+    { key: 'totalCost', label: 'Amount', type: 'currency', total: true },
   ];
 
   viewDetails(grn: any): void {
@@ -593,8 +657,8 @@ export class GrnListComponent implements OnInit {
   private refreshViewCounts(): void {
     const countOf = (id: string) => {
       const params: any = { page: 1, row: 1, search: this.searchQuery };
-      const arriving = id === 'upcoming' || id === 'arriving';
-      if (arriving) params.stage = id;
+      const arriving = id === 'upcoming' || id === 'arriving' || id === 'pending';
+      if (arriving) params.stage = id === 'pending' ? 'missed' : id;
       else if (id !== 'all') params.status = id;
       const request = arriving ? this.grnService.getArrivingPurchaseOrders(params) : this.grnService.getAllGRNs(params);
       return request.pipe(map((r) => r?.pagination?.total ?? 0), catchError(() => of(undefined)));

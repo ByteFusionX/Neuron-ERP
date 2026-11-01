@@ -17,6 +17,7 @@ interface GRN extends Document {
   inspectionNotes?: string;
   inspectedBy?: Types.ObjectId;
   outcomeStatus: "Completed" | "Return Required" | "Return in Progress" | "Resolved";
+  receiptStatus: "Not Received" | "Partially Received" | "Fully Received" | "Fully Rejected";
   invoiceStatus: "Ready for Invoice" | "Blocked by Return";
   returnResolution?: "Replacement" | "Credit Note";
   returnDispatchedAt?: Date;
@@ -163,6 +164,11 @@ const grnSchema = new Schema<GRN>(
     inspectionDate: { type: Date },
     inspectionNotes: { type: String, trim: true },
     inspectedBy: { type: Schema.Types.ObjectId, ref: "Employee" },
+    receiptStatus: {
+      type: String,
+      enum: ["Not Received", "Partially Received", "Fully Received", "Fully Rejected"],
+      default: "Not Received"
+    },
     outcomeStatus: {
       type: String,
       enum: ["Completed", "Return Required", "Return in Progress", "Resolved"],

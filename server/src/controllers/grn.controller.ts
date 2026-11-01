@@ -1,15 +1,15 @@
 import { Request, Response } from "express";
 import GRN from "../models/grn.model";
 import PurchaseOrder from "../models/purchaseOrder.model";
-import { post as postStock } from "../services/stock.service";
+import { post as postStock, reserve as reserveStock } from "../services/stock.service";
+import Job from "../models/job.model";
 import Product from "../models/products.model";
-import { createPendingProduct } from "./productReview.controller";
 import PurchaseRequest from "../models/purchaseRequest.model";
 import mongoose from "mongoose";
 import { getEmployeeData } from "../common/utils/util";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { uploadFileToAws } from "../common/aws-connect";
-import { getNextSequence } from "../models/counter.model";
+import { issueDocNo, peekDocNo } from "../services/docNumber.service";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { Server } from "socket.io";
 import { StockHold } from "../models/stockHold.model";
@@ -18,32 +18,38 @@ import { logAudit } from "../services/audit.service";
 const logGrnAudit = (req: Request, grn: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
   logAudit(req, { entityType: 'grn', entityId: grn._id, entityLabel: grn.grnNo, action, summary, changes });
 
-const seedGRNSequence = (prefix: string) => async (): Promise<number> => {
-  const lastEntry = await GRN.findOne({
-    grnNo: new RegExp(`^${prefix}`)
-  }).sort({ createdAt: -1 });
-
-  if (lastEntry && lastEntry.grnNo) {
-    const parts = lastEntry.grnNo.split('-');
-    if (parts.length >= 4 && !isNaN(parseInt(parts[3]))) {
-      return parseInt(parts[3]);
-    }
-  }
-  return 0;
+const nextGRNNo = async () => {
+  return issueDocNo('GRN');
 };
 
-const nextGRNNo = async () => {
-  const now = new Date();
-  const mm = (now.getMonth() + 1).toString().padStart(2, '0');
-  const yy = now.getFullYear().toString().slice(-2);
-  const prefix = `GRN-${mm}-${yy}`;
-  const sequence = await getNextSequence(`grnNo-${mm}-${yy}`, seedGRNSequence(prefix));
-  return `${prefix}-${sequence.toString().padStart(4, '0')}`;
+// Derive existing records too; no database migration or read-time writes are needed.
+const attachReceiptStatuses = async (receipts: any[]) => {
+  const ids = [...new Set(receipts.map(g => String(g.purchaseOrderId?._id || g.purchaseOrderId)).filter(id => mongoose.Types.ObjectId.isValid(id)))];
+  if (!ids.length) return;
+  const objectIds = ids.map(id => new mongoose.Types.ObjectId(id));
+  const [totals, orders] = await Promise.all([
+    GRN.aggregate([
+      { $match: { purchaseOrderId: { $in: objectIds }, isDeleted: { $ne: true } } },
+      { $group: { _id: '$purchaseOrderId', received: { $sum: { $sum: '$items.receivedQty' } }, accepted: { $sum: { $sum: '$items.acceptedQty' } } } }
+    ]),
+    PurchaseOrder.find({ _id: { $in: objectIds } }).select('poStatus').lean()
+  ]);
+  for (const receipt of receipts) {
+    const id = String(receipt.purchaseOrderId?._id || receipt.purchaseOrderId);
+    const total = totals.find(t => String(t._id) === id);
+    const closed = orders.some(order => String(order._id) === id && order.poStatus === 'Closed');
+    receipt.receiptStatus = !total || total.received <= 0 ? 'Not Received'
+      : total.accepted <= 0 ? 'Fully Rejected' : closed ? 'Fully Received' : 'Partially Received';
+  }
 };
 
 // Preview only: the number is taken when the GRN is saved, so opening the form no longer uses one up.
 export const generateGRNNumber = async (req: Request, res: Response) => {
-  return res.status(200).json({ grn: null, message: "Assigned on save" });
+  try {
+    return res.status(200).json({ grn: await peekDocNo('GRN') });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || 'Failed to generate GRN number' });
+  }
 };
 
 export const createGRN = async (req: Request, res: Response) => {
@@ -261,8 +267,8 @@ export const createGRN = async (req: Request, res: Response) => {
         continue;
       }
 
-      // Product: the LPO line's link, then the part number, then an exact description match. Job/PR lines
-      // often have no product, so a pending product is created and linked to the LPO line for next time.
+      // Product: the LPO line's link, then the part number, then an exact description match. Lines with
+      // no matching product are skipped with a warning; GRN never creates products.
       let product: any = matchingLpoItem.partNo ? await Product.findOne({ _id: matchingLpoItem.partNo, isDeleted: { $ne: true } }) : null;
       if (!product && partNoStr && partNoStr !== '-') {
         product = await Product.findOne({ partNo: new RegExp(`^${escape(partNoStr)}$`, 'i'), isDeleted: { $ne: true } });
@@ -271,13 +277,7 @@ export const createGRN = async (req: Request, res: Response) => {
         product = await Product.findOne({ productDescription: new RegExp(`^${escape(description)}$`, 'i'), isDeleted: { $ne: true } });
       }
       if (!product) {
-        const created = await createPendingProduct({ partNo: partNoStr === '-' ? '' : partNoStr, productDescription: description, isGeneric: !partNoStr || partNoStr === '-' }, 'GRN', employee._id);
-        product = created.status === 'created' ? created.product
-          : created.status === 'duplicate' && created.existing?._id ? await Product.findById(created.existing._id) : null;
-        if (product) warnings.push(`"${description}" was added to stock as a new product waiting for review`);
-      }
-      if (!product) {
-        warnings.push(`"${description}" was not added to stock: no product could be found or created`);
+        warnings.push(`"${description}" was not added to stock: it is not in the product catalogue`);
         continue;
       }
       if (!matchingLpoItem.partNo) {
@@ -303,6 +303,28 @@ export const createGRN = async (req: Request, res: Response) => {
 
       if (acceptedQty > 0) {
         await postStock({ ...commonStockData, warehouse, type: 'Receipt', direction: 'in', quantity: acceptedQty });
+        // Goods bought for a job are claimed for it as soon as they arrive.
+        if (derivedJobId && mongoose.Types.ObjectId.isValid(derivedJobId)) {
+          try {
+            const job: any = await Job.findById(derivedJobId).populate('quoteId', 'client').lean();
+            const reservedQty = Math.floor(acceptedQty);
+            if (job && reservedQty > 0) {
+              await reserveStock({
+                product: product._id,
+                quantity: reservedQty,
+                sourceType: 'Job',
+                job: job._id,
+                quote: job.quoteId?._id,
+                customer: job.quoteId?.client,
+                warehouse,
+                createdBy: employee._id,
+              });
+            }
+          } catch (reserveError) {
+            console.error('Could not reserve GRN stock for job:', reserveError);
+            warnings.push(`"${description}" was added to stock but could not be reserved for the job`);
+          }
+        }
       }
       if (rejectedQty > 0) {
         await postStock({
@@ -404,6 +426,15 @@ export const createGRN = async (req: Request, res: Response) => {
     if (allItemsFullyReceived && lpoItems.length > 0) {
       await logGrnAudit(req, grn, 'lpo-closed', `${populatedPurchaseOrder?.poNo || 'LPO'} fully received and closed`);
     }
+    // Receipt progress belongs to the whole LPO, independently of its return workflow.
+    const receivedTotal = allGRNs.reduce((sum, receipt) => sum + receipt.items.reduce((n, item) => n + Number(item.receivedQty || 0), 0), 0);
+    const acceptedTotal = allGRNs.reduce((sum, receipt) => sum + receipt.items.reduce((n, item) => n + Number(item.acceptedQty || 0), 0), 0);
+    const receiptStatus = receivedTotal <= 0 ? 'Not Received'
+      : acceptedTotal <= 0 ? 'Fully Rejected'
+      : allItemsFullyReceived && lpoItems.length > 0 ? 'Fully Received' : 'Partially Received';
+    await GRN.updateMany({ purchaseOrderId, isDeleted: { $ne: true } }, { $set: { receiptStatus } });
+    populatedGrn.set('receiptStatus', receiptStatus);
+
     if (rejectedItems.length > 0) {
       const socket = req.app.get('io') as Server;
       await createNotificationWithPrivileges(
@@ -487,6 +518,7 @@ export const getGRNByLpoId = async (req: Request, res: Response) => {
       });
     }
 
+    await attachReceiptStatuses([grn]);
     return res.status(200).json({
       success: true,
       data: grn
@@ -536,6 +568,7 @@ export const getAllGRNsByLpoId = async (req: Request, res: Response) => {
       .populate('createdBy', '-password')
       .sort({ createdAt: -1 });
 
+    await attachReceiptStatuses(grns);
     return res.status(200).json({
       success: true,
       data: grns
@@ -668,7 +701,10 @@ export const getGRNById = async (req: Request, res: Response) => {
           { path: 'quoteId', populate: { path: 'client' } }
         ]
       })
-      .populate('createdBy', '-password');
+      .populate('createdBy', '-password')
+      .populate('inspectedBy', 'firstName lastName')
+      .populate('returnResolvedBy', 'firstName lastName')
+      .populate('quarantineWarehouse', 'wareHouseName');
 
     if (!grn || grn.isDeleted) {
       return res.status(404).json({
@@ -677,6 +713,7 @@ export const getGRNById = async (req: Request, res: Response) => {
       });
     }
 
+    await attachReceiptStatuses([grn]);
     return res.status(200).json({
       success: true,
       data: grn
@@ -702,6 +739,8 @@ export const getArrivingPurchaseOrders = async (req: Request, res: Response) => 
     const startOfTomorrow = new Date();
     startOfTomorrow.setHours(0, 0, 0, 0);
     startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
 
     const result = await PurchaseOrder.aggregate([
       { $match: { poStatus: 'Placed' } },
@@ -717,12 +756,14 @@ export const getArrivingPurchaseOrders = async (req: Request, res: Response) => 
       },
       { $match: { $expr: { $lt: ["$acceptedQty", "$orderedQty"] } } },
       // Upcoming: expected after today and no GRN yet; once any GRN exists it is tracked in the other tabs.
-      // Arriving: due today, overdue, or no date given.
+      // Arriving: due today or no date given.
+      // Missed (Nothing received tab): the expected date has passed and the order is not fully accepted, whether or not some goods arrived.
       ...(stage === 'upcoming' ? [{ $match: { expectedDeliveryDate: { $gte: startOfTomorrow }, grnCount: 0 } }] : []),
-      ...(stage === 'arriving' ? [{ $match: { $or: [{ expectedDeliveryDate: { $lt: startOfTomorrow } }, { expectedDeliveryDate: null }, { expectedDeliveryDate: { $exists: false } }] } }] : []),
+      ...(stage === 'arriving' ? [{ $match: { $or: [{ expectedDeliveryDate: { $gte: startOfToday, $lt: startOfTomorrow } }, { expectedDeliveryDate: null }, { expectedDeliveryDate: { $exists: false } }] } }] : []),
+      ...(stage === 'missed' ? [{ $match: { expectedDeliveryDate: { $lt: startOfToday } } }] : []),
       { $lookup: { from: "suppliers", localField: "supplierId", foreignField: "_id", as: "supplierId", pipeline: [{ $project: { supplierName: 1 } }] } },
       { $unwind: { path: "$supplierId", preserveNullAndEmptyArrays: true } },
-      { $lookup: { from: "purchases", localField: "purchaseId", foreignField: "_id", as: "purchaseId", pipeline: [{ $project: { purchaseNo: 1, jobId: 1 } }] } },
+      { $lookup: { from: "purchases", localField: "purchaseId", foreignField: "_id", as: "purchaseId", pipeline: [{ $project: { purchaseNo: 1, jobId: 1, "items.itemDetails.detail": 1, "items.itemDetails.partNo": 1, "items.itemDetails.unitCost": 1, "items.itemDetails.dealUnitCost": 1 } }] } },
       { $unwind: { path: "$purchaseId", preserveNullAndEmptyArrays: true } },
       { $lookup: { from: "jobs", localField: "jobId", foreignField: "_id", as: "jobId", pipeline: [{ $project: { jobId: 1 } }] } },
       { $unwind: { path: "$jobId", preserveNullAndEmptyArrays: true } },
@@ -763,7 +804,11 @@ export const getAllGRNs = async (req: Request, res: Response) => {
     const pageNumber = Number(page);
     const pageSize = Number(row);
     const skip = (pageNumber - 1) * pageSize;
-    const receiptStatus = String(status);
+    const statusAliases: Record<string, string> = {
+      'Not Received': 'pending', 'Partially Received': 'partial',
+      'Fully Received': 'arrived', 'Fully Rejected': 'rejected'
+    };
+    const receiptStatus = statusAliases[String(status)] || String(status);
 
     const pipeline: any[] = [
       { $match: { isDeleted: { $ne: true } } },
@@ -846,16 +891,29 @@ export const getAllGRNs = async (req: Request, res: Response) => {
         }
       }] : []),
       {
+        $lookup: {
+          from: 'grns',
+          let: { po: '$purchaseOrderId._id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$purchaseOrderId', '$$po'] }, isDeleted: { $ne: true } } },
+            { $group: { _id: null, received: { $sum: { $sum: '$items.receivedQty' } }, accepted: { $sum: { $sum: '$items.acceptedQty' } } } }
+          ],
+          as: 'receiptTotals'
+        }
+      },
+      {
         $addFields: {
-          receiptStatus: {
+          receiptStage: {
             $let: {
               vars: {
-                received: { $sum: { $map: { input: { $ifNull: ["$items", []] }, as: "item", in: { $ifNull: ["$$item.receivedQty", 0] } } } }
+                received: { $ifNull: [{ $arrayElemAt: ['$receiptTotals.received', 0] }, 0] },
+                accepted: { $ifNull: [{ $arrayElemAt: ['$receiptTotals.accepted', 0] }, 0] }
               },
               in: {
                 $switch: {
                   branches: [
                     { case: { $lte: ["$$received", 0] }, then: "pending" },
+                    { case: { $lte: ["$$accepted", 0] }, then: "rejected" },
                     // Judged on the whole LPO: a split delivery is fully received once the LPO closes.
                     { case: { $ne: ["$purchaseOrderId.poStatus", "Closed"] }, then: "partial" }
                   ],
@@ -866,8 +924,8 @@ export const getAllGRNs = async (req: Request, res: Response) => {
           }
         }
       },
-      ...(["pending", "partial", "arrived"].includes(receiptStatus)
-        ? [{ $match: { receiptStatus } }]
+      ...(["pending", "partial", "arrived", "rejected"].includes(receiptStatus)
+        ? [{ $match: { receiptStage: receiptStatus } }]
         : []),
       ...(receiptStatus === "returns"
         ? [{
@@ -886,6 +944,7 @@ export const getAllGRNs = async (req: Request, res: Response) => {
             }
           }]
         : []),
+      { $unset: 'receiptTotals' },
       { $sort: { createdAt: -1 } },
       {
         $facet: {
@@ -902,6 +961,7 @@ export const getAllGRNs = async (req: Request, res: Response) => {
 
     const result = await GRN.aggregate(pipeline);
     const grns = result[0].data;
+    await attachReceiptStatuses(grns);
     const totalItems = result[0].totalCount[0]?.count || 0;
 
     return res.status(200).json({

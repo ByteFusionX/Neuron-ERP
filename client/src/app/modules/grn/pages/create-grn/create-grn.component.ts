@@ -163,7 +163,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
 
   grnForm: FormGroup = this.fb.group({
     selectedLpo: [''],
-    grnNo: [{ value: 'Assigned on save', disabled: true }],
+    grnNo: ['Assigned on save'],
     grnDate: [new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), [Validators.required]],
     supplierName: ['', [Validators.required]],
     supplierInvoiceNo: [''],
@@ -190,6 +190,12 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
     this.loadWarehouses();
     this.loadEmployees();
     this.setDefaultReceivedBy();
+    // Shown for reference only; the real number is taken on save.
+    if (!this.grnId) {
+      this.grnService.generateGRNNumber().subscribe({
+        next: (res) => { if (res?.grn) this.grnForm.get('grnNo')?.setValue(res.grn, { emitEvent: false }); },
+      });
+    }
     this.grnForm.get('selectedLpo')?.valueChanges.subscribe((value) => {
       if (value && value !== this.lpoId) this.onLpoSelected(value);
     });
@@ -550,15 +556,8 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
         'All quantities have been fully received. No new GRN can be created.',
       );
     } else {
+      // supplier, linked LPO, job and GRN number stay enabled; the template renders them readonly
       this.grnForm.enable();
-      const grnNoControl = this.grnForm.get('grnNo');
-      const supplierNameControl = this.grnForm.get('supplierName');
-      const linkedLpoNoControl = this.grnForm.get('linkedLpoNo');
-      const jobIdControl = this.grnForm.get('jobId');
-      if (grnNoControl) grnNoControl.disable();
-      if (supplierNameControl) supplierNameControl.disable();
-      if (linkedLpoNoControl) linkedLpoNoControl.disable();
-      if (jobIdControl) jobIdControl.disable();
     }
   }
 
@@ -665,21 +664,12 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
   }
 
   onReceivedQtyChanged(itemGroup: FormGroup): void {
-    const receivedQty = itemGroup.get('receivedQty')?.value || 0;
-    const rejectedQty = Math.min(itemGroup.get('rejectedQty')?.value || 0, receivedQty);
-    itemGroup.get('rejectedQty')?.setValue(rejectedQty, { emitEvent: false });
     this.validateReceivedQty(itemGroup);
     this.validateRejectedQty(itemGroup);
     this.calculateAcceptedQty(itemGroup);
   }
 
   onRejectedQtyChanged(itemGroup: FormGroup): void {
-    const receivedQty = itemGroup.get('receivedQty')?.value || 0;
-    const rejectedQty = itemGroup.get('rejectedQty')?.value || 0;
-    if (rejectedQty > receivedQty) {
-      itemGroup.get('rejectedQty')?.setValue(receivedQty, { emitEvent: false });
-      this.toastr.warning(`Rejected can't be more than received (${receivedQty}), so it was set to ${receivedQty}.`);
-    }
     this.validateReceivedQty(itemGroup);
     this.validateRejectedQty(itemGroup);
     this.calculateAcceptedQty(itemGroup);
