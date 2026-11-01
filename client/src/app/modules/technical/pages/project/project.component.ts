@@ -49,7 +49,7 @@ const PRIORITY_BADGE_CLASSES: Record<string, string> = {
 @Component({
   selector: 'app-technical-project',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, CreateProjectComponent],
   templateUrl: './project.component.html',
   styleUrl: './project.component.css',
 })
@@ -362,9 +362,15 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
     }
   }
 
+  createOpen = false;
+
   addProject(): void {
-    this.dialog.open(CreateProjectComponent, { data: { isEditMode: false }, width: '900px' })
-      .afterClosed().subscribe((result) => { if (result) this.reload(); });
+    this.createOpen = true;
+  }
+
+  onProjectCreated(): void {
+    this.createOpen = false;
+    this.reload();
   }
 
   private openAssignEngineer(job: any): void {

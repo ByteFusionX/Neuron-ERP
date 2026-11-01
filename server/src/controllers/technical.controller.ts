@@ -281,7 +281,13 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
       }
 
       const assignedBy = userData._id;
-      const { engineerId, comment, projectType, customerId, priority } = req.body;
+      const { engineerId, comment, projectType, customerId, priority, estimatedCostForProject } = req.body;
+      if (!engineerId || !customerId || !['project', 'amc'].includes(projectType) || !['High', 'Medium', 'Low'].includes(priority)) {
+         return res.status(400).json({
+            success: false,
+            message: "Customer, project type, engineer and priority are required",
+         });
+      }
       const customerGuard = await getCustomerCommercialGuard(customerId);
       if (customerGuard.blocked) {
          return res.status(409).json({
@@ -291,6 +297,7 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
       }
 
       const technicalProject = await technicalModel.create({
+         estimatedCostForProject: Number(estimatedCostForProject) > 0 ? Number(estimatedCostForProject) : 0,
          assignedTo: engineerId,
          comment,
          assignedBy,

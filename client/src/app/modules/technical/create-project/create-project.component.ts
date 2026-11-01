@@ -1,189 +1,131 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule, FormControl } from '@angular/forms';
-import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild, inject } from '@angular/core';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ToastrService } from 'ngx-toastr';
-import { Observable, forkJoin } from 'rxjs';
-
-// Services
+import { Subscription, filter, switchMap, take } from 'rxjs';
 import { TechnicalService } from 'src/app/core/services/technical.service';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { SfDrawerComponent, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 
-// Components
-import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-
-// Interfaces
-import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
-import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
-import { AssignEngineer } from 'src/app/core/services/technical.service';
-
-
-interface DialogData {
-  isEditMode: boolean;
-  projectData?: any;
-}
-
+/** Create-project slide-over. The host binds `open` and reacts to `saved` / `closed`. */
 @Component({
   selector: 'app-create-project',
   standalone: true,
-  imports: [
-    CommonModule,
-    ReactiveFormsModule,
-    FormFieldComponent,
-    SelectDropdownComponent,
-    ButtonComponent
-  ],
   templateUrl: './create-project.component.html',
-  styleUrl: './create-project.component.css'
+  imports: [ReactiveFormsModule, SmartFormModule, ActionButtonComponent],
 })
-export class CreateProjectComponent implements OnInit {
-  private fb = inject(FormBuilder);
-  private dialogRef = inject(MatDialogRef<CreateProjectComponent>);
-  private data = inject(MAT_DIALOG_DATA) as DialogData;
-  private technicalService = inject(TechnicalService);
-  private customerService = inject(CustomerService);
-  private employeeService = inject(EmployeeService);
-  private toastr = inject(ToastrService);
+export class CreateProjectComponent implements OnChanges, OnDestroy {
+  @Input() open = false;
+  @Output() saved = new EventEmitter<void>();
+  @Output() closed = new EventEmitter<void>();
 
-  projectForm!: FormGroup;
+  @ViewChild(SfDrawerComponent) drawer?: SfDrawerComponent;
 
-  // Loading states
-  isLoading = signal<boolean>(false);
-  isSaving = signal<boolean>(false);
-  isSubmitted = signal<boolean>(false);
-
-  // Data arrays
-  customers = signal<getCustomer[]>([]);
-  engineers = signal<getEmployee[]>([]);
-
-  // Options
-  projectTypeOptions = [
+  saving = false;
+  customerOptions: SfOption[] = [];
+  engineerOptions: SfOption[] = [];
+  readonly projectTypeOptions: SfOption[] = [
     { label: 'Project', value: 'project' },
     { label: 'AMC', value: 'amc' },
   ];
+  readonly priorityOptions: SfOption[] = ['High', 'Medium', 'Low'].map((label) => ({ label, value: label }));
 
-  priorityOptions = [
-    { label: 'High', value: 'High' },
-    { label: 'Medium', value: 'Medium' },
-    { label: 'Low', value: 'Low' }
-  ];
+  private fb = inject(FormBuilder);
+  private toaster = inject(ToastrService);
+  private technicalService = inject(TechnicalService);
+  private customerService = inject(CustomerService);
+  private employeeService = inject(EmployeeService);
+  private optionsLoaded = false;
+  private subscriptions = new Subscription();
 
-  ngOnInit(): void {
-    this.initializeForm();
-    this.loadInitialData();
-    this.setupFormSubscriptions();
+  projectForm = this.fb.group({
+    customerId: [null as string | null, Validators.required],
+    projectType: [null as string | null, Validators.required],
+    engineerId: [null as string | null, Validators.required],
+    priority: ['Medium' as string | null, Validators.required],
+    estimatedCost: [null as number | null, [Validators.min(0)]],
+    comment: [''],
+  });
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['open'] && this.open) this.ensureOptions();
   }
 
-  private initializeForm(): void {
-    this.projectForm = this.fb.group({
-      customerId: ['', [Validators.required]],
-      projectType: ['', [Validators.required]],
-      engineerId: ['', [Validators.required]],
-      priority: ['Medium', [Validators.required]],
-      comment: [''] // Optional field - no validators
-    });
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
   }
 
-  private loadInitialData(): void {
-    this.isLoading.set(true);
-
-    // Get current user data
-    this.employeeService.employeeData$.subscribe((userData) => {
-      if (userData?._id) {
-        const requests = [
-          this.customerService.getAllCustomers(userData._id),
-          this.technicalService.getEngineers()
-        ];
-
-        forkJoin(requests).subscribe({
-          next: ([customersData, engineersData]) => {
-            this.customers.set(customersData);
-            this.engineers.set(engineersData.data || []);
-            this.isLoading.set(false);
-          },
-          error: (error) => {
-            console.error('Error loading initial data:', error);
-            this.toastr.error('Failed to load form data');
-            this.isLoading.set(false);
-          }
-        });
-      }
-    });
+  private ensureOptions(): void {
+    if (this.optionsLoaded) return;
+    this.optionsLoaded = true;
+    this.subscriptions.add(
+      this.employeeService.employeeData$.pipe(
+        filter((e) => !!e?._id),
+        take(1),
+        switchMap((e) => this.customerService.getAllCustomers(e!._id as string)),
+      ).subscribe({
+        next: (customers) => {
+          this.customerOptions = customers.map((c) => ({ label: c.companyName, value: c._id }))
+            .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+        },
+        error: () => this.toaster.error('Failed to load customers'),
+      })
+    );
+    this.subscriptions.add(
+      this.technicalService.getEngineers().subscribe({
+        next: (res) => {
+          this.engineerOptions = (res.data || []).map((e: any) => ({ label: `${e.firstName} ${e.lastName}`.trim(), value: e._id }));
+        },
+        error: () => this.toaster.error('Failed to load engineers'),
+      })
+    );
   }
 
-  private setupFormSubscriptions(): void {
-    // Can add any form value change subscriptions here if needed in the future
+  onDrawerClosed(discarded: boolean): void {
+    if (discarded) this.reset();
+    this.closed.emit();
   }
 
-  onCustomerChange(customerId: string | string[]): void {
-    // Handle both single and multiple selection (though we expect single for customer)
-    const customerIdValue = Array.isArray(customerId) ? customerId[0] : customerId;
-    // Customer selection can be used for future functionality if needed
+  /** Goes through the drawer so unsaved changes get the same discard prompt as X and Esc. */
+  cancel(): void {
+    this.drawer?.requestClose();
   }
 
-  onSubmit(): void {
-    this.isSubmitted.set(true);
-
+  submit(): void {
+    if (this.saving) return;
     if (this.projectForm.invalid) {
-      this.toastr.error('Please fill all required fields correctly');
+      this.projectForm.markAllAsTouched();
+      this.toaster.warning('Complete the highlighted required fields.', 'Complete required information');
       return;
     }
-
-    this.isSaving.set(true);
-
-    const formValue = this.projectForm.value;
-
-    const projectData: AssignEngineer = {
-      jobId: '', // Will be set to empty or handled differently since job is removed
-      engineerId: formValue.engineerId,
-      comment: formValue.comment || 'Project created via dialog', // Use form comment or default
-      projectType: formValue.projectType,
-      customerId: formValue.customerId,
-      priority: formValue.priority
-    };
-
-    this.technicalService.createProject(projectData).subscribe({
-      next: (response) => {
-        this.toastr.success('Project created successfully');
-        this.dialogRef.close(true);
-      },
-      error: (error) => {
-        console.error('Error creating project:', error);
-        this.toastr.error('Failed to create project');
-        this.isSaving.set(false);
-      }
-    });
+    const v = this.projectForm.getRawValue();
+    this.saving = true;
+    this.subscriptions.add(
+      this.technicalService.createProject({
+        jobId: '',
+        engineerId: v.engineerId as string,
+        comment: (v.comment || '').trim(),
+        projectType: v.projectType as string,
+        customerId: v.customerId as string,
+        priority: v.priority as string,
+        estimatedCostForProject: v.estimatedCost ?? 0,
+      }).subscribe({
+        next: () => {
+          this.saving = false;
+          this.toaster.success('Project created successfully');
+          this.reset();
+          this.saved.emit();
+        },
+        error: () => {
+          this.saving = false;
+          this.toaster.error('Failed to create project');
+        },
+      })
+    );
   }
 
-  onCancel(): void {
-    this.dialogRef.close(false);
-  }
-
-  // Getters for form controls
-  get f(): { [key: string]: FormControl } {
-    return this.projectForm.controls as { [key: string]: FormControl };
-  }
-
-  // Helper methods for template
-  getCustomerOptions() {
-    return this.customers().map(customer => ({
-      label: customer.companyName,
-      value: customer._id
-    }));
-  }
-
-
-  getEngineerOptions() {
-    return this.engineers().map(engineer => ({
-      label: `${engineer.firstName} ${engineer.lastName}`,
-      value: engineer._id
-    }));
-  }
-
-  isEditMode(): boolean {
-    return this.data?.isEditMode || false;
+  private reset(): void {
+    this.projectForm.reset({ customerId: null, projectType: null, engineerId: null, priority: 'Medium', estimatedCost: null, comment: '' });
   }
 }
