@@ -124,6 +124,10 @@
           <span *ngIf="supplierScope && selectedActiveCount() && !selectedInactiveKeys().length" [matTooltip]="selectedProtectedCount() > 0 ? unlistBlockedReason() : ''">
             <app-action-button variant="secondary" [disabled]="selectedProtectedCount() > 0" (click)="bulkRemoveFromTab()">Unlist</app-action-button>
           </span>
+          <span *ngIf="supplierScope && isPurchase && selectedActiveCount() && !selectedInactiveKeys().length" [matTooltip]="selectedExceedCount() > 0 || selectedFullCount() > 0 ? awardBlockedReason() : ''">
+            <app-action-button variant="primary" [disabled]="selectedExceedCount() > 0 || selectedFullCount() > 0" (click)="bulkAwardToTab()">Award</app-action-button>
+          </span>
+          <app-action-button *ngIf="supplierScope && isPurchase && selectedHeldCount() > 0 && !selectedInactiveKeys().length" variant="secondary" (click)="bulkReleaseFromTab()">Release</app-action-button>
           <ng-container *ngIf="bulkExtraTemplate" [ngTemplateOutlet]="bulkExtraTemplate" [ngTemplateOutletContext]="{ $implicit: selectedLines(), positions: selectedPositions(), entry: this }"></ng-container>
 
           <div class="ml-auto flex items-center gap-1">
@@ -327,7 +331,6 @@
                 <div *ngIf="isPurchase && quoteLayout" class="relative min-w-0">
                   <app-sf-number *ngIf="!usesScopeQty(i, j, k)" formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
                   <app-sf-number *ngIf="usesScopeQty(i, j, k)" [formControl]="scopeQtyControl(i, j, k)" [placeholder]="defaultHint(i, j, k, 'quantity')" [stepper]="false" [min]="0"></app-sf-number>
-                  <p *ngIf="qtyVsLine(i, j, k) as diff" class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] font-medium tabular-nums text-amber-600 dark:text-amber-400">{{ diff > 0 ? diff + ' above line qty' : -diff + ' below line qty' }}</p>
                 </div>
                 <app-sf-number *ngIf="!(isPurchase && quoteLayout)" formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
                 <span *ngIf="isDeal && !dealAdded(detail) && !usesScopeQty(i, j, k)" class="ie-cell">{{ detail.get('uom')?.value || '—' }}</span>
@@ -390,7 +393,7 @@
                 <button *ngFor="let p of pillsFor(i, j, k); trackBy: trackPill" type="button" (click)="pickPill(i, j, k, p.id)"
                   [disabled]="pillBlocked(i, j, k, p.id)" [attr.title]="pillBlocked(i, j, k, p.id) ? 'The whole quantity is already assigned. Release a supplier first.' : pillTitle(i, j, k, p)"
                   class="max-w-[9rem] truncate rounded-full border px-2 py-0.5 text-[10px] font-medium disabled:cursor-not-allowed disabled:opacity-50"
-                  [ngClass]="pillAwarded(i, j, k, p.id) ? 'border-violet-600 bg-violet-600 text-white' : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300'">{{ pillLabel(i, j, k, p) }}</button>
+                  [ngClass]="pillAwarded(i, j, k, p.id) ? 'border-violet-600 bg-violet-600 text-white' : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300'"><span class="truncate">{{ pillLabel(i, j, k, p) }}</span><span *ngIf="pillQty(i, j, k, p) as q" class="shrink-0 font-semibold">· {{ q }}</span></button>
                 <span *ngIf="!pillsFor(i, j, k).length" class="rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[10px] text-gray-400 dark:border-gray-600">No supplier</span>
               </div>
 
@@ -469,33 +472,31 @@
 
       <!-- Totals ------------------------------------------------------------------------- -->
       <div *ngIf="showTotalsBar" [formGroup]="$any(option)"
-        class="sticky bottom-0 z-20 rounded-xl bg-gray-50/95 px-4 py-3 backdrop-blur dark:bg-gray-900/85"
-        [ngClass]="{ 'border border-gray-200 dark:border-erp-border-dark': !isDeal }">
+        class="sticky bottom-0 z-20 rounded-xl px-4 py-3 backdrop-blur"
+        [ngClass]="['bg-gray-50/95 dark:bg-gray-900/85', isDeal ? '' : 'border border-gray-200 dark:border-erp-border-dark']">
         <div class="flex flex-wrap items-end justify-between gap-4">
           <div *ngIf="isPurchase" class="flex flex-wrap items-end gap-5 text-left">
             <div class="flex items-center gap-2">
-              <span *ngIf="discountDiff() !== 0" class="text-xs font-semibold tabular-nums"
-                [ngClass]="discountDiff() > 0 ? 'text-green-600' : 'text-red-600'">
-                {{ discountDiff() > 0 ? '+' : '' }}{{ discountDiff() | number: '1.2-2' }}
-              </span>
-              <div class="w-28">
-                <app-sf-number formControlName="totalDiscount" placeholder="Discount" [stepper]="false" [min]="0"></app-sf-number>
+              <div [style.width]="discountFieldWidth()" style="min-width:5.5rem;max-width:100%">
+                <app-sf-number formControlName="totalDiscount" placeholder="Discount" [stepper]="false" [min]="0"
+                  [hint]="discountDiff() !== 0 ? (discountDiff() > 0 ? '+' : '') + (discountDiff() | number: '1.2-2') : ''"
+                  [hintClass]="discountDiff() > 0 ? 'text-green-600' : 'text-red-600'"></app-sf-number>
                 <p *ngIf="option.errors?.['discountExceedsTotal']" class="mt-1 text-[11px] text-red-600">Discount is more than the selling total</p>
               </div>
             </div>
             <div>
-              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">
-                Total PR price
-              </p>
-              <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ totalCost() | number: '1.2-2' }}</p>
-            </div>
-            <div>
               <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">PR margin</p>
-              <p class="text-sm font-semibold tabular-nums" [ngClass]="marginTone(prMarginPercent())">{{ prMarginValue() | number: '1.2-2' }}</p>
+              <p class="text-sm font-semibold tabular-nums" [ngClass]="prMarginTone()">{{ prMarginValue() | number: '1.2-2' }}</p>
             </div>
             <div>
               <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">PR margin %</p>
-              <p class="text-sm font-semibold tabular-nums" [ngClass]="marginTone(prMarginPercent())">{{ prMarginPercent() | number: '1.1-1' }}%</p>
+              <p class="text-sm font-semibold tabular-nums" [ngClass]="prMarginTone()">{{ prMarginPercent() | number: '1.1-1' }}%</p>
+            </div>
+            <div>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">
+                Total PR cost
+              </p>
+              <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ totalCost() | number: '1.2-2' }}</p>
             </div>
           </div>
           <div *ngIf="isPurchase" class="flex flex-wrap items-end gap-5">
@@ -510,11 +511,11 @@
               </div>
               <div>
                 <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Deal margin</p>
-                <p class="text-sm font-semibold tabular-nums" [ngClass]="marginTone(dl.marginPercent)">{{ dl.marginValue | number: '1.2-2' }}</p>
+                <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dl.marginValue | number: '1.2-2' }}</p>
               </div>
               <div>
                 <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Deal margin %</p>
-                <p class="text-sm font-semibold tabular-nums" [ngClass]="marginTone(dl.marginPercent)">{{ dl.marginPercent | number: '1.1-1' }}%</p>
+                <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dl.marginPercent | number: '1.1-1' }}%</p>
               </div>
               <div>
                 <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Total price</p>

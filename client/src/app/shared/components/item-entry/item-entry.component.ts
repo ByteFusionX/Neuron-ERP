@@ -66,6 +66,8 @@ export interface LineSupplierOffer {
   pastOnly?: boolean;
   /** Awarded offers only: the part of the line's quantity this supplier won (blank = all of it). */
   qty?: number;
+  /** The quantity saved on this supplier's comparison. */
+  savedQty?: number;
   /** The supplier's last price for the product (last PO, else last comparison); seeds an empty price. */
   last?: SupplierLastPrice;
 }
@@ -198,6 +200,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   @Input() compareLabel: ((i: number, j: number, k: number) => string) | null = null;
   /** Purchase mode: lines the host has frozen (already committed upstream) render read-only. */
   @Input() lineLocked: ((i: number, j: number, k: number) => boolean) | null = null;
+  /** Lines that stay locked with no way to unlock (already on a purchase order). */
+  @Input() lineHardLocked: ((i: number, j: number, k: number) => boolean) | null = null;
   /** Purchase mode: a short badge shown beside a line's description. */
   @Input() lineBadge: ((i: number, j: number, k: number) => string | null) | null = null;
   /** Purchase mode: the suppliers to show as pills under a line (its RFQ suppliers and the current one). */
@@ -251,20 +255,60 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     return this.shares.get(lineKey) ?? null;
   }
 
+  /** Drops the awards kept in this form for lines whose awards were changed elsewhere (Compare & Award), so they read the saved ones again. */
+  forgetShares(lineKeys: string[]): void {
+    lineKeys.forEach((k) => this.shares.delete(k));
+  }
+
+  /** Lines whose award was taken back elsewhere: when the form next reloads they go back to the deal's supplier and cost. */
+  private releasedKeys = new Set<string>();
+
+  releaseLines(lineKeys: string[]): void {
+    lineKeys.forEach((k) => this.releasedKeys.add(k));
+  }
+
+  private applyReleased(): void {
+    if (!this.releasedKeys.size) return;
+    this.optionalItems.controls.forEach((_, i) => {
+      const items = this.itemsAt(i);
+      items?.controls.forEach((_it, j) => {
+        const details = this.detailsAt(i, j);
+        details?.controls.forEach((d) => {
+          const key = d.get('lineKey')?.value;
+          if (!key || !this.releasedKeys.has(key)) return;
+          this.releasedKeys.delete(key);
+          if ((this.lineOffers?.(d.getRawValue()) ?? []).some((o) => o.state === 'awarded')) return;
+          this.shares.delete(key);
+          const deal = this.dealCost(d);
+          const base = this.baseSuppliers.get(d) ?? '';
+          d.patchValue({ supplierId: base || null, ...(deal != null ? { unitCost: deal } : {}) }, { emitEvent: false });
+        });
+      });
+    });
+  }
+
   /** The price shown for a supplier on a line under its tab (typed, offered or suggested), or null. */
   scopePrice(lineKey: string, supplierId: string): number | null {
     const v = this.scopeCosts.get(`${lineKey}|${supplierId}`)?.value;
     return v != null && Number(v) > 0 ? Number(v) : null;
   }
 
-  /** The pill's text: the supplier, plus its share once the line is split or only partly awarded. */
   pillLabel(i: number, j: number, k: number, pill: { id: string; name: string }): string {
+    return pill.name;
+  }
+
+  /** The pill's quantity out of the line's: the awarded share, else what the supplier offers (typed on its tab, saved, or the whole line). */
+  pillQty(i: number, j: number, k: number, pill: { id: string; name: string }): string {
     const d = this.detailsAt(i, j)?.at(k);
-    const won = d ? this.sharesOf(d) : [];
-    const partial = d ? this.pillQtyLeft(d) > 0 : false;
-    const mine = won.length > 1 || partial ? won.find((s) => s.supplierId === pill.id) : undefined;
-    if (!mine) return pill.name;
-    return partial ? `${pill.name} · ${mine.qty}/${Number(d!.get('quantity')?.value) || 0}` : `${pill.name} · ${mine.qty}`;
+    if (!d) return '';
+    const total = Number(d.get('quantity')?.value) || 0;
+    if (!(total > 0)) return '';
+    const mine = this.sharesOf(d).find((s) => s.supplierId === pill.id);
+    if (mine) return `${mine.qty}/${total}`;
+    const typed = this.scopeQtys.get(`${d.get('lineKey')?.value}|${pill.id}`);
+    const saved = Number(this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === pill.id)?.savedQty);
+    const offered = typed?.dirty && Number(typed.value) > 0 ? Number(typed.value) : saved > 0 ? saved : total;
+    return `${Math.min(offered, total)}/${total}`;
   }
 
   private pillQtyLeft(d: AbstractControl): number {
@@ -272,11 +316,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     return total - this.sharesOf(d).reduce((n, s) => n + s.qty, 0);
   }
 
-  /** A pill of a supplier that holds nothing is closed once the whole quantity is awarded. */
+  /** Pills are never closed: an offer that covers more than is free replaces the current awards. */
   pillBlocked(i: number, j: number, k: number, supplierId: string): boolean {
-    const d = this.detailsAt(i, j)?.at(k);
-    if (!d || !this.sharesOf(d).length || this.pillAwarded(i, j, k, supplierId)) return false;
-    return !(this.pillQtyLeft(d) > 0) && supplierId !== (this.baseSuppliers.get(d) ?? '');
+    return false;
   }
 
   pickPill(i: number, j: number, k: number, supplierId: string): void {
@@ -308,13 +350,16 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     }
     // Once some quantity is awarded, another supplier only takes what is still unawarded.
     const left = this.pillQtyLeft(d);
-    if (awarded && !(left > 0)) return;
+    const total = Number(d.get('quantity')?.value) || 0;
     const cost = price ?? (Number(d.get('unitCost')?.value) || 0);
-    // A quantity typed on the supplier's own tab is what it gets, capped at what is still free.
+    // What this supplier offers: the quantity typed on its tab, else the one saved on its comparison, else the whole line.
     const typed = this.scopeQtys.get(`${d.get('lineKey')?.value}|${supplierId}`);
-    const free = awarded ? left : Number(d.get('quantity')?.value) || 0;
-    const qty = typed?.dirty && Number(typed.value) > 0 ? Math.min(Number(typed.value), free) : free;
-    this.applyShares(d, [...(awarded ? this.sharesOf(d) : []), { supplierId, qty, cost }]);
+    const saved = Number(this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === supplierId)?.savedQty);
+    const want = typed?.dirty && Number(typed.value) > 0 ? Number(typed.value) : saved > 0 ? saved : total;
+    // An offer that covers more than is still free replaces the current awards; one that fits is added beside them.
+    const base2 = awarded && left > 0 && want <= left ? this.sharesOf(d) : [];
+    const qty = base2.length ? want : Math.min(want, total);
+    this.applyShares(d, [...base2, { supplierId, qty, cost }]);
     this.refillScopeQtys(d, supplierId);
     d.markAsDirty();
     this.pillClicked.emit({ lineKey: d.get('lineKey')?.value, supplierId, price });
@@ -712,11 +757,13 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
     const seed = changes['seedOptionalItems'];
     if (seed && !seed.isFirstChange() && this.seedOptionalItems?.length) this.patchOptions(this.seedOptionalItems);
-    if (changes['supplierDiscounts'] || changes['supplierScope'] || seed) this.syncPurchaseDiscount();
+    if (changes['supplierDiscounts'] || changes['dealSupplierDiscounts'] || changes['supplierScope'] || seed) this.syncPurchaseDiscount();
   }
 
   /** Purchase: the deal's per-supplier discounts carried onto the PR. A supplier tab shows that supplier's; Items shows the sum. */
   @Input() supplierDiscounts: { supplierId: any; discount?: number | string }[] | null = null;
+  /** Purchase: the deal's own supplier discounts, the baseline the PR cost is measured against. Defaults to `supplierDiscounts`. */
+  @Input() dealSupplierDiscounts: { supplierId: any; discount?: number | string }[] | null = null;
 
   /** A supplier's discount is edited on its tab; the host stores it with the request. */
   @Output() supplierDiscountEdited = new EventEmitter<{ supplierId: string; discount: number }>();
@@ -727,8 +774,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   private discountFor(id: string): number {
     if (this.discountEdits.has(id)) return this.discountEdits.get(id)!;
-    return (this.supplierDiscounts ?? []).filter((s) => this.discountSupplierId(s) === id)
-      .reduce((sum, s) => sum + (Number(s.discount) || 0), 0);
+    const sum = (list: any[] | null | undefined) => (list ?? []).filter((s) => this.discountSupplierId(s) === id)
+      .reduce((t, s) => t + (Number(s.discount) || 0), 0);
+    const own = sum(this.supplierDiscounts);
+    // A saved 0 is the same as no PR figure: start from the deal's own discount for the supplier.
+    return own || sum(this.dealSupplierDiscounts);
   }
 
   /** Suppliers awarded on some line (or carried as the line's supplier when it has no comparisons). */
@@ -748,20 +798,23 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   private purchaseDiscount(): number | null {
     if (!this.isPurchase) return null;
-    if (!this.supplierDiscounts?.length && !this.discountEdits.size) return null;
-    if (this.supplierScope) return this.discountFor(this.supplierScope);
-    const all = new Set([...(this.supplierDiscounts ?? []).map(this.discountSupplierId), ...this.discountEdits.keys()]);
+    // A supplier tab always has a figure: the supplier's PR discount, else the deal's, else 0. Without an award it is the deal's, untouched.
+    if (this.supplierScope) return this.awardedSupplierIds().has(this.supplierScope) ? this.discountFor(this.supplierScope) : this.dealDiscountBaseline();
+    if (!this.supplierDiscounts?.length && !this.dealSupplierDiscounts?.length && !this.discountEdits.size) return null;
+    const all = new Set([...(this.supplierDiscounts ?? []).map(this.discountSupplierId),
+      ...(this.dealSupplierDiscounts ?? []).map(this.discountSupplierId), ...this.discountEdits.keys()]);
     const awarded = this.awardedSupplierIds();
     return [...all].filter((id) => awarded.has(id)).reduce((sum, id) => sum + this.discountFor(id), 0);
   }
 
   /** The deal's own discount for the same scope, before any PR edit. Supplier compare prices already include it. */
   dealDiscountBaseline(): number {
-    const sum = (id: string) => (this.supplierDiscounts ?? []).filter((s) => this.discountSupplierId(s) === id)
+    const base = this.dealSupplierDiscounts ?? this.supplierDiscounts ?? [];
+    const sum = (id: string) => base.filter((s) => this.discountSupplierId(s) === id)
       .reduce((t, s) => t + (Number(s.discount) || 0), 0);
     if (this.supplierScope) return sum(this.supplierScope);
     const awarded = this.awardedSupplierIds();
-    const ids = new Set((this.supplierDiscounts ?? []).map(this.discountSupplierId));
+    const ids = new Set(base.map(this.discountSupplierId));
     return [...ids].filter((id) => awarded.has(id)).reduce((t, id) => t + sum(id), 0);
   }
 
@@ -773,21 +826,34 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     return now - this.dealDiscountBaseline();
   }
 
+  /** The discount field grows with its value and the diff note shown inside it. */
+  discountFieldWidth(): string {
+    const value = this.optionalItems?.at(this.selectedOption)?.get('totalDiscount')?.value;
+    const diff = this.discountDiff();
+    const diffLen = diff !== 0 ? (diff > 0 ? '+' : '').length + Math.abs(diff).toFixed(2).length + (diff < 0 ? 1 : 0) + 1 : 0;
+    const chars = String(value ?? '').length + diffLen * 0.8;
+    return `calc(${Math.max(chars, 4)}ch + 1.75rem)`;
+  }
+
   /** Mirrors the supplier's discount into the banner field: editable on a supplier tab, the awarded total on Items. */
   private syncPurchaseDiscount(): void {
     const ctrl = this.optionalItems?.at(this.selectedOption)?.get('totalDiscount');
     const value = this.purchaseDiscount();
     if (!ctrl || value === null) return;
-    if (Number(ctrl.value) !== value) ctrl.setValue(value, { emitEvent: false });
-    if (this.supplierScope) { if (ctrl.disabled) ctrl.enable({ emitEvent: false }); }
-    else if (ctrl.enabled) ctrl.disable({ emitEvent: false });
+    // No discount yet stays empty so the "Discount" placeholder shows instead of 0.
+    if (Number(ctrl.value) !== value) ctrl.setValue(value === 0 ? null : value, { emitEvent: false });
+    // Editable only on the tab of a supplier that was awarded something.
+    const editable = !!this.supplierScope && this.awardedSupplierIds().has(this.supplierScope);
+    if (editable && ctrl.disabled) ctrl.enable({ emitEvent: false });
+    else if (!editable && ctrl.enabled) ctrl.disable({ emitEvent: false });
   }
 
   /** A typed discount on a supplier tab is kept for that supplier. */
   private captureDiscountEdit(): void {
     if (!this.isPurchase || !this.supplierScope) return;
     const ctrl = this.optionalItems?.at(this.selectedOption)?.get('totalDiscount');
-    if (!ctrl || ctrl.disabled) return;
+    // Only a typed value is an edit: a reseed rebuilds the group with an empty discount, which is not the user zeroing it.
+    if (!ctrl || ctrl.disabled || !ctrl.dirty) return;
     const value = Number(ctrl.value) || 0;
     if (value === this.discountFor(this.supplierScope)) return;
     this.discountEdits.set(this.supplierScope, value);
@@ -796,7 +862,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   /** Awards change outside this form, so the Items tab's awarded total is refreshed on every check. */
   ngDoCheck(): void {
-    if (this.isPurchase && !this.supplierScope && this.supplierDiscounts?.length) this.syncPurchaseDiscount();
+    if (this.isPurchase && (this.supplierScope || this.supplierDiscounts?.length || this.dealSupplierDiscounts?.length)) this.syncPurchaseDiscount();
   }
 
   ngOnDestroy(): void {
@@ -828,6 +894,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   /** True when the host locks the line and the user hasn't unlocked it. */
   isLineLocked(i: number, j: number, k: number): boolean {
+    if (this.isPurchase && this.lineHardLocked?.(i, j, k)) return true;
     if (!this.isPurchase || !this.lineLocked?.(i, j, k)) return false;
     const line = this.detailsAt(i, j)?.at(k);
     return !(line && this.unlockedLines.has(line));
@@ -835,7 +902,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   /** The host locks this line but the user can lift the lock. */
   isLineUnlockable(i: number, j: number, k: number): boolean {
-    return this.isPurchase && !!this.lineLocked?.(i, j, k);
+    return this.isPurchase && !!this.lineLocked?.(i, j, k) && !this.lineHardLocked?.(i, j, k);
   }
 
   isLineUnlocked(i: number, j: number, k: number): boolean {
@@ -851,7 +918,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   isItemLocked(i: number, j: number): boolean {
-    if (!this.isPurchase || !this.lineLocked) return false;
+    if (!this.isPurchase || !(this.lineLocked || this.lineHardLocked)) return false;
     return (this.detailsAt(i, j)?.controls || []).some((_, k) => this.isLineLocked(i, j, k));
   }
 
@@ -891,6 +958,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       c = new FormControl<number | null>(mine ?? offer?.price ?? (won.length ? null : this.dealCostFor(d, this.supplierScope ?? '')));
       this.scopeCosts.set(key, c);
       this.scopeCostSeeds.set(key, c.value);
+      this.dirtyOnEdit(c);
     }
     return c;
   }
@@ -959,8 +1027,13 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       const own = this.sharesOf(d).find((s) => s.supplierId === scope)?.qty;
       const open = full == null ? null : Math.max(0, (Number(raw) || full) - this.claimedElsewhere(d, scope));
       // Nothing open to award leaves the field blank; the line's own quantity then shows as its placeholder.
-      c = new FormControl<number | null>(own ?? (this.sharesOf(d).length ? open || null : full));
+      // An unawarded supplier shows the quantity saved on its comparison.
+      const savedQty = Number(this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === scope)?.savedQty);
+      // On a split line a saved quantity below the line's own is a typed one; the default copy of the full quantity stays blank.
+      const typedQty = savedQty > 0 && savedQty !== full ? savedQty : null;
+      c = new FormControl<number | null>(own ?? (this.sharesOf(d).length ? typedQty ?? (open || null) : (savedQty > 0 ? savedQty : full)));
       this.scopeQtys.set(key, c);
+      this.dirtyOnEdit(c);
     }
     return c;
   }
@@ -978,8 +1051,14 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       const own = field === 'uom' ? saved?.uom : saved?.etaTerms;
       c = new FormControl<string | null>(own || d.get(field)?.value || null);
       map.set(key, c);
+      this.dirtyOnEdit(c);
     }
     return c;
+  }
+
+  /** Supplier-tab fields live outside the form array, so a value the user types there must mark the array dirty or Save skips it. */
+  private dirtyOnEdit(c: FormControl): void {
+    this.subs.add(c.valueChanges.subscribe(() => { if (c.dirty) this.optionalItems.markAsDirty(); }));
   }
 
   scopeUomControl(i: number, j: number, k: number): FormControl<string | null> {
@@ -1377,8 +1456,12 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     this.seedMargin(i, this.itemsAt(i).length - 1, 0);
   }
 
+  private isItemHardLocked(i: number, j: number): boolean {
+    return (this.detailsAt(i, j)?.controls || []).some((_, k) => !!this.lineHardLocked?.(i, j, k));
+  }
+
   removeItem(i: number, j: number): void {
-    if (this.itemsAt(i).length <= 1) return;
+    if (this.itemsAt(i).length <= 1 || this.isItemHardLocked(i, j)) return;
     this.removedItems.push({ item: this.itemsAt(i).at(j).value, i, j });
     this.itemsAt(i).removeAt(j);
     this.offerUndo('item');
@@ -1395,7 +1478,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   removeDetail(i: number, j: number, k: number): void {
     const details = this.detailsAt(i, j);
-    if (!details || details.length <= 1) return;
+    if (!details || details.length <= 1 || this.lineHardLocked?.(i, j, k)) return;
     this.removedItemDetails.push({ item: details.at(k).value, i, j, k });
     details.removeAt(k);
     this.offerUndo('line');
@@ -1404,7 +1487,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   /** Wipes every field of the line but keeps its row. */
   clearDetail(i: number, j: number, k: number): void {
     const details = this.detailsAt(i, j);
-    if (!details || !details.at(k)) return;
+    if (!details || !details.at(k) || this.lineHardLocked?.(i, j, k)) return;
     details.setControl(k, this.createDetail());
     this.seedMargin(i, j, k);
     details.markAsDirty();
@@ -1454,6 +1537,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     });
     if (!this.optionalItems.length) this.addOption();
     this.selectedOption = 0;
+    this.applyReleased();
     this.applyLineLocks();
     this.emitTotals();
   }
@@ -2254,7 +2338,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     return net > 0 ? ((net - this.totalCost()) / net) * 100 : 0;
   }
 
-  /** Purchase: the deal's own figures (its quantities, selling prices and margins), which do not move with the PR. In a supplier tab, only that tab's lines. */
+  /** Purchase: the deal's own figures (its quantities, selling prices and margins), which do not move with the PR. In a supplier tab, only that tab's lines, at the quantity entered there. */
   dealFigures(): { cost: number; selling: number; marginValue: number; marginPercent: number } {
     let selling = 0;
     let cost = 0;
@@ -2264,7 +2348,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       (item.itemDetails || []).forEach((d: any, k: number) => {
         if (this.supplierScope && !this.inSupplierScope(d)) return;
         const ctrl = this.detailsAt(this.selectedOption, j)?.at(k);
-        const qty = (ctrl && this.dealQty(ctrl)) ?? (Number(d.quantity) || 0);
+        // In a supplier tab the deal is taken at the quantity entered here, so a part-supplied line is compared like for like.
+        const qty = this.supplierScope ? this.bannerQty(this.selectedOption, j, k) : (ctrl && this.dealQty(ctrl)) ?? (Number(d.quantity) || 0);
         const lineSelling = qty * (Number(d.unitSellingPrice) || 0);
         selling += lineSelling;
         // The deal's unit cost when known (exact); otherwise back out of the stored margin, which is rounded.
@@ -2347,6 +2432,19 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     if (!profit || margin == null) return;
     profit.setValue(margin);
     profit.markAsDirty();
+  }
+
+  /** Purchase: true when the PR costs more than the deal did, so the PR margin figures turn red. */
+  costAboveDeal(): boolean {
+    return this.isPurchase && this.totalCost() - this.dealFigures().cost > 0.005;
+  }
+
+  /** Purchase: PR margin colour against the deal's — plain when equal, green when higher, red when lower. */
+  prMarginTone(): string {
+    const deal = this.dealFigures();
+    const diff = deal ? this.prMarginValue() - deal.marginValue : 0;
+    if (Math.abs(diff) <= 0.005) return 'text-gray-900 dark:text-gray-100';
+    return diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
   }
 
   /** Text colour for a margin %: red below zero, amber below the threshold. */

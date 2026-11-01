@@ -1,4 +1,5 @@
 import { Component, ElementRef, HostListener, Inject, Input, LOCALE_ID, OnInit, booleanAttribute } from '@angular/core';
+import { Router } from '@angular/router';
 import { CommonModule, formatNumber } from '@angular/common';
 import { DetailFootRow, DetailSummaryRow, DetailTableColumn } from './detail-panel.model';
 import { DetailBadgeComponent } from './detail-badge.component';
@@ -105,13 +106,12 @@ interface DetailTableLine {
               </td>
             </tr>
 
-            <tr *ngIf="line.kind === 'data'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos" [class.bg-gray-50]="striped && line.stripe" [class.opacity-60]="line.excluded" [class.dt-sub]="line.sub"
+            <tr *ngIf="line.kind === 'data'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos" [class.bg-gray-50]="striped && line.stripe" [class.opacity-60]="line.excluded" [class.dt-sub]="line.sub" [class.cursor-pointer]="!!line.row['_link']" (click)="openRow(line.row, $event)"
               [ngClass]="[(striped && line.stripe ? 'dark:bg-white/[0.02]' : ''), (groupDividers && line.groupEnd ? 'border-b-2 border-gray-300 dark:border-gray-700' : '')]"
               class="border-b border-gray-100 transition-colors last:border-0 hover:bg-violet-50/60 dark:border-white/5 dark:hover:bg-white/[0.06]">
               <td *ngIf="numbered" class="px-3 py-2.5 text-right align-top text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{{ line.sub ? line.label : line.index }}</td>
               <td *ngFor="let c of columns" [class.text-right]="isRight(c)" [class.text-center]="c.align === 'center'" [class.tabular-nums]="isRight(c) || c.type === 'date'"
                 [ngClass]="[c.wrap || isExpanded(line.pos, c) ? 'whitespace-normal break-words' : 'whitespace-nowrap', c.truncate ? (isExpanded(line.pos, c) ? 'max-w-0' : 'max-w-0 truncate') : '', c.emphasis ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-800 dark:text-gray-100']"
-                [matTooltip]="c.truncate && c.type !== 'html' ? line.row[c.key] : ''" matTooltipPosition="above" matTooltipClass="dt-tooltip"
                 class="px-3 py-2.5 align-top">
                 <ng-container [ngSwitch]="c.type">
                   <ng-container *ngSwitchCase="'currency'">{{ line.row[c.key] | number: '1.2-2' }}</ng-container>
@@ -140,7 +140,12 @@ interface DetailTableLine {
                   <textarea *ngSwitchCase="'textarea'" readonly rows="1" [value]="line.row[c.key] || ''"
                     (focus)="expandTextarea($event)" (blur)="collapseTextarea($event)"
                     class="min-h-[2.25rem] w-full min-w-52 resize-none rounded-md border border-gray-200 bg-gray-50 px-2.5 py-2 text-[12px] leading-5 text-gray-700 outline-none transition focus:border-violet-400 focus:bg-white focus:ring-2 focus:ring-violet-500/10 dark:border-erp-border-dark dark:bg-white/[0.04] dark:text-gray-200 dark:focus:border-violet-500 dark:focus:bg-erp-surface-dark"></textarea>
-                  <ng-container *ngSwitchDefault>{{ line.row[c.key] ?? '—' }}</ng-container>
+                  <ng-container *ngSwitchDefault>
+                    <div *ngIf="c.truncate && c.hoverOnly" class="truncate" [matTooltip]="line.row[c.tooltipKey || c.key]" matTooltipClass="erp-tooltip-detail" matTooltipPosition="above" [matTooltipShowDelay]="250">{{ line.row[c.key] ?? '—' }}</div>
+                    <div *ngIf="c.truncate && !c.hoverOnly" class="cursor-pointer" [class.truncate]="!isExpanded(line.pos, c)"
+                      (click)="toggleExpanded(line.pos, c)">{{ line.row[c.key] ?? '—' }}</div>
+                    <ng-container *ngIf="!c.truncate">{{ line.row[c.key] ?? '—' }}</ng-container>
+                  </ng-container>
                 </ng-container>
               </td>
             </tr>
@@ -193,7 +198,7 @@ interface DetailTableLine {
     </div>
 
 
-    <div *ngIf="tools && colMenuOpen" class="fixed z-50 w-52 rounded-lg border border-gray-200 bg-white py-1 text-[13px] shadow-lg dark:border-erp-border-dark dark:bg-erp-surface-dark" [style.top.px]="menuTop" [style.right.px]="menuRight">
+    <div *ngIf="tools && colMenuOpen" class="dt-colmenu fixed z-50 w-52 rounded-lg border border-gray-200 bg-white py-1 text-[13px] shadow-lg dark:border-erp-border-dark dark:bg-erp-surface-dark" [style.top.px]="menuTop" [style.right.px]="menuRight">
       <p class="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Columns</p>
       <label *ngFor="let c of allColumns" draggable="true" (dragstart)="dragKey = c.key" (dragover)="$event.preventDefault()" (drop)="dropColumn(c.key)" (dragend)="dragKey = ''"
         class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/5" [class.opacity-40]="dragKey === c.key">
@@ -263,7 +268,16 @@ export class DetailTableComponent implements OnInit {
   @Input({ transform: booleanAttribute }) groupDividers = false;
   /** When set, hidden columns are remembered in this browser under this key. */
   @Input() storageKey = '';
-  constructor(@Inject(LOCALE_ID) private locale: string, private host: ElementRef<HTMLElement>) {}
+  constructor(@Inject(LOCALE_ID) private locale: string, private host: ElementRef<HTMLElement>, private router: Router) {}
+
+  /** Rows carrying a `_link` open that route on click; clicks on expandable cells keep their own behaviour. */
+  openRow(row: Record<string, any>, ev: Event): void {
+    const link = row['_link'];
+    if (!link) return;
+    const t = ev.target as HTMLElement;
+    if (t.closest('.truncate, button, a, input, textarea')) return;
+    this.router.navigate(link);
+  }
 
   /** Every column the caller passed, hidden or not; `columns` is the visible subset. */
   allColumns: DetailTableColumn[] = [];
@@ -357,9 +371,10 @@ export class DetailTableComponent implements OnInit {
     this.colMenuOpen = true;
   }
 
-  @HostListener('document:click', ['$event'])
+  @HostListener('document:mousedown', ['$event'])
   onDocClick(e: Event): void {
-    if (this.colMenuOpen && !this.host.nativeElement.contains(e.target as Node)) this.colMenuOpen = false;
+    const t = e.target as HTMLElement;
+    if (this.colMenuOpen && !t.closest?.('.dt-colmenu, .dt-dots')) this.colMenuOpen = false;
   }
 
   openImage(url: string, alt?: string): void {

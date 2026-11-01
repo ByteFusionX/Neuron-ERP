@@ -49,6 +49,8 @@ export class LpoItemEntryComponent implements OnChanges {
   @Input() currency = '';
   /** The supplier's approved discount, shown in the totals bar. */
   @Input() discount = 0;
+  /** Showing an existing PO: no "fully issued" notes, nothing to pick. */
+  @Input() readOnly = false;
 
   @Output() tabSelected = new EventEmitter<string>();
   /** Units of measure offered on each line. */

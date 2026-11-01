@@ -91,6 +91,8 @@ export interface DetailTableColumn {
   wrap?: boolean;
   /** Keeps a long text value on one line with an ellipsis (full text on hover) instead of widening the table. */
   truncate?: boolean;
+  /** With `truncate`: no click-to-expand; the full text (or `tooltipKey`) shows as a tooltip on hover instead. */
+  hoverOnly?: boolean;
   /** Sum this column in the footer row. */
   total?: boolean;
   /** Row field holding the raw number to sum, when `key` holds a formatted string. */

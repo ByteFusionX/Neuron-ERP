@@ -11,6 +11,7 @@ import { SF_STYLES } from './sf.model';
   providers: [{ provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => SfNumberComponent), multi: true }],
   template: `
     <div class="sf-input flex items-center gap-2 !pr-1" [class.sf-disabled]="disabled">
+      <span *ngIf="hint" class="shrink-0 whitespace-nowrap text-xs font-semibold tabular-nums" [ngClass]="hintClass">{{ hint }}</span>
       <input class="sf-bare text-right tabular-nums" inputmode="decimal" [id]="inputId" [value]="value ?? ''"
         [placeholder]="placeholder" [disabled]="disabled" [readOnly]="readonly"
         (input)="onInput($any($event.target))" (blur)="touch()" (keydown.arrowup)="step(1, $event)" (keydown.arrowdown)="step(-1, $event)" />
@@ -28,6 +29,9 @@ export class SfNumberComponent extends SfControl<number> {
   @Input() max: number | null = null;
   @Input() stepSize = 1;
   @Input() suffix = '';
+  /** Small note shown inside the field before the value (e.g. a +/- difference). */
+  @Input() hint = '';
+  @Input() hintClass: string | string[] = '';
   /** Opt-in: stops typing more than this many decimal places (e.g. 2 for money shown to 2 places). */
   @Input() decimals: number | null = null;
   @Input({ transform: booleanAttribute }) stepper = true;

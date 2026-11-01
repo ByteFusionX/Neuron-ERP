@@ -144,7 +144,7 @@ export class DetailFieldsMenuComponent implements OnChanges {
     } catch {}
   }
 
-  @HostListener('document:click', ['$event'])
+  @HostListener('document:mousedown', ['$event'])
   onDocClick(e: Event): void {
     if (this.open && !this.host.nativeElement.contains(e.target as Node)) this.open = false;
   }
