@@ -8,9 +8,10 @@ import Quotation from '../models/quotation.model';
 import PurchaseRequest from '../models/purchaseRequest.model';
 import PurchaseOrder from '../models/purchaseOrder.model';
 import { StockError, findDeliveryShortages, postDelivery, post as postStock, reverseByReference } from '../services/stock.service';
-import { getNextSequence } from '../models/counter.model';
+import { issueDocNo, peekDocNo } from '../services/docNumber.service';
 import GRN from '../models/grn.model';
 import { Invoice } from '../models/invoice.model';
+import { CustomerInvoice } from '../models/customerInvoice.model';
 import { checkAndUpdateJobCompletionStatus } from './job.controller';
 import { createNotificationWithPrivileges } from './notification.controller';
 import { getEmployeeData } from '../common/utils/util';
@@ -85,22 +86,9 @@ const hasInventoryDeduction = async (dnId: any): Promise<boolean> => !!(await St
     isDeleted: { $ne: true }
 }));
 
-const seedDnSequence = async (): Promise<number> => {
-    const lastDn = await DeliveryNote.findOne().sort({ createdDate: -1 });
-    if (lastDn && lastDn.dnNo) {
-        const matches = lastDn.dnNo.match(/DN-(\d+)/);
-        if (matches && matches[1]) {
-            return parseInt(matches[1], 10);
-        }
-    }
-    return 0;
-};
-
 export const generateDnNumber = async (req: Request, res: Response) => {
     try {
-        const nextNum = await getNextSequence('dnNo', seedDnSequence);
-        const dnNumber = `DN-${String(nextNum).padStart(4, '0')}`;
-        res.status(200).json({ dnNumber });
+        res.status(200).json({ dnNumber: await peekDocNo('DN') });
     } catch (error) {
         res.status(500).json({ message: 'Error generating DN Number', error });
     }
@@ -154,7 +142,7 @@ const calculateDnStatus = async (jobId: string, currentDnItems: any[], excludeDn
     }
 
     if (anyItemDelivered) {
-        return 'Ready for Dispatch';
+        return 'Ready to Deliver';
     }
 
     return 'Draft';
@@ -251,6 +239,7 @@ export const createDn = async (req: Request, res: Response) => {
 
         const newDn = new DeliveryNote({
             ...req.body,
+            dnNo: await issueDocNo('DN'),
             status: finalStatus,
             createdBy: employee?._id
         });
@@ -379,6 +368,13 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
             const poIds = new Set(dnPos.map((p) => String(p._id)));
             d.poNumbers = dnPos.map((p) => p.poNo).filter(Boolean);
             d.grnNumbers = grns.filter((g) => poIds.has(String(g.purchaseOrderId))).map((g) => g.grnNo).filter(Boolean);
+        });
+        // Customer invoice raised against each DN, so the register can offer preview/download instead of Create invoice.
+        const invoices: any[] = await CustomerInvoice.find({ deliveryNote: { $in: dns.map((d: any) => d._id) } }).select('deliveryNote invoiceNo paymentTerms').lean();
+        dns.forEach((d: any) => {
+            const inv = invoices.find((i) => String(i.deliveryNote) === String(d._id));
+            d.customerInvoiceNo = inv?.invoiceNo || '';
+            d.customerInvoicePaymentTerms = inv?.paymentTerms || '';
         });
         return res.status(200).json({ total: total, dns: dns });
 
@@ -606,6 +602,7 @@ export const getDnById = async (req: Request, res: Response) => {
             .populate('jobId', 'jobId projectName')
             .populate('createdBy', 'firstName lastName')
             .populate('pod.deliveredBy', 'firstName lastName')
+            .populate('rejectedHistory.rejectedBy', 'firstName lastName')
             .lean();
 
         if (!dn) {
@@ -740,7 +737,7 @@ export const dispatchDn = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, message: 'Delivery Note not found' });
         }
 
-        if (dn.status !== 'Ready for Dispatch') {
+        if (dn.status !== 'Ready to Deliver') {
             return res.status(400).json({ success: false, message: 'Only ready delivery notes can be dispatched' });
         }
 

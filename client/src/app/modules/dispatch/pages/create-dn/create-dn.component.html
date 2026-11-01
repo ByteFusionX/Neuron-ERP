@@ -42,8 +42,7 @@
   <app-action-button *ngIf="step === 2" variant="secondary" (click)="goToStep(1)">Back</app-action-button>
   <app-action-button *ngIf="step === 1" variant="primary" (click)="goToStep(2)">Next: Items</app-action-button>
   <ng-container *ngIf="step === 2">
-    <app-action-button variant="secondary" [disabled]="isAllDelivered()" (click)="onPreview()">Preview DN</app-action-button>
-    <app-action-button variant="primary" [disabled]="isAllDelivered() || isSubmitting()" (click)="onPostDn()">{{ isSubmitting() ? 'Saving...' : 'Place Order' }}</app-action-button>
+    <app-action-button variant="primary" [disabled]="isAllDelivered() || isSubmitting()" (click)="onPostDn()">{{ isSubmitting() ? 'Saving...' : 'Deliver Order' }}</app-action-button>
   </ng-container>
 </ng-template>
 
@@ -98,7 +97,8 @@
 
         <app-sf-section title="Delivery Details" columns="3">
           <app-sf-field label="Delivery Type" [control]="dnForm.get('deliveryType')">
-            <app-sf-select formControlName="deliveryType" [options]="deliveryTypeOptions"></app-sf-select>
+            <app-sf-combobox formControlName="deliveryType" [options]="deliveryTypeOptions" placeholder="Select delivery type"
+              emptyText="No delivery types found"></app-sf-combobox>
           </app-sf-field>
           <app-sf-field label="Contact No" [control]="dnForm.get('contactNo')">
             <app-sf-input formControlName="contactNo" placeholder="Receiver contact"></app-sf-input>
@@ -108,6 +108,9 @@
           </app-sf-field>
           <app-sf-field label="Contact Person" [control]="dnForm.get('contactPerson')">
             <app-sf-input formControlName="contactPerson" placeholder="Receiver name"></app-sf-input>
+          </app-sf-field>
+          <app-sf-field label="Payment Terms" optional [control]="dnForm.get('paymentTerms')">
+            <app-sf-input formControlName="paymentTerms" placeholder="From the job's quotation"></app-sf-input>
           </app-sf-field>
           <app-sf-field full label="Ship-to Address" [control]="dnForm.get('shipToAddress')">
             <app-sf-textarea formControlName="shipToAddress" [rows]="2" placeholder="Delivery site address"></app-sf-textarea>

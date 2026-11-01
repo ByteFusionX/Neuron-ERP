@@ -1,96 +1,136 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
+import { ModalService } from 'src/app/shared/components/modal';
+import { ConfirmDeliveryData, ConfirmDeliveryModalComponent } from '../../components/confirm-delivery-modal/confirm-delivery-modal.component';
 import { ToastrService } from 'ngx-toastr';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { DeliveryNote } from 'src/app/shared/interfaces/delivery-note.interface';
-import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { } from 'src/app/shared/components/button/button.component';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
-import { DetailViewBadge, DetailViewBreadcrumb, DetailViewShellComponent, DetailViewStat, DetailViewTab } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
+import { DetailViewShellComponent, DetailViewStat } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
 import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
 import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
-import { } from 'src/app/shared/components/detail-panel/detail-badge.component';
+import { DetailFieldsMenuComponent, DetailFieldsMenuItem } from 'src/app/shared/components/detail-panel/detail-fields-menu.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
-import { DetailDocument, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocument, DetailFootRow, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { DETAIL_TONE, DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { CustomerInvoiceFormComponent } from 'src/app/modules/finance/pages/vendor-bills/customer-invoice-form.component';
+import { CustomerInvoiceService } from 'src/app/core/services/customer-invoice.service';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+
+const STATUS_TONES: Record<string, DetailTone> = {
+  Draft: 'neutral',
+  'Ready to Deliver': 'info',
+  Dispatched: 'active',
+  Delivered: 'good',
+  'Partially Delivered': 'warn',
+  'Partially Rejected': 'warn',
+  Rejected: 'bad',
+  Cancelled: 'bad',
+};
+
+/** A label/value in the Details section or a side panel; ids link out, statuses show as dot + text. */
+interface DnFact {
+  label: string;
+  value: string;
+  link?: any[];
+  state?: { dot: string; text: string };
+}
+
+type PanelTab = 'delivery' | 'documents' | 'history';
 
 @Component({
   selector: 'app-delivery-note-view',
   standalone: true,
   imports: [
     CommonModule,
-    FormsModule,
     ReactiveFormsModule,
-    IconsModule,
+    RouterLink,
     ActionButtonComponent,
     DetailViewShellComponent,
     DetailSectionComponent,
     DetailFieldComponent,
+    DetailFieldsMenuComponent,
     DetailTableComponent,
     DetailDocumentsComponent,
     DetailTimelineComponent,
-    SmartFormModule
+    SmartFormModule,
+    CustomerInvoiceFormComponent
   ],
   templateUrl: './delivery-note-view.component.html',
   styleUrl: './delivery-note-view.component.css'
 })
-export class DeliveryNoteViewComponent implements OnInit {
+export class DeliveryNoteViewComponent {
   private dnService = inject(DeliveryNoteService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
+  private modal = inject(ModalService);
   private fb = inject(FormBuilder);
   private auditLog = inject(AuditLogService);
+  private confirm = inject(ConfirmDialogService);
+  private employeeService = inject(EmployeeService);
 
+  canInvoice = false;
+  openingInvoice = false;
+  invoiceDn: any = null;
+  private customerInvoices = inject(CustomerInvoiceService);
   deliveryNote: DeliveryNote | null = null;
   deliveryItems: any[] = [];
-  breadcrumbs: DetailViewBreadcrumb[] = [];
-  badges: DetailViewBadge[] = [];
-  stats: DetailViewStat[] = [];
-  itemRows: Record<string, any>[] = [];
-  readonly tabs: DetailViewTab[] = [
-    { id: 'details', label: 'Details' },
-    { id: 'items', label: 'Items' },
+  isLoading = true;
+  isDispatching = false;
+
+  // view model — rebuilt by rebuildView() on every load
+  panelOpen = true;
+  panelTab: PanelTab = 'delivery';
+  // stable array: a getter that builds a new one each change detection re-creates the buttons and swallows clicks
+  readonly panelTabs: { id: PanelTab; label: string }[] = [
+    { id: 'delivery', label: 'Delivery' },
     { id: 'documents', label: 'Documents' },
     { id: 'history', label: 'History' },
   ];
-  tab = 'details';
+
+  subtitle = '';
+  statusState: { dot: string; text: string } | null = null;
+  stats: DetailViewStat[] = [];
+  private detailFacts: DnFact[] = [];
+  detailItems: DetailFieldsMenuItem[] = [];
+  hiddenDetail = new Set<string>();
+  detailOrder: string[] = [];
+  get visibleDetail(): DnFact[] {
+    const pos = (k: string) => { const i = this.detailOrder.indexOf(k); return i < 0 ? this.detailOrder.length : i; };
+    return this.detailFacts.filter((f) => !this.hiddenDetail.has(f.label)).sort((a, b) => pos(a.label) - pos(b.label));
+  }
+  trackFact = (_: number, f: DnFact) => f.label;
+  deliveryFacts: DnFact[] = [];
+  instructions = '';
+  podFacts: DnFact[] = [];
+  podRemarks = '';
+  rejectionFacts: DnFact[] = [];
+  poFacts: DnFact[] = [];
+  grnFacts: DnFact[] = [];
+  itemColumns: DetailTableColumn[] = [];
+  itemRows: Record<string, any>[] = [];
+  itemFootRows: DetailFootRow[] = [];
   documents: DetailDocument[] = [];
   history: DetailTimelineEntry[] = [];
-  readonly itemCols: DetailTableColumn[] = [
-    { key: 'partNo', label: 'Item', type: 'stack', subKey: 'description', wrap: true },
-    { key: 'orderedQty', label: 'Ordered', type: 'number' },
-    { key: 'deliveredQty', label: 'Previous', type: 'number' },
-    { key: 'currentDeliveryQty', label: 'This DN', type: 'number' },
-    { key: 'serialNos', label: 'Serial No(s)', type: 'textarea', width: '18rem' },
-  ];
-  isLoading = true;
-  isDispatching = false;
-  isSavingPod = false;
-
-  podForm = this.fb.group({
-    receivedBy: ['', Validators.required],
-    receivedContactNo: [''],
-    receivedDate: [new Date().toISOString().split('T')[0], Validators.required],
-    remarks: [''],
-    signatureName: ['']
-  });
 
   constructor() {
+    this.employeeService.employeeData$.pipe(takeUntilDestroyed()).subscribe(emp => {
+      this.canInvoice = !!emp?.category?.privileges?.invoice?.createInvoice;
+    });
     this.loadDeliveryNote();
-  }
-
-  ngOnInit(): void {
   }
 
   loadDeliveryNote() {
@@ -104,16 +144,10 @@ export class DeliveryNoteViewComponent implements OnInit {
     this.dnService.getDnById(dnId).subscribe({
       next: (response) => {
         this.deliveryNote = response;
-        this.deliveryItems = (response.items || []).filter((item: any) => 
-          item.currentDeliveryQty > 0
-        );
+        this.deliveryItems = (response.items || []).filter((item: any) => item.currentDeliveryQty > 0);
         this.rebuildView();
-        console.log('DN Loaded. Items with Serial Numbers:', this.deliveryItems.map((item: any) => ({
-          partNo: item.partNo,
-          serialNos: item.serialNos,
-          serialNosType: Array.isArray(item.serialNos) ? 'Array' : typeof item.serialNos
-        })));
         this.isLoading = false;
+        this.loadInvoiceState(dnId);
       },
       error: (error) => {
         this.notificationService.error('Failed to load delivery note details');
@@ -127,16 +161,61 @@ export class DeliveryNoteViewComponent implements OnInit {
   onEdit() {
     if (!this.deliveryNote) return;
     this.router.navigate(['/dispatch/create'], {
-      queryParams: { id: this.deliveryNote._id } 
+      queryParams: { id: this.deliveryNote._id }
     });
   }
 
-  onDispatch(): void {
-    if (!this.deliveryNote?._id || this.deliveryNote.status !== 'Ready for Dispatch') return;
+  /** Whether this DN already has a customer invoice; hides Create Invoice once one exists. */
+  hasInvoice = false;
+
+  private loadInvoiceState(dnId: string): void {
+    this.customerInvoices.list({ page: 1, limit: 1, search: '', deliveryNote: dnId }).subscribe({
+      next: (res) => this.hasInvoice = (res?.total ?? res?.data?.length ?? 0) > 0,
+      error: () => this.hasInvoice = false,
+    });
+  }
+
+  /** Offered from DN creation (Ready to Deliver) until it is invoiced or delivered. */
+  canCreateInvoice(): boolean {
+    return this.canInvoice && !this.hasInvoice && ['Ready to Deliver', 'Dispatched'].includes(this.deliveryNote?.status || '');
+  }
+
+  openCreateInvoice(): void {
+    if (!this.deliveryNote?._id || this.openingInvoice) return;
+    this.openingInvoice = true;
+    this.customerInvoices.prepareDn(this.deliveryNote._id).subscribe({
+      next: (response: any) => {
+        this.openingInvoice = false;
+        this.invoiceDn = response?.success ? response.data : response;
+      },
+      error: (error) => {
+        this.openingInvoice = false;
+        this.notificationService.error(error?.error?.message || 'Failed to load the delivery note for invoicing');
+      },
+    });
+  }
+
+  onInvoiceSaved(invoice: any): void {
+    this.invoiceDn = null;
+    this.hasInvoice = true;
+    this.notificationService.success(`Customer invoice ${invoice?.invoiceNo || ''} created`.replace('  ', ' '));
+  }
+
+  /** Place Order confirms, then dispatches the DN (stock leaves the warehouse). */
+  async onDispatch(): Promise<void> {
+    if (!this.deliveryNote?._id || this.deliveryNote.status !== 'Ready to Deliver') return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Place order?',
+      message: 'The delivery note will be dispatched and its stock taken out of the warehouse.',
+      details: [{ label: 'Delivery note', value: this.deliveryNote.dnNo }],
+      confirmLabel: 'Place order',
+    });
+    if (!confirmed) return;
     this.isDispatching = true;
     this.dnService.dispatchDn(this.deliveryNote._id).subscribe({
       next: () => {
-        this.notificationService.success('Delivery dispatched and stock deducted');
+        this.notificationService.success('Order placed; delivery note dispatched');
         this.isDispatching = false;
         this.loadDeliveryNote();
       },
@@ -147,44 +226,8 @@ export class DeliveryNoteViewComponent implements OnInit {
     });
   }
 
-  getStatusClass(status: string): string {
-    switch (status) {
-      case 'Draft':
-        return 'bg-gray-100 text-gray-800';
-      case 'Delivered':
-      case 'Ready for Dispatch':
-      case 'Dispatched':
-        return 'bg-green-100 text-green-800';
-      case 'Partially Delivered':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'Cancelled':
-        return 'bg-red-100 text-red-800';
-      case 'Rejected':
-      case 'Partially Rejected':
-        return 'bg-orange-100 text-orange-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  }
-
-  getItemStatusClass(status: string): string {
-    switch (status) {
-      case 'Delivered':
-        return 'bg-green-100 text-green-800';
-      case 'Pending':
-      case 'Partially Delivered':
-        return 'bg-yellow-100 text-yellow-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  }
-
   onBack() {
     this.router.navigate(['/dispatch']);
-  }
-
-  onTabChange(tab: string): void {
-    this.tab = tab;
   }
 
   closedPurchaseOrders(dn: DeliveryNote): any[] {
@@ -207,24 +250,13 @@ export class DeliveryNoteViewComponent implements OnInit {
     return this.deliveryNote?.status === 'Dispatched';
   }
 
-  onCompletePod(): void {
-    if (!this.deliveryNote?._id) return;
-    if (this.podForm.invalid) {
-      this.podForm.markAllAsTouched();
-      return;
-    }
-    this.isSavingPod = true;
-    this.dnService.completePod(this.deliveryNote._id, this.podForm.value).subscribe({
-      next: () => {
-        this.notificationService.success('POD captured. Delivery marked delivered.');
-        this.isSavingPod = false;
-        this.loadDeliveryNote();
-      },
-      error: (error) => {
-        this.notificationService.error(error.error?.message || 'Failed to capture POD');
-        this.isSavingPod = false;
-      }
-    });
+  /** Same delivery-confirmation modal the DN register uses. */
+  openPod(): void {
+    const dn = this.deliveryNote;
+    if (!dn?._id) return;
+    const data: ConfirmDeliveryData = { id: dn._id, dnNo: dn.dnNo, clientName: dn.clientName };
+    this.modal.open<boolean>(ConfirmDeliveryModalComponent, { data, width: '560px' })
+      .afterClosed().subscribe(done => { if (done) this.loadDeliveryNote(); });
   }
 
   async onPreview() {
@@ -250,32 +282,118 @@ export class DeliveryNoteViewComponent implements OnInit {
     }
   }
 
+  private state(value: string): { dot: string; text: string } {
+    const tone = DETAIL_TONE[STATUS_TONES[value] ?? 'neutral'];
+    return { dot: tone.dot, text: tone.text };
+  }
+
+  /** The shell takes new-array inputs, so everything it shows is built once per load. */
   private rebuildView(): void {
     const dn = this.deliveryNote;
     if (!dn) return;
-    this.breadcrumbs = [
-      { label: 'Home', link: ['/home'] },
-      { label: 'Dispatch', link: ['/dispatch'] },
-      { label: dn.dnNo || 'Delivery Note' }
-    ];
-    this.badges = [{ label: dn.status, tone: dn.status === 'Cancelled' || dn.status === 'Rejected' ? 'bad' : dn.status === 'Draft' ? 'neutral' : 'good' }];
-    const qty = this.deliveryItems.reduce((sum, item: any) => sum + (item.currentDeliveryQty || 0), 0);
+    const job: any = dn.jobId;
+    const items = this.deliveryItems;
+    const sum = (pick: (i: any) => number) => items.reduce((total, i) => total + (pick(i) || 0), 0);
+    const ordered = sum((i) => i.orderedQty);
+    const previous = sum((i) => i.deliveredQty);
+    const current = sum((i) => i.currentDeliveryQty);
+    const rejected = sum((i) => i.rejectedQty);
+    const creator = this.employeeName(dn.createdBy);
+
+    this.subtitle = [dn.clientName, job?.projectName || dn.subject].filter(Boolean).join(' · ');
+    this.statusState = this.state(dn.status);
+
     this.stats = [
-      { label: 'Items', value: String(this.deliveryItems.length) },
-      { label: 'Quantity', value: String(qty) },
-      { label: 'Type', value: dn.deliveryType || 'Customer Delivery' },
+      { label: 'Ordered', value: String(ordered) },
+      { label: 'Previously delivered', value: String(previous) },
+      { label: 'This DN', value: String(current) },
+      { label: 'Rejected', value: String(rejected), danger: rejected > 0 },
+      { label: 'Lines', value: String(items.length) },
     ];
-    this.itemRows = this.deliveryItems.map((item: any) => ({
-      ...item,
-      serialNos: Array.isArray(item.serialNos) ? item.serialNos.join('\n') : (item.serialNos || ''),
+
+    this.detailFacts = [
+      { label: 'DN Date', value: this.formatDate(dn.dnDate) },
+      { label: 'Job ID', value: job?.jobId || '-', link: job?._id && job?.jobId ? ['/job-sheet/view', job._id] : undefined },
+      { label: 'Customer', value: dn.clientName || '-' },
+      { label: 'Customer PO', value: dn.customerLpoNumber || '-' },
+      { label: 'Project', value: job?.projectName || '-' },
+      { label: 'Subject', value: dn.subject || '-' },
+      { label: 'Delivery Type', value: dn.deliveryType || 'Customer Delivery' },
+      { label: 'Ship To', value: dn.shipToName || dn.clientName || '-' },
+      { label: 'Status', value: dn.status, state: this.state(dn.status) },
+      { label: 'Created By', value: creator || '-' },
+      { label: 'Created On', value: this.formatDate(dn.createdDate) },
+      { label: 'Last Updated', value: this.formatDate(dn.updatedDate) },
+    ];
+    const hidden = ['Created On', 'Last Updated', 'Subject'];
+    this.detailItems = this.detailFacts.map((f) => ({ key: f.label, label: f.label, hiddenByDefault: hidden.includes(f.label) }));
+
+    this.deliveryFacts = [
+      { label: 'Type', value: dn.deliveryType || 'Customer Delivery' },
+      { label: 'Ship To', value: dn.shipToName || dn.clientName || '-' },
+      { label: 'Address', value: dn.shipToAddress || '-' },
+      { label: 'Contact Person', value: dn.contactPerson || '-' },
+      { label: 'Contact No', value: dn.contactNo || '-' },
+    ];
+    this.instructions = dn.deliveryInstructions || '';
+
+    this.podFacts = dn.pod?.receivedBy ? [
+      { label: 'Received By', value: dn.pod.receivedBy },
+      { label: 'Contact No', value: dn.pod.receivedContactNo || '-' },
+      { label: 'Received On', value: this.formatDate(dn.pod.receivedDate) },
+      { label: 'Signature Name', value: dn.pod.signatureName || '-' },
+      { label: 'Delivered By', value: this.employeeName(dn.pod.deliveredBy) || '-' },
+    ] : [];
+    this.podRemarks = dn.pod?.remarks || '';
+    this.rejectionFacts = (dn.rejectedHistory || []).map((r) => ({
+      label: this.formatDate(r.date),
+      value: [r.reason || 'No reason given', this.employeeName(r.rejectedBy)].filter(Boolean).join(' · '),
     }));
+
+    this.poFacts = this.closedPurchaseOrders(dn).map((po: any) => ({
+      label: po.poNo || '-',
+      value: [po.supplierId?.supplierName, this.formatDate(po.poDate)].filter(Boolean).join(' · '),
+      link: ['/purchase-order/view-lpo', po._id],
+    }));
+    this.grnFacts = this.passedGrns(dn).map((grn: any) => ({
+      label: grn.grnNo || '-',
+      value: this.formatDate(grn.grnDate),
+      link: ['/grn/view-grn', grn._id],
+    }));
+
+    this.itemColumns = [
+      { key: 'detail', label: 'Description', truncate: true, tooltipKey: 'detail' },
+      { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
+      { key: 'partNo', label: 'Part No', hiddenByDefault: true },
+      { key: 'rejectedQty', label: 'Rejected', type: 'number', align: 'right', hiddenByDefault: !rejected },
+      { key: 'reason', label: 'Rejection reason', wrap: true, hiddenByDefault: !items.some((i) => i.rejectionReason) },
+      { key: 'serials', label: 'Serial nos', wrap: true, hiddenByDefault: !items.some((i) => i.serialNos?.length) },
+      { key: 'itemStatus', label: 'Status', hiddenByDefault: true },
+    ];
+    this.itemRows = items.map((i: any) => ({
+      detail: i.description || '-',
+      itemCode: i.itemCode || '-',
+      partNo: i.partNo || '-',
+      rejectedQty: i.rejectedQty || 0,
+      reason: i.rejectionReason || '-',
+      serials: Array.isArray(i.serialNos) && i.serialNos.length ? i.serialNos.join(', ') : '-',
+      itemStatus: i.status || '-',
+    }));
+    this.itemFootRows = items.length ? [{
+      label: 'Total',
+      emphasis: true,
+      cells: {
+        rejectedQty: { value: rejected, format: 'number' },
+      },
+    }] : [];
+
     this.documents = (dn.pod?.attachments || []).map((file, index) => ({
       id: `${file.fileName || file.originalname}-${index}`,
       name: file.originalname || file.fileName,
       date: dn.pod?.receivedDate || dn.updatedDate || dn.createdDate,
       uploadedBy: 'Proof of Delivery',
     }));
-    const creator = dn.createdBy ? `${dn.createdBy.firstName || ''} ${dn.createdBy.lastName || ''}`.trim() : '';
+
     const derivedHistory: DetailTimelineEntry[] = [
       { text: 'Delivery note created', meta: [creator, this.formatDateTime(dn.createdDate)].filter(Boolean).join(' · '), tone: 'info' as const },
       ...(dn.status !== 'Draft' ? [{ text: `Status: ${dn.status}`, meta: this.formatDateTime(dn.updatedDate || dn.createdDate), tone: dn.status === 'Cancelled' ? 'bad' as const : 'good' as const }] : []),
@@ -292,15 +410,16 @@ export class DeliveryNoteViewComponent implements OnInit {
       next: (e) => { if (e?.length) this.history = toTimelineEntries(e); },
       error: () => { /* keep the derived timeline */ },
     });
-    if (dn.pod) {
-      this.podForm.patchValue({
-        receivedBy: dn.pod.receivedBy || '',
-        receivedContactNo: dn.pod.receivedContactNo || '',
-        receivedDate: dn.pod.receivedDate ? new Date(dn.pod.receivedDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        remarks: dn.pod.remarks || '',
-        signatureName: dn.pod.signatureName || ''
-      });
-    }
+  }
+
+  private employeeName(employee: any): string {
+    if (!employee || typeof employee === 'string') return '';
+    return `${employee.firstName || ''} ${employee.lastName || ''}`.trim();
+  }
+
+  private formatDate(value?: string | Date): string {
+    if (!value) return '-';
+    return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
   private formatDateTime(value?: string): string {

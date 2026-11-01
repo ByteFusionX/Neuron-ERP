@@ -34,6 +34,11 @@ export class DnItemEntryComponent {
   @Input({ required: true }) items!: FormArray;
   @Input({ required: true }) isSelected!: (index: number) => boolean;
   @Input() title = 'Items to deliver';
+  /** Discount given on the whole job, and the job's items value it was given against. */
+  @Input() jobDiscount = 0;
+  @Input() jobItemsPrice = 0;
+  /** The job's net cost (items less supplier discount plus additional cost); a DN carries its share of it. */
+  @Input() jobCost = 0;
 
   @Output() toggle = new EventEmitter<number>();
 
@@ -90,17 +95,51 @@ export class DnItemEntryComponent {
     return !!qty?.invalid && !!qty?.touched;
   }
 
-  total(name: string): number {
-    return this.lines.reduce((sum, l) => sum + this.num(l, name), 0);
+  /** Sum of a column over the lines selected for this DN. */
+  selectedTotal(name: string): number {
+    return this.lines.reduce((sum, l, i) => sum + (this.isSelected(i) ? this.num(l, name) : 0), 0);
   }
 
-  get totalBalance(): number {
-    return this.lines.reduce((sum, l) => sum + this.balance(l), 0);
+  get selectedBalance(): number {
+    return this.lines.reduce((sum, l, i) => sum + (this.isSelected(i) ? this.balance(l) : 0), 0);
   }
 
-  /** Quantity going out on this DN: selected lines only. */
-  get thisDnTotal(): number {
-    return this.lines.reduce((sum, l, i) => sum + (this.isSelected(i) ? this.num(l, 'currentDeliveryQty') : 0), 0);
+  /** Selling value of what this DN delivers. */
+  get dnPrice(): number {
+    return this.lines.reduce((sum, l, i) => sum + (this.isSelected(i) ? this.num(l, 'unitSellingPrice') * this.num(l, 'currentDeliveryQty') : 0), 0);
+  }
+
+  get jobValueShown(): number { return this.jobValue; }
+
+  private get jobValue(): number {
+    return this.jobItemsPrice
+      || this.lines.reduce((sum, l) => sum + this.num(l, 'unitSellingPrice') * this.num(l, 'totalQuantity'), 0);
+  }
+
+  /** The job-level discount spreads over the lines in proportion to their value, so a part of the job gets a part of it. */
+  discountShare(amount: number): number {
+    return this.jobValue > 0 ? (this.jobDiscount * amount) / this.jobValue : 0;
+  }
+
+  /** Whole-job figures: price less discount, then cost. */
+  get jobMargin(): number {
+    return this.jobValue - this.jobDiscount - this.jobCost;
+  }
+
+  get jobMarginPct(): number {
+    const net = this.jobValue - this.jobDiscount;
+    return net > 0 ? (this.jobMargin / net) * 100 : 0;
+  }
+
+  /** This DN's net value less its share of the job's cost. */
+  get dnMargin(): number {
+    const share = this.jobValue > 0 ? this.dnPrice / this.jobValue : 0;
+    return this.dnPrice - this.discountShare(this.dnPrice) - this.jobCost * share;
+  }
+
+  get dnMarginPct(): number {
+    const net = this.dnPrice - this.discountShare(this.dnPrice);
+    return net > 0 ? (this.dnMargin / net) * 100 : 0;
   }
 
   get selectedCount(): number {

@@ -1,11 +1,10 @@
-import { Component, Inject, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { ModalFooterButton, ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
+import { FormModalShellComponent, MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 
 export interface ConfirmDeliveryData {
@@ -18,31 +17,41 @@ export interface ConfirmDeliveryData {
 @Component({
   selector: 'app-confirm-delivery-modal',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, ModalLayoutComponent, SmartFormModule],
+  imports: [CommonModule, ReactiveFormsModule, SmartFormModule, FormModalShellComponent],
   template: `
-    <app-modal-layout title="Deliver" [subtitle]="data.dnNo + (data.clientName ? ' · ' + data.clientName : '')"
-      [onClose]="cancel.bind(this)" [footerButtons]="footerButtons">
-      <form [formGroup]="form" class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2" (ngSubmit)="confirm()" novalidate>
-        <app-sf-field label="Delivered on" required [control]="form.controls.receivedDate" [messages]="{ required: 'Pick the delivery date and time' }">
-          <app-sf-date formControlName="receivedDate" type="datetime-local" [max]="now"></app-sf-date>
-        </app-sf-field>
-        <app-sf-field label="Delivered by" required [control]="form.controls.deliveredBy" [messages]="{ required: 'Pick who delivered it' }">
-          <app-sf-combobox formControlName="deliveredBy" [options]="employeeOptions" placeholder="Select employee"
-            emptyText="No employees found"></app-sf-combobox>
-        </app-sf-field>
-        <app-sf-field label="Accepted by" optional full hint="Name of the person who received the goods.">
-          <app-sf-input formControlName="receivedBy" placeholder="Receiver name"></app-sf-input>
-        </app-sf-field>
-        <app-sf-field label="Note" optional full>
-          <app-sf-textarea formControlName="remarks" [rows]="2" placeholder="Delivery note (optional)"></app-sf-textarea>
-        </app-sf-field>
-        <app-sf-field label="Proof of delivery" optional full hint="Signed DN, photos or any other documents.">
-          <app-sf-file formControlName="files"></app-sf-file>
-        </app-sf-field>
-        <button type="submit" class="hidden" aria-hidden="true" tabindex="-1"></button>
+    <app-form-modal-shell
+      icon="check" tone="emerald" title="Proof of delivery"
+      [context]="contextText" contextLabel="Delivering" contextEmptyText="Record the hand-over of this delivery."
+      formId="confirm-delivery-form" [invalid]="form.invalid && submitted" [saving]="saving"
+      submitLabel="Submit POD" submitIcon="check" submitShortcutVerb="submit"
+      (closed)="cancel()">
+      <form id="confirm-delivery-form" [formGroup]="form" (ngSubmit)="confirm()" novalidate>
+        <app-sf-section title="Delivery" columns="2">
+          <app-sf-field label="Delivered on" required [control]="form.controls.receivedDate" [messages]="{ required: 'Pick the delivery date and time' }">
+            <app-sf-date formControlName="receivedDate" type="datetime-local" [max]="now"></app-sf-date>
+          </app-sf-field>
+          <app-sf-field label="Delivered by" required [control]="form.controls.deliveredBy" [messages]="{ required: 'Pick who delivered it' }">
+            <app-sf-combobox formControlName="deliveredBy" [options]="employeeOptions" placeholder="Select employee"
+              emptyText="No employees found"></app-sf-combobox>
+          </app-sf-field>
+          <div class="col-span-2">
+            <app-sf-field label="Accepted by" optional hint="Name of the person who received the goods.">
+              <app-sf-input formControlName="receivedBy" placeholder="Receiver name" clearable></app-sf-input>
+            </app-sf-field>
+          </div>
+        </app-sf-section>
+        <app-sf-section title="Notes & proof" columns="1">
+          <app-sf-field label="Note" optional>
+            <app-sf-textarea formControlName="remarks" [rows]="3" [maxlength]="1000" autoresize placeholder="Delivery note (optional)"></app-sf-textarea>
+          </app-sf-field>
+          <app-sf-field label="Proof of delivery" optional hint="Signed DN, photos or any other documents.">
+            <app-sf-file formControlName="files"></app-sf-file>
+          </app-sf-field>
+        </app-sf-section>
       </form>
-    </app-modal-layout>
+    </app-form-modal-shell>
   `,
+  styles: [':host{display:block}'],
 })
 export class ConfirmDeliveryModalComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
@@ -53,6 +62,14 @@ export class ConfirmDeliveryModalComponent implements OnInit {
   readonly now = this.localDateTime(new Date());
   employeeOptions: SfOption<string>[] = [];
   saving = false;
+  submitted = false;
+
+  private dialogRef = inject<ModalRef<boolean>>(ModalRef);
+  data = inject(MODAL_DATA) as ConfirmDeliveryData;
+
+  get contextText(): string {
+    return this.data.dnNo + (this.data.clientName ? ' · ' + this.data.clientName : '');
+  }
 
   form = this.fb.group({
     receivedDate: [this.now, Validators.required],
@@ -62,10 +79,6 @@ export class ConfirmDeliveryModalComponent implements OnInit {
     files: [[] as File[]],
   });
 
-  constructor(
-    private dialogRef: MatDialogRef<ConfirmDeliveryModalComponent, boolean>,
-    @Inject(MAT_DIALOG_DATA) public data: ConfirmDeliveryData,
-  ) {}
 
   ngOnInit(): void {
     this.employeeService.getAllEmployees().subscribe({
@@ -80,19 +93,13 @@ export class ConfirmDeliveryModalComponent implements OnInit {
     });
   }
 
-  get footerButtons(): ModalFooterButton[] {
-    return [
-      { label: 'Cancel', theme: 'cancel', onClick: () => this.cancel(), disabled: this.saving },
-      { label: 'Deliver', theme: 'primary', onClick: () => this.confirm(), loading: this.saving },
-    ];
-  }
-
   cancel(): void {
     this.dialogRef.close(false);
   }
 
   confirm(): void {
     if (this.saving) return;
+    this.submitted = true;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;

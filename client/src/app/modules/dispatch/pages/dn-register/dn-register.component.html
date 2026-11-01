@@ -32,7 +32,7 @@
       <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
         [ngClass]="{
           'bg-gray-100 text-gray-700 ring-gray-200': row.status === 'Draft',
-          'bg-sky-50 text-sky-700 ring-sky-200': row.status === 'Ready for Dispatch' || row.status === 'Dispatched',
+          'bg-sky-50 text-sky-700 ring-sky-200': row.status === 'Ready to Deliver' || row.status === 'Dispatched',
           'bg-emerald-50 text-emerald-700 ring-emerald-200': row.status === 'Delivered',
           'bg-red-50 text-red-700 ring-red-200': row.status === 'Cancelled' || row.status === 'Rejected',
           'bg-amber-50 text-amber-700 ring-amber-200': row.status === 'Partially Rejected'
@@ -61,7 +61,7 @@
     <ng-template #detailTemplate let-row let-tab="tab">
       <ng-container [ngSwitch]="tab">
         <div *ngSwitchCase="'details'" class="space-y-5">
-          <app-detail-section title="Delivery Note">
+          <app-detail-section title="Overview">
             <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
               <app-detail-field label="DN No" stacked>{{ row.dnNo || '-' }}</app-detail-field>
               <app-detail-field label="DN Date" stacked>{{ row.dnDate | date:'dd MMM yyyy' }}</app-detail-field>
@@ -69,6 +69,11 @@
               <app-detail-field label="Job ID" stacked>{{ row.job?.jobId || '-' }}</app-detail-field>
               <app-detail-field label="Customer PO" stacked>{{ row.customerLpoNumber || '-' }}</app-detail-field>
               <app-detail-field label="Delivery Type" stacked>{{ row.deliveryType || 'Customer Delivery' }}</app-detail-field>
+              <app-detail-field label="Invoice No" stacked>{{ $any(row).customerInvoiceNo || '-' }}</app-detail-field>
+              <app-detail-field label="Payment Terms" stacked>{{ $any(row).customerInvoicePaymentTerms || '-' }}</app-detail-field>
+              <app-detail-field label="GRN" stacked>{{ linked($any(row).grnNumbers) }}</app-detail-field>
+              <app-detail-field label="Created By" stacked>{{ row.createdBy ? (row.createdBy.firstName + ' ' + (row.createdBy.lastName || '')) : '-' }}</app-detail-field>
+              <app-detail-field label="Created At" stacked>{{ row.createdDate | date:'dd MMM yyyy' }}</app-detail-field>
             </div>
           </app-detail-section>
           <app-detail-section title="Delivery">
@@ -80,7 +85,18 @@
               <app-detail-field label="Instructions" stacked>{{ row.deliveryInstructions || '-' }}</app-detail-field>
             </div>
           </app-detail-section>
+          <app-detail-section *ngIf="row.pod?.receivedBy || row.rejectedHistory?.length" title="Proof of Delivery">
+            <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <app-detail-field label="Received By" stacked>{{ row.pod?.receivedBy || '-' }}</app-detail-field>
+              <app-detail-field label="Received Date" stacked>{{ row.pod?.receivedDate ? (row.pod?.receivedDate | date:'dd MMM yyyy') : '-' }}</app-detail-field>
+              <app-detail-field label="Receiver Contact" stacked>{{ row.pod?.receivedContactNo || '-' }}</app-detail-field>
+              <app-detail-field label="Remarks" stacked>{{ row.pod?.remarks || '-' }}</app-detail-field>
+              <app-detail-field *ngIf="row.rejectedHistory?.length" label="Rejection Reasons" stacked>{{ rejectionReasons(row) }}</app-detail-field>
+            </div>
+          </app-detail-section>
         </div>
+        <app-detail-table *ngSwitchCase="'items'" title="Delivery items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals
+          emptyMessage="No items on this delivery note."></app-detail-table>
         <app-detail-documents *ngSwitchCase="'documents'" [documents]="detailDocuments(row)"
           [downloadable]="false" [viewable]="false" emptyMessage="No proof-of-delivery documents attached."></app-detail-documents>
         <app-detail-timeline *ngSwitchCase="'history'" [entries]="(historyFor(row) | async) ?? []"
@@ -90,12 +106,15 @@
 
     <!-- right: permanent, every tab (filled) -->
     <ng-template #detailFooterTemplate let-row>
-      <app-action-button *ngIf="canReject(row)" variant="secondary" (click)="openReject(row)">Reject</app-action-button>
-      <app-action-button *ngIf="row.status === 'Dispatched'" variant="primary" (click)="openConfirmDelivery(row)">Confirm delivery</app-action-button>
-      <app-action-button variant="primary" (click)="viewDnDetails(row)" icon="view">Open full DN</app-action-button>
+      <app-action-button variant="primary" (click)="viewDnDetails(row)" icon="view">Detail view</app-action-button>
     </ng-template>
   </app-data-grid>
 
   <app-create-dn [drawerMode]="true" [open]="formOpen" [editId]="formEditId" [defaultJobId]="formJobId"
     (saved)="onCreateSaved()" (closed)="closeCreateDrawer()"></app-create-dn>
+
+  <app-confirm-delivery-drawer *ngIf="deliveryDn" [id]="deliveryDn._id" [dnNo]="deliveryDn.dnNo" [clientName]="deliveryDn.clientName"
+    (closed)="deliveryDn = null" (saved)="onDeliverySaved()"></app-confirm-delivery-drawer>
+
+  <app-customer-invoice-form *ngIf="invoiceDn" [dn]="invoiceDn" (closed)="invoiceDn = null" (saved)="onInvoiceSaved($event)"></app-customer-invoice-form>
 </div>
