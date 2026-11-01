@@ -8,27 +8,34 @@
   padding: 0.625rem 0.75rem;
 }
 
+.vendor-bill-meta + .vendor-bill-meta {
+  border-left: 1px solid #e5e7eb;
+}
+
 .vendor-bill-meta-label {
-  margin: 0 0 0.125rem;
-  color: #64748b;
+  margin: 0;
   font-size: 0.6875rem;
-  font-weight: 600;
+  color: #6b7280;
 }
 
 .vendor-bill-meta-value {
-  margin: 0;
+  margin: 0.125rem 0 0;
   overflow: hidden;
-  color: #0f172a;
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #111827;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-:host-context(.dark) .vendor-bill-meta-label {
-  color: #94a3b8;
+:host-context(html.dark) .vendor-bill-meta + .vendor-bill-meta {
+  border-left-color: #262626;
 }
 
-:host-context(.dark) .vendor-bill-meta-value {
-  color: #e2e8f0;
+:host-context(html.dark) .vendor-bill-meta-label {
+  color: #a1a1a1;
+}
+
+:host-context(html.dark) .vendor-bill-meta-value {
+  color: #ededed;
 }

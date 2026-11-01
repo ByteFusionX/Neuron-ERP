@@ -62,7 +62,7 @@ export class InvoiceService {
         });
     }
 
-    async generateInvoicePDF(invoice: any) {
+    async generateInvoicePDF(invoice: any, includeStamp = false) {
         pdfMake.vfs = pdfFonts.vfs;
 
         (pdfMake as any).fonts = {
@@ -92,6 +92,12 @@ export class InvoiceService {
             { text: `Total (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '',
             { text: String(invoice.amount || 0), style: 'tableFooter', alignment: 'right' },
           ]);
+        if (!invoice.isProforma && Number(invoice.discount) > 0) {
+            tableBody.push(
+                [{ text: `Discount (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '', { text: String(invoice.discount), style: 'tableFooter', alignment: 'right' }],
+                [{ text: `Net Total (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '', { text: String(Math.max(0, Math.round((Number(invoice.amount || 0) - Number(invoice.discount)) * 100) / 100)), style: 'tableFooter', alignment: 'right' }],
+            );
+        }
         
         const quoteCompany = (invoice.quoteCompany || '').toString().toLowerCase();
         const isSecurity = quoteCompany.includes('security');
@@ -167,6 +173,74 @@ export class InvoiceService {
                 }
             ];
 
+        // Proforma layout: boxed client block, blue item table, claim rows, then bank details and sign-off.
+        const box = { hLineWidth: () => 1.5, vLineWidth: () => 1.5 };
+        const cell = (text: string, extra: any = {}) => ({ text, fontSize: 10, margin: [2, 2, 2, 2], ...extra });
+        const proformaContent: any[] | null = invoice.isProforma ? [
+            {
+                table: {
+                    widths: ['*'],
+                    body: [[{ text: invoice.documentTitle || 'PROFORMA INVOICE', style: 'mainHead', border: [false, false, false, false], fillColor: '#1E3964', alignment: 'center', margin: [0, 3, 0, 3] }]]
+                }
+            },
+            {
+                layout: box, margin: [0, 8, 0, 15],
+                table: {
+                    widths: [45, '*', 75, '*'],
+                    body: [
+                        [cell('PI No'), cell(invoice.invoiceNo || '-', { bold: true }), cell('PI Date'), cell(new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-'))],
+                        [cell('Client'), cell((invoice.customer?.companyName || '-').toUpperCase()), cell('Payment Terms'), cell((invoice.paymentTerms || '-').toUpperCase(), { bold: true })],
+                        [cell('Atten'), cell(invoice.attention || '-'), cell('LPO, No:'), cell(invoice.lpoRef || '-')],
+                        [cell('Ship To'), cell((invoice.shipTo || invoice.customer?.companyName || '-').toUpperCase()), cell('Job No:'), cell(invoice.jobId?.jobId || '-')],
+                    ]
+                }
+            },
+            {
+                layout: { ...box, hLineColor: () => '#000', vLineColor: () => '#000' }, margin: [0, 0, 0, 20],
+                table: {
+                    headerRows: 1,
+                    widths: [35, '*', 30, 55, 60],
+                    body: [
+                        ['SL.\nNo.', 'Description', 'Qty', `Unit Price\n(${currency})`, `Total Cost\n(${currency})`].map((t, i) => ({ text: t, bold: true, color: 'white', fillColor: '#1E3964', fontSize: 9, alignment: 'center', margin: [0, 4, 0, 4] })),
+                        ...items.map((item: any, index: number) => [
+                            cell(String(index + 1).padStart(2, '0'), { alignment: 'center' }),
+                            cell(item.description || '-'),
+                            cell(String(item.quantity || 0).padStart(2, '0'), { alignment: 'center' }),
+                            cell(Number((item.amount / item.quantity) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { alignment: 'right' }),
+                            cell(Number(item.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { alignment: 'right' }),
+                        ]),
+                        [cell(`TOTAL (${currency})`, { colSpan: 4 }), {}, {}, {}, cell(Number(invoice.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { alignment: 'right' })],
+                        ...(Number(invoice.discount) > 0 ? [
+                            [cell(`DISCOUNT (${currency})`, { colSpan: 4 }), {}, {}, {}, cell(Number(invoice.discount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { alignment: 'right' })],
+                            [cell(`NET TOTAL (${currency})`, { bold: true, colSpan: 4 }), {}, {}, {}, cell(Math.max(0, Number(invoice.amount || 0) - Number(invoice.discount)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { bold: true, alignment: 'right' })],
+                        ] : []),
+                        [cell(`${(invoice.paymentTerms || '').toUpperCase()} AMOUNT CLAIM (${currency}):`.trim(), { bold: true, colSpan: 4 }), {}, {}, {}, cell(Number(invoice.claimAmount ?? invoice.amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { bold: true, alignment: 'right' })],
+                    ]
+                }
+            },
+            { stack: bankStack, alignment: 'left', margin: [0, 0, 0, 25] },
+            {
+                unbreakable: true,
+                stack: [
+                    ...(includeStamp ? [{
+                        image: await this.getBase64ImageFromURL('assets/images/stamp.jpg'),
+                        width: 90,
+                        alignment: 'left',
+                        margin: [0, 0, 0, 10],
+                    }] : []),
+                    { text: 'For, Neuron Technologies W.L.L', bold: true, fontSize: 10, margin: [0, 0, 0, 5] },
+                ],
+            },
+            {
+                margin: [90, 0, 0, 0],
+                stack: [
+                    { text: `For, ${(invoice.customer?.companyName || '').toUpperCase()}`, fontSize: 10, margin: [0, 0, 0, 25] },
+                    { text: 'Received by: ……………………………', fontSize: 10, margin: [0, 0, 0, 15] },
+                    { text: 'Date…………………………………………', fontSize: 10 },
+                ]
+            },
+        ] : null;
+
         const documentDefinition: any = {
             defaultStyle: {
                 font: 'EBGaramond'
@@ -182,7 +256,9 @@ export class InvoiceService {
             },
             header: {
                 image: await this.getBase64ImageFromURL(
-                    '../../assets/images/pdfheader.jpg'
+                    isSecurity
+                        ? '../../assets/images/pdfheader-security.jpg'
+                        : '../../assets/images/pdfheader.jpg'
                 ),
                 width: 550,
                 alignment: 'center',
@@ -197,7 +273,7 @@ export class InvoiceService {
                 margin: [0, 25, 0, 0]
             },
             pageMargins: [45, 115, 45, 100],
-            content: [
+            content: proformaContent ?? [
                 {
                     style: 'header',
                     table: {
@@ -208,7 +284,7 @@ export class InvoiceService {
                                 style: 'mainHead',
                                 border: [1, 1, 1, 1],
                                 fillColor: '#1f3864',
-                                text: 'INVOICE',
+                                text: invoice.documentTitle || 'INVOICE',
                                 alignment: 'center',
                                 margin: [0, 3, 0, 3]
                             }]]

@@ -1,16 +1,14 @@
-import { Component, EventEmitter, inject, Input, OnChanges, OnInit, Output, signal, SimpleChanges } from '@angular/core';
+import { Component, computed, DestroyRef, EventEmitter, inject, Input, OnChanges, OnInit, Output, signal, SimpleChanges } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { NgSelectModule } from '@ng-select/ng-select';
 
 import { InvoiceService } from 'src/app/core/services/invoice.service';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { Invoice } from 'src/app/shared/interfaces/invoice.interface';
 import { getJob } from 'src/app/shared/interfaces/job.interface';
 import { DeliveryNote } from 'src/app/shared/interfaces/delivery-note.interface';
@@ -26,8 +24,6 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
     ReactiveFormsModule,
     RouterModule,
     SmartFormModule,
-    SelectDropdownComponent,
-    FormFieldComponent,
     ActionButtonComponent
   ],
   templateUrl: './create-invoice.component.html',
@@ -35,6 +31,9 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 })
 export class CreateInvoiceComponent implements OnInit, OnChanges {
   @Input() open = false;
+  /** When opened from a delivery note, the job and DN the invoice starts from. */
+  @Input() presetJobId: string | null = null;
+  @Input() presetDnId: string | null = null;
   @Output() saved = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
 
@@ -56,6 +55,11 @@ export class CreateInvoiceComponent implements OnInit, OnChanges {
   editInvoiceCustomerId = signal<string | null>(null);
   jobs = signal<getJob[]>([]);
   deliveryNotes = signal<DeliveryNote[]>([]);
+  jobOptions = computed(() => this.jobs().map(j => ({ label: j.jobId || '', value: j._id })));
+  dnOptions = computed(() => this.deliveryNotes().map(dn => ({ label: dn.dnNo || '', value: dn._id })));
+  private destroyRef = inject(DestroyRef);
+  /** True while the form is patched from code, so the job/DN valueChanges handlers don't clear what was just loaded. */
+  private patching = false;
   selectedJob: any = null;
   pendingDeliveryItems: any[] = [];
   dnInvoiceSummary: Record<string, { deliveredQty: number; invoicedQty: number; balanceQty: number }> = {};
@@ -85,6 +89,13 @@ export class CreateInvoiceComponent implements OnInit, OnChanges {
   private routeMode = false;
 
   ngOnInit(): void {
+    this.f['jobId'].valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(id => {
+      if (!this.patching) this.onJobSelect(id);
+    });
+    this.f['dnNos'].valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(ids => {
+      if (!this.patching) this.onDnSelect(this.mapDnIdsToObjects(ids));
+    });
+
     this.routeMode = (this.route.snapshot.routeConfig?.path || '').includes('invoice-register/');
     if (this.routeMode) {
       this.open = true;
@@ -163,8 +174,14 @@ export class CreateInvoiceComponent implements OnInit, OnChanges {
     this.loadDeliveryNotes();
   }
 
+  /** Runs a programmatic form update without triggering the job/DN change handlers. */
+  private quietly(fn: () => void): void {
+    this.patching = true;
+    try { fn(); } finally { this.patching = false; }
+  }
+
   private resetCreateForm(): void {
-    this.invoiceForm.reset({
+    this.quietly(() => this.invoiceForm.reset({
       date: new Date().toISOString().split('T')[0],
       invoiceNo: '',
       jobId: null,
@@ -175,7 +192,7 @@ export class CreateInvoiceComponent implements OnInit, OnChanges {
       paymentTerms: '',
       amountWords: '',
       amountFigures: 0
-    });
+    }));
     this.itemsFormArray.clear();
     this.deliveryNotes.set([]);
     this.pendingDeliveryItems = [];
@@ -244,7 +261,7 @@ export class CreateInvoiceComponent implements OnInit, OnChanges {
               )
             ];
 
-            this.invoiceForm.patchValue({
+            this.quietly(() => this.invoiceForm.patchValue({
               date: new Date(invoice.date).toISOString().split('T')[0],
               invoiceNo: invoice.invoiceNo,
               jobId: jobId,
@@ -255,7 +272,7 @@ export class CreateInvoiceComponent implements OnInit, OnChanges {
               paymentTerms: invoice.paymentTerms || '',
               amountFigures: invoice.amount,
               amountWords: convertNumberToWords(invoice.amount) + ` ${this.currency()} Only`
-            });
+            }));
 
             this.jobService.getOneJob(jobId as string).subscribe({
               next: (jobData: any) => {
@@ -402,11 +419,24 @@ export class CreateInvoiceComponent implements OnInit, OnChanges {
         });
 
         this.jobs.set(Array.from(uniqueJobsMap.values()));
+        this.applyPreset();
       },
       error: (err) => {
         console.error('Error loading DNs', err);
         this.notificationService.error('Failed to load Delivery Notes');
       }
+    });
+  }
+
+  /** Picks the job and DN the drawer was opened for, once the invoiced totals are known. */
+  private applyPreset(): void {
+    const jobId = this.presetJobId;
+    const dnId = this.presetDnId;
+    if (!jobId || !this.jobs().some(j => j._id === jobId)) return;
+    this.f['jobId'].setValue(jobId);
+    if (!dnId) return;
+    this.loadItemInvoicedTotals(jobId).then(() => {
+      if (this.deliveryNotes().some(dn => dn._id === dnId)) this.f['dnNos'].setValue([dnId]);
     });
   }
 
@@ -440,20 +470,20 @@ export class CreateInvoiceComponent implements OnInit, OnChanges {
     // Auto-patch Customer info from the First DN of this job
     if (jobDns.length > 0) {
       const firstDn = jobDns[0];
-      this.invoiceForm.patchValue({
+      this.quietly(() => this.invoiceForm.patchValue({
         customerName: (firstDn as any)?.companyName || firstDn?.clientName || '',
         customerLpo: firstDn.customerLpoNumber || '',
         dnNos: [], // Reset selection
         items: []
-      });
+      }));
     } else {
       const clientName = (job as any).quoteId?.clientName || (job as any).clientName || '';
-      this.invoiceForm.patchValue({
+      this.quietly(() => this.invoiceForm.patchValue({
         customerName: clientName,
         customerLpo: '',
         dnNos: [],
         items: []
-      });
+      }));
     }
 
     this.itemsFormArray.clear();
@@ -476,14 +506,14 @@ export class CreateInvoiceComponent implements OnInit, OnChanges {
 
 
   resetFormAfterJob() {
-    this.invoiceForm.patchValue({
+    this.quietly(() => this.invoiceForm.patchValue({
       customerName: '',
       customerLpo: '',
       dnNos: [],
       items: [],
       amountWords: '',
       amountFigures: 0
-    });
+    }));
     this.itemsFormArray.clear();
     this.deliveryNotes.set([]);
   }
@@ -653,6 +683,7 @@ export class CreateInvoiceComponent implements OnInit, OnChanges {
   onSubmit() {
     this.isSubmitted.set(true);
     if (this.invoiceForm.invalid) {
+      this.invoiceForm.markAllAsTouched();
       this.notificationService.error('Please fill all required fields');
       return;
     }

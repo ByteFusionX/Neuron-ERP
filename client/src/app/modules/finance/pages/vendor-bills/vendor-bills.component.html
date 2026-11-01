@@ -3,7 +3,7 @@
     #grid
     class="flex-1 min-h-0"
     [fillHeight]="true"
-    title="Vendor Bills"
+    title="Supplier Bills"
     subtitle="Approved supplier commitments visible early for payment preparation"
     [breadcrumbs]="breadcrumbs"
     rowKey="_id"
@@ -14,9 +14,10 @@
     [loading]="isLoading"
     [pageSize]="pageSize"
     searchPlaceholder="Search by PO, supplier, customer, or job"
-    emptyMessage="No approved purchase orders are waiting for finance"
+    [emptyMessage]="emptyMessage"
+    initialViewId="all"
     [views]="views"
-    storageKey="finance-vendor-bills"
+    storageKey="finance-vendor-bills-invoices"
     [detailTabs]="detailTabs"
     [detailTitle]="title"
     [detailSubtitle]="subtitle"
@@ -29,15 +30,15 @@
     <ng-template #detailMetaTemplate let-row>
       <div class="vendor-bill-meta">
         <p class="vendor-bill-meta-label">Supplier</p>
-        <p class="vendor-bill-meta-value">{{ row.supplierId?.supplierName || '-' }}</p>
+        <p class="vendor-bill-meta-value">{{ row.supplierName || row.supplierId?.supplierName || '-' }}</p>
       </div>
       <div class="vendor-bill-meta">
-        <p class="vendor-bill-meta-label">PO Value</p>
+        <p class="vendor-bill-meta-label">{{ row.invoiceNo ? 'Invoice Value' : 'PO Value' }}</p>
         <p class="vendor-bill-meta-value">{{ amount(row) }}</p>
       </div>
       <div class="vendor-bill-meta">
-        <p class="vendor-bill-meta-label">Receipt</p>
-        <p class="vendor-bill-meta-value">{{ row.receiptStatus || 'Not Received' }}</p>
+        <p class="vendor-bill-meta-label">{{ row.invoiceNo ? 'Status' : 'Receipt' }}</p>
+        <p class="vendor-bill-meta-value">{{ row.status || row.receiptStatus || 'Not Received' }}</p>
       </div>
       <div class="vendor-bill-meta">
         <p class="vendor-bill-meta-label">Payment Terms</p>

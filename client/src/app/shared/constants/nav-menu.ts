@@ -222,6 +222,21 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     ],
   },
   {
+    id: 'administration',
+    label: 'Logistics',
+    group: 'Operations',
+    items: [
+      {
+        id: 'dispatch',
+        label: 'Dispatch',
+        icon: 'heroTruck',
+        route: '/dispatch',
+        privilegeKey: 'dispatch',
+        privilegeValue: 'none',
+      },
+    ],
+  },
+  {
     id: 'inventory',
     label: 'Inventory',
     group: 'Operations',
@@ -243,21 +258,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         privilegeKey: 'inventory',
         privilegeValue: 'none',
         inventorySubKey: 'stockEntries',
-      },
-    ],
-  },
-  {
-    id: 'administration',
-    label: 'Logistics',
-    group: 'Operations',
-    items: [
-      {
-        id: 'dispatch',
-        label: 'Dispatch',
-        icon: 'heroTruck',
-        route: '/dispatch',
-        privilegeKey: 'dispatch',
-        privilegeValue: 'none',
       },
     ],
   },
@@ -335,13 +335,28 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     group: 'Finance',
     items: [
       {
+        id: 'customer-bills',
+        label: 'Customer Bill',
+        icon: 'heroDocumentArrowUp',
+        route: '/finance/customer-bills',
+        privilegeKey: 'invoice',
+        privilegeValue: 'none',
+      },
+      {
         id: 'vendor-bills',
-        label: 'Vendor Bill',
-        icon: 'heroClipboardDocumentList',
+        label: 'Supplier Bill',
+        icon: 'heroBuildingStorefront',
         route: '/finance/vendor-bills',
         privilegeKey: 'invoice',
         privilegeValue: 'none',
       },
+    ],
+  },
+  {
+    id: 'finance-payment',
+    label: 'Payments',
+    group: 'Finance',
+    items: [
       {
         id: 'payables',
         label: 'Payable',

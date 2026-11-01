@@ -1,0 +1,63 @@
+<app-sf-drawer [open]="true" title="Create Customer Invoice" [subtitle]="drawerSubtitle" width="1040px" [dirty]="form.dirty" (closed)="!saving && closed.emit()">
+<form id="customer-invoice-form" [formGroup]="form" (ngSubmit)="save()" novalidate>
+
+
+    <app-sf-section title="Invoice details" columns="2">
+      <app-sf-field label="DN No" optional [control]="form.controls.dnNo">
+        <app-sf-input formControlName="dnNo" readonly></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Invoice No" [control]="form.controls.invoiceNo">
+        <app-sf-input formControlName="invoiceNo" readonly></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Job No" [control]="form.controls.jobNo">
+        <app-sf-input formControlName="jobNo" readonly></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Client" [control]="form.controls.clientName">
+        <app-sf-input formControlName="clientName" readonly></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Attention" optional [control]="form.controls.attention">
+        <app-sf-input formControlName="attention"></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Invoice Date" [control]="form.controls.invoiceDate">
+        <app-sf-date formControlName="invoiceDate" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
+      </app-sf-field>
+      <app-sf-field label="LPO Ref (Customer LPO No)" optional [control]="form.controls.lpoRef">
+        <app-sf-input formControlName="lpoRef"></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Subject" optional [control]="form.controls.subject">
+        <app-sf-input formControlName="subject"></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Payment Terms" optional [control]="form.controls.paymentTerms">
+        <app-sf-input formControlName="paymentTerms"></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Payment Method" optional [control]="form.controls.paymentMethod">
+        <app-sf-combobox formControlName="paymentMethod" [options]="paymentMethodOptions" placeholder="Select method"></app-sf-combobox>
+      </app-sf-field>
+    </app-sf-section>
+    <hr class="my-6 border-t border-gray-200 dark:border-erp-border-dark">
+    <section>
+      <h3 class="mb-2 text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">Items</h3>
+      <app-invoice-item-entry [items]="invoiceLines" [currency]="currency" [title]="'From the ' + sourceLabel"></app-invoice-item-entry>
+      <div *ngIf="jobTotals as job" class="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-erp-border-dark dark:bg-erp-surface-dark">
+        <div class="flex flex-wrap gap-x-6 gap-y-2">
+          <div><p class="text-[10px] font-medium uppercase tracking-wider text-gray-500">Job total price</p><p class="text-sm font-bold tabular-nums text-gray-900 dark:text-gray-100">{{ job.price | number:'1.2-2' }}</p></div>
+          <div><p class="text-[10px] font-medium uppercase tracking-wider text-gray-500">Job total discount</p><p class="text-sm font-bold tabular-nums text-gray-900 dark:text-gray-100">{{ job.discount | number:'1.2-2' }}</p></div>
+          <div><p class="text-[10px] font-medium uppercase tracking-wider text-gray-500">Job net total</p><p class="text-sm font-bold tabular-nums text-gray-900 dark:text-gray-100">{{ jobNet | number:'1.2-2' }}</p></div>
+        </div>
+        <div class="flex flex-wrap gap-x-6 gap-y-2">
+          <div><p class="text-[10px] font-medium uppercase tracking-wider text-gray-500">DN total price</p><p class="text-sm font-bold tabular-nums text-gray-900 dark:text-gray-100">{{ dnPrice | number:'1.2-2' }}</p></div>
+          <div><p class="text-[10px] font-medium uppercase tracking-wider text-gray-500">DN total discount</p><p class="text-sm font-bold tabular-nums text-gray-900 dark:text-gray-100">{{ dnDiscount | number:'1.2-2' }}</p></div>
+          <div><p class="text-[10px] font-medium uppercase tracking-wider text-gray-500">DN net total</p><p class="text-sm font-bold tabular-nums text-gray-900 dark:text-gray-100">{{ dnNet | number:'1.2-2' }}</p></div>
+        </div>
+      </div>
+    </section>
+    <p *ngIf="error" role="alert" class="mt-3 text-sm text-red-600">{{ error }}</p>
+
+</form>
+  <ng-container sfDrawerFooter>
+    <app-action-button variant="secondary" (click)="closed.emit()" [disabled]="saving">Cancel</app-action-button>
+    <app-action-button variant="primary" type="submit" form="customer-invoice-form" [disabled]="saving">
+      {{ saving ? 'Submitting...' : 'Submit Invoice' }}
+    </app-action-button>
+  </ng-container>
+</app-sf-drawer>

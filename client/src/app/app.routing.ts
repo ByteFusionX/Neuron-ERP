@@ -266,6 +266,7 @@ export const routes: Routes = [
     children: [
       { path: '', redirectTo: 'receivables', pathMatch: 'full' },
       { path: 'receivables', loadComponent: () => import('./modules/finance/pages/receivables/receivables.component').then((c) => c.ReceivablesComponent) },
+      { path: 'customer-bills', loadComponent: () => import('./modules/finance/pages/customer-bills/customer-bills.component').then((c) => c.CustomerBillsComponent) },
       { path: 'vendor-bills', loadComponent: () => import('./modules/finance/pages/vendor-bills/vendor-bills.component').then((c) => c.VendorBillsComponent) },
       {
         path: 'payables',
