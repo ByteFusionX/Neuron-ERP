@@ -1,0 +1,12 @@
+import { Router } from 'express';
+import { requirePrivilege } from '../common/middlewares/privilege.middleware';
+import { createCustomerInvoice, listCustomerInvoices, customerInvoicePo, customerInvoiceDn, listPdc, updatePdcStatus } from '../controllers/customerInvoice.controller';
+const router = Router();
+router.use(requirePrivilege('invoice'));
+router.get('/', listCustomerInvoices);
+router.get('/pdc', listPdc);
+router.patch('/pdc/:id/status', requirePrivilege('invoice', 'pdcApprove'), updatePdcStatus);
+router.get('/purchase-order/:id', requirePrivilege('invoice', 'createInvoice'), customerInvoicePo);
+router.get('/delivery-note/:id', requirePrivilege('invoice', 'createInvoice'), customerInvoiceDn);
+router.post('/', requirePrivilege('invoice', 'createInvoice'), createCustomerInvoice);
+export default router;

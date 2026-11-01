@@ -4,7 +4,7 @@ import { InvoiceAudit } from '../models/invoiceAudit.model';
 import DeliveryNote from '../models/deliveryNote.model';
 import mongoose from 'mongoose';
 import { getEmployeeData } from '../common/utils/util';
-import { getNextSequence, peekNextSequence } from '../models/counter.model';
+import { issueDocNo, peekDocNo } from '../services/docNumber.service';
 import { applyDnItemRejections, RejectDnItemInput } from './deliveryNote.controller';
 import { createCreditNote } from './creditNote.controller';
 import { createNotificationWithPrivileges } from './notification.controller';
@@ -130,8 +130,7 @@ export const createInvoice = async (req: Request, res: Response) => {
             return res.status(401).json({ success: false, message: 'Unauthorized' });
         }
 
-        const nextNumber = await getNextSequence('invoiceNo', seedInvoiceNumber);
-        const invoiceNo = `INV-${nextNumber.toString().padStart(4, '0')}`;
+        const invoiceNo = await issueDocNo('INV');
 
         const newInvoice = new Invoice({
             invoiceNo,
@@ -340,22 +339,9 @@ export const updateInvoice = async (req: Request, res: Response) => {
     }
 };
 
-const seedInvoiceNumber = async (): Promise<number> => {
-    const invoices = await Invoice.find({ isDeleted: false }).select('invoiceNo').lean();
-    let maxNum = 0;
-    for (const inv of invoices) {
-        const match = (inv.invoiceNo || '').match(/^INV-(\d+)/);
-        if (match) {
-            maxNum = Math.max(maxNum, parseInt(match[1], 10));
-        }
-    }
-    return maxNum;
-};
-
 export const generateInvoiceNumber = async (req: Request, res: Response) => {
     try {
-        const nextNumber = await peekNextSequence('invoiceNo', seedInvoiceNumber);
-        const invoiceNo = `INV-${nextNumber.toString().padStart(4, '0')}`;
+        const invoiceNo = await peekDocNo('INV');
         res.status(200).json({ success: true, invoiceNo });
     } catch (error) {
         console.error('Error generating invoice number:', error);
