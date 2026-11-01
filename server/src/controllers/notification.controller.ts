@@ -497,7 +497,7 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
             return { routePath: '/grn/grn-list', routeData: { view: 'arriving' } };
 
         case 'LpoPlacedBilling':
-            return { routePath: '/finance/vendor-bills', routeData: { view: 'upcoming' } };
+            return { routePath: '/finance/vendor-bills', routeData: { view: 'new' } };
 
         case 'GrnItemsRejected': {
             const grnId = additionalData?.grnId || referenceId?._id?.toString?.() || referenceId?.toString?.();

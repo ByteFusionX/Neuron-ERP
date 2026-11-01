@@ -331,6 +331,9 @@ export interface Privileges {
     viewInvoicesVsDn: boolean;
     viewCancelledAdjusted: boolean;
     viewReissued: boolean;
+    piCreateEdit?: boolean;
+    piApprove?: boolean;
+    pdcApprove?: boolean;
   };
   claims: {
     viewReport: string;

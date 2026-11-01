@@ -230,7 +230,7 @@ export class RoleFormDrawerComponent implements OnChanges {
         { path: 'purchaseOrder.canInitiateLPO', label: 'Initiate LPO and issue PO' },
         { path: 'purchaseOrder.canApprovePOs', label: 'Approve purchase orders' },
         { path: 'purchaseOrder.canReissueAndRevoke', label: 'Re-issue and revoke POs' },
-        { path: 'purchaseOrder.canCancel', label: 'Cancel POs and move their quantity to another supplier' },
+        { path: 'purchaseOrder.canCancel', label: 'Cancel POs and replace the supplier' },
       ],
     },
     {
@@ -255,6 +255,9 @@ export class RoleFormDrawerComponent implements OnChanges {
         { path: 'invoice.viewInvoicesVsDn', label: 'View invoices vs DN' },
         { path: 'invoice.viewCancelledAdjusted', label: 'View cancelled / adjusted' },
         { path: 'invoice.viewReissued', label: 'View reissued' },
+        { path: 'invoice.piCreateEdit', label: 'Proforma invoice: create / edit' },
+        { path: 'invoice.piApprove', label: 'Proforma invoice: update status' },
+        { path: 'invoice.pdcApprove', label: 'PDC: approve, reject and revoke' },
       ],
     },
     {
@@ -509,6 +512,9 @@ export class RoleFormDrawerComponent implements OnChanges {
         viewInvoicesVsDn: [false],
         viewCancelledAdjusted: [false],
         viewReissued: [false],
+        piCreateEdit: [false],
+        piApprove: [false],
+        pdcApprove: [false],
       }),
       claims: this._fb.group({
         viewReport: 'none',
@@ -697,7 +703,9 @@ export class RoleFormDrawerComponent implements OnChanges {
           !!privileges.invoice.createInvoice ||
           !!privileges.invoice.viewInvoicesVsDn ||
           !!privileges.invoice.viewCancelledAdjusted ||
-          !!privileges.invoice.viewReissued
+          !!privileges.invoice.viewReissued ||
+          !!privileges.invoice.piCreateEdit ||
+          !!privileges.invoice.piApprove || !!privileges.invoice.pdcApprove
         : false,
       this.claimsChecked = privileges.claims?.viewReport !== 'none',
       this.portalChecked = privileges.portalManagement
@@ -893,6 +901,9 @@ export class RoleFormDrawerComponent implements OnChanges {
               viewInvoicesVsDn: false,
               viewCancelledAdjusted: false,
               viewReissued: false,
+              piCreateEdit: false,
+              piApprove: false,
+              pdcApprove: false,
             },
           },
         });
@@ -905,6 +916,9 @@ export class RoleFormDrawerComponent implements OnChanges {
               viewInvoicesVsDn: false,
               viewCancelledAdjusted: false,
               viewReissued: false,
+              piCreateEdit: false,
+              piApprove: false,
+              pdcApprove: false,
             },
           },
         });
