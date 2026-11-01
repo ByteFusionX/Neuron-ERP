@@ -183,6 +183,8 @@ export class ViewDealsheetComponent implements OnInit {
     { key: 'image', label: 'Image', type: 'image', imagePreview: true, align: 'center', width: '5rem' },
     { key: 'quantity', label: 'Qty', type: 'number', align: 'center' },
     { key: 'uom', label: 'UOM', align: 'center', hiddenByDefault: true },
+    { key: 'margin', label: 'Margin', type: 'text', align: 'right' },
+    { key: 'marginValue', label: 'Margin Value', type: 'currency', align: 'right', total: true, hiddenByDefault: true },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency', align: 'right' },
     { key: 'totalCost', label: 'Total Cost', type: 'currency', align: 'right', total: true },
     { key: 'unitSellingPrice', label: 'Unit Selling Price', type: 'currency', align: 'right' },
@@ -682,15 +684,32 @@ export class ViewDealsheetComponent implements OnInit {
 
   /** Totals shown in the item table footer, each figure under the column it belongs to. */
   get itemFootRows(): DetailFootRow[] {
-    const cost = this.viewMode === 'po' ? this.poSummaryTotalCost : this.data.priceDetails.totalCost;
+    // Only the listed lines: deal-level additional costs and discounts belong to the Pricing tab, not this table.
+    const po = this.viewMode === 'po';
+    let sell = 0;
+    let cost = 0;
+    for (const item of this.data.quoteItems ?? []) {
+      for (const detail of item?.itemDetails ?? []) {
+        if (!detail.dealSelected) continue;
+        sell += (Number(detail.unitSellingPrice) || 0) * (Number(detail.quantity) || 0);
+        cost += po ? this.getPoItemTotalCost(detail) : (Number(detail.unitCost) || 0) * (Number(detail.quantity) || 0);
+      }
+    }
     return [{
       label: 'Total',
       emphasis: true,
       cells: {
-        totalSellingPrice: { value: this.data.priceDetails.totalSellingPrice, format: 'currency' },
+        totalSellingPrice: { value: sell, format: 'currency' },
         totalCost: { value: cost, format: 'currency' },
+        marginValue: { value: sell - cost, format: 'currency' },
+        margin: { value: sell > 0 ? `${(((sell - cost) / sell) * 100).toFixed(2)}%` : '-', format: 'text' },
       },
     }];
+  }
+
+  /** Margin of one line (or the whole table) against its selling price, as the PR view shows it. */
+  private lineMarginCells(sell: number, cost: number): { marginValue: number; margin: string } {
+    return { marginValue: sell - cost, margin: sell > 0 ? `${(((sell - cost) / sell) * 100).toFixed(2)}%` : '-' };
   }
 
   /**
@@ -826,6 +845,10 @@ export class ViewDealsheetComponent implements OnInit {
           totalSellingPrice: detail.unitSellingPrice * detail.quantity,
           unitCost,
           totalCost: this.viewMode === 'po' ? this.getPoItemTotalCost(detail) : detail.quantity * detail.unitCost,
+          ...this.lineMarginCells(
+            detail.unitSellingPrice * detail.quantity,
+            this.viewMode === 'po' ? this.getPoItemTotalCost(detail) : detail.quantity * detail.unitCost,
+          ),
           supplier: detail.supplierName || (detail.supplierId ? this.getSupplierName(detail.supplierId) : '-') || '-',
         });
         // Parts of a split line follow it as sub rows (1.1, 1.2 ...); the line's own cost already covers them.

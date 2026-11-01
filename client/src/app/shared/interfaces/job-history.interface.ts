@@ -1,7 +1,7 @@
 export interface TimelineEvent {
   id: string;
   timestamp: string | Date;
-  pipeline: 'purchaseRequest' | 'purchaseOrder' | 'grn' | 'technical' | 'deliveryNote';
+  pipeline: 'purchaseRequest' | 'purchaseOrder' | 'grn' | 'technical' | 'deliveryNote' | 'invoice';
   eventType: string;
   title: string;
   description: string;

@@ -11,6 +11,8 @@ export interface filterJob {
     access?: string;
     userId?: string;
     allocateStatus?: allocateStatus | null;
+    allocateStatuses?: allocateStatus[];
+    withoutPi?: boolean;
     sortKey?: string | null;
     sortDir?: 'asc' | 'desc' | null;
     filters?: { key: string; op: string; value?: unknown }[];
@@ -28,6 +30,8 @@ export interface getJob {
     status: string;
     createdDate: string;
     updatedDate?: string;
+    holdReason?: string;
+    lostReason?: string;
     clientDetails?: any;
     salesPersonDetails?: any;
     departmentDetails?: any;

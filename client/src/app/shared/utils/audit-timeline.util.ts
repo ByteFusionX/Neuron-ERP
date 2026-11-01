@@ -12,7 +12,7 @@ const ACTION_TONES: Record<string, DetailTimelineEntry['tone']> = {
   cancelled: 'bad', 'partly-cancelled': 'warn', revoked: 'bad',
   allocated: 'info', 'procurement-transferred': 'info', completed: 'good', lost: 'bad',
   'lpo-closed': 'good', 'return-sent': 'warn', 'return-resolved': 'good',
-  dispatched: 'info', delivered: 'good', 'pod-files': 'info', 'items-rejected': 'bad',
+  invoiced: 'good', dispatched: 'info', delivered: 'good', 'pod-files': 'info', 'items-rejected': 'bad',
 };
 
 /** Friendly module names for the entity types recorded in the audit log. */
@@ -20,7 +20,8 @@ const AUDIT_MODULE_LABELS: Record<string, string> = {
   enquiry: 'Enquiry', quotation: 'Quotation', job: 'Job Sheet', customer: 'Customer', employee: 'Employee',
   supplier: 'Supplier', product: 'Product', masterList: 'Master List', announcement: 'Announcement',
   purchaseRequest: 'Purchase Request', generalPurchaseRequest: 'General Purchase Request',
-  purchaseOrder: 'Purchase Order (LPO)', grn: 'GRN', deliveryNote: 'Delivery Note',
+  purchaseOrder: 'Purchase Order (LPO)', grn: 'GRN', deliveryNote: 'Delivery Note', proformaInvoice: 'Proforma Invoice',
+  customerInvoice: 'Customer Invoice',
 };
 
 export function auditModuleLabel(type: string): string {

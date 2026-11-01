@@ -16,6 +16,7 @@ interface Job extends Document {
     productDistribution?: boolean;
     projectInstallation?: boolean;
     amc?: boolean;
+    holdReason?: string;
     lostReason?: string;
     lostAt?: Date;
     lostBy?: Types.ObjectId;
@@ -98,6 +99,7 @@ const jobSchema = new Schema<Job>({
     },
     allocatedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     allocatedAt: { type: Date },
+    holdReason: { type: String },
     lostReason: { type: String },
     lostAt: { type: Date },
     lostBy: { type: Schema.Types.ObjectId, ref: 'Employee' },

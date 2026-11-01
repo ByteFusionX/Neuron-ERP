@@ -109,6 +109,21 @@
                     (open)="onDocumentOpen($event)"
                     (download)="onDocumentDownload($event)"></app-detail-documents>
 
+                <ng-container *ngSwitchCase="isStageTab(panelTab) ? panelTab : ''">
+                    <p *ngIf="stagesStatus === 'loading'" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Loading details&hellip;</p>
+                    <p *ngIf="stagesStatus === 'error'" class="py-6 text-center text-[13px] text-red-600 dark:text-red-400">Could not load this stage. Reopen this tab to retry.</p>
+                    <ng-container *ngIf="stagesStatus === 'ready' && isStageTab(panelTab)">
+                        <app-detail-table *ngIf="stages[panelTab].length"
+                            [columns]="stageColumns(panelTab)"
+                            [rows]="stageRows[panelTab]"
+                            [currency]="quote?.currency"
+                            numbered
+                            [footRows]="stageFoot[panelTab]"
+                            emptyMessage="Nothing at this stage for this job yet."></app-detail-table>
+                        <p *ngIf="!stages[panelTab].length" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Nothing at this stage for this job yet.</p>
+                    </ng-container>
+                </ng-container>
+
                 <ng-container *ngSwitchCase="'workflow'">
                     <p *ngIf="workflowStatus === 'loading'" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Loading workflow…</p>
                     <p *ngIf="workflowStatus === 'error'" class="py-6 text-center text-[13px] text-red-600 dark:text-red-400">Could not load the workflow. Reopen this tab to retry.</p>

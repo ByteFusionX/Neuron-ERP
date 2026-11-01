@@ -8,6 +8,7 @@ import { ToastrService } from 'ngx-toastr';
 import * as FileSaver from 'file-saver';
 
 import { JobService } from 'src/app/core/services/job/job.service';
+import { ProformaInvoice, ProformaInvoiceService } from 'src/app/core/services/proforma-invoice.service';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
@@ -453,9 +454,23 @@ export class JobListComponent {
     if (row) setTimeout(() => this.grid?.openRow(row));
   }
 
-  onRowOpen(): void {
+  private piService = inject(ProformaInvoiceService);
+  private customerBills = new Map<string, { bills: ProformaInvoice[]; status: string }>();
+
+  onRowOpen(row: getJob): void {
     this.detailLoading = true;
     setTimeout(() => (this.detailLoading = false), 250);
+    const state = { bills: [] as ProformaInvoice[], status: 'Loading customer bills…' };
+    this.customerBills.set(row._id, state);
+    const loadPage = (page: number) => this.piService.list({ job: row._id, page, limit: 100 }).subscribe({
+      next: (result) => {
+        state.bills.push(...result.data);
+        if (state.bills.length < result.total && result.data.length) loadPage(page + 1);
+        else state.status = state.bills.length ? '' : 'No customer bills for this job.';
+      },
+      error: () => { state.status = 'Could not load customer bills. Close and reopen this job to retry.'; },
+    });
+    loadPage(1);
   }
 
   onRowAction(event: DataGridRowActionEvent<getJob>): void {
@@ -602,6 +617,27 @@ export class JobListComponent {
 
   // ---- Details tab -----------------------------------------------------------------------
 
+  private customerBillSections(row: getJob): DetailOverviewSection[] {
+    const state = this.customerBills.get(row._id);
+    if (!state || state.status) return [{
+      title: 'Customer Bills',
+      fields: [{ type: 'field', label: 'Customer Bills', value: state?.status || 'Loading customer bills…' }],
+    }];
+    return state.bills.map((pi, index) => ({
+      title: state.bills.length > 1 ? `Customer Bills (${index + 1})` : 'Customer Bills',
+      columns: '2',
+      fields: [
+        { type: 'field', label: 'PI Number', value: pi.piNo },
+        { type: 'field', label: 'PI Date', value: this.datePipe.transform(pi.createdAt, 'dd MMM yyyy') || '—' },
+        { type: 'field', label: 'Created By', value: this.fullName(pi.createdBy) || '—' },
+        { type: 'field', label: 'Payment Term', value: pi.paymentTerms || '—' },
+        { type: 'field', label: 'Expected Date', value: this.datePipe.transform(pi.expectedDate, 'dd MMM yyyy') || '—' },
+        { type: 'field', label: 'Expected Amount', value: `${this.numberFormat.transform(pi.expectedAmount ?? 0)} ${pi.currency || 'QAR'}`, numeric: true },
+        { type: 'field', label: 'Status', value: pi.status },
+      ],
+    }));
+  }
+
   overviewSections(row: getJob): DetailOverviewSection[] {
     return [
       {
@@ -617,8 +653,11 @@ export class JobListComponent {
           { type: 'field', label: 'Department', value: row.departmentDetails?.[0]?.departmentName ?? '' },
           { type: 'field', label: 'Last Updated', value: row.updatedDate ? (this.datePipe.transform(row.updatedDate, 'dd MMM yyyy') ?? '—') : '—' },
           { type: 'field', label: 'Procurement Person', value: this.fullName(row.procurementPerson) || '—', visible: !!row.procurementPerson },
+          { type: 'field', label: 'Hold Reason', value: row.holdReason || '—', noHover: true, visible: row.allocateStatus === 'On Hold' },
+          { type: 'field', label: 'Lost Reason', value: row.lostReason || '—', noHover: true, visible: row.allocateStatus === 'Lost' },
         ],
       },
+      ...this.customerBillSections(row),
       {
         title: 'Quotation',
         columns: '2',
