@@ -29,7 +29,9 @@ import { CreateDnComponent } from '../create-dn/create-dn.component';
 import { CustomerInvoiceFormComponent } from 'src/app/modules/finance/pages/vendor-bills/customer-invoice-form.component';
 import { CustomerInvoiceService } from 'src/app/core/services/customer-invoice.service';
 import { InvoiceService } from 'src/app/core/services/invoice.service';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { ConfirmDeliveryDrawerComponent } from '../../components/confirm-delivery-drawer/confirm-delivery-drawer.component';
+import { ReturnDnDrawerComponent } from '../../components/return-dn-drawer/return-dn-drawer.component';
 
 interface FilterParams {
   [key: string]: any;
@@ -62,6 +64,7 @@ interface FilterParams {
     CreateDnComponent,
     CustomerInvoiceFormComponent,
     ConfirmDeliveryDrawerComponent,
+    ReturnDnDrawerComponent,
     IconsModule,
     MatMenuModule
   ],
@@ -82,6 +85,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   private employeeService = inject(EmployeeService);
   private subscriptions = new Subscription();
   private auditLog = inject(AuditLogService);
+  private confirmDialog = inject(ConfirmDialogService);
   private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
 
   canCreateDn = signal<boolean>(false);
@@ -108,7 +112,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   ];
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Dispatch' }, { label: 'Delivery Notes' }];
   readonly detailTabs: DataGridDetailTab[] = [
-    { id: 'details', label: 'Details', icon: 'info' },
+    { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'documents', label: 'Documents', icon: 'files' },
     { id: 'history', label: 'History', icon: 'history' },
@@ -202,15 +206,12 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
         key: 'clientName',
         label: 'Customer',
       },
-      { key: 'deliveryType', label: 'Type', type: 'badge' },
       { key: 'grnNumbers', label: 'GRN No', valueGetter: (item: any) => (item.grnNumbers || []).join(', ') || '-' },
       {
         key: 'customerLpoNumber',
         label: 'LPO Ref',
         valueGetter: (item) => item.customerLpoNumber || 'N/A'
       },
-      { key: 'customerInvoiceNo', label: 'Invoice No', valueGetter: (item: any) => item.customerInvoiceNo || '-' },
-      { key: 'customerInvoicePaymentTerms', label: 'Payment Terms', valueGetter: (item: any) => item.customerInvoicePaymentTerms || '-' },
       {
         key: 'status',
         label: 'Status',
@@ -224,24 +225,31 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
 
   private setupReadyColumns(): void {
     this.tableColumns = [
+      { key: 'grnNo', label: 'GRN No', valueGetter: (row: any) => row.grnNo || '-' },
+      { key: 'grnDate', label: 'GRN Date', type: 'date' },
       { key: 'job.jobId', label: 'Job ID', valueGetter: (row: any) => row.job?.jobId || 'N/A' },
-      { key: 'poNumbers', label: 'PO Number', valueGetter: (row: any) => (row.poNumbers || []).join(', ') || '-' },
-      { key: 'grnNumbers', label: 'GRN No', valueGetter: (row: any) => (row.grnNumbers || []).join(', ') || '-' },
-      { key: 'productNames', label: 'Products', valueGetter: (row: any) => row.productNames || '-' },
-      { key: 'productCount', label: 'Items', type: 'number' },
-      { key: 'acceptedQty', label: 'Deliverable Qty', type: 'number' },
-      { key: 'lastGrnDate', label: 'Last Received', type: 'date', width: '120px' },
+      { key: 'clientName', label: 'Customer', valueGetter: (row: any) => row.clientName || '-' },
+      { key: 'customerPoNumber', label: 'Customer PO', valueGetter: (row: any) => row.customerPoNumber || '-' },
+      { key: 'subject', label: 'Subject', valueGetter: (row: any) => row.subject || '-' },
+      { key: 'prNo', label: 'PR No', valueGetter: (row: any) => row.prNo || '-' },
+      { key: 'poNo', label: 'PO No', valueGetter: (row: any) => row.poNo || '-' },
+      { key: 'receivedQty', label: 'Received', type: 'number', align: 'right' },
+      { key: 'deliveryStatus', label: 'Status', type: 'badge', valueGetter: (row: any) => row.deliveryStatus || '-' },
     ];
   }
 
   setupRowActions(): void {
     this.rowActions = [
       { id: 'viewDn', label: 'Detail view', icon: 'eye', quick: true, panel: true },
+      { id: 'editDn', label: 'Edit DN', icon: 'edit', hidden: row => row.status !== DnStatus.DRAFT && row.status !== DnStatus.READY_TO_DELIVER },
+      { id: 'placeOrder', label: 'Place order', icon: 'check', quick: true, hidden: row => row.status !== DnStatus.READY_TO_DELIVER },
       { id: 'confirmDelivery', label: 'Confirm delivery', icon: 'check', quick: true, hidden: row => row.status !== DnStatus.DISPATCHED },
+      { id: 'returnDn', label: 'Return', icon: 'close', quick: true, variant: 'danger', hidden: row => !this.canReturn(row) },
       { id: 'previewDn', label: 'Preview DN', icon: 'files', quick: true },
-      { id: 'downloadDn', label: 'Download DN PDF', icon: 'download' },
+      { id: 'downloadDn', label: 'Download DN', icon: 'download' },
+      { id: 'editInvoice', label: 'Edit invoice', icon: 'edit', hidden: row => !this.canInvoice || !this.hasInvoice(row) },
       { id: 'createInvoice', label: 'Create invoice', icon: 'plus', quick: true, hidden: row => !this.canCreateInvoice(row) },
-      { id: 'previewInvoice', label: 'Preview invoice', icon: 'card', quick: true, hidden: row => !this.hasInvoice(row) },
+      { id: 'previewInvoice', label: 'Preview invoice', icon: 'customerBill', quick: true, hidden: row => !this.hasInvoice(row) },
       { id: 'downloadInvoice', label: 'Download invoice', icon: 'download', hidden: row => !this.hasInvoice(row) },
     ];
   }
@@ -408,8 +416,17 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
       case 'createDn':
         this.openCreateDrawer(null, row.job?._id || row.jobId);
         break;
+      case 'editDn':
+        this.openCreateDrawer(row._id);
+        break;
+      case 'placeOrder':
+        void this.placeOrder(row);
+        break;
       case 'confirmDelivery':
         this.openConfirmDelivery(row);
+        break;
+      case 'returnDn':
+        this.returnDnRow = row;
         break;
       case 'previewDn':
       case 'downloadDn':
@@ -417,6 +434,9 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
         break;
       case 'createInvoice':
         this.openCreateInvoice(row);
+        break;
+      case 'editInvoice':
+        this.openEditInvoice(row);
         break;
       case 'previewInvoice':
       case 'downloadInvoice':
@@ -484,8 +504,60 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     });
   }
 
+  editingInvoice: any = null;
+
+  /** Only a still-pending invoice can be edited (a PDC one only while its PDC is un-actioned). */
+  openEditInvoice(row: DeliveryNote): void {
+    if (this.openingInvoice) return;
+    this.openingInvoice = true;
+    this.customerInvoices.list({ page: 1, limit: 1, search: '', deliveryNote: row._id }).subscribe({
+      next: res => {
+        const inv = res?.data?.[0];
+        const editable = !!inv?._id && inv.status === 'Pending'
+          && (inv.paymentMethod !== 'PDC' || !inv.pdcStatus || inv.pdcStatus === 'Pending');
+        if (!editable) {
+          this.openingInvoice = false;
+          this.toaster.error(inv ? 'This invoice can no longer be edited' : 'Invoice details are not available');
+          return;
+        }
+        this.customerInvoices.prepareDn(row._id).subscribe({
+          next: (response: any) => {
+            this.openingInvoice = false;
+            this.invoiceDn = response?.success ? response.data : response;
+            this.editingInvoice = inv;
+          },
+          error: (error) => {
+            this.openingInvoice = false;
+            this.toaster.error(error?.error?.message || 'Failed to load the invoice for editing');
+          },
+        });
+      },
+      error: () => {
+        this.openingInvoice = false;
+        this.toaster.error('Failed to load the invoice details');
+      },
+    });
+  }
+
+  onInvoiceClosed(): void {
+    this.invoiceDn = null;
+    this.editingInvoice = null;
+  }
+
   onInvoiceSaved(invoice: any): void {
-    if (this.invoiceDn?._id) this.invoicedDnIds.add(this.invoiceDn._id);
+    const wasEdit = !!this.editingInvoice;
+    this.editingInvoice = null;
+    if (wasEdit) {
+      this.invoiceDn = null;
+      this.toaster.success(`Customer invoice ${invoice?.invoiceNo || ''} updated`.replace('  ', ' '));
+      return;
+    }
+    if (this.invoiceDn?._id) {
+      const id = this.invoiceDn._id;
+      this.invoicedDnIds.add(id);
+      const subject = this.historyCache.get(id);
+      if (subject) this.auditLog.getHistory('deliveryNote', id).subscribe({ next: (e) => { if (e?.length) subject.next(toTimelineEntries(e)); }, error: () => {} });
+    }
     this.invoiceDn = null;
     this.toaster.success(`Customer invoice ${invoice?.invoiceNo || ''} created`.replace('  ', ' '));
   }
@@ -494,7 +566,41 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     this._router.navigate(['/dispatch/view', dn._id]);
   }
 
+  /** Place Order confirms, then dispatches the DN (stock leaves the warehouse). */
+  async placeOrder(row: DeliveryNote): Promise<void> {
+    if (row.status !== DnStatus.READY_TO_DELIVER) return;
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Place order?',
+      message: 'The delivery note will be dispatched and its stock taken out of the warehouse.',
+      details: [{ label: 'Delivery note', value: row.dnNo }],
+      confirmLabel: 'Place order',
+    });
+    if (!confirmed) return;
+    this._dnService.dispatchDn(row._id).subscribe({
+      next: () => {
+        this.toaster.success('Order placed; delivery note dispatched');
+        this.loadData(this.activeFilters);
+        this.refreshViewCounts();
+      },
+      error: (error) => this.toaster.error(error?.error?.message || 'Failed to dispatch delivery'),
+    });
+  }
+
   deliveryDn: DeliveryNote | null = null;
+  returnDnRow: DeliveryNote | null = null;
+
+  /** A delivered note (or one already partly returned) with quantity still left to send back. */
+  canReturn(row: DeliveryNote): boolean {
+    return (row.status === DnStatus.DELIVERED || row.status === DnStatus.PARTIALLY_REJECTED)
+      && (row.items || []).some((i: any) => Number(i.currentDeliveryQty || i.deliveredQty || 0) > Number(i.rejectedQty || 0));
+  }
+
+  onReturnSaved(): void {
+    this.returnDnRow = null;
+    this.loadData(this.activeFilters);
+    this.refreshViewCounts();
+  }
 
   openConfirmDelivery(row: DeliveryNote): void {
     this.deliveryDn = row;
@@ -534,9 +640,49 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     });
   }
 
-  dnTitle = (row: DeliveryNote): string => row.dnNo || 'Delivery Note';
-  dnSubtitle = (row: DeliveryNote): string => row.clientName || '';
-  dnRowOpenable = (): boolean => this.activeViewId !== 'ready';
+  dnTitle = (row: DeliveryNote): string => this.activeViewId === 'ready' ? ((row as any).job?.jobId || 'Ready for DN') : (row.dnNo || 'Delivery Note');
+  dnSubtitle = (row: DeliveryNote): string => this.activeViewId === 'ready' ? ((row as any).clientName || '') : (row.clientName || '');
+  dnRowOpenable = (): boolean => true;
+
+  readonly readyDetailTabs: DataGridDetailTab[] = [
+    { id: 'ready-details', label: 'Details', icon: 'info' },
+    { id: 'ready-items', label: 'Items', icon: 'card' },
+  ];
+
+  readonly readyItemColumns: DetailTableColumn[] = [
+    { key: 'name', label: 'Item Description', wrap: true },
+    { key: 'totalQty', label: 'Total Qty', type: 'number', total: true },
+    { key: 'receivedQty', label: 'Received Qty', type: 'number', total: true },
+    { key: 'rejectedQty', label: 'Rejected Qty', type: 'number', total: true },
+    { key: 'deliveredQty', label: 'Delivered Qty', type: 'number', total: true },
+    { key: 'totalPrice', label: 'Total Price', type: 'number', total: true },
+    { key: 'status', label: 'Status' },
+  ];
+
+  readonly readyJobItemColumns: DetailTableColumn[] = [
+    { key: 'name', label: 'Item Description', truncate: true },
+    { key: 'totalQty', label: 'Total Qty', type: 'number' },
+    { key: 'dnQty', label: 'Delivery', type: 'number', tooltipKey: 'dnNos' },
+    { key: 'deliveredQty', label: 'Delivered', type: 'number' },
+    { key: 'totalCost', label: 'Cost', type: 'number', total: true },
+    { key: 'totalPrice', label: 'Price', type: 'number', total: true },
+  ];
+
+  /** All the job's items; those not on this GRN are muted and left out of the totals. */
+  readyJobItemRows(row: any): Record<string, any>[] {
+    const norm = (v: any) => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const onGrn = new Set((row?.products || []).map((p: any) => norm(p.name)));
+    return (row?.jobProducts || []).map((p: any) => ({
+      name: p.name || '-',
+      totalQty: p.totalQty || 0,
+      deliveredQty: p.deliveredQty || 0,
+      dnQty: p.dnQty || 0,
+      dnNos: p.dnNos ? `On DN: ${p.dnNos}` : '',
+      totalCost: p.totalCost || 0,
+      totalPrice: p.totalPrice || 0,
+      _excludeFromTotal: !onGrn.has(norm(p.name)),
+    }));
+  }
 
   openCreateDrawer(editId: string | null = null, jobId: string | null = null): void {
     this.formEditId = editId;
@@ -571,10 +717,11 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   readonly itemColumns: DetailTableColumn[] = [
     { key: 'description', label: 'Description', wrap: true },
     { key: 'orderedQty', label: 'Qty', type: 'number', total: true },
-    { key: 'unitPrice', label: 'Price', type: 'currency', total: true, totalKey: 'amount' },
+    { key: 'unitPrice', label: 'Price', type: 'currency' },
+    { key: 'amount', label: 'Total', type: 'currency', total: true },
   ];
 
-  /** Footer total under Price is the sum of qty x price per line, not of the unit prices. */
+  /** Total per line is qty x price; the footer sums those. */
   itemRows(row: DeliveryNote): Record<string, any>[] {
     return (row.items || []).map((item) => {
       const qty = item.orderedQty || 0;

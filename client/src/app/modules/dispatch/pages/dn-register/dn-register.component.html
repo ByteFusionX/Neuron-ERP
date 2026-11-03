@@ -12,7 +12,8 @@
     [columns]="tableColumns"
     [loading]="isLoading()"
     [pageSize]="paginationService.paginationState().row"
-    [searchPlaceholder]="activeViewId === 'ready' ? 'Search by GRN, Job, or PO number' : 'Search by DN number'"
+    [pageSizeOptions]="[5, 10, 15, 30, 50]"
+    [searchPlaceholder]="activeViewId === 'ready' ? 'Search by GRN, Job ID, customer, PO or subject' : 'Search by DN number'"
     [emptyMessage]="activeViewId === 'ready' ? 'No accepted GRNs are ready for DN' : 'No delivery notes found'"
     [createLabel]="canCreateDn() ? 'Create DN' : ''"
     [rowActions]="rowActions"
@@ -23,13 +24,13 @@
     exportFileName="delivery-notes.xlsx"
     [detailTitle]="dnTitle"
     [detailSubtitle]="dnSubtitle"
-    [detailTabs]="activeViewId === 'ready' ? [] : detailTabs"
+    [detailTabs]="activeViewId === 'ready' ? readyDetailTabs : detailTabs"
     (queryChange)="onQueryChange($event)"
     (rowAction)="onRowAction($event)"
     (create)="openCreateDrawer()">
 
     <ng-template #detailAsideTemplate let-row>
-      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
+      <span *ngIf="activeViewId !== 'ready'" class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
         [ngClass]="{
           'bg-gray-100 text-gray-700 ring-gray-200': row.status === 'Draft',
           'bg-sky-50 text-sky-700 ring-sky-200': row.status === 'Ready to Deliver' || row.status === 'Dispatched',
@@ -40,6 +41,25 @@
     </ng-template>
 
     <ng-template #detailMetaTemplate let-row>
+      <ng-container *ngIf="activeViewId === 'ready'">
+        <div class="qt-meta">
+          <p class="qt-meta-label">Job</p>
+          <p class="qt-meta-value">{{ row.job?.jobId || '-' }}</p>
+        </div>
+        <div class="qt-meta">
+          <p class="qt-meta-label">Customer</p>
+          <p class="qt-meta-value">{{ row.clientName || '-' }}</p>
+        </div>
+        <div class="qt-meta">
+          <p class="qt-meta-label">LPO Value</p>
+          <p class="qt-meta-value">{{ row.lpoValue | number:'1.2-2' }}</p>
+        </div>
+        <div class="qt-meta">
+          <p class="qt-meta-label">Supplier</p>
+          <p class="qt-meta-value">{{ row.supplier || '-' }}</p>
+        </div>
+      </ng-container>
+      <ng-container *ngIf="activeViewId !== 'ready'">
       <div class="qt-meta">
         <p class="qt-meta-label">Customer</p>
         <p class="qt-meta-value">{{ row.clientName }}</p>
@@ -56,11 +76,49 @@
         <p class="qt-meta-label">Date</p>
         <p class="qt-meta-value">{{ row.dnDate | date: 'dd MMM yyyy' }}</p>
       </div>
+      </ng-container>
     </ng-template>
 
     <ng-template #detailTemplate let-row let-tab="tab">
       <ng-container [ngSwitch]="tab">
-        <div *ngSwitchCase="'details'" class="space-y-5">
+        <div *ngSwitchCase="'ready-details'" class="space-y-5">
+          <app-detail-section title="Job">
+            <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <app-detail-field label="Job ID" stacked>
+                <a *ngIf="row.job?._id; else noJob" [routerLink]="['/job-sheet/view', row.job._id]" class="font-medium text-violet-700 hover:underline dark:text-violet-400">{{ row.job?.jobId }}</a>
+                <ng-template #noJob>-</ng-template>
+              </app-detail-field>
+              <app-detail-field label="Customer" stacked>{{ row.clientName || '-' }}</app-detail-field>
+              <app-detail-field label="Customer PO" stacked>{{ row.customerPoNumber || '-' }}</app-detail-field>
+              <app-detail-field label="Subject" stacked>{{ row.subject || '-' }}</app-detail-field>
+            </div>
+          </app-detail-section>
+          <hr class="border-t border-gray-200 dark:border-gray-700" />
+          <app-detail-section title="GRN">
+            <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <app-detail-field label="GRN No" stacked>
+                <a *ngIf="row._id && row.grnNo; else noGrn" [routerLink]="['/grn/view-grn', row._id]" class="font-medium text-violet-700 hover:underline dark:text-violet-400">{{ row.grnNo }}</a>
+                <ng-template #noGrn>-</ng-template>
+              </app-detail-field>
+              <app-detail-field label="GRN Date" stacked>{{ row.grnDate ? (row.grnDate | date:'dd MMM yyyy') : '-' }}</app-detail-field>
+              <app-detail-field label="PO No" stacked>
+                <a *ngIf="row.poId && row.poNo; else noPo" [routerLink]="['/purchase/view-lpo', row.poId]" class="font-medium text-violet-700 hover:underline dark:text-violet-400">{{ row.poNo }}</a>
+                <ng-template #noPo>-</ng-template>
+              </app-detail-field>
+              <app-detail-field label="Status" stacked>
+                <span *ngIf="row.deliveryStatus; else noSt2" class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
+                  [ngClass]="row.deliveryStatus === 'Partially Delivered' ? 'bg-amber-50 text-amber-700 ring-amber-200' : 'bg-emerald-50 text-emerald-700 ring-emerald-200'">{{ row.deliveryStatus }}</span>
+                <ng-template #noSt2>-</ng-template>
+              </app-detail-field>
+              <app-detail-field label="Received Qty" stacked>{{ row.receivedQty }}</app-detail-field>
+              <app-detail-field label="Rejected Qty" stacked>{{ row.rejectedQty || 0 }}</app-detail-field>
+              <app-detail-field label="Deliverable Now" stacked>{{ row.deliverableQty }}</app-detail-field>
+            </div>
+          </app-detail-section>
+        </div>
+        <app-detail-table *ngSwitchCase="'ready-items'" title="Job items" [columns]="readyJobItemColumns" [rows]="readyJobItemRows(row)" showTotals
+          emptyMessage="No items ordered for this job."></app-detail-table>
+        <div *ngSwitchCase="'overview'" class="dn-sections space-y-5">
           <app-detail-section title="Overview">
             <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
               <app-detail-field label="DN No" stacked>{{ row.dnNo || '-' }}</app-detail-field>
@@ -106,7 +164,8 @@
 
     <!-- right: permanent, every tab (filled) -->
     <ng-template #detailFooterTemplate let-row>
-      <app-action-button variant="primary" (click)="viewDnDetails(row)" icon="view">Detail view</app-action-button>
+      <app-action-button *ngIf="activeViewId === 'ready' && canCreateDn()" variant="primary" (click)="openCreateDrawer(null, row.job?._id || row.jobId)" icon="plus">Create DN</app-action-button>
+      <app-action-button *ngIf="activeViewId !== 'ready'" variant="primary" (click)="viewDnDetails(row)" icon="view">Detail view</app-action-button>
     </ng-template>
   </app-data-grid>
 
@@ -116,5 +175,8 @@
   <app-confirm-delivery-drawer *ngIf="deliveryDn" [id]="deliveryDn._id" [dnNo]="deliveryDn.dnNo" [clientName]="deliveryDn.clientName"
     (closed)="deliveryDn = null" (saved)="onDeliverySaved()"></app-confirm-delivery-drawer>
 
-  <app-customer-invoice-form *ngIf="invoiceDn" [dn]="invoiceDn" (closed)="invoiceDn = null" (saved)="onInvoiceSaved($event)"></app-customer-invoice-form>
+  <app-return-dn-drawer *ngIf="returnDnRow" [id]="returnDnRow._id" [dnNo]="returnDnRow.dnNo" [clientName]="returnDnRow.clientName"
+    (closed)="returnDnRow = null" (saved)="onReturnSaved()"></app-return-dn-drawer>
+
+  <app-customer-invoice-form *ngIf="invoiceDn" [dn]="invoiceDn" [invoice]="editingInvoice" (closed)="onInvoiceClosed()" (saved)="onInvoiceSaved($event)"></app-customer-invoice-form>
 </div>

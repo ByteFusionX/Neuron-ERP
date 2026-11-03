@@ -6,3 +6,7 @@
 :host-context(html.dark) .qt-meta + .qt-meta { border-left-color: #262626; }
 :host-context(html.dark) .qt-meta-label { color: #a1a1a1; }
 :host-context(html.dark) .qt-meta-value { color: #ededed; }
+
+/* Divider line between sections (Overview / Delivery / Proof of Delivery) in the details tab. */
+.dn-sections > app-detail-section + app-detail-section { display: block; border-top: 1px solid #e5e7eb; padding-top: 1.25rem; }
+:host-context(html.dark) .dn-sections > app-detail-section + app-detail-section { border-top-color: #3f3f46; }

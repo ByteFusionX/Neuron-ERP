@@ -51,7 +51,7 @@
         <span class="w-5 shrink-0"></span>
         <span class="w-6 shrink-0"></span>
         <div class="de-strip de-labels min-w-0 flex-1">
-          <span>Item</span><span class="text-right">Ordered</span><span class="text-right">Delivered</span><span class="text-right">Balance</span>
+          <span>Item</span><span class="text-right">Total Qty</span><span class="text-right">Received Qty</span><span class="text-right">Delivered Qty</span><span class="text-right">Remaining Qty</span><span class="text-right">Unit Price</span>
           <span>This DN</span><span>Serial No.</span>
         </div>
       </div>
@@ -72,9 +72,11 @@
                   <p [title]="text(line, 'description')" class="line-clamp-2 whitespace-pre-line text-xs font-normal text-gray-900 dark:text-gray-100">{{ text(line, 'description') || '-' }}</p>
                   <p *ngIf="text(line, 'partNo')" class="text-xs text-gray-500">{{ text(line, 'partNo') }}</p>
                 </div>
-                <div class="de-cell de-num" title="Ordered">{{ num(line, 'orderedQty') }}</div>
-                <div class="de-cell de-num" title="Delivered">{{ num(line, 'deliveredQty') }}</div>
-                <div class="de-cell de-num font-medium" title="Balance" [class.!text-red-600]="balance(line) === 0">{{ balance(line) }}</div>
+                <div class="de-cell de-num" title="Total Qty">{{ num(line, 'totalQuantity') }}</div>
+                <div class="de-cell de-num" title="Received Qty">{{ num(line, 'orderedQty') }}</div>
+                <div class="de-cell de-num" title="Delivered Qty">{{ num(line, 'deliveredQty') }}</div>
+                <div class="de-cell de-num font-medium" title="Remaining Qty" [class.!text-red-600]="balance(line) === 0">{{ balance(line) }}</div>
+                <div class="de-cell de-num" title="Unit Price"><span class="mr-1 text-gray-500 min-[900px]:hidden">Unit price</span>{{ num(line, 'unitSellingPrice') | number:'1.2-2' }}</div>
                 <div>
                   <app-sf-number formControlName="currentDeliveryQty" [min]="0" [max]="balance(line)" [stepper]="false" placeholder="0"
                     [attr.aria-label]="'Delivery qty for ' + text(line, 'description')"></app-sf-number>

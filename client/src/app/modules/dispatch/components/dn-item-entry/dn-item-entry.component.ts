@@ -20,7 +20,7 @@ type DnFilter = 'selected' | 'pending' | 'unavailable' | 'done';
     :host { display: block; }
     .de-strip { display: grid; gap: 0.375rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     @media (min-width: 900px) {
-      .de-strip { grid-template-columns: minmax(0, 5fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.4fr) minmax(0, 2.5fr); }
+      .de-strip { grid-template-columns: minmax(0, 5fr) repeat(5, minmax(0, 1fr)) minmax(0, 1.4fr) minmax(0, 2.5fr); }
     }
     .de-labels { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.03em; color: #9ca3af; }
     :host-context(html.dark) .de-labels { color: #6b7280; }

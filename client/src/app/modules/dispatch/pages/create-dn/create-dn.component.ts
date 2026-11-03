@@ -17,7 +17,7 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
-import { piSummaryFromJob } from 'src/app/modules/finance/pages/customer-bills/pi-form-drawer/pi-form-drawer.component';
+import { piSummaryFromJob } from 'src/app/modules/finance/pages/pi-shared/pi-form-drawer/pi-form-drawer.component';
 import { DnItemEntryComponent } from '../../components/dn-item-entry/dn-item-entry.component';
 
 @Component({
@@ -104,6 +104,8 @@ export class CreateDnComponent implements OnInit, OnChanges {
     { n: 1 as const, label: 'Delivery details' },
     { n: 2 as const, label: 'Items' },
   ];
+  readonly stepLabels = this.steps.map(s => s.label);
+  readonly stepDone = (): boolean => this.isDetailsValid();
   private readonly detailControls = ['jobId', 'clientName', 'customerLpoNumber', 'dnNo', 'dnDate', 'subject', 'deliveryType',
     'shipToName', 'shipToAddress', 'contactPerson', 'contactNo', 'deliveryInstructions'];
 
@@ -200,9 +202,9 @@ export class CreateDnComponent implements OnInit, OnChanges {
     this.isLoading.set(true);
     this.deliveryNoteService.getDnById(dnId).subscribe({
       next: (dn) => {
-        if (dn.status !== 'Draft') {
-          this.toastr.error('Only draft DNs can be edited');
-          this.router.navigate(['/dispatch']);
+        if (!['Draft', 'Ready to Deliver'].includes(dn.status)) {
+          this.toastr.error('Only draft or ready-to-deliver DNs can be edited');
+          if (this.drawerMode) this.closed.emit(); else this.router.navigate(['/dispatch']);
           this.isLoading.set(false);
           return;
         }
@@ -223,6 +225,9 @@ export class CreateDnComponent implements OnInit, OnChanges {
   setDraftLoaded(dn: any): void {
     this.draftLoaded.set(true);
     this.loadedDraftNo.set(dn?.dnNo || null);
+    if (dn?.status && dn.status !== 'Draft') {
+      return;
+    }
     if (dn?.dnNo) {
       this.toastr.info(`Draft loaded - ${dn.dnNo}`);
     } else {
@@ -309,6 +314,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
             totalQuantity: [item.totalQuantity || 0],
             orderedQty: [item.orderedQty || 0],
         deliveredQty: [prevDelivered],
+            rejectedQty: [this.getRejectedQty(item._id)],
             currentDeliveryQty: [{ value: currentDeliveryQty, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
             serialNos: [this.formatSerialNos(serialNos)],
             status: [initialStatus],
@@ -479,6 +485,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
             totalQuantity: [item.totalQuantity || 0],
             orderedQty: [item.orderedQty || 0],
         deliveredQty: [prevDelivered],
+            rejectedQty: [this.getRejectedQty(item._id)],
             currentDeliveryQty: [{ value: 0, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
             serialNos: [this.formatSerialNos(item.receivedSerialNos || [])],
             status: [initialStatus],
@@ -505,6 +512,16 @@ export class CreateDnComponent implements OnInit, OnChanges {
       if (matchedItem) {
         total += matchedItem.currentDeliveryQty || 0;
       }
+    });
+    return total;
+  }
+
+  getRejectedQty(itemId: string): number {
+    let total = 0;
+    this.previousDns.forEach(dn => {
+      if (dn.status === 'Cancelled' || dn.status === 'Draft') return;
+      const matchedItem = dn.items?.find((i: any) => i.itemId === itemId);
+      if (matchedItem) total += matchedItem.rejectedQty || 0;
     });
     return total;
   }

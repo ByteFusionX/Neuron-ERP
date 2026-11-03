@@ -19,7 +19,7 @@ type PodFilter = 'rejected' | 'accepted' | 'errors';
   imports: [CommonModule, FormsModule, ReactiveFormsModule, NgIcon, SmartFormModule],
   styles: [SF_STYLES + `
     :host { display: block; }
-    .pe-strip { display: grid; gap: 0.375rem; grid-template-columns: minmax(0, 1fr) repeat(3, 5rem); }
+    .pe-strip { display: grid; gap: 0.375rem; grid-template-columns: minmax(0, 1fr) repeat(3, 5rem) minmax(0, 16rem); }
     .pe-labels { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.03em; color: #9ca3af; }
     :host-context(html.dark) .pe-labels { color: #6b7280; }
     .pe-cell { display: flex; align-items: center; align-self: start; justify-content: flex-end; height: 2.25rem; border-radius: 0.5rem; padding: 0 0.5rem; font-size: 0.75rem; font-variant-numeric: tabular-nums; background: #f9fafb; color: #111827; }
@@ -73,7 +73,7 @@ type PodFilter = 'rejected' | 'accepted' | 'errors';
           <div class="flex items-start gap-2 px-3 pt-2">
             <span class="w-6 shrink-0"></span>
             <div class="pe-strip pe-labels min-w-0 flex-1">
-              <span>Item</span><span class="text-right">Total</span><span class="text-right">Accepted</span><span>Rejected</span>
+              <span>Item</span><span class="text-right">Total</span><span class="text-right">Accepted</span><span>Rejected</span><span>Rejected reason <span class="text-red-500">*</span></span>
             </div>
           </div>
           <div class="divide-y divide-gray-100 dark:divide-erp-border-dark">
@@ -93,9 +93,10 @@ type PodFilter = 'rejected' | 'accepted' | 'errors';
                       [attr.aria-label]="'Rejected qty for ' + text(line, 'description')"></app-sf-number>
                     <p *ngIf="hasError(line)" class="mt-1 text-[11px] text-red-600">Max {{ num(line, 'total') }}</p>
                   </div>
-                  <div *ngIf="num(line, 'rejected') > 0" class="col-span-full">
-                    <app-sf-input formControlName="reason" placeholder="Rejected reason (optional)"
+                  <div>
+                    <app-sf-input formControlName="reason" placeholder="Reason"
                       [attr.aria-label]="'Rejected reason for ' + text(line, 'description')"></app-sf-input>
+                    <p *ngIf="reasonMissing(line)" class="mt-1 text-[11px] text-red-600">Reason is required</p>
                   </div>
                 </div>
               </div>
@@ -140,6 +141,11 @@ export class PodItemEntryComponent {
 
   hasError(line: AbstractControl): boolean {
     return !!line.get('rejected')?.invalid;
+  }
+
+  reasonMissing(line: AbstractControl): boolean {
+    const c = line.get('reason');
+    return !!c && c.touched && !!c.errors?.['required'];
   }
 
   get totalQty(): number {

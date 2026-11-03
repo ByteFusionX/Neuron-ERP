@@ -9,12 +9,11 @@
     [emptyLink]="['/dispatch']"
     emptyLinkLabel="Back to DN register"
     customTitle
-    [stats]="stats"
-    statsLayout="fields"
-    statsTitle="Quantities"
-    statsStorageKey="dn-summary"
     tabParam=""
     bodyBare
+    [stats]="summaryStats"
+    statsLayout="fields"
+    statsTitle="Summary"
     [hasSidebar]="true"
     [(panelOpen)]="panelOpen"
     sidebarBare
@@ -42,10 +41,12 @@
 
     <ng-container headerActions *ngIf="deliveryNote as dn">
       <app-action-button variant="outline" (click)="onBack()">Back</app-action-button>
-      <app-action-button variant="outline" icon="view" (click)="onPreview()">Preview</app-action-button>
-      <app-action-button *ngIf="dn.status === 'Draft'" variant="outline" icon="edit" (click)="onEdit()">Edit</app-action-button>
+      <app-action-button *ngIf="canEditInvoice()" variant="outline" icon="edit" [disabled]="openingInvoice" (click)="openEditInvoice()">Edit Invoice</app-action-button>
+      <app-action-button *ngIf="dn.status === 'Draft' || dn.status === 'Ready to Deliver'" variant="outline" icon="edit" (click)="onEdit()">Edit DN</app-action-button>
+      <app-action-menu label="Delivery note" [items]="dnPdfItems" (selected)="onPdfMenu($event)"></app-action-menu>
+      <app-action-menu *ngIf="hasInvoice" label="Invoice" [items]="invoicePdfItems" (selected)="onPdfMenu($event)"></app-action-menu>
       <app-action-button *ngIf="canCreateInvoice()" variant="outline" [disabled]="openingInvoice" (click)="openCreateInvoice()">Create Invoice</app-action-button>
-      <app-action-button *ngIf="dn.status === 'Ready to Deliver'" variant="primary" [disabled]="isDispatching" (click)="onDispatch()">
+      <app-action-button *ngIf="dn.status === 'Ready to Deliver'" variant="primary" icon="send" [disabled]="isDispatching" (click)="onDispatch()">
         {{ isDispatching ? 'Placing order…' : 'Place Order' }}
       </app-action-button>
       <app-action-button *ngIf="canCompletePod()" variant="primary" (click)="openPod()">Delivered</app-action-button>
@@ -64,21 +65,9 @@
       </nav>
 
       <div class="dv-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel" [ngSwitch]="panelTab">
-        <ng-container *ngSwitchCase="'delivery'">
-          <app-detail-section title="Ship to">
-            <app-detail-field *ngFor="let f of deliveryFacts" [label]="f.label">
-              <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
-            </app-detail-field>
-          </app-detail-section>
-          <app-detail-section *ngIf="instructions" title="Instructions" class="block border-t border-gray-200 pt-5 dark:border-erp-border-dark">
-            <p class="whitespace-pre-line text-[13px] text-gray-700 dark:text-gray-300">{{ instructions }}</p>
-          </app-detail-section>
-          <app-detail-section *ngIf="podFacts.length" title="Proof of delivery" class="block border-t border-gray-200 pt-5 dark:border-erp-border-dark">
-            <app-detail-field *ngFor="let f of podFacts" [label]="f.label">{{ f.value }}</app-detail-field>
-            <p *ngIf="podRemarks" class="mt-2 whitespace-pre-line text-[13px] text-gray-700 dark:text-gray-300">{{ podRemarks }}</p>
-          </app-detail-section>
-          <app-detail-section *ngIf="rejectionFacts.length" title="Rejections" class="block border-t border-gray-200 pt-5 dark:border-erp-border-dark">
-            <app-detail-field *ngFor="let f of rejectionFacts" [label]="f.label">{{ f.value }}</app-detail-field>
+        <ng-container *ngSwitchCase="'pricing'">
+          <app-detail-section *ngFor="let g of priceGroups; let i = index" [title]="g.title" [ngClass]="i ? 'block border-t border-gray-200 pt-5 dark:border-erp-border-dark' : ''">
+            <app-detail-field *ngFor="let r of g.rows" [label]="r.label">{{ r.value }}</app-detail-field>
           </app-detail-section>
         </ng-container>
 
@@ -102,13 +91,16 @@
         spread
         bare
         tools
-        storageKey="dn-items-v1"
+        storageKey="dn-items-v2"
         searchKey="detail"
         emptyMessage="No items in this delivery note."></app-detail-table>
     </div>
   </app-detail-view-shell>
 
-  <app-customer-invoice-form *ngIf="invoiceDn" [dn]="invoiceDn" (closed)="invoiceDn = null" (saved)="onInvoiceSaved($event)"></app-customer-invoice-form>
+  <app-create-dn *ngIf="deliveryNote" [drawerMode]="true" [open]="editOpen" [editId]="deliveryNote._id"
+    (saved)="onEditSaved()" (closed)="editOpen = false"></app-create-dn>
+
+  <app-customer-invoice-form *ngIf="invoiceDn" [dn]="invoiceDn" [invoice]="editingInvoice" (closed)="onInvoiceClosed()" (saved)="onInvoiceSaved($event)"></app-customer-invoice-form>
 </div>
 
 <ng-template #factValue let-f>
