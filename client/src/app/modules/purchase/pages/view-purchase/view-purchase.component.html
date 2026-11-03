@@ -92,33 +92,16 @@
         <ng-container *ngSwitchCase="'pos'">
           <p *ngIf="posLoading" class="py-6 text-center text-sm text-gray-500">Loading POs…</p>
           <p *ngIf="!posLoading && !poLineRows().length" class="py-6 text-center text-sm text-gray-500">No items have been moved to a PO yet.</p>
-          <div *ngIf="poLineRows().length" class="-mx-5 overflow-x-auto">
-            <table class="w-full min-w-[640px] text-xs">
-              <thead class="border-b border-gray-200 text-left text-[11px] uppercase tracking-wide text-gray-400 dark:border-erp-border-dark">
-                <tr>
-                  <th class="px-5 py-2 font-medium">PO No</th>
-                  <th class="px-5 py-2 font-medium">Item description</th>
-                  <th class="px-2 py-2 text-right font-medium">Qty</th>
-                  <th class="px-2 py-2 text-right font-medium">Price</th>
-                  <th class="px-2 py-2 font-medium">Supplier</th>
-                  <th class="px-5 py-2 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100 dark:divide-erp-border-dark">
-                <tr *ngFor="let r of poLineRows()" tabindex="0" class="cursor-pointer hover:bg-violet-50/60 dark:hover:bg-violet-950/20"
-                  (click)="onViewPoLine(r)" (keydown.enter)="onViewPoLine(r)">
-                  <td class="whitespace-nowrap px-5 py-2 text-gray-700 dark:text-gray-300">{{ r.poNo }}</td>
-                  <td class="max-w-[200px] px-5 py-2">
-                    <p class="line-clamp-2 break-words text-[13px] text-gray-900 dark:text-gray-100" [title]="r.detail">{{ r.detail }}</p>
-                  </td>
-                  <td class="px-2 py-2 text-right tabular-nums">{{ r.qty }}{{ r.uom ? ' ' + r.uom : '' }}</td>
-                  <td class="px-2 py-2 text-right tabular-nums">{{ r.price != null ? (r.price | number: '1.2-2') : '-' }}</td>
-                  <td class="px-2 py-2 text-gray-700 dark:text-gray-300">{{ r.supplierName }}</td>
-                  <td class="px-5 py-2"><span class="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium" [ngClass]="poTone(r.status)">{{ r.status }}</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <app-detail-table *ngIf="poLineRows().length"
+            [columns]="poColumns"
+            [rows]="poTableRows()"
+            [footRows]="poFootRows()"
+            [currency]="purchase?.currency || 'QAR'"
+            groupStyle="band"
+            centerGroups
+            numbered
+            groupTotals
+            emptyMessage="No items have been moved to a PO yet."></app-detail-table>
         </ng-container>
 
         <app-detail-timeline *ngSwitchCase="'approval'" [entries]="historyEntries" emptyMessage="No approval history yet."></app-detail-timeline>

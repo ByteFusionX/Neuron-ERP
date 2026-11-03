@@ -62,7 +62,7 @@
         </ng-container>
 
         <ng-container *ngSwitchCase="'items'">
-          <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals></app-detail-table>
+          <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" [currency]="row.currency || 'QAR'" showTotals></app-detail-table>
         </ng-container>
 
         <app-detail-documents *ngSwitchCase="'documents'"

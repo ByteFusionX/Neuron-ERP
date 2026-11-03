@@ -1527,6 +1527,16 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     return this.poCards().length > 0 && this.poCards().every((c) => c.lpos.some((l) => ['Placed', 'Closed'].includes(l.poStatus)));
   }
 
+  readonly stepDoneFn = (n: number): boolean => this.stepDone(n);
+  readonly stepLockedFn = (n: number): boolean => this.stepLocked(n);
+  /** Stable arrays for the stepper: the view-only drawer hides the POs step. */
+  get shownLabels(): string[] { return this.viewOnly ? this.viewLabels : this.fullLabels; }
+  get shownIds(): number[] { return this.viewOnly ? this.viewIds : this.fullIds; }
+  private readonly fullLabels = this.steps.map((x) => x.label);
+  private readonly fullIds: number[] = this.steps.map((x) => x.n);
+  private readonly viewLabels = this.steps.filter((x) => x.n <= 4).map((x) => x.label);
+  private readonly viewIds: number[] = this.steps.filter((x) => x.n <= 4).map((x) => x.n);
+
   stepLocked(n: number): boolean {
     return n === 5 && !this.isApproved;
   }

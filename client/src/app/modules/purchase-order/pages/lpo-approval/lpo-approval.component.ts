@@ -21,7 +21,7 @@ import {
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
-import { DetailDocument, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocument, DetailFootRow, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import saveAs from 'file-saver';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ModalService } from 'src/app/shared/components/modal';
@@ -177,9 +177,9 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     this.columns = [
       { key: 'poDate', label: 'Date', type: 'date', sortable: true, width: '120px' },
       { key: 'poNo', label: 'PO No', sortable: true, locked: true },
+      { key: 'jobId', label: 'Job No', sortable: true, valueGetter: (row) => row.jobId?.jobId || '-' },
       { key: 'poStatus', label: 'Status', type: 'badge', align: 'center', badgeClasses: STATUS_BADGE_CLASSES, badgeLabel: statusLabel },
       { key: 'supplier', label: 'Supplier', sortable: true, valueGetter: (row) => row.supplierId?.supplierName || '-' },
-      { key: 'jobId', label: 'Job ID', sortable: true, valueGetter: (row) => row.jobId?.jobId || '-' },
       {
         key: 'totalLpoValue',
         label: 'LPO Value',
@@ -188,8 +188,17 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
         valueGetter: (row) => this.formatAmount(row),
       },
       { key: 'createdBy', label: 'Prepared By', valueGetter: (row) => this.personName(row.createdBy) },
+      { key: 'approvedBy', label: 'Approved By', valueGetter: (row) => this.approvedByNames(row) },
       { key: 'customer', label: 'Customer', sortable: true, valueGetter: (row) => row.purchaseId?.customerId?.companyName || '-' },
+      ...(this.activeViewId === 'rejected'
+        ? [{ key: 'rejectReason', label: 'Reject Reason', valueGetter: (row: any) => this.rejectReason(row) } as DataGridColumn<any>]
+        : []),
     ];
+  }
+
+  private rejectReason(row: any): string {
+    const history = row?.rejectedHistory ?? [];
+    return history.length ? (history[history.length - 1]?.reason || '-') : '-';
   }
 
   private buildRowActions(): void {
@@ -245,7 +254,9 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     this.searchQuery = query.search;
     this.page = query.page;
     this.row = query.pageSize;
+    const wasRejected = this.activeViewId === 'rejected';
     this.activeViewId = query.viewId || 'all';
+    if (wasRejected !== (this.activeViewId === 'rejected')) this.buildColumns();
     this.loadData();
   }
 
@@ -604,6 +615,17 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     return rows;
   }
 
+  itemFootRows(row: any): DetailFootRow[] {
+    const total = this.itemRows(row).reduce((s, r) => s + (Number(r['amount']) || 0), 0);
+    const discount = Number(row?.discount) || 0;
+    const cell = (value: number) => ({ amount: { value, format: 'currency' as const } });
+    return [
+      { label: 'Total', cells: cell(total) },
+      { label: 'Discount', cells: cell(discount) },
+      { label: 'Net Total', cells: cell(Math.max(total - discount, 0)), emphasis: true },
+    ];
+  }
+
   overviewSections(row: any): DetailOverviewSection[] {
     return [
       {
@@ -614,12 +636,15 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
           { type: 'dg', key: 'poStatus' },
           { type: 'field', label: 'Supplier', value: row.supplierId?.supplierName || '-' },
           { type: 'field', label: 'Customer', value: row.purchaseId?.customerId?.companyName || '-' },
-          { type: 'field', label: 'Job ID', value: row.jobId?.jobId || '-' },
+          { type: 'field', label: 'Job No', value: row.jobId?.jobId || '-' },
           { type: 'field', label: 'Date', value: this.datePipe.transform(row.poDate, 'dd MMM yyyy') },
           { type: 'field', label: 'Prepared By', value: this.personName(row.createdBy) },
           { type: 'field', label: 'Amount', value: this.formatAmount(row), numeric: true, noHover: true },
           { type: 'dg', key: 'receiptStatus', label: 'Receipt Status' },
           { type: 'dg', key: 'billingStatus', label: 'Billing Status' },
+          ...((row?.rejectedHistory?.length || this.activeViewId === 'rejected')
+            ? [{ type: 'field', label: 'Reject Reason', value: this.rejectReason(row) } as any]
+            : []),
         ],
       },
       this.summarySection(row),
@@ -651,6 +676,13 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
         { type: 'field', label: 'Net Total', value: fmt(Math.max(totalPrice - discount, 0)), numeric: true },
       ],
     };
+  }
+
+  private approvedByNames(row: any): string {
+    const names = (row?.approvedHistory ?? [])
+      .map((h: any) => this.personName(h?.approvedBy))
+      .filter((n: string) => n !== '-');
+    return names.length ? Array.from(new Set<string>(names)).join(', ') : '-';
   }
 
   private personName(person: any): string {

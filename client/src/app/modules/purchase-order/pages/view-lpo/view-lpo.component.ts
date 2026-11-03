@@ -739,8 +739,12 @@ export class ViewLpoComponent implements OnInit {
 
   itemFootRows(): DetailFootRow[] {
     const totalQty = this.items().reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+    const discount = Number(this.lpo?.discount) || 0;
+    const cost = (value: number) => ({ totalCost: { value, format: 'currency' as const } });
     return [
-      { label: 'Total', cells: { quantity: { value: totalQty, format: 'number' }, totalCost: { value: this.getSubTotal(), format: 'currency' } } },
+      { label: 'Total', cells: { quantity: { value: totalQty, format: 'number' }, ...cost(this.getSubTotal()) } },
+      { label: 'Discount', cells: cost(discount) },
+      { label: 'Net Total', cells: cost(Math.max(this.getSubTotal() - discount, 0)), emphasis: true },
     ];
   }
 }

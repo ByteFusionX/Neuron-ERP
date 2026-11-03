@@ -311,6 +311,8 @@ export class InitiateLpoComponent implements OnInit {
     this.step = 1;
   }
 
+  readonly stepLabels = ['Items and quantities', 'Delivery, terms and notes'];
+  readonly stepDone = (n: number): boolean => this.isStepValid(n);
   readonly steps = [
     { n: 1 as const, label: 'Items and quantities' },
     { n: 2 as const, label: 'Delivery, terms and notes' },

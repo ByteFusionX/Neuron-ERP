@@ -33,7 +33,7 @@ import {
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailFootRow, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { CreatePurchaseComponent } from '../create-purchase/create-purchase.component';
 import { ModalService } from 'src/app/shared/components/modal';
@@ -716,6 +716,18 @@ export class PurchaseRequestListComponent {
     return rows;
   }
 
+  /** Footer under the items: total, the PR's supplier discount, then net total. */
+  itemFootRows(row: any): DetailFootRow[] {
+    const total = this.itemRows(row).reduce((s, r) => s + (Number(r['amount']) || 0), 0);
+    const discount = Number(row?.supplierDiscounts?.totalDiscount) || 0;
+    const cell = (value: number) => ({ amount: { value, format: 'currency' as const } });
+    return [
+      { label: 'Total', cells: cell(total) },
+      { label: 'Discount', cells: cell(discount) },
+      { label: 'Net Total', cells: cell(Math.max(total - discount, 0)), emphasis: true },
+    ];
+  }
+
   private buildItemRows(row: any): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
     const source = row.items?.length ? row.items : row.dealItems ?? [];
@@ -796,6 +808,41 @@ export class PurchaseRequestListComponent {
         { type: 'field', label: 'LPO Value', value: money(lpo), numeric: true, noHover: true },
       );
     }
+    const person = (p: any) => p?.firstName ? `${p.firstName} ${p.lastName ?? ''}`.trim() : '-';
+    if (isNewJob) {
+      const d = row.dealSummary ?? {};
+      const sum = (key: string) => ({ type: 'field' as const, label: '', value: money(Number(d[key]) || 0), numeric: true, noHover: true });
+      const line = (label: string, key: string) => ({ ...sum(key), label });
+      return [
+        {
+          title: 'General',
+          columns: '2',
+          fields: [
+            { type: 'field', label: 'PR No', value: row.purchaseNo, numeric: true },
+            { type: 'dg', key: 'status' },
+            { type: 'field', label: 'Customer', value: row.customerId?.companyName },
+            { type: 'field', label: 'Job ID', value: row.jobId?.jobId },
+            { type: 'field', label: 'Date', value: this.datePipe.transform(row.approvedDate || row.createdAt, 'dd MMM yyyy') },
+            { type: 'field', label: 'Sales Person', value: row.salesPerson || '-' },
+            { type: 'field', label: 'Allocated By', value: person(row.allocatedBy) },
+            { type: 'field', label: 'Procurement Person', value: person(row.procurementPerson) },
+          ],
+        },
+        {
+          title: 'Summary',
+          columns: '2',
+          fields: [
+            line('Total Price', 'totalPrice'),
+            line('Discount', 'discount'),
+            line('Net Total Price', 'netTotalPrice'),
+            line('Total Cost', 'totalCost'),
+            line('Additional Cost', 'additionalCost'),
+            line('Supplier Discount', 'supplierDiscount'),
+            line('Net Total Cost', 'netTotalCost'),
+          ],
+        },
+      ];
+    }
     return [
       {
         title: 'General',
@@ -818,6 +865,7 @@ export class PurchaseRequestListComponent {
       },
     ];
   }
+
 
   private readonly followUpViewFor = followUpViewer();
 

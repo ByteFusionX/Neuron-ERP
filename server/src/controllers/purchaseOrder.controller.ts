@@ -17,7 +17,8 @@ import { createNotificationWithPrivileges } from "./notification.controller";
 import Employee from "../models/employee.model";
 import { getWorkflowSteps, updateApprovalStatus, rebuildPendingRoute } from "../services/workflow.service";
 import { recordPrices } from "../services/supplierPrice.service";
-import { notifyByPrivilege } from "../services/notify.service";
+import { notify, notifyByPrivilege } from "../services/notify.service";
+import { recipientsExcluding, safely, viewersOf } from "../services/workflowNotify.service";
 import { SupplierPriceSource } from "../models/supplierPrice.model";
 import { logAudit } from "../services/audit.service";
 
@@ -1572,6 +1573,7 @@ export const cancelPurchaseOrder = async (req: Request, res: Response) => {
       cancelled.push({ prLineKey: item.prLineKey, detail: item.detail, qty });
     }
 
+    const wasPlaced = po.poStatus === 'Placed';
     po.cancelHistory.push({ cancelledBy: employee._id, reason, date: new Date(), lines: cancelled });
     const ordered = (po.items || []).reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
     if (ordered <= 0) po.poStatus = 'Cancelled';
@@ -1582,6 +1584,23 @@ export const cancelPurchaseOrder = async (req: Request, res: Response) => {
     await logPoAudit(req, po, po.poStatus === 'Cancelled' ? 'cancelled' : 'partly-cancelled',
       `${po.poStatus === 'Cancelled' ? 'Cancelled' : 'Partly cancelled'} — ${reason}`,
       cancelled.map((c) => ({ label: c.detail, to: `${c.qty} cancelled` })));
+
+    // The buyer hears about it, and so does the receiving team when they were expecting the delivery.
+    await safely('LpoCancelled', async () => {
+      const whole = po.poStatus === 'Cancelled';
+      const lineText = cancelled.map((c) => `${c.qty} x ${c.detail}`).join(', ');
+      await notify({
+        type: 'LpoCancelled',
+        referenceModel: 'PurchaseOrder',
+        title: whole ? 'LPO cancelled' : 'LPO partly cancelled',
+        message: whole ? `${po.poNo} was cancelled: ${reason}` : `${po.poNo} was partly cancelled (${lineText}): ${reason}`,
+        sentBy: employee._id?.toString(),
+        recipients: recipientsExcluding([po.createdBy, ...(wasPlaced ? await viewersOf('grn') : [])], employee),
+        referenceId: po._id,
+        additionalData: { purchaseOrderId: po._id.toString() },
+        channels: ['inapp', 'push', 'email'],
+      });
+    });
 
     return res.status(200).json({
       success: true,

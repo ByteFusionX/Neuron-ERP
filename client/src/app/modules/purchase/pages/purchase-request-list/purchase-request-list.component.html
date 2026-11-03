@@ -60,7 +60,7 @@
         <ng-template #detailFooterTemplate let-row>
             <app-action-button *ngIf="canEdit(row)" variant="primary" (click)="onEditPr(row, $event)" icon="edit">Edit</app-action-button>
             <app-action-button *ngIf="canCreateFromJob(row)" variant="primary" (click)="onCreatePrForJob(row, $event)" icon="plus">Create PR</app-action-button>
-            <app-action-button variant="primary" (click)="openFullPurchase(row, $event)" icon="view">Detail view</app-action-button>
+            <app-action-button variant="primary" (click)="openFullPurchase(row, $event)" icon="view">{{ activeViewId === 'new' ? 'Job view' : 'Detail view' }}</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">
@@ -84,7 +84,7 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'items'">
-                    <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals [currency]="row.currency"></app-detail-table>
+                    <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" showTotals [currency]="row.currency"></app-detail-table>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'approval'">

@@ -135,6 +135,56 @@ export class ViewPurchaseComponent {
     })));
     return out.sort((a, b) => a.poNo.localeCompare(b.poNo));
   });
+  /** PO tab table; rows carry `_link` so a click opens the PO. */
+  readonly poColumns: DetailTableColumn[] = [
+    { key: 'poNo', label: 'PO No', type: 'text', width: '1%' },
+    { key: 'detail', label: 'Item Description', type: 'text', truncate: true, hoverOnly: true, width: '100%' },
+    { key: 'qtyText', label: 'Qty', type: 'text', align: 'right' },
+    { key: 'price', label: 'Unit Price', type: 'currency', align: 'right' },
+    { key: 'amount', label: 'Total', type: 'currency', align: 'right', total: true },
+  ];
+  /** Grouped under the supplier name, the same banded layout as the PR items. */
+  poTableRows = computed<Record<string, any>[]>(() => {
+    const lines = [...this.poLineRows()].sort((a, b) => (a.supplierName || '').localeCompare(b.supplierName || '') || a.poNo.localeCompare(b.poNo));
+    const out: Record<string, any>[] = [];
+    let last: string | null = null;
+    const idOf = (v: any) => String(v?._id || v || '');
+    const discounts: any[] = (this.purchase as any)?.supplierDiscounts?.suppliers || [];
+    const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // "total − discount = cost" per supplier, shown beside the supplier name
+    const noteFor = (supplierId: string) => {
+      const total = lines.filter((l) => l.supplierId === supplierId).reduce((s, l) => s + (l.price != null ? l.price * l.qty : 0), 0);
+      const disc = discounts.filter((d) => idOf(d.supplierId) === idOf(supplierId)).reduce((s, d) => s + (Number(d.discount) || 0), 0);
+      return `${fmt(total)} − ${fmt(disc)} = ${fmt(Math.max(total - disc, 0))}`;
+    };
+    for (const r of lines) {
+      const g = r.supplierName || 'No supplier';
+      if (g !== last) { out.push({ _group: true, label: g, bandText: noteFor(r.supplierId) }); last = g; }
+      out.push({
+        ...r,
+        qtyText: `${r.qty}`,
+        amount: r.price != null ? r.price * r.qty : 0,
+        _link: ['/purchase-order/view-lpo', r.poId],
+      });
+    }
+    return out;
+  });
+  /** Total, Discount, Net Total under the PO items; discount is the PR's, for suppliers still on a PO. */
+  poFootRows = computed<DetailFootRow[]>(() => {
+    const lines = this.poLineRows();
+    if (!lines.length) return [];
+    const idOf = (v: any) => String(v?._id || v || '');
+    const onPo = new Set(lines.map((l) => idOf(l.supplierId)));
+    const list: any[] = (this.purchase as any)?.supplierDiscounts?.suppliers || [];
+    const discount = list.filter((d) => onPo.has(idOf(d.supplierId))).reduce((s, d) => s + (Number(d.discount) || 0), 0);
+    const total = lines.reduce((s, l) => s + (l.price != null ? l.price * l.qty : 0), 0);
+    const amt = (value: number) => ({ amount: { value, format: 'currency' as const } });
+    return [
+      { label: 'Total', cells: amt(total) },
+      { label: 'Discount', cells: amt(discount) },
+      { label: 'Net Total', emphasis: true, cells: amt(Math.max(total - discount, 0)) },
+    ];
+  });
   onViewPoLine(r: { poId: string }): void {
     this.router.navigate(['/purchase-order/view-lpo', r.poId]);
   }
@@ -371,13 +421,15 @@ export class ViewPurchaseComponent {
       { key: 'partNo', label: 'Part No', hiddenByDefault: true },
       { key: 'qty', label: 'Qty', type: 'number', align: 'right' },
       { key: 'uom', label: 'UOM' },
+      ...(manual ? [] : [
+        { key: 'unitSelling', label: 'Unit price', type: 'currency' },
+        { key: 'totalSelling', label: 'Total price', type: 'currency', total: true },
+        { key: 'margin', label: 'Margin %', align: 'right' },
+        { key: 'marginValue', label: 'Margin value', type: 'currency', total: true },
+      ] as DetailTableColumn[]),
       { key: 'unitCost', label: 'Unit cost', type: 'currency' },
       { key: 'totalCost', label: 'Total cost', type: 'currency', emphasis: true, total: true },
       ...(manual ? [] : [
-        { key: 'margin', label: 'Margin %', align: 'right' },
-        { key: 'marginValue', label: 'Margin value', type: 'currency', total: true },
-        { key: 'unitSelling', label: 'Unit price', type: 'currency' },
-        { key: 'totalSelling', label: 'Total price', type: 'currency', total: true },
         { key: 'eta', label: 'ETA terms', wrap: true, hiddenByDefault: true },
       ] as DetailTableColumn[]),
     ];
@@ -395,7 +447,15 @@ export class ViewPurchaseComponent {
     for (const row of selectedRows) {
       const group = supplierOf(row);
       if (group !== lastGroup) {
-        rows.push({ _group: true, label: group });
+        const gid = idOf(row.selectedSupplier?.supplierId);
+        const gTotal = selectedRows
+          .filter((x: any) => supplierOf(x) === group)
+          .reduce((s: number, x: any) => s + (Number(x.selectedSupplier.unitPrice) || 0) * (Number(x.selectedSupplier.quantity) || 0), 0);
+        const gDisc = discountRows
+          .filter((d: any) => gid && idOf(d.supplierId) === gid)
+          .reduce((s: number, d: any) => s + (Number(d.discount) || 0), 0);
+        const f = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        rows.push({ _group: true, label: group, bandText: `${f(gTotal)} − ${f(gDisc)} = ${f(Math.max(gTotal - gDisc, 0))}` });
         lastGroup = group;
       }
       const qty = Number(row.selectedSupplier.quantity) || 0;
@@ -420,14 +480,17 @@ export class ViewPurchaseComponent {
       });
     }
     this.itemRows = rows;
-    this.itemFootRows = [{
-      label: 'Total',
-      emphasis: true,
-      cells: {
-        totalCost: { value: sumCost, format: 'currency' },
-        ...(manual ? {} : { totalSelling: { value: sumSell, format: 'currency' } }),
+    this.itemFootRows = [
+      {
+        label: 'Total',
+        cells: {
+          totalCost: { value: sumCost, format: 'currency' },
+          ...(manual ? {} : { totalSelling: { value: sumSell, format: 'currency' } }),
+        },
       },
-    }];
+      { label: 'Discount', cells: { totalCost: { value: discountReceived, format: 'currency' } } },
+      { label: 'Net Total', emphasis: true, cells: { totalCost: { value: Math.max(sumCost - discountReceived, 0), format: 'currency' } } },
+    ];
 
     // Pricing tab: how line costs become the PR cost, then the profit against the deal sheet
     const sellingPrice = Number(p.lpoValue) || 0;
@@ -719,6 +782,7 @@ export class ViewPurchaseComponent {
               itemName: item.itemName,
               detail,
               selectedSupplier: {
+                supplierId: selected.supplierId ?? detail.supplierId,
                 // a deal-sheet supplier on the line stands in when the comparison's own supplier is not found
                 supplierName: nameOf(selected.supplierId) ?? nameOf(detail.supplierId) ?? detail.supplierName ?? 'Unknown Supplier',
                 unitPrice: selected.unitPrice,
@@ -732,6 +796,7 @@ export class ViewPurchaseComponent {
             itemName: item.itemName,
             detail,
             selectedSupplier: {
+              supplierId: detail.supplierId,
               supplierName: nameOf(detail.supplierId) ?? detail.supplierName ?? 'Unknown Supplier',
               unitPrice: detail.unitCost,
               quantity: detail.quantity,

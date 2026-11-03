@@ -127,7 +127,7 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
         _id: { $nin: withPr },
     }).populate({
         path: 'quoteId',
-        select: 'client currency quoteId subject department createdBy dealData.dealId dealData.totalDiscount dealData.updatedItems',
+        select: 'client currency quoteId subject department createdBy dealData.dealId dealData.totalDiscount dealData.additionalCosts dealData.updatedItems',
         populate: [
             { path: 'client', select: 'companyName' },
             { path: 'department', select: 'departmentName' },
@@ -146,6 +146,19 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
         const total = lines.reduce((sum: number, d: any) => sum + (Number(d.unitSellingPrice) || 0) * (Number(d.quantity) || 0), 0) - (Number(quote?.dealData?.totalDiscount) || 0);
         return quote?.currency === 'USD' ? total * qatarUsdRate : total;
     };
+    // Deal sheet money summary for the details panel: selling side, then cost side.
+    const dealSummaryOf = (quote: any) => {
+        const deal = quote?.dealData;
+        const lines = (deal?.updatedItems ?? []).flatMap((item: any) => item.itemDetails ?? []);
+        const totalPrice = lines.reduce((sum: number, d: any) => sum + (Number(d.unitSellingPrice) || 0) * (Number(d.quantity) || 0), 0);
+        const totalCost = lines.reduce((sum: number, d: any) => sum + (Number(d.unitCost) || 0) * (Number(d.quantity) || 0), 0);
+        const extras = deal?.additionalCosts ?? [];
+        const sumOf = (type: string) => extras.filter((c: any) => c.type === type).reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+        const discount = (Number(deal?.totalDiscount) || 0) + sumOf('Customer Discount');
+        const additionalCost = sumOf('Additional Cost');
+        const supplierDiscount = sumOf('Supplier Discount');
+        return { totalPrice, discount, netTotalPrice: totalPrice - discount, totalCost, additionalCost, supplierDiscount, netTotalCost: totalCost + additionalCost - supplierDiscount };
+    };
     const fullName = (e: any) => e?.firstName ? `${e.firstName} ${e.lastName ?? ''}`.trim() : '';
 
     const needle = searchText.toLowerCase();
@@ -157,6 +170,7 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
             description: job.quoteId?.subject,
             lpoValue: lpoValueOf(job.quoteId),
             salesPerson: fullName(job.quoteId?.createdBy),
+            dealSummary: dealSummaryOf(job.quoteId),
             department: job.quoteId?.department?.departmentName ?? '',
             quoteNo: job.quoteId?.quoteId,
             dealNo: job.quoteId?.dealData?.dealId ?? '',

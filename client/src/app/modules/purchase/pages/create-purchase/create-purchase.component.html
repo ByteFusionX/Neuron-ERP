@@ -80,27 +80,7 @@
     <app-detail-badge *ngFor="let b of badges()" [label]="b.label" [tone]="b.tone || 'neutral'"></app-detail-badge>
   </span>
 
-  <ol class="mb-5 flex items-center gap-2">
-    <li *ngFor="let s of shownSteps; let i = index; let last = last" class="flex flex-1 items-center gap-2">
-      <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-        [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
-        [disabled]="stepLocked(s.n)"
-        (click)="goToStep(s.n)">
-        <span class="grid h-6 w-6 shrink-0 place-content-center rounded-full text-[11px] font-semibold"
-          [ngClass]="s.n === step
-            ? 'bg-violet-600 text-white'
-            : stepDone(s.n)
-              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-              : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">
-          <ng-icon *ngIf="s.n !== step && stepDone(s.n); else stepNumber" name="heroCheck" class="h-3.5 w-3.5"></ng-icon>
-          <ng-template #stepNumber>{{ i + 1 }}</ng-template>
-        </span>
-        <span class="truncate text-xs font-medium"
-          [ngClass]="s.n === step ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'">{{ s.label }}        </span>
-      </button>
-      <span *ngIf="!last" class="h-px w-4 shrink-0 bg-gray-200 dark:bg-erp-border-dark"></span>
-    </li>
-  </ol>
+  <app-sf-stepper [labels]="shownLabels" [ids]="shownIds" [current]="step" [isComplete]="stepDoneFn" [isLocked]="stepLockedFn" [tickAhead]="true" (stepClick)="goToStep($any($event))"></app-sf-stepper>
 
   <p *ngIf="!canSaveDraft && step < 5" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
     This request is {{ f['status'].value }}: lines, prices and suppliers can no longer change.

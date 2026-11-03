@@ -9,23 +9,7 @@
 
   <div *ngIf="purchase" class="space-y-4">
     <!-- Stepper -->
-    <ol class="mb-1 flex items-center gap-2">
-      <li *ngFor="let s of steps" class="flex flex-1 items-center gap-2">
-        <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
-          [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
-          (click)="goToStep(s.n)">
-          <span class="grid h-6 w-6 shrink-0 place-content-center rounded-full text-[11px] font-semibold"
-            [ngClass]="s.n === step
-              ? 'bg-violet-600 text-white'
-              : (s.n < step && isStepValid(s.n))
-                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-                : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">{{ s.n }}</span>
-          <span class="truncate text-xs font-medium"
-            [ngClass]="s.n === step ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'">{{ s.label }}</span>
-        </button>
-        <span *ngIf="s.n < 2" class="h-px w-4 shrink-0 bg-gray-200 dark:bg-erp-border-dark"></span>
-      </li>
-    </ol>
+    <app-sf-stepper class="block [&_ol]:mb-1" [labels]="stepLabels" [current]="step" [isComplete]="stepDone" (stepClick)="goToStep($any($event))"></app-sf-stepper>
 
     <!-- banner: the purchase at a glance, step 1 only -->
     <section *ngIf="step === 1" class="rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-erp-border-dark dark:bg-erp-surface-dark">
