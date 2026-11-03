@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import Employee from "../models/employee.model";
 import * as bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { startSession, refreshSession, endSession, revokeAllSessions, listSessions, revokeSession } from "../services/authSession.service";
 import announcementModel from "../models/announcement.model";
 import { activeForUser } from "../common/utils/announcementVisibility";
 import { logAudit } from "../services/audit.service";
@@ -933,8 +934,7 @@ export const login = async (
       return res.send({ passwordNotMatchError: true });
     }
 
-    const payload = { id: employee._id, employeeId: employee.employeeId };
-    const token = jwt.sign(payload, process.env.JWT_SECRET as string);
+    const token = await startSession(req, res, employee);
     await Employee.updateOne({ _id: employee._id }, { $set: { lastLoginAt: new Date() } });
 
     const employeeData = await Employee.findById(employee._id, {
@@ -1017,8 +1017,7 @@ export const loginWithMicrosoft = async (
       }
     }
 
-    const payload = { id: employee._id, employeeId: employee.employeeId };
-    const token = jwt.sign(payload, process.env.JWT_SECRET as string);
+    const token = await startSession(req, res, employee);
     await Employee.updateOne({ _id: employee._id }, { $set: { lastLoginAt: new Date() } });
 
     const employeeData = await Employee.findById(employee._id, {
@@ -1373,5 +1372,53 @@ export const blockEmployee = async (
   } catch (error) {
     console.log(error);
     next(error);
+  }
+};
+
+// Silent session renewal: the httpOnly refresh cookie is rotated and a new access token returned.
+export const refreshToken = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = await refreshSession(req, res);
+    if (!token) return res.status(401).json({ message: "Session expired" });
+    return res.status(200).json({ token });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const logout = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await endSession(req, res);
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// Sign out of every device for the calling employee.
+export const revokeMySessions = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    await revokeAllSessions(req.user.id);
+    await endSession(req, res);
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const getMySessions = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    return res.status(200).json(await listSessions(req, req.user.id));
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const revokeMySession = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const ok = await revokeSession(req, res, req.user.id, String(req.params.id));
+    return ok ? res.status(200).json({ success: true }) : res.status(404).json({ message: "Session not found" });
+  } catch (error) {
+    return next(error);
   }
 };

@@ -424,6 +424,8 @@ export async function getQarRates(): Promise<{ rates: Record<string, number>; as
 }
 
 export const getAllReportedEmployees = async (userId: any): Promise<ObjectId[]> => {
+    // No user supplied (e.g. an unscoped list request): nobody reports to them.
+    if (!userId) return [];
     try {
         // Step 1: Fetch all employees and their reportingTo relationships in one go
         const employees = await employeeModel.find({}, '_id reportingTo').lean();

@@ -1,5 +1,6 @@
-// Per-device UI preferences that should survive sign-out (sidebar layout, theme).
-const PERSISTED_KEY = /^(sidebar_|app-theme$)/;
+// Per-device UI preferences that should survive sign-out (sidebar layout, theme),
+// plus the MSAL account cache so the saved Microsoft account stays in the picker.
+const PERSISTED_KEY = /^(sidebar_|app-theme$|msal\.)/;
 
 export function clearSessionStorage(): void {
   const kept: [string, string][] = [];

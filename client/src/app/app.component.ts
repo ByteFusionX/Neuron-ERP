@@ -112,9 +112,8 @@ export class AppComponent implements OnDestroy, OnInit {
       this._notificationService.authSocketIo(employeeToken)
       this._notificationService.getEmployeeTextNotifications()
       this._notificationService.initializeNotifications()
-      if (Notification.permission === 'granted') {
-        this.pushNotificationService.registerAndSubscribe().catch(() => this.pushNotificationService.subscribedSubject.next(false));
-      }
+      // push is always on: subscribe on every load (asks for permission the first time, re-syncs the subscription after that)
+      this.pushNotificationService.ensurePermissionPrompt();
       if (!this.isLoginRoute()) {
         this.isUserThere();
       }
@@ -128,6 +127,9 @@ export class AppComponent implements OnDestroy, OnInit {
           this.layout.closeOverlay();
           this.isUserThere();
           this._notificationService.markAsReadForRoute(event.urlAfterRedirects);
+          if (this._employeeService.getToken() && Notification.permission === 'default') {
+            this.pushNotificationService.ensurePermissionPrompt();
+          }
         }
       }
     });

@@ -202,11 +202,6 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                             router.navigate(['/dispatch']);
                             return false;
                         }
-                    } else if (url.includes('/pending-delivery-reports')) {
-                        if (!privileges?.dispatch?.viewPendingDelivery) {
-                            router.navigate(['/home']);
-                            return false;
-                        }
                     } else {
                         // General dispatch view report check
                         if (privileges?.dispatch?.viewReport == 'none' || privileges?.dispatch?.viewReport == undefined) {

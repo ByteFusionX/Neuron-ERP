@@ -130,15 +130,37 @@ export class EmployeeService {
   }
 
   employeeLogin(employeeData: Object): Observable<login> {
-    return this.http.post(`${this.api}/employee/login`, employeeData)
+    return this.http.post(`${this.api}/employee/login`, employeeData, { withCredentials: true })
   }
 
   // There's no employeeToken yet at login time, so the Azure access token is
   // attached explicitly here rather than relying on JwtInterceptor.
   employeeLoginWithMicrosoft(azureAccessToken: string): Observable<login> {
     return this.http.post(`${this.api}/employee/login-microsoft`, {}, {
+      withCredentials: true,
       headers: new HttpHeaders({ Authorization: `Bearer ${azureAccessToken}` })
     })
+  }
+
+  // Silent renewal: the httpOnly refresh cookie is sent automatically; returns a new access token.
+  refreshAccessToken(): Observable<{ token: string }> {
+    return this.http.post<{ token: string }>(`${this.api}/employee/refresh`, {}, { withCredentials: true });
+  }
+
+  logout(): Observable<unknown> {
+    return this.http.post(`${this.api}/employee/logout`, {}, { withCredentials: true });
+  }
+
+  logoutEverywhere(): Observable<unknown> {
+    return this.http.post(`${this.api}/employee/revoke-sessions`, {}, { withCredentials: true });
+  }
+
+  getSessions(): Observable<EmployeeSession[]> {
+    return this.http.get<EmployeeSession[]>(`${this.api}/employee/sessions`, { withCredentials: true });
+  }
+
+  revokeSession(id: string): Observable<unknown> {
+    return this.http.delete(`${this.api}/employee/sessions/${id}`, { withCredentials: true });
   }
 
   getToken(): string | null {
@@ -232,4 +254,15 @@ export class EmployeeService {
     }
     throw new Error('No user token found');
   }
+}
+
+export interface EmployeeSession {
+  id: string;
+  browser: string;
+  os: string;
+  mobile: boolean;
+  ip: string | null;
+  signedInAt: string;
+  lastActiveAt: string;
+  current: boolean;
 }
