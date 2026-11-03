@@ -7,6 +7,7 @@ import { PurchaseService } from 'src/app/core/services/purchase/purchase.service
 import { FileService } from 'src/app/core/services/file.service';
 import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
 import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
+import { dealSheetPriceDetails } from 'src/app/shared/utils/deal-pricing.util';
 import { buildApprovalTimeline } from 'src/app/shared/utils/approval-timeline.util';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
@@ -350,9 +351,6 @@ export class ViewPurchaseComponent {
     const discountReceived = discountRows
       .filter((d: any) => activeSuppliers.has(idOf(d.supplierId)))
       .reduce((sum: number, d: any) => sum + (Number(d.discount) || 0), 0);
-    const dealAdditionalCosts = (p.jobId?.quoteId?.dealData?.additionalCosts || [])
-      .filter((c: any) => c.type !== 'Supplier Discount')
-      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
     // The PR's own additional costs replace the deal's once saved; until then the deal's stand.
     const prExtraCosts: { name: string; value: number }[] = Array.isArray(p.additionalCosts)
       ? p.additionalCosts.map((c: any) => ({ name: c.name || 'Additional cost', value: Number(c.value) || 0 }))
@@ -360,12 +358,18 @@ export class ViewPurchaseComponent {
           .filter((c: any) => (c.type || 'Additional Cost') === 'Additional Cost')
           .map((c: any) => ({ name: c.name || 'Additional cost', value: Number(c.value) || 0 }));
     const prAdditionalCosts = prExtraCosts.reduce((sum, c) => sum + c.value, 0);
-    const customerDiscount = (p.jobId?.quoteId?.dealData?.additionalCosts || [])
+    const dealForPrice = p.jobId?.quoteId?.dealData;
+    const jobNetPrice = dealSheetPriceDetails(dealForPrice?.updatedItems, dealForPrice?.additionalCosts, dealForPrice?.totalDiscount).totalSellingPrice;
+    const customerDiscount = (Number(dealForPrice?.totalDiscount) || 0) + (dealForPrice?.additionalCosts || [])
       .filter((c: any) => c.type === 'Customer Discount')
       .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
     const prCost = grossCost + prAdditionalCosts - discountReceived;
+    const jobDeal = p.jobId?.quoteId?.dealData;
+    const jobNetCost = dealSheetPriceDetails(jobDeal?.updatedItems, jobDeal?.additionalCosts, jobDeal?.totalDiscount).totalCost;
+    const jobCostDiscount = (jobDeal?.additionalCosts || [])
+      .filter((c: any) => c.type === 'Supplier Discount')
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
     const profit = this.getProfitMargin(p.lpoValue || 0, prCost);
-    const diff = (profit || 0) - (p.dealProfit || 0);
 
     this.subtitle = manual ? ['General purchase', p.supplierId?.supplierName].filter(Boolean).join(' · ') : (p.customerId?.companyName || '');
     this.owner = p.procurementPerson ? this.fullName(p.procurementPerson) : '';
@@ -373,17 +377,15 @@ export class ViewPurchaseComponent {
     this.stats = manual
       ? [{ label: 'Total LPO value', value: this.money(p.totalLpo) }]
       : [
-          { label: 'Total price', value: this.money((p.lpoValue || 0) + customerDiscount) },
-          { label: 'LPO value', value: this.money(p.lpoValue) },
-          ...(customerDiscount ? [{ label: 'Customer discount', value: this.money(customerDiscount) }] : []),
-          { label: 'Cost as per deal sheet', value: this.money(p.totalDealCost) },
-          { label: 'Additional costs in deal', value: this.money(dealAdditionalCosts) },
-          { label: 'Additional costs in PR', value: this.money(prAdditionalCosts) },
-          { label: 'Total discount', value: this.money(discountReceived) },
-          { label: 'Cost as per PR', value: this.money(prCost) },
-          { label: 'Margin %', value: `${((p.lpoValue || 0) > 0 ? (profit / p.lpoValue) * 100 : 0).toFixed(2)}%`, danger: profit < 0, hiddenByDefault: true },
-          { label: 'Margin value', value: this.money(profit), danger: profit < 0, hiddenByDefault: true },
-          { label: 'Difference in profit', value: this.money(diff), danger: diff < 0, hiddenByDefault: true },
+          { label: 'Total Price', value: this.money(jobNetPrice + customerDiscount) },
+          { label: 'Discount', value: this.money(customerDiscount) },
+          { label: 'Net Total Price', value: this.money(jobNetPrice) },
+          { label: 'Total Cost', value: this.money(jobNetCost + jobCostDiscount) },
+          { label: 'Cost Discount', value: this.money(jobCostDiscount) },
+          { label: 'Net Total Cost', value: this.money(jobNetCost) },
+          { label: 'Total PR Cost', value: this.money(grossCost + prAdditionalCosts) },
+          { label: 'PR Cost Discount', value: this.money(discountReceived) },
+          { label: 'Net PR Total Cost', value: this.money(prCost), danger: profit < 0 },
         ];
 
     const tone = DETAIL_TONE[STATUS_TONES[p.status] ?? 'neutral'];
@@ -488,8 +490,14 @@ export class ViewPurchaseComponent {
           ...(manual ? {} : { totalSelling: { value: sumSell, format: 'currency' } }),
         },
       },
-      { label: 'Discount', cells: { totalCost: { value: discountReceived, format: 'currency' } } },
-      { label: 'Net Total', emphasis: true, cells: { totalCost: { value: Math.max(sumCost - discountReceived, 0), format: 'currency' } } },
+      { label: 'Discount', cells: {
+        totalCost: { value: discountReceived, format: 'currency' },
+        ...(manual ? {} : { totalSelling: { value: customerDiscount, format: 'currency' } }),
+      } },
+      { label: 'Net Total', emphasis: true, cells: {
+        totalCost: { value: Math.max(sumCost - discountReceived, 0), format: 'currency' },
+        ...(manual ? {} : { totalSelling: { value: jobNetPrice, format: 'currency' } }),
+      } },
     ];
 
     // Pricing tab: how line costs become the PR cost, then the profit against the deal sheet

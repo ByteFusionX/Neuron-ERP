@@ -507,6 +507,7 @@ export class ViewJobComponent implements OnInit {
     this.stats = [
       { label: `Total Price`, value: this.formatNumber(price.totalSellingPrice + discount) },
       { label: `Discount`, value: this.formatNumber(discount) },
+      { label: `Net Total Price`, value: this.formatNumber(price.totalSellingPrice) },
       { label: 'Margin %', value: `${(price.perc || 0).toFixed(2)}%` },
       { label: `Margin`, value: this.formatNumber(price.profit) },
       { label: `Total Additional Cost`, value: this.formatNumber(sumOf('Additional Cost')) },
