@@ -63,11 +63,16 @@
             </div>
         </ng-template>
 
+        <!-- left: secondary actions (outline) -->
+        <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
+            <app-action-button *ngIf="canChangeStatus(row)" variant="outline" icon="edit" (click)="onUpdateStatus(row)">Update status</app-action-button>
+            <app-action-button *ngIf="canMarkLost(row)" variant="outline" icon="trash" (click)="onMarkLost(row)">Mark as lost</app-action-button>
+        </ng-template>
+
         <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row let-tab="tab">
-            <app-action-button *ngIf="canChangeStatus(row)" variant="outline" (click)="onUpdateStatus(row)">Update status</app-action-button>
-            <app-action-button *ngIf="canAllocate(row)" variant="primary" (click)="openAllocateTypeSelecter(row)">Allocate</app-action-button>
-            <app-action-button *ngIf="canMarkLost(row)" variant="outline" (click)="onMarkLost(row)">Mark as lost</app-action-button>
+            <app-action-button variant="outline" icon="view" (click)="onRowAction({ action: { id: 'detailView', label: 'Detail View' }, row })">Job view</app-action-button>
+            <app-action-button *ngIf="canAllocate(row)" variant="primary" icon="refresh" (click)="openAllocateTypeSelecter(row)">Allocate</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">
@@ -84,7 +89,7 @@
                     <app-detail-overview [grid]="grid" [row]="row" [sections]="commentSections(row)"></app-detail-overview>
                 </ng-container>
 
-                <ng-container *ngSwitchCase="'lpo'">
+                <ng-container *ngSwitchCase="'documents'">
                     <app-detail-documents
                         title="LPO Documents"
                         emptyMessage="No documents uploaded yet."
@@ -99,7 +104,7 @@
                         <p *ngIf="wf.status === 'error'" class="text-[13px] text-red-600 dark:text-red-400 px-1 py-6 text-center">Could not load the workflow. Close and reopen this job to retry.</p>
                         <div *ngIf="wf.status === 'ready' && wf.timeline?.timeline?.length" class="space-y-3">
                             <div *ngFor="let event of wf.timeline!.timeline; trackBy: trackByEventId"
-                                class="rounded-lg border px-3 py-2.5" [ngClass]="eventTone(event)">
+                                class="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2.5 text-gray-800 dark:text-gray-200">
                                 <div class="flex items-center justify-between gap-2">
                                     <p class="text-[13px] font-medium">{{ event.title }}</p>
                                     <p class="text-[11px] opacity-75 whitespace-nowrap">{{ event.timestamp | date: 'dd MMM yyyy, HH:mm' }}</p>

@@ -114,7 +114,7 @@ const buildJobGridQuery = (search: unknown, filters: unknown, sortKey: unknown, 
 };
 
 /** Lookups + LPO value shared by the page query and the totals query, so "of N" always matches the rows. */
-const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number, jobOwnMatch: Record<string, any> = {}): any[] => [
+export const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number, jobOwnMatch: Record<string, any> = {}): any[] => [
     // Conditions on the job's own fields run before the joins so they only join the jobs that can match.
     ...(Object.keys(jobOwnMatch).length ? [{ $match: jobOwnMatch }] : []),
     { $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' } },
@@ -162,7 +162,7 @@ const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number, jobOwnMatch
                     in: {
                         $reduce: {
                             input: { $ifNull: ['$quotation.dealData.additionalCosts', []] },
-                            initialValue: '$$baseLpoValue',
+                            initialValue: { $subtract: ['$$baseLpoValue', { $ifNull: ['$quotation.dealData.totalDiscount', 0] }] },
                             in: { $cond: [{ $eq: ['$$this.type', 'Customer Discount'] }, { $subtract: ['$$value', '$$this.value'] }, '$$value'] },
                         },
                     },
@@ -200,6 +200,11 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
         const jobOwnClauses: any[] = [];
         if (status != null) { matchFilters.$and.push({ status }); jobOwnClauses.push({ status }); }
         if (allocateStatusFilter) matchFilters.allocateStatus = allocateStatusFilter;
+        // Held jobs of one type only (New Jobs lists just the ones waiting on an advance payment); other statuses pass through.
+        const onHoldType = ['advance-payment', 'other'].includes(String(req.body.onHoldType)) ? String(req.body.onHoldType) : null;
+        if (onHoldType && allocateStatusFilter?.$in?.includes(allocateStatus.OnHold)) {
+            matchFilters.$and.push({ $or: [{ allocateStatus: { $ne: allocateStatus.OnHold } }, { holdType: onHoldType }] });
+        }
         if (customer && ObjectId.isValid(String(customer))) matchFilters['quotation.client'] = new ObjectId(String(customer));
         if (department && ObjectId.isValid(String(department))) matchFilters['quotation.department'] = new ObjectId(String(department));
         // Created-date window (the report's From / To); both ends inclusive.
@@ -224,12 +229,13 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
 
         switch (access) {
             case 'created':
-                accessFilter = { 'salesPersonDetails._id': new ObjectId(userId) };
+                if (userId) accessFilter = { 'salesPersonDetails._id': new ObjectId(userId) };
                 break;
             case 'reported':
-                accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
+                if (userId) accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
                 break;
             case 'createdAndReported':
+                if (!userId) break;
                 reportedToUserIds.push(new ObjectId(userId));
                 accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
                 break;
@@ -245,18 +251,27 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
 
         const qatarUsdRate = await getUSDRated();
         const gridQuery = buildJobGridQuery(search, gridFilters, sortKey, sortDir);
-        const withoutPiStages: any[] = req.body.withoutPi === true ? [
+        // piState narrows jobs by their latest proforma: none (no PI yet), inProcess (a PI that is not Received), received.
+        const piState: string | null = req.body.withoutPi === true ? 'none' : (['none', 'inProcess', 'received', 'completed'].includes(req.body.piState) ? req.body.piState : null);
+        const piStateMatch: Record<string, any> = {
+            none: { 'linkedPi.0': { $exists: false } },
+            inProcess: { 'linkedPi.0': { $exists: true }, 'linkedPi.0.status': { $nin: ['Received', 'Completed'] } },
+            received: { 'linkedPi.0.status': 'Received' },
+            completed: { 'linkedPi.0.status': 'Completed' },
+        };
+        const withoutPiStages: any[] = piState ? [
             { $lookup: {
                 from: ProformaInvoice.collection.name,
                 let: { jobId: '$_id' },
                 pipeline: [
                     { $match: { $expr: { $eq: ['$job', '$$jobId'] }, isDeleted: { $ne: true } } },
+                    { $sort: { createdAt: -1 } },
                     { $limit: 1 },
-                    { $project: { _id: 1 } },
+                    { $project: { _id: 1, status: 1 } },
                 ],
                 as: 'linkedPi',
             } },
-            { $match: { 'linkedPi.0': { $exists: false } } },
+            { $match: piStateMatch[piState] },
             { $project: { linkedPi: 0 } },
         ] : [];
         const ownMatch = (withAllocate: boolean) => ({
@@ -314,7 +329,18 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                         },
                     },
                 },
-                { $project: { purchaseRequests: 0, costSupplierDetails: 0, salesPersonName: 0, departmentName: 0, procurementName: 0 } },
+                { $lookup: {
+                    from: ProformaInvoice.collection.name,
+                    let: { jobId: '$_id' },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ['$job', '$$jobId'] }, isDeleted: { $ne: true }, status: { $in: ['Received', 'Completed'] } } },
+                        { $limit: 1 },
+                        { $project: { _id: 1 } },
+                    ],
+                    as: 'paidPi',
+                } },
+                { $addFields: { advancePaid: { $gt: [{ $size: '$paidPi' }, 0] } } },
+                { $project: { paidPi: 0, purchaseRequests: 0, costSupplierDetails: 0, salesPersonName: 0, departmentName: 0, procurementName: 0 } },
             ]),
             jobModel.aggregate([
                 ...baseStages,
@@ -343,12 +369,13 @@ export const totalJob = async (req: Request, res: Response, next: NextFunction) 
 
         switch (access) {
             case 'created':
-                accessFilter = { 'salesPersonDetails._id': new ObjectId(userId) };
+                if (userId) accessFilter = { 'salesPersonDetails._id': new ObjectId(userId) };
                 break;
             case 'reported':
-                accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
+                if (userId) accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
                 break;
             case 'createdAndReported':
+                if (!userId) break;
                 reportedToUserIds.push(new ObjectId(userId));
                 accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
                 break;
@@ -438,17 +465,20 @@ export const updateJobStatus = async (req: Request, res: Response, next: NextFun
             return res.status(200).json({ success: true, status, allocateStatus: targetTab });
         }
 
+        const holdType = req.body.holdType === 'advance-payment' ? 'advance-payment' : 'other';
+        const holdNote = String(req.body.note ?? '').trim();
+        const holdReason = holdNote ? `${reason} — ${holdNote}` : reason;
         await jobModel.updateOne({ _id: job._id }, status === jobStatus.OnHold
-            ? { $set: { status, allocateStatus: targetTab, holdReason: reason, updatedDate: new Date() } }
-            : { $set: { status, allocateStatus: targetTab, updatedDate: new Date() }, $unset: { holdReason: '' } });
+            ? { $set: { status, allocateStatus: targetTab, holdReason, holdType, updatedDate: new Date() } }
+            : { $set: { status, allocateStatus: targetTab, updatedDate: new Date() }, $unset: { holdReason: '', holdType: '' } });
 
         await logAudit(req, {
             entityType: 'job', entityId: job._id, entityLabel: job.jobId, action: 'status-changed',
-            summary: `Status changed to ${status}${reason ? ` — ${reason}` : ''}`,
+            summary: `Status changed to ${status}${reason ? ` — ${status === jobStatus.OnHold ? holdReason : reason}` : ''}`,
             changes: [
                 { label: 'Status', from: String(job.status), to: String(status) },
                 ...(job.allocateStatus !== targetTab ? [{ label: 'Allocation status', from: String(job.allocateStatus), to: targetTab }] : []),
-                ...(reason ? [{ label: 'Reason', to: reason }] : []),
+                ...(reason ? [{ label: 'Reason', to: status === jobStatus.OnHold ? holdReason : reason }] : []),
             ],
         });
         return res.status(200).json({ success: true, status, allocateStatus: targetTab });
@@ -868,7 +898,7 @@ export const oneJobSheet = async (req: Request, res: Response, next: NextFunctio
                             in: {
                                 $reduce: {
                                     input: '$quotation.dealData.additionalCosts',
-                                    initialValue: '$$baseLpoValue',
+                                    initialValue: { $subtract: ['$$baseLpoValue', { $ifNull: ['$quotation.dealData.totalDiscount', 0] }] },
                                     in: {
                                         $cond: [
                                             { $eq: ['$$this.type', 'Customer Discount'] },
@@ -1015,7 +1045,7 @@ export const markJobLost = async (req: Request, res: Response, next: NextFunctio
         const previous = String(job.allocateStatus);
         const updated = await jobModel.findByIdAndUpdate(id, {
             $set: { allocateStatus: allocateStatus.Lost, status: jobStatus.Cancelled, lostReason: reason, lostAt: now, lostBy: actor?._id, updatedDate: now },
-            $unset: { holdReason: '' },
+            $unset: { holdReason: '', holdType: '' },
         }, { new: true });
         if (!updated) return res.status(404).json({ success: false, message: 'Job not found' });
 

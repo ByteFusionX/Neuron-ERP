@@ -973,14 +973,35 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             }
         ] : [];
 
+        // With no explicit sort, enquiries whose follow-up is overdue come first (most overdue first), then newest.
+        const defaultSort = !sortKey;
+        const isOverdueExpr = {
+            $and: [
+                { $lt: [{ $ifNull: ['$nextFollowUpDate', todayStart] }, todayStart] },
+                { $not: [{ $in: ['$status', ['Quoted', 'Lost', 'quoted', 'lost']] }] }
+            ]
+        };
+        const overduePrep: any[] = defaultSort ? [{
+            $addFields: {
+                _overdueRank: { $cond: [isOverdueExpr, 0, 1] },
+                // Only overdue rows are ordered by due date; the rest tie and fall back to newest first
+                _overdueDate: { $cond: [isOverdueExpr, '$nextFollowUpDate', new Date(0)] }
+            }
+        }] : [];
+        const sortStage: Record<string, 1 | -1> = defaultSort
+            ? { _overdueRank: 1, _overdueDate: 1, _id: -1 }
+            : { [resolvedSortKey]: resolvedSortDirection, _id: resolvedSortDirection };
+
         const enquiryDataQuery = enquiryModel.aggregate([
             { $match: listFilters },
             { $match: listStatusFilter },
             ...sortPrep,
-            { $sort: { [resolvedSortKey]: resolvedSortDirection, _id: resolvedSortDirection } },
+            ...overduePrep,
+            { $sort: sortStage },
             { $skip: skipNum },
             { $limit: row },
             ...(relatedSort ? [{ $project: { _sortRef: 0, _sortValue: 0 } }] : []),
+            ...(defaultSort ? [{ $project: { _overdueRank: 0, _overdueDate: 0 } }] : []),
             {
                 $lookup: { from: 'customers', localField: 'client', foreignField: '_id', as: 'client' }
             },
@@ -2071,7 +2092,7 @@ export const giveFeedback = async (req: any, res: Response, next: NextFunction) 
             const userData = await getEmployeeData(req.user);
             await notifyByPrivilege(
                 {
-                    type: 'AssignedJob',
+                    type: 'FeedbackGiven',
                     referenceModel: 'Enquiry',
                     title: 'Feedback Received',
                     message: `Feedback has been provided for enquiry ${result.enquiryId}`,
@@ -2631,7 +2652,7 @@ export const RejectPresaleJob = async (req: Request, res: Response, next: NextFu
             const owner = String(result.salesPerson ?? '');
             await notifyByPrivilege(
                 {
-                    type: 'Enquiry',
+                    type: 'PresaleRejected',
                     referenceModel: 'Enquiry',
                     title: 'Presale Job Rejected by Manager',
                     message: `Presale job has been rejected by manager for enquiry ${result.enquiryId}`,
@@ -2805,7 +2826,7 @@ export const returnPresaleJob = async (req: Request, res: Response, next: NextFu
         const salesPerson = enquiry.salesPerson?.toString();
         await notifyByPrivilege(
             {
-                type: 'Enquiry',
+                type: 'PresaleRejected',
                 referenceModel: 'Enquiry',
                 title: 'Presale Job Returned',
                 message: `Enquiry ${enquiry.enquiryId} was rejected by presales and returned to you${note ? `. Note: ${note}` : ''}`,
@@ -2897,7 +2918,7 @@ export const resolveHeldPresaleAssignment = async (req: Request, res: Response, 
             const salesPerson = enquiry.salesPerson?.toString();
             await notifyByPrivilege(
                 {
-                    type: 'Enquiry',
+                    type: 'PresaleRejected',
                     referenceModel: 'Enquiry',
                     title: 'Presale Job Rejected',
                     message: `Enquiry ${enquiry.enquiryId} could not be assigned in presales and was rejected: ${comment}`,
@@ -2951,7 +2972,7 @@ export const rejectNewPresaleJob = async (req: Request, res: Response, next: Nex
         const salesPerson = enquiry.salesPerson?.toString();
         await notifyByPrivilege(
             {
-                type: 'Enquiry',
+                type: 'PresaleRejected',
                 referenceModel: 'Enquiry',
                 title: 'Presale Job Rejected',
                 message: `Enquiry ${enquiry.enquiryId} was rejected by presales: ${comment}`,

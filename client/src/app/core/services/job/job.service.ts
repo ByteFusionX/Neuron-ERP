@@ -32,8 +32,8 @@ export class JobService {
       { responseType: 'blob', observe: 'events', reportProgress: true })
   }
 
-  updateJobStatus(jobId: string, status: JobStatus, reason?: string): Observable<{ success: boolean; status: JobStatus; allocateStatus: string }> {
-    return this.http.patch<{ success: boolean; status: JobStatus; allocateStatus: string }>(`${this.apiUrl}/job/status/${jobId}`, { status, reason })
+  updateJobStatus(jobId: string, status: JobStatus, reason?: string, hold?: { holdType: string; note?: string }): Observable<{ success: boolean; status: JobStatus; allocateStatus: string }> {
+    return this.http.patch<{ success: boolean; status: JobStatus; allocateStatus: string }>(`${this.apiUrl}/job/status/${jobId}`, { status, reason, ...hold })
   }
 
   totalJobs(access?: string, userId?: string): Observable<{ total: number }> {

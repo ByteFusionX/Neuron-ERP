@@ -13,6 +13,9 @@ export interface filterJob {
     allocateStatus?: allocateStatus | null;
     allocateStatuses?: allocateStatus[];
     withoutPi?: boolean;
+    piState?: 'none' | 'inProcess' | 'received' | 'completed';
+    /** With On Hold among allocateStatuses, keeps only the held jobs of this type. */
+    onHoldType?: 'advance-payment' | 'other';
     sortKey?: string | null;
     sortDir?: 'asc' | 'desc' | null;
     filters?: { key: string; op: string; value?: unknown }[];
@@ -31,6 +34,7 @@ export interface getJob {
     createdDate: string;
     updatedDate?: string;
     holdReason?: string;
+    holdType?: 'advance-payment' | 'other';
     lostReason?: string;
     clientDetails?: any;
     salesPersonDetails?: any;
@@ -41,6 +45,8 @@ export interface getJob {
     allocateStatus: allocateStatus
     allocateType: allocateType
     hasPurchaseRequest?: boolean;
+    /** A proforma invoice exists for the job and its advance payment is confirmed. */
+    advancePaid?: boolean;
     comment?: string;
     lpoValue?: number;
     procurementPerson?: {

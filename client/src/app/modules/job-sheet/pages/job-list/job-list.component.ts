@@ -19,6 +19,7 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { ModalService } from 'src/app/shared/components/modal';
 import { AllocateTypeModalComponent, AllocateTypeResult } from '../allocate-type-modal/allocate-type-modal.component';
 import { MarkLostModalComponent } from '../mark-lost-modal/mark-lost-modal.component';
+import { HoldJobModalComponent, HoldJobResult } from '../hold-job-modal/hold-job-modal.component';
 import { TransferProcurementPersonComponent, TransferProcurementPersonResult } from '../transfer-procurement-person/transfer-procurement-person.component';
 
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
@@ -30,6 +31,7 @@ import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailOverviewSection, DetailDocument, DetailTableColumn, DetailFootRow } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
@@ -118,7 +120,17 @@ export class JobListComponent {
 
   itemFootRows(row: getJob): DetailFootRow[] {
     const subtotal = this.itemRows(row).reduce((sum, r) => sum + (Number(r['amount']) || 0), 0);
-    return [{ label: 'Total', emphasis: true, cells: { amount: { value: subtotal, format: 'currency' } } }];
+    const d = (row.quotation?.dealData as any) ?? {};
+    const customerDiscount = ((d.additionalCosts ?? []) as any[])
+      .filter((c) => c.type === 'Customer Discount')
+      .reduce((sum, c) => sum + (Number(c.value) || 0), 0);
+    const discount = (Number(d.totalDiscount) || 0) + customerDiscount;
+    const cell = (value: number) => ({ amount: { value, format: 'currency' as const } });
+    return [
+      { label: 'Total', cells: cell(subtotal) },
+      { label: 'Discount', cells: cell(discount) },
+      { label: 'Net Total', emphasis: true, cells: cell(Math.max(subtotal - discount, 0)) },
+    ];
   }
 
   @ViewChild('grid') grid?: DataGridComponent<getJob>;
@@ -143,7 +155,7 @@ export class JobListComponent {
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'comments', label: 'Comments', icon: 'chat' },
-    { id: 'lpo', label: 'Documents', icon: 'files' },
+    { id: 'documents', label: 'Documents', icon: 'files' },
     { id: 'workflow', label: 'Workflow', icon: 'activity' },
     { id: 'history', label: 'History', icon: 'clock' },
   ];
@@ -258,8 +270,8 @@ export class JobListComponent {
       { key: 'jobId', label: 'Job Id', sortable: true },
       // Status, owner and value come first so they stay in view without horizontal scrolling at ~1500 px.
       {
-        // Hidden for now, and locked so the columns menu can't turn it back on.
-        key: 'allocateStatus', label: 'Allocate Status', type: 'badge', sortable: true, visible: false, locked: true,
+        // Hidden by default; the columns menu can turn it on or off.
+        key: 'allocateStatus', label: 'Allocate Status', type: 'badge', sortable: true, visible: false,
         badgeClasses: this.allocateStatusBadgeClasses,
         badgeLabel: allocateStatusLabel,
         filterOptions: Object.entries(ALLOCATE_STATUS_LABELS).map(([value, label]) => ({ value, label })),
@@ -287,6 +299,10 @@ export class JobListComponent {
       {
         id: 'status', label: 'Update status', icon: 'pencil', quick: true,
         hidden: (r) => !this.canChangeStatus(r),
+      },
+      {
+        id: 'hold', label: 'Put on hold', icon: 'flag', quick: true,
+        hidden: (r) => !this.canHold(r),
       },
       {
         id: 'allocate', label: 'Allocate', icon: 'refresh', quick: true,
@@ -460,15 +476,15 @@ export class JobListComponent {
   onRowOpen(row: getJob): void {
     this.detailLoading = true;
     setTimeout(() => (this.detailLoading = false), 250);
-    const state = { bills: [] as ProformaInvoice[], status: 'Loading customer bills…' };
+    const state = { bills: [] as ProformaInvoice[], status: 'Loading advance…' };
     this.customerBills.set(row._id, state);
     const loadPage = (page: number) => this.piService.list({ job: row._id, page, limit: 100 }).subscribe({
       next: (result) => {
         state.bills.push(...result.data);
         if (state.bills.length < result.total && result.data.length) loadPage(page + 1);
-        else state.status = state.bills.length ? '' : 'No customer bills for this job.';
+        else state.status = state.bills.length ? '' : 'No advance for this job.';
       },
-      error: () => { state.status = 'Could not load customer bills. Close and reopen this job to retry.'; },
+      error: () => { state.status = 'Could not load advance. Close and reopen this job to retry.'; },
     });
     loadPage(1);
   }
@@ -481,6 +497,9 @@ export class JobListComponent {
         break;
       case 'status':
         this.onUpdateStatus(row);
+        break;
+      case 'hold':
+        this.onHold(row);
         break;
       case 'allocate':
         this.openAllocateTypeSelecter(row);
@@ -497,6 +516,29 @@ export class JobListComponent {
   /** Pending jobs aren't allocated yet and Lost ones are closed, so only the stages in between take a manual status. Once a purchase request exists, operations take over. */
   canChangeStatus(row: getJob): boolean {
     return this.canUpdateJobStatus && row.status !== JobStatus.completed;
+  }
+
+  /** Only users with the allocate/reallocate privilege can hold; not an already held, paid, completed or lost job. */
+  canHold(row: getJob): boolean {
+    return this.canAllocateJobs && this.canChangeStatus(row) && !row.advancePaid && row.allocateStatus !== allocateStatus.OnHold &&
+      row.allocateStatus !== allocateStatus.Completed && row.allocateStatus !== allocateStatus.Lost;
+  }
+
+  onHold(row: getJob): void {
+    if (!this.canHold(row)) {
+      this.toast.warning('You cannot put this job on hold');
+      return;
+    }
+    this.modal.open<HoldJobResult>(HoldJobModalComponent, { width: '520px', data: row }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this._jobService.updateJobStatus(row._id, JobStatus.onHold, result.reason, { holdType: result.holdType, note: result.note }).subscribe({
+        next: () => {
+          this.toast.success(result.holdType === 'advance-payment' ? 'Job on hold and sent to Finance for an advance payment' : 'Job put on hold');
+          this.getJobs(true);
+        },
+        error: (err) => this.toast.error(err?.error?.message || 'Failed to put the job on hold'),
+      });
+    });
   }
 
   onUpdateStatus(row: getJob): void {
@@ -620,11 +662,11 @@ export class JobListComponent {
   private customerBillSections(row: getJob): DetailOverviewSection[] {
     const state = this.customerBills.get(row._id);
     if (!state || state.status) return [{
-      title: 'Customer Bills',
-      fields: [{ type: 'field', label: 'Customer Bills', value: state?.status || 'Loading customer bills…' }],
+      title: 'Advance',
+      fields: [{ type: 'field', label: 'Advance', value: state?.status || 'Loading advance…' }],
     }];
     return state.bills.map((pi, index) => ({
-      title: state.bills.length > 1 ? `Customer Bills (${index + 1})` : 'Customer Bills',
+      title: state.bills.length > 1 ? `Advance (${index + 1})` : 'Advance',
       columns: '2',
       fields: [
         { type: 'field', label: 'PI Number', value: pi.piNo },
@@ -633,9 +675,21 @@ export class JobListComponent {
         { type: 'field', label: 'Payment Term', value: pi.paymentTerms || '—' },
         { type: 'field', label: 'Expected Date', value: this.datePipe.transform(pi.expectedDate, 'dd MMM yyyy') || '—' },
         { type: 'field', label: 'Expected Amount', value: `${this.numberFormat.transform(pi.expectedAmount ?? 0)} ${pi.currency || 'QAR'}`, numeric: true },
-        { type: 'field', label: 'Status', value: pi.status },
+        { type: 'field', label: 'Status', value: pi.status, pill: true, tone: this.piStatusTone(pi.status) },
       ],
     }));
+  }
+
+  private piStatusTone(status: string): DetailTone {
+    switch (status) {
+      case 'Completed':
+      case 'Received': return 'good';
+      case 'Accepted': return 'active';
+      case 'Sent': return 'info';
+      case 'Pending': return 'warn';
+      case 'Rejected': return 'bad';
+      default: return 'neutral';
+    }
   }
 
   overviewSections(row: getJob): DetailOverviewSection[] {

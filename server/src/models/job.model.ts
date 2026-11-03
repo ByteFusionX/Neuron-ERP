@@ -17,6 +17,7 @@ interface Job extends Document {
     projectInstallation?: boolean;
     amc?: boolean;
     holdReason?: string;
+    holdType?: string;
     lostReason?: string;
     lostAt?: Date;
     lostBy?: Types.ObjectId;
@@ -100,6 +101,8 @@ const jobSchema = new Schema<Job>({
     allocatedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     allocatedAt: { type: Date },
     holdReason: { type: String },
+    // advance-payment: Finance raises a proforma, and receiving it returns the job to Pending.
+    holdType: { type: String, enum: ['advance-payment', 'other'] },
     lostReason: { type: String },
     lostAt: { type: Date },
     lostBy: { type: Schema.Types.ObjectId, ref: 'Employee' },

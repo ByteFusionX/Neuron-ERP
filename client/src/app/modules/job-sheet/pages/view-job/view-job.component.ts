@@ -46,18 +46,15 @@ interface JobFact {
   state?: { dot: string; text: string };
 }
 
-/** One step in the Costs tab breakdown; negative values reduce the total. */
-interface CostBreakdownLine {
+/** One row of the Pricing tab. */
+interface PricingLine {
   label: string;
   note?: string;
-  value: number;
-}
-
-interface CostBreakdownSection {
-  title: string;
-  start: CostBreakdownLine;
-  lines: CostBreakdownLine[];
-  total: CostBreakdownLine;
+  value: string;
+  /** Rows that reduce the total are tinted orange, rows that add to it green. */
+  tone?: 'add' | 'reduce';
+  emphasis?: boolean;
+  divider?: boolean;
 }
 
 type PanelTab = 'costs' | 'documents' | StageKey | 'workflow' | 'history';
@@ -118,7 +115,7 @@ export class ViewJobComponent implements OnInit {
   panelOpen = true;
   panelTab: PanelTab = 'costs';
   readonly panelTabs: { id: PanelTab; label: string }[] = [
-    { id: 'costs', label: 'Costs' },
+    { id: 'costs', label: 'Pricing' },
     { id: 'documents', label: 'Documents' },
     { id: 'workflow', label: 'Workflow' },
     { id: 'pr', label: 'PR' },
@@ -143,8 +140,7 @@ export class ViewJobComponent implements OnInit {
 
   itemRows: Record<string, any>[] = [];
   itemFootRows: DetailFootRow[] = [];
-  costBreakdown: CostBreakdownSection[] = [];
-  costProfit = { value: 0, perc: 0 };
+  pricingLines: PricingLine[] = [];
   documents: DetailDocument[] = [];
   private docFiles = new Map<string, any>();
 
@@ -499,22 +495,23 @@ export class ViewJobComponent implements OnInit {
   private rebuildView(): void {
     const q = this.quote;
     const d = q?.dealData ?? {};
-    const currency = q?.currency ? ` ${q.currency}` : '';
     const price = dealSheetPriceDetails(d.updatedItems, d.additionalCosts, d.totalDiscount);
     const customerDiscount = (d.additionalCosts ?? [])
       .filter((c: any) => c.type === 'Customer Discount')
       .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
     const quoteDiscount = Number(d.totalDiscount) || 0;
     const discount = quoteDiscount + customerDiscount;
+    const sumOf = (type: string) => (d.additionalCosts ?? [])
+      .filter((c: any) => c.type === type)
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
     this.stats = [
-      { label: `Total Cost${currency}`, value: this.formatNumber(price.totalCost) },
-      { label: `Subtotal${currency}`, value: this.formatNumber(price.totalSellingPrice + discount) },
-      { label: `Profit${currency}`, value: this.formatNumber(price.profit) },
-      { label: 'Profit %', value: `${(price.perc || 0).toFixed(2)}%` },
-      { label: `Quotation Discount${currency}`, value: this.formatNumber(quoteDiscount) },
-      ...(customerDiscount ? [{ label: `Customer Discount${currency}`, value: this.formatNumber(customerDiscount) }] : []),
-      { label: `Total Discount${currency}`, value: this.formatNumber(discount) },
-      { label: `Net Deal Value${currency}`, value: this.formatNumber(price.totalSellingPrice) },
+      { label: `Total Price`, value: this.formatNumber(price.totalSellingPrice + discount) },
+      { label: `Discount`, value: this.formatNumber(discount) },
+      { label: 'Margin %', value: `${(price.perc || 0).toFixed(2)}%` },
+      { label: `Margin`, value: this.formatNumber(price.profit) },
+      { label: `Total Additional Cost`, value: this.formatNumber(sumOf('Additional Cost')) },
+      { label: `Total Supplier Discount`, value: this.formatNumber(sumOf('Supplier Discount')) },
+      { label: `Total Cost`, value: this.formatNumber(price.totalCost) },
     ];
     // Only the listed lines: deal-level additional costs and discounts belong to the Costs tab, not this table.
     let itemSell = 0;
@@ -532,6 +529,8 @@ export class ViewJobComponent implements OnInit {
         totalCost: { value: itemCost, format: 'currency' },
         ...this.footMarginCells(itemSell, itemCost),
       } },
+      { label: 'Discount', cells: { totalSellingPrice: { value: discount, format: 'currency' } } },
+      { label: 'Net Total', emphasis: true, cells: { totalSellingPrice: { value: Math.max(itemSell - discount, 0), format: 'currency' } } },
     ];
     this.detailFacts = this.buildDetailFacts();
     this.detailItems = this.detailFacts.map((f) => ({ key: f.label, label: f.label, hiddenByDefault: f.label === 'Currency' || f.label === 'Department' }));
@@ -542,35 +541,35 @@ export class ViewJobComponent implements OnInit {
     this.documents = this.buildDocuments();
   }
 
-  /** Costs tab: how the selected lines' sums become the deal totals, same as the deal sheet view. */
+  /** Pricing tab: price, discount, net total, margin, then each additional cost and the resulting total cost. */
   private buildCostBreakdown(d: any, price: { totalCost: number; totalSellingPrice: number; profit: number; perc: number }): void {
-    let lineSell = 0;
-    let lineCost = 0;
-    for (const item of selectedDealItems(d.updatedItems) ?? []) {
-      for (const detail of (item as any)?.itemDetails ?? []) {
-        if (!detail.dealSelected) continue;
-        lineSell += (Number(detail.unitSellingPrice) || 0) * (Number(detail.quantity) || 0);
-        lineCost += (Number(detail.unitCost) || 0) * (Number(detail.quantity) || 0);
-      }
-    }
-    const costLines: CostBreakdownLine[] = [];
-    const sellLines: CostBreakdownLine[] = [];
+    const quoteDiscount = Number(d.totalDiscount) || 0;
+    const customerDiscount = (d.additionalCosts ?? [])
+      .filter((c: any) => c.type === 'Customer Discount')
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+    const discount = quoteDiscount + customerDiscount;
+    const money = (n: number) => this.formatNumber(n);
+    const lines: PricingLine[] = [
+      { label: 'Total price', value: money(price.totalSellingPrice + discount) },
+      { label: 'Discount', value: discount ? `− ${money(discount)}` : money(0), tone: discount ? 'reduce' : undefined },
+      { label: 'Net total', value: money(price.totalSellingPrice), emphasis: true, divider: true },
+      { label: 'Margin %', value: `${(price.perc || 0).toFixed(2)}%` },
+      { label: 'Margin', value: money(price.profit) },
+    ];
+    let hasExtra = false;
     for (const c of d.additionalCosts ?? []) {
       const value = Number(c.value) || 0;
       if (!value) continue;
-      if (c.type === 'Additional Cost') costLines.push({ label: c.name || 'Additional cost', note: 'Additional cost', value });
-      else if (c.type === 'Supplier Discount') costLines.push({ label: c.supplierDetails?.supplierName || c.name || 'Supplier', note: 'Supplier discount', value: -value });
+      if (c.type === 'Additional Cost') {
+        lines.push({ label: c.name || 'Additional cost', note: 'Additional cost', value: `+ ${money(value)}`, tone: 'add', divider: !hasExtra });
+        hasExtra = true;
+      } else if (c.type === 'Supplier Discount') {
+        lines.push({ label: c.supplierDetails?.supplierName || c.name || 'Supplier', note: 'Supplier discount', value: `− ${money(value)}`, tone: 'reduce', divider: !hasExtra });
+        hasExtra = true;
+      }
     }
-    const quoteDiscount = Number(d.totalDiscount) || 0;
-    if (quoteDiscount) sellLines.push({ label: 'Quotation discount', value: -quoteDiscount });
-    for (const c of d.additionalCosts ?? []) {
-      if (c.type === 'Customer Discount' && Number(c.value)) sellLines.push({ label: c.name || 'Customer discount', note: 'Customer discount', value: -Number(c.value) });
-    }
-    this.costBreakdown = [
-      { title: 'Cost', start: { label: 'Items cost', value: lineCost }, lines: costLines, total: { label: 'Total cost', value: price.totalCost } },
-      { title: 'Selling price', start: { label: 'Items selling price', value: lineSell }, lines: sellLines, total: { label: 'Net deal value', value: price.totalSellingPrice } },
-    ];
-    this.costProfit = { value: price.profit, perc: price.perc || 0 };
+    lines.push({ label: 'Total cost', value: money(price.totalCost), emphasis: true, divider: true });
+    this.pricingLines = lines;
   }
 
   private buildDetailFacts(): JobFact[] {
@@ -590,7 +589,7 @@ export class ViewJobComponent implements OnInit {
       { label: 'Allocate Type', value: job.allocateType || '' },
       { label: 'Deal ID', value: d.dealId || '', link: q._id ? ['/deal-sheet/view', q._id] : undefined },
       { label: 'Quote ID', value: q.quoteId || '', link: q._id ? ['/quotations/view', q._id] : undefined },
-      { label: 'Customer ID', value: q.client?.clientRef || '', link: q.client?.clientRef ? ['/customers'] : undefined, queryParams: { search: q.client?.companyName } },
+      { label: 'Customer ID', value: q.client?.clientRef || '' },
       { label: 'Company', value: q.client?.companyName || '' },
       { label: 'Contact', value: contact },
       { label: 'Email', value: attention?.email || q.client?.customerEmailId || '' },
