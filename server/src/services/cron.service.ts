@@ -3,7 +3,7 @@ import announcementModel from "../models/announcement.model";
 import Notification from "../models/notification.model";
 import { fetchExchangeRate } from "../common/utils/util";
 import Event from '../models/events.model';
-import Quotation from '../models/quotation.model';
+import Quotation, { quoteStatus } from '../models/quotation.model';
 import PurchaseRequest, { PurchaseRequestStatus } from '../models/purchaseRequest.model';
 import Enquiry from '../models/enquiry.model';
 import Category from '../models/category.model';
@@ -14,7 +14,8 @@ import { logAudit } from './audit.service';
 import { processOutbox } from './outbox.service';
 import { runExclusive } from './cronLock.service';
 import './announcementNotify.service';
-import Rfq, { RfqStatus, RfqType } from '../models/rfq.model';
+import { Invoice } from '../models/invoice.model';
+import { billingRecipients } from './workflowNotify.service';
 import { expireLapsedReservations } from './stock.service';
 const cron = require('node-cron');
 
@@ -437,7 +438,7 @@ const processPresaleAssignments = async () => {
                 );
                 if (!claim.modifiedCount) continue;
                 await rejectUnassignedPresale(enquiry._id, 'Auto-rejected: not assigned within the workflow time limit', 'Workflow');
-                await notifyPresaleRoles(enquiry, [enquiry.salesPerson], 'Presale job rejected', `Enquiry ${enquiry.enquiryId} was auto-rejected because no one was assigned within the workflow time limit`, presaleKey(enquiry, approval, 'reject'), 'Enquiry');
+                await notifyPresaleRoles(enquiry, [enquiry.salesPerson], 'Presale job rejected', `Enquiry ${enquiry.enquiryId} was auto-rejected because no one was assigned within the workflow time limit`, presaleKey(enquiry, approval, 'reject'), 'PresaleRejected');
                 continue;
             }
 
@@ -513,40 +514,119 @@ const processOverdueFollowUps = async () => {
 };
 
 /**
- * Tells whoever booked an open supplier RFQ chase that it is overdue. One notification per follow-up.
- * Chases created automatically (on "Mark sent") go to the person who raised the RFQ.
+ * Tells the owner of an open quotation follow-up that it is overdue (its due day has passed). The owner is whoever
+ * scheduled it, else the quotation's creator. One notification per follow-up, however often this runs.
  */
-const processOverdueRfqFollowUps = async () => {
+const processOverdueQuoteFollowUps = async () => {
     try {
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
-        const rfqs = await Rfq.find({
-            rfqType: RfqType.Sales,
-            isDeleted: false,
-            status: { $nin: [RfqStatus.Closed, RfqStatus.Cancelled] },
-            followUps: { $elemMatch: { status: 'scheduled', dueDate: { $lt: startOfToday } } }
-        }).select('rfqNo enquiryId createdBy followUps');
+        const quotes = await Quotation.find({
+            isDeleted: { $ne: true },
+            status: { $nin: [quoteStatus.Won, quoteStatus.Lost, quoteStatus.Expired] },
+            'followUp.history': { $elemMatch: { status: 'scheduled', dueDate: { $lt: startOfToday } } }
+        }).select('quoteId createdBy followUp.history');
 
-        for (const rfq of rfqs) {
-            const overdue = (rfq.followUps || []).filter((f: any) => f.status === 'scheduled' && f.dueDate && f.dueDate < startOfToday);
-            for (const followUp of overdue as any[]) {
-                const about = followUp.supplierName ? ` with ${followUp.supplierName}` : '';
-                await notify({
-                    type: 'RfqFollowUpOverdue',
-                    referenceModel: 'Rfq',
-                    title: 'RFQ follow-up overdue',
-                    message: `The follow-up${about} on ${rfq.rfqNo} was due on ${new Date(followUp.dueDate).toLocaleDateString('en-GB')} and is still open`,
-                    sentBy: rfq.createdBy?.toString(),
-                    recipients: [followUp.createdBy ?? rfq.createdBy],
-                    referenceId: rfq._id,
-                    additionalData: { rfqId: rfq._id.toString(), enquiryId: rfq.enquiryId?.toString() },
-                    dedupeKey: `rfq-followup-overdue:${rfq._id}:${followUp._id}`,
-                    channels: ['inapp', 'push', 'email'],
-                });
-            }
+        for (const quote of quotes) {
+            const followUp: any = (quote.followUp?.history || []).find((f: any) => f.status === 'scheduled' && f.dueDate && f.dueDate < startOfToday);
+            if (!followUp) continue;
+            await notify({
+                type: 'QuotationFollowUpOverdue',
+                referenceModel: 'Quotation',
+                title: 'Quote follow-up overdue',
+                message: `The follow-up for quotation ${quote.quoteId} was due on ${new Date(followUp.dueDate).toLocaleDateString('en-GB')} and is still open`,
+                sentBy: quote.createdBy?.toString(),
+                recipients: [followUp.createdBy ?? quote.createdBy],
+                referenceId: quote._id,
+                additionalData: { quotationId: quote._id.toString() },
+                dedupeKey: `quote-followup-overdue:${quote._id}:${followUp._id}`,
+                channels: ['inapp', 'push', 'email'],
+            });
         }
     } catch (error) {
-        console.error('Overdue RFQ follow-up check error:', error.message);
+        console.error('Overdue quote follow-up check error:', error.message);
+    }
+};
+
+/**
+ * Tells the owner of an open purchase request follow-up that it is overdue. The owner is whoever scheduled it,
+ * else the buyer the job is assigned to, else the request's creator. One notification per follow-up.
+ */
+const processOverduePurchaseFollowUps = async () => {
+    try {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const requests = await PurchaseRequest.find({
+            isDeleted: { $ne: true },
+            status: { $nin: [PurchaseRequestStatus.Rejected, PurchaseRequestStatus.Revoked, PurchaseRequestStatus.OnHoldCancelled] },
+            'followUp.history': { $elemMatch: { status: 'scheduled', dueDate: { $lt: startOfToday } } }
+        }).select('purchaseNo createdBy procurementPerson followUp.history');
+
+        for (const request of requests) {
+            const followUp: any = (request.followUp?.history || []).find((f: any) => f.status === 'scheduled' && f.dueDate && f.dueDate < startOfToday);
+            if (!followUp) continue;
+            await notify({
+                type: 'PurchaseFollowUpOverdue',
+                referenceModel: 'Purchase',
+                title: 'Purchase follow-up overdue',
+                message: `The follow-up for purchase request ${request.purchaseNo} was due on ${new Date(followUp.dueDate).toLocaleDateString('en-GB')} and is still open`,
+                sentBy: request.createdBy?.toString(),
+                recipients: [followUp.createdBy ?? request.procurementPerson ?? request.createdBy],
+                referenceId: request._id,
+                additionalData: { purchaseId: request._id.toString() },
+                dedupeKey: `purchase-followup-overdue:${request._id}:${followUp._id}`,
+                channels: ['inapp', 'push', 'email'],
+            });
+        }
+    } catch (error) {
+        console.error('Overdue purchase follow-up check error:', error.message);
+    }
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The credit days in a payment-terms text such as "Net 30" or "30 days"; null when it states none. */
+const paymentTermDays = (terms: unknown): number | null => {
+    const days = String(terms ?? '').match(/\d+/);
+    return days ? Number(days[0]) : null;
+};
+
+/**
+ * Tells billing that a submitted invoice is past its payment terms and still unpaid. The due date is the invoice
+ * date plus the credit days in its payment terms; an invoice whose terms state no days is never flagged.
+ * One notification per invoice.
+ */
+const processOverdueInvoices = async () => {
+    try {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const invoices = await Invoice.find({
+            isDeleted: { $ne: true },
+            status: { $in: ['Submitted', 'Partial invoicing'] },
+            paymentStatus: { $in: ['Pending', 'Partially paid'] },
+            date: { $lt: startOfToday },
+        }).select('invoiceNo date paymentTerms amount salesperson createdBy').lean();
+
+        for (const invoice of invoices as any[]) {
+            const days = paymentTermDays(invoice.paymentTerms);
+            if (days === null) continue;
+            const due = new Date(new Date(invoice.date).getTime() + days * DAY_MS);
+            if (due >= startOfToday) continue;
+            const recipients = await billingRecipients([invoice.salesperson, invoice.createdBy]);
+            await notify({
+                type: 'InvoiceOverdue',
+                referenceModel: 'Invoice',
+                title: 'Invoice overdue',
+                message: `Invoice ${invoice.invoiceNo} was due on ${due.toLocaleDateString('en-GB')} and is still unpaid`,
+                recipients,
+                referenceId: invoice._id,
+                additionalData: { invoiceId: invoice._id.toString() },
+                dedupeKey: `invoice-overdue:${invoice._id}`,
+                channels: ['inapp', 'push', 'email'],
+            });
+        }
+    } catch (error) {
+        console.error('Overdue invoice check error:', error.message);
     }
 };
 
@@ -637,7 +717,9 @@ const startCronJob = () => {
         // Hourly is plenty for a day-level due date
         if (new Date().getMinutes() === 0) {
             await processOverdueFollowUps();
-            await processOverdueRfqFollowUps();
+            await processOverdueQuoteFollowUps();
+            await processOverduePurchaseFollowUps();
+            await processOverdueInvoices();
             await expireLapsedReservations();
         }
         await processOutbox();

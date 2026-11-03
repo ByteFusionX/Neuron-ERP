@@ -33,7 +33,11 @@ export class PushNotificationService {
             return;
         }
 
-        const permission = await Notification.requestPermission();
+        if (Notification.permission === 'denied') {
+            this.subscribedSubject.next(false);
+            return;
+        }
+        const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
         if (permission !== 'granted') {
             this.subscribedSubject.next(false);
             return;
@@ -42,21 +46,58 @@ export class PushNotificationService {
         const registration = await navigator.serviceWorker.register('/sw-push.js');
         await navigator.serviceWorker.ready;
 
+        const subscribe = () => registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: this.urlBase64ToUint8Array(environment.vapidPublicKey) as BufferSource,
+        });
         let subscription = await registration.pushManager.getSubscription();
         if (!subscription) {
-            subscription = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: this.urlBase64ToUint8Array(environment.vapidPublicKey),
-            });
+            subscription = await subscribe();
+        } else {
+            // a subscription made with a different VAPID key can never receive pushes: replace it
+            const current = subscription.options?.applicationServerKey;
+            const expected = this.urlBase64ToUint8Array(environment.vapidPublicKey);
+            const same = !!current && new Uint8Array(current).length === expected.length
+                && new Uint8Array(current).every((b, i) => b === expected[i]);
+            if (current && !same) {
+                await subscription.unsubscribe();
+                subscription = await subscribe();
+            }
         }
 
         const subscriptionJson = subscription.toJSON();
-        await firstValueFrom(this.http.post(`${this.api}/push-subscription/subscribe`, {
+        await firstValueFrom(this.http.post(`${this.api}/employee/push-subscription`, {
             endpoint: subscriptionJson.endpoint,
             keys: subscriptionJson.keys,
             userAgent: navigator.userAgent,
         }));
         this.subscribedSubject.next(true);
+    }
+
+    private gestureRetryArmed = false;
+
+    /**
+     * Asks for browser notification permission whenever it hasn't been decided yet.
+     * Browsers often ignore a prompt that has no user gesture, so if it is still undecided
+     * afterwards, retry once on the user's next click/keypress.
+     */
+    async ensurePermissionPrompt(): Promise<void> {
+        if (!this.isSupported) return;
+        try {
+            await this.registerAndSubscribe();
+        } catch {
+            this.subscribedSubject.next(false);
+        }
+        if (Notification.permission !== 'default' || this.gestureRetryArmed) return;
+        this.gestureRetryArmed = true;
+        const retry = () => {
+            document.removeEventListener('click', retry, true);
+            document.removeEventListener('keydown', retry, true);
+            this.gestureRetryArmed = false;
+            this.ensurePermissionPrompt();
+        };
+        document.addEventListener('click', retry, true);
+        document.addEventListener('keydown', retry, true);
     }
 
     async unsubscribe(): Promise<void> {

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import PushSubscription from "../models/pushSubscription.model";
 import { getEmployeeData } from "../common/utils/util";
+import { currentFamily } from "../services/authSession.service";
 
 export const subscribe = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -12,11 +13,19 @@ export const subscribe = async (req: Request, res: Response, next: NextFunction)
 
         const userData = await getEmployeeData(req.user);
 
+        // Bind the browser subscription to this login session. The refresh cookie only travels to /employee,
+        // so this handler is mounted there (POST /employee/push-subscription).
+        const family = await currentFamily(req);
+        if (!family) {
+            return res.status(401).json({ success: false, message: 'No active session' });
+        }
+
         const subscription = await PushSubscription.findOneAndUpdate(
             { endpoint },
             {
                 endpoint,
                 employee: userData._id,
+                family,
                 keys: { p256dh: keys.p256dh, auth: keys.auth },
                 userAgent,
             },

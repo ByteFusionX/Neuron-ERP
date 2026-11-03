@@ -103,19 +103,54 @@ export class NotificationService {
             case 'ReAssignedJob':
                 return { routePath: '/presales' };
 
+            case 'FeedbackGiven':
+                return { routePath: '/presales' };
+
             case 'FeedbackRequest':
             case 'Enquiry':
+            case 'PresaleRejected':
+            case 'EnquiryEstimationReady':
+            case 'EnquiryFollowUpOverdue':
                 const enquiryId = additionalData?.enquiryId || referenceId?._id?.toString() || referenceId?.toString();
-                return { 
+                return {
                     routePath: '/enquiry',
                     routeData: { enquiryId }
                 };
-            
-            case 'RfqFollowUpOverdue':
+
+            case 'QuotationWon':
+            case 'QuotationFollowUpOverdue':
                 return {
-                    routePath: '/enquiry',
-                    routeData: { enquiryId: additionalData?.enquiryId }
+                    routePath: '/quotations/view',
+                    routeData: { _id: additionalData?.quotationId || referenceId?._id?.toString?.() }
                 };
+
+            case 'PurchaseFollowUpOverdue':
+                return {
+                    routePath: '/purchase/view-purchase',
+                    routeData: { purchaseId: additionalData?.purchaseId || referenceId?._id?.toString?.() }
+                };
+
+            case 'LpoCancelled':
+                return {
+                    routePath: '/purchase/view-lpo',
+                    routeData: { purchaseOrderId: additionalData?.purchaseOrderId || referenceId?._id?.toString?.() }
+                };
+
+            case 'GrnCreated':
+                return { routePath: '/grn/view-grn', routeData: { grnId: additionalData?.grnId || referenceId?._id?.toString?.() } };
+
+            case 'DnItemsRejected':
+            case 'DnDispatched':
+            case 'DnDelivered':
+                return { routePath: '/dispatch/view', routeData: { dnId: additionalData?.dnId || referenceId?._id?.toString?.() } };
+
+            case 'InvoiceRejected':
+            case 'InvoiceOverdue':
+                return { routePath: '/finance/receivables' };
+
+            case 'PdcRejected':
+            case 'ProformaPaymentConfirmed':
+                return { routePath: '/finance/vendor-bills' };
 
             case 'DealSheet':
                 return { routePath: '/deal-sheet/pendings' };
@@ -439,6 +474,12 @@ export class NotificationService {
         }
         if ((routePath === '/grn/view-grn' || routePath === '/grn/rejections') && routeData?.grnId) {
             return { commands: ['/grn/view-grn', routeData.grnId] };
+        }
+        if (routePath === '/purchase/view-lpo' && routeData?.purchaseOrderId) {
+            return { commands: [routePath, routeData.purchaseOrderId] };
+        }
+        if (routePath === '/dispatch/view' && routeData?.dnId) {
+            return { commands: [routePath, routeData.dnId] };
         }
         if (routePath === '/grn/grn-list') {
             return { commands: [routePath], extras: routeData?.view ? { queryParams: { view: routeData.view } } : undefined };
