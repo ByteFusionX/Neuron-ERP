@@ -70,7 +70,7 @@ export class PushNotificationService {
             endpoint: subscriptionJson.endpoint,
             keys: subscriptionJson.keys,
             userAgent: navigator.userAgent,
-        }));
+        }, { withCredentials: true }));
         this.subscribedSubject.next(true);
     }
 
