@@ -24,8 +24,18 @@ export const listAuditLogs = async (req: Request, res: Response, next: NextFunct
     const { entityType, action, actor, search, from, to } = req.query as Record<string, string | undefined>;
 
     const filter: Record<string, any> = {};
-    if (entityType) filter.entityType = entityType;
-    if (action) filter.action = action;
+    // Presale events are stored under 'enquiry'; 'presale' is a virtual tab that lists them separately.
+    const presaleActions = /^presale|estimation|feedback|revision|to-presale/;
+    if (entityType === "presale") {
+      filter.entityType = "enquiry";
+      filter.action = { $regex: presaleActions };
+    } else if (entityType === "enquiry") {
+      filter.entityType = "enquiry";
+      filter.action = { $not: presaleActions };
+    } else if (entityType) {
+      filter.entityType = entityType;
+    }
+    if (action && !filter.action) filter.action = action;
     if (actor) filter.actorName = { $regex: escapeRegex(actor.trim()), $options: "i" };
     if (search) filter.summary = { $regex: escapeRegex(search.trim()), $options: "i" };
     if (from || to) {

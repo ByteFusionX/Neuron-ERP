@@ -17,7 +17,7 @@ const ACTION_TONES: Record<string, DetailTimelineEntry['tone']> = {
 
 /** Friendly module names for the entity types recorded in the audit log. */
 const AUDIT_MODULE_LABELS: Record<string, string> = {
-  enquiry: 'Enquiry', quotation: 'Quotation', job: 'Job Sheet', customer: 'Customer', employee: 'Employee',
+  enquiry: 'Enquiry', presale: 'Presale', dealSheet: 'Deal Sheet', quotation: 'Quotation', job: 'Job Sheet', customer: 'Customer', employee: 'Employee',
   supplier: 'Supplier', product: 'Product', masterList: 'Master List', announcement: 'Announcement',
   purchaseRequest: 'Purchase Request', generalPurchaseRequest: 'General Purchase Request',
   purchaseOrder: 'Purchase Order (LPO)', grn: 'GRN', deliveryNote: 'Delivery Note', proformaInvoice: 'Proforma Invoice',

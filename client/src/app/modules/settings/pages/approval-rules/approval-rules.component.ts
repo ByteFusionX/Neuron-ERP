@@ -180,7 +180,7 @@ export class ApprovalRulesComponent implements OnInit {
     if (event.action.id === 'open') this.rulesGrid?.openRow(event.row);
   }
 
-  detailTabs: DataGridDetailTab[] = [{ id: 'overview', label: 'Overview', icon: 'info' }];
+  detailTabs: DataGridDetailTab[] = [{ id: 'overview', label: 'Details', icon: 'info' }];
 
   constructor(private _rules: ApprovalRuleService, private _employeeService: EmployeeService) {}
 
