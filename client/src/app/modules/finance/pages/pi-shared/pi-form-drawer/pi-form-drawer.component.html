@@ -26,8 +26,8 @@
             <app-sf-field label="PI No" [control]="f['piNo']">
                 <app-sf-input formControlName="piNo" readonly placeholder="Issued on save"></app-sf-input>
             </app-sf-field>
-            <app-sf-field label="Job" [control]="f['job']" class="sm:col-span-2">
-                <app-sf-combobox formControlName="job" [options]="jobOptions()" placeholder="Select a pending or on hold job" emptyText="No pending or on hold jobs"></app-sf-combobox>
+            <app-sf-field label="Job" [control]="f['job']">
+                <app-sf-combobox formControlName="job" [options]="jobOptions()" placeholder="Select a job" emptyText="No billable jobs"></app-sf-combobox>
             </app-sf-field>
             <app-sf-field label="Client" [control]="f['clientName']">
                 <app-sf-input formControlName="clientName" readonly></app-sf-input>

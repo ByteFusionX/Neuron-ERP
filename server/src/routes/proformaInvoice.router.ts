@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
     getProformaInvoices, getProformaInvoiceById, createProformaInvoice, updateProformaInvoice,
-    updateProformaInvoiceStatus, getNextProformaInvoiceNo,
+    updateProformaInvoiceStatus, confirmProformaPayment, getNextProformaInvoiceNo,
 } from '../controllers/proformaInvoice.controller';
 import { requirePrivilege } from '../common/middlewares/privilege.middleware';
 
@@ -18,5 +18,6 @@ router.get('/:id', getProformaInvoiceById);
 router.post('/', requirePrivilege('invoice', 'piCreateEdit'), createProformaInvoice);
 router.put('/:id', requirePrivilege('invoice', 'piCreateEdit'), updateProformaInvoice);
 router.patch('/:id/status', requirePrivilege('invoice', 'piApprove'), upload.array('document', 1), updateProformaInvoiceStatus);
+router.patch('/:id/confirm-payment', requirePrivilege('invoice', 'piApprove'), confirmProformaPayment);
 
 export default router;

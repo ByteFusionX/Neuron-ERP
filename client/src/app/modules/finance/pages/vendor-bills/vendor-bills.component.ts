@@ -1,7 +1,10 @@
 import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, OnInit, ViewChild, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subscription, catchError, forkJoin, map, of } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, catchError, forkJoin, map, of } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { CustomerInvoiceService } from 'src/app/core/services/customer-invoice.service';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
@@ -24,7 +27,7 @@ import {
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
-import { DetailDocument, DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocument, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 
 const STATUS_CLASSES: Record<string, string> = {
@@ -42,7 +45,7 @@ const RECEIPT_CLASSES: Record<string, string> = {
 @Component({
   selector: 'app-vendor-bills',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailDocumentsComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailDocumentsComponent, DetailTimelineComponent],
   templateUrl: './vendor-bills.component.html',
   styleUrl: './vendor-bills.component.css',
 })
@@ -58,6 +61,7 @@ export class VendorBillsComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly invoices = inject(CustomerInvoiceService);
   private readonly employeeService = inject(EmployeeService);
+  private readonly auditLog = inject(AuditLogService);
   private readonly destroyRef = inject(DestroyRef);
   private loadSub?: Subscription;
   canApprovePdc = false;
@@ -82,7 +86,24 @@ export class VendorBillsComponent implements OnInit {
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'documents', label: 'Documents', icon: 'files' },
+    { id: 'history', label: 'History', icon: 'clock' },
   ];
+
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+
+  /** Recorded events of the purchase order behind the bill. */
+  historyFor(row: any): Observable<DetailTimelineEntry[]> {
+    let subject = this.historyCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(row._id, subject);
+      this.auditLog.getHistory('purchaseOrder', row._id).subscribe({
+        next: (entries) => subject!.next(toTimelineEntries(entries)),
+        error: () => this.historyCache.delete(row._id),
+      });
+    }
+    return subject.asObservable();
+  }
   readonly rowActions: DataGridRowAction<any>[] = [
     ...['Approved', 'Rejected', 'Revoked'].map(status => ({
       id: 'pdc-' + status, label: status === 'Approved' ? 'Approve PDC' : status === 'Rejected' ? 'Reject PDC' : 'Revoke PDC',

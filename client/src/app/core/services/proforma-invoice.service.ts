@@ -3,9 +3,9 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 
-export type ProformaStatus = 'Pending' | 'Sent' | 'Accepted' | 'Received';
-export const PI_STATUS_LIST: ProformaStatus[] = ['Pending', 'Sent', 'Accepted', 'Received'];
-export const PAYMENT_METHODS = ['PDC', 'Account Transfer', 'Cash', 'Other'] as const;
+export type ProformaStatus = 'Pending' | 'Sent' | 'Accepted' | 'Received' | 'Rejected' | 'Completed';
+export const PI_STATUS_LIST: ProformaStatus[] = ['Pending', 'Sent', 'Accepted', 'Received', 'Rejected'];
+export const PAYMENT_METHODS = ['PDC', 'Bank Transfer', 'Cash', 'Open Credit', 'Other'] as const;
 
 export interface ProformaPayment {
   method: string;
@@ -21,6 +21,8 @@ export interface ProformaStatusPayload {
   paymentMethod?: string;
   otherMethod?: string;
   referenceNo?: string;
+  /** yyyy-MM-dd, the day the payment arrived. */
+  receivedDate?: string;
   document?: File | null;
 }
 
@@ -65,6 +67,7 @@ export interface ProformaInvoice {
   createdBy?: { _id: string; firstName?: string; lastName?: string };
   statusUpdatedBy?: { _id: string; firstName?: string; lastName?: string };
   statusUpdatedAt?: string;
+  paymentConfirmedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -87,14 +90,42 @@ export interface ProformaInvoiceList {
   viewCounts: Record<string, number>;
 }
 
+/** A stored PI shaped like an invoice so the invoice PDF can print it in the proforma layout. */
+export function proformaToInvoice(pi: ProformaInvoice): any {
+  return {
+    invoiceNo: pi.piNo,
+    isProforma: true,
+    documentTitle: 'PROFORMA INVOICE',
+    attention: pi.attention,
+    date: pi.createdAt,
+    customer: { companyName: pi.client?.name },
+    jobId: { jobId: pi.jobId },
+    items: pi.items.map((i) => ({ description: i.description, quantity: i.quantity, amount: i.amount ?? i.quantity * i.unitPrice })),
+    amount: pi.amount,
+    discount: pi.summary?.customerDiscount || 0,
+    claimAmount: pi.expectedAmount || Math.max(0, pi.amount - (pi.summary?.customerDiscount || 0)),
+    subTotal: pi.amount,
+    taxAmount: 0,
+    paymentTerms: pi.paymentTerms,
+    shipTo: pi.shipTo,
+    dnNumbers: '',
+    lpoRef: pi.lpoNo,
+    subject: pi.subject,
+    currency: pi.currency || 'QAR',
+    quoteCompany: pi.quoteCompany || '',
+    isPreview: true,
+  };
+}
+
 @Injectable({ providedIn: 'root' })
 export class ProformaInvoiceService {
   private readonly api = `${environment.api}/proforma-invoice`;
 
   constructor(private http: HttpClient) {}
 
-  list(params: { page: number; limit: number; status?: string; search?: string; job?: string }): Observable<ProformaInvoiceList> {
+  list(params: { page: number; limit: number; status?: string; search?: string; job?: string; jobs?: string[] }): Observable<ProformaInvoiceList> {
     const query: Record<string, string> = { page: String(params.page), limit: String(params.limit) };
+    if (params.jobs?.length) query['jobs'] = params.jobs.join(',');
     if (params.status) query['status'] = params.status;
     if (params.search) query['search'] = params.search;
     if (params.job) query['job'] = params.job;
@@ -122,8 +153,13 @@ export class ProformaInvoiceService {
       form.append('paymentMethod', payload.paymentMethod ?? '');
       form.append('otherMethod', payload.otherMethod ?? '');
       form.append('referenceNo', payload.referenceNo ?? '');
+      if (payload.receivedDate) form.append('receivedDate', payload.receivedDate);
       if (payload.document) form.append('document', payload.document);
     }
     return this.http.patch<{ success: boolean; data: ProformaInvoice }>(`${this.api}/${id}/status`, form);
+  }
+
+  confirmPayment(id: string): Observable<{ success: boolean; data: ProformaInvoice }> {
+    return this.http.patch<{ success: boolean; data: ProformaInvoice }>(`${this.api}/${id}/confirm-payment`, {});
   }
 }

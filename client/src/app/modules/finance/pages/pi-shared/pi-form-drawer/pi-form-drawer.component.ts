@@ -100,9 +100,9 @@ export class PiFormDrawerComponent implements OnInit, OnChanges {
   private quoteCompany = '';
 
   readonly form: FormGroup = this.fb.group({
-    piNo: [{ value: '', disabled: true }],
+    piNo: [''],
     job: [null as string | null, [Validators.required]],
-    clientName: [{ value: '', disabled: true }, [Validators.required]],
+    clientName: ['', [Validators.required]],
     attention: [''],
     paymentTerms: ['', [Validators.required]],
     shipTo: [''],
@@ -216,9 +216,14 @@ export class PiFormDrawerComponent implements OnInit, OnChanges {
         search: '', page: 1, row: 200, status: null,
         access: employee?.category?.privileges?.jobSheet?.viewReport,
         userId: employee?._id,
-        allocateStatuses: [allocateStatus.Pending, allocateStatus.OnHold],
+        allocateStatuses: [allocateStatus.Pending, allocateStatus.OpenToWork, allocateStatus.WorkInProgress, allocateStatus.OnHold],
       }).subscribe({
-        next: (data) => this.jobs.set(data?.job ?? []),
+        next: (data) => {
+          const list = data?.job ?? [];
+          // Keep the preselected job in the options even if the list didn't include it.
+          const selected = this.job;
+          this.jobs.set(selected && !list.some((j) => j._id === selected._id) ? [selected, ...list] : list);
+        },
         error: () => this.notificationService.error('Failed to load jobs'),
       });
     });

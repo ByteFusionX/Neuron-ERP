@@ -1,0 +1,62 @@
+<div class="h-full flex flex-col p-5 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-data-grid
+    #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Invoices"
+    subtitle="Manage customer invoices and advances"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [serverSide]="true"
+    [totalCount]="total"
+    [data]="rows"
+    [columns]="columns"
+    [loading]="isLoading"
+    [pageSize]="pageSize"
+    [searchPlaceholder]="'Search by job, client, or LPO'"
+    [emptyMessage]="'No jobs found'"
+    [views]="views"
+    initialViewId="all"
+    [detailTitle]="title"
+    [detailSubtitle]="subtitle"
+    [rowOpenable]="rowOpenable"
+    [detailTabs]="detailTabs"
+    [rowActions]="rowActions"
+    (rowAction)="onRowAction($event)"
+    exportable
+    exportFileName="invoices.xlsx"
+    (queryChange)="onQueryChange($event)">
+
+    <ng-template #detailMetaTemplate let-row>
+      <app-detail-meta panelMeta [items]="advanceMeta(row)" [currency]="advanceCurrency(row)"></app-detail-meta>
+    </ng-template>
+
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <app-detail-overview *ngSwitchCase="'overview'" [grid]="grid" [row]="row" [sections]="advanceSections(row)"></app-detail-overview>
+        <app-detail-table *ngSwitchCase="'items'" [columns]="itemColumns" [rows]="itemRows(row)"
+          [currency]="advanceCurrency(row)" [footRows]="itemFootRows(row)" numbered
+          emptyMessage="No items yet. They appear once a proforma invoice is created."></app-detail-table>
+        <app-detail-documents *ngSwitchCase="'documents'" title="Payment proof" emptyMessage="No payment proof uploaded yet."
+          [documents]="paymentDocuments(row)" [viewable]="false" (download)="onPaymentDocument(row)"></app-detail-documents>
+        <app-detail-timeline *ngSwitchCase="'history'" [entries]="(advanceHistory(row) | async) ?? []"
+          emptyMessage="No history yet. It starts once a proforma invoice is created."></app-detail-timeline>
+      </ng-container>
+    </ng-template>
+  </app-data-grid>
+</div>
+
+<app-pi-form-drawer
+  [open]="drawerOpen"
+  [job]="drawerJob"
+  [pi]="drawerPi"
+  (saved)="onDrawerSaved()"
+  (closed)="closeDrawer()">
+</app-pi-form-drawer>
+
+<app-pi-invoice-drawer
+  [open]="invoiceDrawerOpen"
+  [pi]="invoiceDrawerPi"
+  (saved)="onInvoiceCreated($event)"
+  (closed)="invoiceDrawerOpen = false">
+</app-pi-invoice-drawer>

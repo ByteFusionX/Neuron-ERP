@@ -1,8 +1,10 @@
 import { Schema, model } from 'mongoose';
 
-export const PAYMENT_METHODS = ['PDF', 'PDC', 'Account Transfer', 'Cash', 'Other'] as const;
+export const PAYMENT_METHODS = ['PDF', 'PDC', 'Bank Transfer', 'Cash', 'Open Credit', 'Other'] as const;
 
-export const PI_STATUSES = ['Pending', 'Sent', 'Accepted', 'Received'] as const;
+export const PI_STATUSES = ['Pending', 'Sent', 'Accepted', 'Received', 'Rejected', 'Completed'] as const;
+// Completed is set only by confirm-payment, never picked as a status.
+export const PI_PICKABLE_STATUSES = ['Pending', 'Sent', 'Accepted', 'Received', 'Rejected'] as const;
 
 const proformaInvoiceSchema = new Schema({
     // NT/PI-<mm>-<yy>-0001, issued when the PI is created.
@@ -52,6 +54,9 @@ const proformaInvoiceSchema = new Schema({
     },
     statusUpdatedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     statusUpdatedAt: { type: Date },
+    // Set when finance confirms the received payment after the invoice is raised; this releases the held job.
+    paymentConfirmedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+    paymentConfirmedAt: { type: Date },
     isDeleted: { type: Boolean, default: false },
 }, {
     // createdAt is the PI create date; updatedAt drives "Last Updated".

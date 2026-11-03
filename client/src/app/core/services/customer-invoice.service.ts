@@ -6,6 +6,10 @@ import { SKIP_ERROR_TOAST } from '../interceptors/error-interceptor/error.interc
 export interface CustomerInvoicePayload {
   purchaseOrder?: string;
   deliveryNote?: string;
+  /** Raised from a received proforma invoice. */
+  proformaInvoice?: string;
+  receivedAmount?: number;
+  receivedDate?: string;
   client: { name: string; customerId?: string };
   attention: string;
   invoiceDate: string;
@@ -20,7 +24,7 @@ export interface CustomerInvoicePayload {
 export class CustomerInvoiceService {
   private readonly http = inject(HttpClient);
   private readonly url = `${environment.api}/customer-invoice`;
-  list(params: { page: number; limit: number; search: string; status?: string; deliveryNote?: string }) {
+  list(params: { page: number; limit: number; search: string; status?: string; deliveryNote?: string; proformaInvoices?: string }) {
     return this.http.get<any>(this.url, { params, context: new HttpContext().set(SKIP_ERROR_TOAST, true) });
   }
   listPdc(params: { page: number; limit: number; search: string; status?: string }) {
@@ -32,8 +36,14 @@ export class CustomerInvoiceService {
   create(payload: CustomerInvoicePayload) {
     return this.http.post<any>(this.url, payload, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) });
   }
+  update(id: string, payload: Partial<CustomerInvoicePayload>) {
+    return this.http.put<any>(`${this.url}/${id}`, payload, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) });
+  }
   prepareDn(deliveryNote: string) {
     return this.http.get<any>(`${this.url}/delivery-note/${deliveryNote}`, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) });
+  }
+  get(id: string) {
+    return this.http.get<any>(`${this.url}/${id}`, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) });
   }
   prepare(purchaseOrder: string) {
     return this.http.get<any>(`${this.url}/purchase-order/${purchaseOrder}`, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) });

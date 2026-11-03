@@ -1,14 +1,16 @@
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
-import { ProformaInvoice, PI_STATUSES, PAYMENT_METHODS } from '../models/proformaInvoice.model';
+import { ProformaInvoice, PI_STATUSES, PI_PICKABLE_STATUSES, PAYMENT_METHODS } from '../models/proformaInvoice.model';
 import Job from '../models/job.model';
 import { issueDocNo, peekDocNo } from '../services/docNumber.service';
 import { getEmployeeData } from '../common/utils/util';
 import { logAudit } from '../services/audit.service';
+import { notify } from '../services/notify.service';
+import { jobOwnerOf, recipientsExcluding, safely } from '../services/workflowNotify.service';
 import { uploadFileToAws } from '../common/aws-connect';
 
 const ENTITY = 'proformaInvoice';
-const BILLABLE_JOB_STATUSES = ['Pending', 'On Hold'];
+const BILLABLE_JOB_STATUSES = ['Pending', 'OpenToWork', 'Work In Progress', 'On Hold'];
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const money = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
@@ -71,6 +73,12 @@ export const getProformaInvoices = async (req: Request, res: Response) => {
             if (!Types.ObjectId.isValid(job)) return res.status(400).json({ success: false, message: 'Invalid job' });
             base.job = new Types.ObjectId(job);
         }
+        // Comma-separated job ids: the proformas of one page of jobs in a single call.
+        if (req.query.jobs) {
+            const ids = String(req.query.jobs).split(',').map((s) => s.trim()).filter(Boolean);
+            if (!ids.length || ids.some((id) => !Types.ObjectId.isValid(id))) return res.status(400).json({ success: false, message: 'Invalid jobs' });
+            base.job = { $in: ids.map((id) => new Types.ObjectId(id)) };
+        }
         if (search) {
             const rx = { $regex: escapeRegex(search), $options: 'i' };
             base.$or = [{ piNo: rx }, { jobId: rx }, { 'client.name': rx }, { lpoNo: rx }, { attention: rx }];
@@ -113,7 +121,7 @@ export const createProformaInvoice = async (req: Request, res: Response) => {
         const job: any = await Job.findOne({ _id: jobRef, isDeleted: { $ne: true } }).lean();
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
         if (!BILLABLE_JOB_STATUSES.includes(job.allocateStatus)) {
-            return res.status(400).json({ success: false, message: 'A proforma invoice can only be raised for a pending or on hold job' });
+            return res.status(400).json({ success: false, message: 'A proforma invoice can only be raised for a job that is not yet completed or lost' });
         }
 
         const clientName = String(req.body.client?.name || '').trim();
@@ -152,7 +160,7 @@ export const updateProformaInvoice = async (req: Request, res: Response) => {
         if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid id' });
         const pi = await ProformaInvoice.findOne({ _id: req.params.id, isDeleted: false });
         if (!pi) return res.status(404).json({ success: false, message: 'Proforma invoice not found' });
-        if (pi.status === 'Received') return res.status(400).json({ success: false, message: 'A received proforma invoice can no longer be edited' });
+        if (pi.status === 'Received' || pi.status === 'Completed') return res.status(400).json({ success: false, message: 'A received proforma invoice can no longer be edited' });
 
         const clientName = String(req.body.client?.name || pi.client?.name || '').trim();
         const body = normalizeBody(req.body);
@@ -181,11 +189,13 @@ export const updateProformaInvoiceStatus = async (req: Request, res: Response) =
         if (!employee) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
         const status = clean(req.body.status);
-        if (!(PI_STATUSES as readonly string[]).includes(status)) return res.status(400).json({ success: false, message: 'Select a valid status' });
+        if (!(PI_PICKABLE_STATUSES as readonly string[]).includes(status)) return res.status(400).json({ success: false, message: 'Select a valid status' });
         const note = clean(req.body.note);
+        if (status === 'Rejected' && !note) return res.status(400).json({ success: false, message: 'A note is required when rejecting a proforma invoice' });
 
         const pi = await ProformaInvoice.findOne({ _id: req.params.id, isDeleted: false });
         if (!pi) return res.status(404).json({ success: false, message: 'Proforma invoice not found' });
+        if (pi.status === 'Completed') return res.status(400).json({ success: false, message: 'A completed proforma invoice can no longer change status' });
         if (pi.status === status) return res.status(400).json({ success: false, message: `The proforma invoice is already ${status}` });
 
         const previous = pi.status;
@@ -196,7 +206,7 @@ export const updateProformaInvoiceStatus = async (req: Request, res: Response) =
             const referenceNo = clean(req.body.referenceNo);
             if (!(PAYMENT_METHODS as readonly string[]).includes(method) || method === 'PDF') return res.status(400).json({ success: false, message: 'Select the payment method' });
             if (method === 'Other' && !otherMethod) return res.status(400).json({ success: false, message: 'Enter the payment method' });
-            if (!referenceNo) return res.status(400).json({ success: false, message: 'Reference number is required' });
+            if (!referenceNo && method !== 'Open Credit') return res.status(400).json({ success: false, message: 'Reference number is required' });
 
             const file = ((req as any).files || [])[0];
             let document;
@@ -204,7 +214,10 @@ export const updateProformaInvoiceStatus = async (req: Request, res: Response) =
                 await uploadFileToAws(file.filename, file.path);
                 document = { fileName: file.filename, originalname: file.originalname };
             }
-            payment = { method, otherMethod: method === 'Other' ? otherMethod : undefined, referenceNo, document, receivedAt: new Date() };
+            // The date the money actually arrived; defaults to now when not given.
+            const receivedAt = req.body.receivedDate ? new Date(req.body.receivedDate) : new Date();
+            if (isNaN(receivedAt.getTime())) return res.status(400).json({ message: 'Enter a valid received date' });
+            payment = { method, otherMethod: method === 'Other' ? otherMethod : undefined, referenceNo, document, receivedAt };
         }
 
         pi.status = status as any;
@@ -214,6 +227,7 @@ export const updateProformaInvoiceStatus = async (req: Request, res: Response) =
         pi.statusUpdatedAt = new Date();
         await pi.save();
 
+        // The job held for this advance payment is released later, by confirmPayment, once the invoice is raised.
         const paid = payment ? ` (${payment.method === 'Other' ? payment.otherMethod : payment.method}, ref ${payment.referenceNo}${payment.document ? ', document attached' : ''})` : '';
         await logAudit(req, {
             entityType: ENTITY, entityId: pi._id, entityLabel: pi.piNo, action: 'status-changed',
@@ -223,5 +237,73 @@ export const updateProformaInvoiceStatus = async (req: Request, res: Response) =
     } catch (error) {
         console.error('Error updating proforma invoice status:', error);
         return res.status(500).json({ success: false, message: 'Failed to update the proforma invoice status' });
+    }
+};
+
+/** Finance confirms the received payment: the job held for the advance goes back to Pending and moves on. */
+export const confirmProformaPayment = async (req: Request, res: Response) => {
+    try {
+        if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid id' });
+        const employee = await getEmployeeData(req.user);
+        if (!employee) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+        const pi = await ProformaInvoice.findOne({ _id: req.params.id, isDeleted: false });
+        if (!pi) return res.status(404).json({ success: false, message: 'Proforma invoice not found' });
+        const alreadyConfirmed = pi.status === 'Completed' || !!(pi as any).paymentConfirmedAt;
+        if (!alreadyConfirmed && pi.status !== 'Received') return res.status(400).json({ success: false, message: 'Only a received payment can be confirmed' });
+        // A confirmed PI can be confirmed again only to release a job that is still on hold.
+        if (alreadyConfirmed) {
+            const held = pi.job ? await Job.exists({ _id: pi.job, allocateStatus: 'On Hold' }) : null;
+            if (!held) return res.status(400).json({ success: false, message: 'The payment is already confirmed' });
+            // Payment was confirmed earlier but the status was left behind (e.g. Received); bring it to Completed.
+            if (pi.status !== 'Completed') {
+                pi.status = 'Completed' as any;
+                await pi.save();
+            }
+        } else {
+            (pi as any).paymentConfirmedBy = employee._id;
+            (pi as any).paymentConfirmedAt = new Date();
+            pi.status = 'Completed' as any;
+            await pi.save();
+        }
+
+        if (pi.job) {
+            // Any hold except one set manually for another reason; older holds have no type at all.
+            const resumed = await Job.findOneAndUpdate(
+                { _id: pi.job, allocateStatus: 'On Hold', holdType: { $ne: 'other' } },
+                { $set: { allocateStatus: 'Pending', status: 'Work In Progress', updatedDate: new Date() }, $unset: { holdReason: '', holdType: '' } },
+            ).lean();
+            if (resumed) {
+                await logAudit(req, {
+                    entityType: 'job', entityId: resumed._id, entityLabel: resumed.jobId, action: 'status-changed',
+                    summary: `Payment on ${pi.piNo} confirmed; job moved from On Hold to Pending`,
+                });
+            }
+        }
+        await logAudit(req, {
+            entityType: ENTITY, entityId: pi._id, entityLabel: pi.piNo, action: 'status-changed',
+            summary: `Payment on ${pi.piNo} confirmed by ${fullName(employee)}; status moved from Received to Completed`,
+        });
+        // The held job moves on, so the people waiting on the advance (job owner, whoever raised the PI) are told.
+        if (!alreadyConfirmed) {
+            await safely('ProformaPaymentConfirmed', async () => {
+                const jobOwner = await jobOwnerOf(pi.job);
+                await notify({
+                    type: 'ProformaPaymentConfirmed',
+                    referenceModel: 'ProformaInvoice',
+                    title: 'Advance payment confirmed',
+                    message: `Payment on proforma ${pi.piNo} was confirmed. The job can move forward`,
+                    sentBy: employee._id?.toString(),
+                    recipients: recipientsExcluding([jobOwner, pi.createdBy], employee),
+                    referenceId: pi._id,
+                    additionalData: { proformaInvoiceId: pi._id.toString() },
+                    channels: ['inapp', 'push', 'email'],
+                });
+            });
+        }
+        return res.status(200).json({ success: true, data: pi });
+    } catch (error) {
+        console.error('Error confirming proforma payment:', error);
+        return res.status(500).json({ success: false, message: 'Failed to confirm the payment' });
     }
 };
