@@ -1,5 +1,6 @@
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { Component, DoCheck, ElementRef, EventEmitter, HostListener, Inject, Input, OnChanges, OnDestroy, OnInit, Optional, Output, SimpleChanges, TemplateRef, ViewChild } from '@angular/core';
+import { Component, DoCheck, ElementRef, NgZone, inject, EventEmitter, HostListener, Inject, Input, OnChanges, OnDestroy, OnInit, Optional, Output, SimpleChanges, TemplateRef, ViewChild } from '@angular/core';
+import { LineViewportDirective } from './line-viewport.directive';
 import { CommandPaletteService } from '../../../core/services/command-palette.service';
 import { CommonModule } from '@angular/common';
 import { AbstractControl, FormArray, FormBuilder, FormControl, FormGroup, FormsModule, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
@@ -83,7 +84,7 @@ export interface LineShare {
   selector: 'app-item-entry',
   standalone: true,
   templateUrl: './item-entry.component.html',
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, MatTooltipModule, NgIcon, DragDropModule, SmartFormModule, ActionButtonComponent, ImageViewerComponent, ParseBoldTextPipe, ParseBracketsTextPipe, LoadMoreOnScrollDirective],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, MatTooltipModule, NgIcon, DragDropModule, SmartFormModule, ActionButtonComponent, ImageViewerComponent, ParseBoldTextPipe, ParseBracketsTextPipe, LoadMoreOnScrollDirective, LineViewportDirective],
   styles: [SF_STYLES + `
     :host { display: block; }
     /* The numeric strip is dense on purpose: seven fields per line have to fit without a horizontal scrollbar. */
@@ -233,7 +234,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   private lastOffer(d: AbstractControl, supplierId: string | null): SupplierLastPrice | undefined {
     if (!supplierId) return undefined;
-    return this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === supplierId)?.last;
+    return this.offersOf(d)?.find((o) => o.supplierId === supplierId)?.last;
   }
 
   /** Percent change from the last price, or null when unchanged or unknown. */
@@ -277,7 +278,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
           const key = d.get('lineKey')?.value;
           if (!key || !this.releasedKeys.has(key)) return;
           this.releasedKeys.delete(key);
-          if ((this.lineOffers?.(d.getRawValue()) ?? []).some((o) => o.state === 'awarded')) return;
+          if ((this.offersOf(d) ?? []).some((o) => o.state === 'awarded')) return;
           this.shares.delete(key);
           const deal = this.dealCost(d);
           const base = this.baseSuppliers.get(d) ?? '';
@@ -306,7 +307,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     const mine = this.sharesOf(d).find((s) => s.supplierId === pill.id);
     if (mine) return `${mine.qty}/${total}`;
     const typed = this.scopeQtys.get(`${d.get('lineKey')?.value}|${pill.id}`);
-    const saved = Number(this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === pill.id)?.savedQty);
+    const saved = Number(this.offersOf(d)?.find((o) => o.supplierId === pill.id)?.savedQty);
     const offered = typed?.dirty && Number(typed.value) > 0 ? Number(typed.value) : saved > 0 ? saved : total;
     return `${Math.min(offered, total)}/${total}`;
   }
@@ -354,7 +355,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     const cost = price ?? (Number(d.get('unitCost')?.value) || 0);
     // What this supplier offers: the quantity typed on its tab, else the one saved on its comparison, else the whole line.
     const typed = this.scopeQtys.get(`${d.get('lineKey')?.value}|${supplierId}`);
-    const saved = Number(this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === supplierId)?.savedQty);
+    const saved = Number(this.offersOf(d)?.find((o) => o.supplierId === supplierId)?.savedQty);
     const want = typed?.dirty && Number(typed.value) > 0 ? Number(typed.value) : saved > 0 ? saved : total;
     // An offer that covers more than is still free replaces the current awards; one that fits is added beside them.
     const base2 = awarded && left > 0 && want <= left ? this.sharesOf(d) : [];
@@ -374,7 +375,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     const own = this.shares.get(key);
     if (own) return own;
     const total = Number(d.get('quantity')?.value) || 0;
-    return (this.lineOffers?.(d.getRawValue()) ?? [])
+    return (this.offersOf(d) ?? [])
       .filter((o) => o.state === 'awarded' && o.supplierId)
       .map((o) => ({ supplierId: o.supplierId!, qty: o.qty || total, cost: Number(o.price) || 0 }));
   }
@@ -446,7 +447,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     const deal = this.dealCost(d);
     const typed = this.scopeCosts.get(`${d.get('lineKey')?.value}|${supplierId}`)?.value;
     if (typed != null && Number(typed) > 0) return Number(typed);
-    const offer = this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === supplierId);
+    const offer = this.offersOf(d)?.find((o) => o.supplierId === supplierId);
     if (offer?.price != null && Number(offer.price) > 0) return Number(offer.price);
     return this.baseSuppliers.get(d) === supplierId ? deal : null;
   }
@@ -498,7 +499,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   pillsFor(i: number, j: number, k: number): { id: string; name: string }[] {
     if (!this.isPurchase || !this.linePills) return [];
     const d = this.detailsAt(i, j)?.at(k);
-    return d ? this.linePills(d.getRawValue()) : [];
+    if (!d) return [];
+    const m = this.memoOf(d);
+    if (!m) return this.linePills(d.getRawValue());
+    return (m.pills ??= this.linePills(this.rawOf(d)));
   }
 
   /** Pills are rebuilt on every check; tracking by supplier keeps the button (and its click) alive. */
@@ -600,7 +604,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     if (this.seedOptionalItems?.length && !alreadyFilled) this.patchOptions(this.seedOptionalItems);
     else if (!this.optionalItems.length) this.addOption();
 
-    this.subs.add(this.optionalItems.valueChanges.subscribe(() => { this.captureDiscountEdit(); this.emitTotals(); }));
+    this.subs.add(this.optionalItems.valueChanges.subscribe(() => { this.resetPass(); this.captureDiscountEdit(); this.emitTotals(); }));
     this.syncPurchaseDiscount();
 
     if (!this.isDeal) {
@@ -781,8 +785,58 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     return own || sum(this.dealSupplierDiscounts);
   }
 
+  /**
+   * The banner totals below are read by several bindings on every change detection pass, and each one walks every line.
+   * Within one pass the form cannot change, so the first answer is reused; outside a pass nothing is cached.
+   */
+  private passCache = new Map<string, unknown>();
+  private passOpen = false;
+  private openPassCache(): void {
+    if (this.passOpen) return;
+    this.passOpen = true;
+    this.resetPass();
+    // Outside the zone: a zone microtask would trigger another change detection pass, which would schedule another, forever.
+    this.zone.runOutsideAngular(() => queueMicrotask(() => { this.passOpen = false; this.resetPass(); }));
+  }
+  private zone = inject(NgZone);
+
+  /** Per-pass copies of each line (getRawValue deep-copies), its offers and its pills; dropped with passCache. */
+  private lineMemo = new Map<AbstractControl, { raw?: any; offers?: LineSupplierOffer[]; pills?: { id: string; name: string }[] }>();
+  private resetPass(): void {
+    this.passCache.clear();
+    this.lineMemo.clear();
+  }
+  private memoOf(d: AbstractControl): { raw?: any; offers?: LineSupplierOffer[]; pills?: { id: string; name: string }[] } | null {
+    if (!this.passOpen) return null;
+    let m = this.lineMemo.get(d);
+    if (!m) { m = {}; this.lineMemo.set(d, m); }
+    return m;
+  }
+  private rawOf(d: AbstractControl): any {
+    const m = this.memoOf(d);
+    if (!m) return d.getRawValue();
+    return (m.raw ??= d.getRawValue());
+  }
+  private offersOf(d: AbstractControl): LineSupplierOffer[] {
+    const m = this.memoOf(d);
+    if (!m) return this.lineOffers?.(d.getRawValue()) ?? [];
+    return (m.offers ??= this.lineOffers?.(this.rawOf(d)) ?? []);
+  }
+
+  private inPass<T>(key: string, compute: () => T): T {
+    if (!this.passOpen) return compute();
+    if (this.passCache.has(key)) return this.passCache.get(key) as T;
+    const value = compute();
+    this.passCache.set(key, value);
+    return value;
+  }
+
   /** Suppliers awarded on some line (or carried as the line's supplier when it has no comparisons). */
   private awardedSupplierIds(): Set<string> {
+    return this.inPass('awarded', () => this.computeAwardedSupplierIds());
+  }
+
+  private computeAwardedSupplierIds(): Set<string> {
     const ids = new Set<string>();
     const option = this.optionalItems?.at(this.selectedOption);
     ((option?.get('items') as FormArray | null)?.getRawValue() ?? []).forEach((item: any) =>
@@ -797,6 +851,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   private purchaseDiscount(): number | null {
+    return this.inPass('purchaseDiscount', () => this.computePurchaseDiscount());
+  }
+
+  private computePurchaseDiscount(): number | null {
     if (!this.isPurchase) return null;
     // A supplier tab always has a figure: the supplier's PR discount, else the deal's, else 0. Without an award it is the deal's, untouched.
     if (this.supplierScope) return this.awardedSupplierIds().has(this.supplierScope) ? this.discountFor(this.supplierScope) : this.dealDiscountBaseline();
@@ -809,6 +867,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   /** The deal's own discount for the same scope, before any PR edit. Supplier compare prices already include it. */
   dealDiscountBaseline(): number {
+    return this.inPass('dealBaseline', () => this.computeDealDiscountBaseline());
+  }
+
+  private computeDealDiscountBaseline(): number {
     const base = this.dealSupplierDiscounts ?? this.supplierDiscounts ?? [];
     const sum = (id: string) => base.filter((s) => this.discountSupplierId(s) === id)
       .reduce((t, s) => t + (Number(s.discount) || 0), 0);
@@ -818,8 +880,41 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     return [...ids].filter((id) => awarded.has(id)).reduce((t, id) => t + sum(id), 0);
   }
 
+  /** Discount given to the customer: the quotation's discount plus any extra the deal added. Fixed whatever the PR does. */
+  @Input() customerDiscountTotal = 0;
+  /** Purchase: the deal's own additional costs, added to its cost in the banner. */
+  @Input() dealExtraCosts = 0;
+  /** The job's own Total cost and net price (the deal sheet's), shown as is on the purchase banner. */
+  @Input() jobTotals: { cost: number; price: number } | null = null;
+  /** Purchase: the deal's cost after its supplier discount, plus its additional costs. */
+  dealTotalCost(): number {
+    // In a supplier tab: only that tab's lines at the deal's cost.
+    if (this.isPurchase && this.supplierScope) return this.dealFigures().cost - this.dealDiscountBaseline();
+    if (this.jobTotals) return this.jobTotals.cost;
+    return this.dealFigures().cost - this.dealDiscountBaseline() + (Number(this.dealExtraCosts) || 0);
+  }
+  /** The deal's margin on its Total cost (after supplier discount and additional costs). */
+  dealNetMargin(): { value: number; percent: number } {
+    // Sum of all items' total price less the quote's discount, against the Total cost.
+    const price = this.dealFigures().selling - (this.supplierScope ? 0 : this.dealTotalDiscount());
+    const value = price - this.dealTotalCost();
+    return { value, percent: price > 0 ? (value / price) * 100 : 0 };
+  }
+  /** The deal's selling total after the customer discount (quotation's plus the deal's extra). */
+  dealTotalPrice(): number {
+    if (this.jobTotals) return this.jobTotals.price;
+    return this.dealFigures().selling - this.dealTotalDiscount();
+  }
+  dealTotalDiscount(): number {
+    return Number(this.customerDiscountTotal) || 0;
+  }
+
   /** Purchase: discount added or removed in the PR against the deal's. Only this moves the PR cost. */
   discountDiff(): number {
+    return this.inPass('discountDiff', () => this.computeDiscountDiff());
+  }
+
+  private computeDiscountDiff(): number {
     if (!this.isPurchase) return 0;
     const ctrl = this.optionalItems?.at(this.selectedOption)?.get('totalDiscount');
     const now = this.purchaseDiscount() ?? (Number(ctrl?.value) || 0);
@@ -862,12 +957,14 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   /** Awards change outside this form, so the Items tab's awarded total is refreshed on every check. */
   ngDoCheck(): void {
+    this.openPassCache();
     if (this.isPurchase && (this.supplierScope || this.supplierDiscounts?.length || this.dealSupplierDiscounts?.length)) this.syncPurchaseDiscount();
   }
 
   ngOnDestroy(): void {
     this.codeLookupTimers.forEach((timer) => clearTimeout(timer));
     this.codeLookupTimers.clear();
+    if (this.recomputeTimer) clearTimeout(this.recomputeTimer);
     this.subs.unsubscribe();
     this.unregisterTarget?.();
     Object.keys(this.imagePreviews).forEach((key) => this.closeImagePreview(key));
@@ -950,7 +1047,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     const key = `${d.get('lineKey')?.value}|${this.supplierScope}`;
     let c = this.scopeCosts.get(key);
     if (!c) {
-      const offer = this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === this.supplierScope);
+      const offer = this.offersOf(d)?.find((o) => o.supplierId === this.supplierScope);
       // A cost awarded to another supplier is not this supplier's: fall back to the deal's cost only while nobody has won the line,
       // and only for the deal's own supplier; any other supplier starts empty until its price is typed.
       const won = this.sharesOf(d);
@@ -967,7 +1064,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   previousQuote(i: number, j: number, k: number): SalesRfqPastQuote | null {
     const d = this.detailsAt(i, j)?.at(k);
     if (!d || !this.supplierScope) return null;
-    return this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === this.supplierScope)?.previous ?? null;
+    return this.offersOf(d)?.find((o) => o.supplierId === this.supplierScope)?.previous ?? null;
   }
 
   /** Warning when this request plus what was already awarded to the supplier elsewhere passes the quantity they quoted. */
@@ -1028,7 +1125,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       const open = full == null ? null : Math.max(0, (Number(raw) || full) - this.claimedElsewhere(d, scope));
       // Nothing open to award leaves the field blank; the line's own quantity then shows as its placeholder.
       // An unawarded supplier shows the quantity saved on its comparison.
-      const savedQty = Number(this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === scope)?.savedQty);
+      const savedQty = Number(this.offersOf(d)?.find((o) => o.supplierId === scope)?.savedQty);
       // On a split line a saved quantity below the line's own is a typed one; the default copy of the full quantity stays blank.
       const typedQty = savedQty > 0 && savedQty !== full ? savedQty : null;
       c = new FormControl<number | null>(own ?? (this.sharesOf(d).length ? typedQty ?? (open || null) : (savedQty > 0 ? savedQty : full)));
@@ -1245,7 +1342,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     const group = this._fb.group({
       // Hidden: set only by `applySuggestion`, cleared when the user retypes the line by hand.
       productId: [null as string | null],
-      itemCode: [''],
+          itemCode: [''],
       partNo: [''],
       detail: ['', deal ? [] : Validators.required],
       quantity: [null as number | null, deal ? [this.whenTicked(Validators.required), Validators.min(0)] : [Validators.required, Validators.min(0)]],
@@ -2297,11 +2394,15 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     if (shown > 0) return shown;
     const d = this.detailsAt(i, j)?.at(k);
     if (!d) return 0;
-    const offer = this.lineOffers?.(d.getRawValue())?.find((o) => o.supplierId === this.supplierScope)?.price;
+    const offer = this.offersOf(d)?.find((o) => o.supplierId === this.supplierScope)?.price;
     return Number(offer) || Number(d.get('unitCost')?.value) || this.dealCostFor(d, this.supplierScope ?? '') || 0;
   }
 
   totalCost(): number {
+    return this.inPass('totalCost', () => this.computeTotalCost());
+  }
+
+  private computeTotalCost(): number {
     const scoped = this.isPurchase && !!this.supplierScope;
     const lines = this.sumOption((j, k) => scoped
       ? this.bannerQty(this.selectedOption, j, k) * this.bannerUnitCost(this.selectedOption, j, k)
@@ -2311,12 +2412,20 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   sellingPrice(): number {
+    return this.inPass('sellingPrice', () => this.computeSellingPrice());
+  }
+
+  private computeSellingPrice(): number {
     return this.sumOption((j, k) => this.supplierScope
       ? this.bannerQty(this.selectedOption, j, k) * (Number(this.detailsAt(this.selectedOption, j)?.at(k)?.get('unitSellingPrice')?.value) || 0)
       : this.lineTotal(this.selectedOption, j, k));
   }
 
   discount(): number {
+    return this.inPass('discount', () => this.computeDiscount());
+  }
+
+  private computeDiscount(): number {
     if (this.isDeal) return Number(this.discountAdjustment) || 0;
     const fromDeal = this.purchaseDiscount();
     if (fromDeal !== null) return fromDeal;
@@ -2340,6 +2449,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   /** Purchase: the deal's own figures (its quantities, selling prices and margins), which do not move with the PR. In a supplier tab, only that tab's lines, at the quantity entered there. */
   dealFigures(): { cost: number; selling: number; marginValue: number; marginPercent: number } {
+    return this.inPass('dealFigures', () => this.computeDealFigures());
+  }
+
+  private computeDealFigures(): { cost: number; selling: number; marginValue: number; marginPercent: number } {
     let selling = 0;
     let cost = 0;
     const option = this.optionalItems.value[this.selectedOption];
@@ -2365,17 +2478,42 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   /** Purchase: the PR's margin — current selling price against the cost of the chosen suppliers. */
+  /** Purchase: the PR's additional costs, all of them. */
+  @Input() prExtraCosts = 0;
+  /** Purchase: lines' cost less the supplier discount in force, plus the PR's additional costs: same basis as the deal's Total cost. */
+  prTotalCost(): number {
+    // Sum of every item's total cost less the discount.
+    // In a supplier tab this covers only that tab's lines and its discount.
+    return this.totalCost() - this.discount();
+  }
+
+  /** Purchase: the PR's net price. With the job's figures, the job's net price moved by any selling change made in the PR. */
+  prPrice(): number {
+    if (this.supplierScope) return this.sellingPrice();
+    return this.jobTotals
+      ? this.jobTotals.price + (this.sellingPrice() - this.dealFigures().selling)
+      : this.finalTotal();
+  }
+
   prMarginValue(): number {
-    return this.finalTotal() - this.totalCost();
+    return this.prPrice() - this.prTotalCost();
   }
 
   prMarginPercent(): number {
-    const selling = this.finalTotal();
+    const selling = this.prPrice();
     return selling > 0 ? (this.prMarginValue() / selling) * 100 : 0;
   }
 
+  /** The filter-chip counts walk every line; typing only needs them once it pauses. */
+  private recomputeTimer: ReturnType<typeof setTimeout> | null = null;
+  private scheduleRecompute(): void {
+    if (this.recomputeTimer) clearTimeout(this.recomputeTimer);
+    this.recomputeTimer = setTimeout(() => { this.recomputeTimer = null; this.recompute(); }, 200);
+  }
+
   private emitTotals(): void {
-    this.recompute();
+    this.resetPass();
+    this.scheduleRecompute();
     this.totals.emit({
       totalCost: this.totalCost(),
       sellingPrice: this.sellingPrice(),
@@ -2440,9 +2578,13 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   /** Purchase: PR margin colour against the deal's — plain when equal, green when higher, red when lower. */
+  /** Magnitude only, so the summary bar shows no minus sign. */
+  absNum(v: number | null | undefined): number {
+    return Math.abs(Number(v) || 0);
+  }
+
   prMarginTone(): string {
-    const deal = this.dealFigures();
-    const diff = deal ? this.prMarginValue() - deal.marginValue : 0;
+    const diff = this.prMarginValue() - this.dealNetMargin().value;
     if (Math.abs(diff) <= 0.005) return 'text-gray-900 dark:text-gray-100';
     return diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
   }
@@ -2545,6 +2687,33 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     if (j >= 0) this.jumpTo(String(j));
   }
 
+  /** Set when Send for approval finds lines with no catalogue product: their item code is outlined until it is filled from the catalogue. */
+  highlightCodes = false;
+
+  /** True when a filled line is not linked to the catalogue, lacks an item code, or fails validation. */
+  hasSubmitProblems(): boolean {
+    const items = this.itemsAt(this.selectedOption)?.controls || [];
+    return items.some((_, jj) => (this.detailsAt(this.selectedOption, jj)?.controls || []).some((l) => {
+      const v = (l as FormGroup).getRawValue();
+      return !!(v.detail || '').toString().trim() && (this.lineFlags(l).notInCatalogue || l.invalid);
+    }));
+  }
+
+  /** Marks every required field, filters straight to the Not in products group (or Errors when all are linked) and scrolls to the first. */
+  showCatalogueGaps(): void {
+    this.highlightCodes = true;
+    this.lineSearch = '';
+    this.itemsAt(this.selectedOption)?.controls.forEach((c) => c.markAllAsTouched());
+    const items = this.itemsAt(this.selectedOption)?.controls || [];
+    const any = (key: 'notInCatalogue' | 'errors') => items.some((_, jj) => (this.detailsAt(this.selectedOption, jj)?.controls || []).some((l) => this.lineFlags(l)[key]));
+    this.lineFilter = any('notInCatalogue') ? 'notInCatalogue' : 'errors';
+    this.jumpToFirstFlagged(this.lineFilter);
+  }
+
+  codeMissing(detail: AbstractControl): boolean {
+    return this.highlightCodes && (!detail.get('productId')?.value || !String(detail.get('itemCode')?.value || '').trim());
+  }
+
   clearFilters(): void {
     this.lineSearch = '';
     this.lineFilter = null;
@@ -2558,7 +2727,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     if (!filled) return { missingPrice: false, notInCatalogue: false, notAwarded: false, errors: false };
     return {
       missingPrice: this.isRfq ? this.rfqPriced && v.unitCost == null : !(Number(v.unitSellingPrice) > 0),
-      notInCatalogue: !v.productId && !!detail,
+      notInCatalogue: (!v.productId || !String(v.itemCode || '').trim()) && !!detail,
       notAwarded: !!this.lineAwarded && !this.lineAwarded(v),
       errors: line.invalid || this.missingSupplier(v),
     };
@@ -2755,8 +2924,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   /** Supplier tab: true for the lines that belong to the tab (every line when there is no tab). */
   lineActive(i: number, j: number, k: number): boolean {
     if (!this.supplierScope) return true;
-    const line = this.detailsAt(i, j)?.at(k);
-    return !!line && this.inSupplierScope((line as FormGroup).getRawValue());
+    // Read several times per row by the template; each answer deep-copies the line, so it is kept for the pass.
+    return this.inPass(`active:${i}:${j}:${k}`, () => {
+      const line = this.detailsAt(i, j)?.at(k);
+      return !!line && this.inSupplierScope(this.rawOf(line));
+    });
   }
 
   /** Supplier tab: items holding no line of the tab sink below the ones that do. */
@@ -2766,9 +2938,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   /** Ticked lines that are not in the active supplier tab yet. */
   selectedInactiveKeys(): string[] {
-    return this.selectedLines()
+    return this.inPass('inactiveKeys', () => this.selectedLines()
       .filter((l) => !this.inSupplierScope(l.getRawValue()))
-      .map((l) => l.get('lineKey')?.value).filter((k): k is string => !!k);
+      .map((l) => l.get('lineKey')?.value).filter((k): k is string => !!k));
   }
 
   @Output() addToTab = new EventEmitter<string[]>();

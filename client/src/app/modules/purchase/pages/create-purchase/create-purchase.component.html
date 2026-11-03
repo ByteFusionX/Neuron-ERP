@@ -12,7 +12,7 @@
     [tabParam]="''"
   >
     <ng-container footerLeft>
-      <app-action-button variant="outline" *ngIf="canSaveDraft" (click)="onDraftClicks()">Save</app-action-button>
+      <app-action-button variant="outline" *ngIf="canSaveDraft" (click)="onDraftClicks()"><ng-icon name="heroArrowDownTray" class="h-3.5 w-3.5"></ng-icon> Save</app-action-button>
     </ng-container>
     <ng-container footerRight>
       <app-action-button (click)="onDiscardClicks()">Discard</app-action-button>
@@ -54,6 +54,10 @@
     (supplierAdded)="onSupplierTabAdded($event)"
     (linesAddedToTab)="onLinesAddedToTab($event)"
     [dealSupplierDiscounts]="dealSupplierDiscounts"
+    [dealExtraCosts]="dealExtraCostsTotal"
+    [prExtraCosts]="extraCostsTotal"
+    [customerDiscountTotal]="dealCustomerDiscount"
+    [jobTotals]="jobTotals"
     (supplierDiscountEdited)="onSupplierDiscountEdited($event)"
     (supplierClosed)="onSupplierTabClosed($event)"
     (offerPicked)="onOfferPicked($event)"
@@ -61,7 +65,7 @@
         (jobLessChange)="toggleJobLess($event)"
         (jobSelected)="onJobSelected($event)"
         (materialRequestsClicked)="onGetMaterialRequestsClicks()"
-        (createProductRequested)="onCreatePartNumber()"
+        (createProductRequested)="onCreatePartNumber($event)"
       ></app-pr-form>
     </div>
   </app-detail-view-shell>
@@ -76,9 +80,6 @@
     (click)="fullView = !fullView">
     <ng-icon [name]="fullView ? 'heroArrowsPointingIn' : 'heroArrowsPointingOut'" class="h-4 w-4"></ng-icon>
   </button>
-  <span sfDrawerHeader class="flex flex-wrap gap-1.5">
-    <app-detail-badge *ngFor="let b of badges()" [label]="b.label" [tone]="b.tone || 'neutral'"></app-detail-badge>
-  </span>
 
   <app-sf-stepper [labels]="shownLabels" [ids]="shownIds" [current]="step" [isComplete]="stepDoneFn" [isLocked]="stepLockedFn" [tickAhead]="true" (stepClick)="goToStep($any($event))"></app-sf-stepper>
 
@@ -122,6 +123,10 @@
     (supplierAdded)="onSupplierTabAdded($event)"
     (linesAddedToTab)="onLinesAddedToTab($event)"
     [dealSupplierDiscounts]="dealSupplierDiscounts"
+    [dealExtraCosts]="dealExtraCostsTotal"
+    [prExtraCosts]="extraCostsTotal"
+    [customerDiscountTotal]="dealCustomerDiscount"
+    [jobTotals]="jobTotals"
     (supplierDiscountEdited)="onSupplierDiscountEdited($event)"
     (linesRemovedFromTab)="onLinesRemovedFromTab($event)"
     (linesAwardedToTab)="onLinesAwardedToTab($event)"
@@ -131,7 +136,7 @@
     (jobLessChange)="toggleJobLess($event)"
     (jobSelected)="onJobSelected($event)"
     (materialRequestsClicked)="onGetMaterialRequestsClicks()"
-    (createProductRequested)="onCreatePartNumber()"
+    (createProductRequested)="onCreatePartNumber($event)"
   ></app-pr-form>
   </div>
 
@@ -173,27 +178,19 @@
       </div>
       <div *ngIf="ie.dealFigures() as dl" class="ml-auto flex flex-wrap items-end gap-5">
         <ng-container *ngIf="showDealFigures">
-        <div *ngIf="ie.dealDiscountBaseline() > 0">
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Deal discount</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ ie.dealDiscountBaseline() | number: '1.2-2' }}</p>
+        <div>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Margin</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ absNum(ie.dealNetMargin().value) | number: '1.2-2' }}</p>
         </div>
         <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Deal cost</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dl.cost | number: '1.2-2' }}</p>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Margin %</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ absNum(ie.dealNetMargin().percent) | number: '1.1-1' }}%</p>
         </div>
         <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Deal margin</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dl.marginValue | number: '1.2-2' }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Deal margin %</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dl.marginPercent | number: '1.1-1' }}%</p>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Total cost</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ ie.dealTotalCost() | number: '1.2-2' }}</p>
         </div>
         </ng-container>
-        <div class="text-right">
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Total price</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dl.selling | number: '1.2-2' }}</p>
-        </div>
       </div>
     </div>
   </ng-template>
@@ -352,7 +349,6 @@
 
   <ng-container sfDrawerFooter>
     <div class="mr-auto flex flex-wrap items-center gap-2">
-      <span *ngIf="purchaseId && !isEditing && !viewOnly" class="text-xs text-gray-400 dark:text-gray-500">{{ f['purchaseNo'].value }} saved</span>
       <ng-container *ngIf="step <= 2 && canSaveDraft">
         <ng-container *ngIf="selectedJobSheet || isJobLess">
           <app-action-button variant="secondary" (click)="onCreatePartNumber()">
@@ -362,18 +358,18 @@
             <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add supplier
           </app-action-button>
         </ng-container>
-        <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onMrRequestClicks()">MR request</app-action-button>
+        <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onMrRequestClicks()"><ng-icon name="heroClipboardDocumentList" class="h-3.5 w-3.5"></ng-icon> MR request</app-action-button>
       </ng-container>
     </div>
     <span *ngIf="step === 4 && canSaveDraft && submitBlockedReason" class="text-xs text-amber-600 dark:text-amber-400">{{ submitBlockedReason }}</span>
-    <app-action-button variant="secondary" (click)="prDrawer.requestClose()">{{ canSaveDraft ? 'Cancel' : 'Close' }}</app-action-button>
+    <app-action-button variant="secondary" (click)="prDrawer.requestClose()"><ng-icon name="heroXMark" class="h-3.5 w-3.5"></ng-icon> {{ canSaveDraft ? 'Cancel' : 'Close' }}</app-action-button>
     <!-- view-only: the stepper moves between tabs, so the footer carries just Close -->
     <ng-container *ngIf="!viewOnly">
-      <app-action-button *ngIf="step > 2" variant="secondary" (click)="onBackClicks()">Back</app-action-button>
-      <app-action-button *ngIf="canSaveDraft" variant="tool" (click)="onDraftClicks()">Save</app-action-button>
-      <app-action-button *ngIf="step === 2" variant="primary" (click)="onNextClicks()" title="Saves the items, then opens Compare & award">Save & compare</app-action-button>
-      <app-action-button *ngIf="step === 3" variant="primary" (click)="goToStep(4)">Next: Additional costs</app-action-button>
-      <app-action-button *ngIf="step === 4 && isApproved" variant="primary" (click)="goToStep(5)">Next: POs</app-action-button>
+      <app-action-button *ngIf="step > 2" variant="secondary" (click)="onBackClicks()"><ng-icon name="heroArrowLeft" class="h-3.5 w-3.5"></ng-icon> Back</app-action-button>
+      <app-action-button *ngIf="canSaveDraft" variant="tool" (click)="onDraftClicks()"><ng-icon name="heroArrowDownTray" class="h-3.5 w-3.5"></ng-icon> Save</app-action-button>
+      <app-action-button *ngIf="step === 2" variant="primary" (click)="onNextClicks()" title="Saves the items, then opens Compare & award"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Save & compare</app-action-button>
+      <app-action-button *ngIf="step === 3" variant="primary" (click)="goToStep(4)"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Next: Additional costs</app-action-button>
+      <app-action-button *ngIf="step === 4 && isApproved" variant="primary" (click)="goToStep(5)"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Next: POs</app-action-button>
     </ng-container>
     <span *ngIf="step === 4 && canSaveDraft">
       <app-action-button variant="primary" [disabled]="!!submitBlockedReason" (click)="onSubmit()">

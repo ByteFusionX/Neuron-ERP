@@ -19,28 +19,38 @@
     </app-sf-field>
   </div>
 
-  <div *ngIf="selectedJobSheet || isJobLess" class="flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-erp-border-dark pb-3">
-    <div class="flex flex-wrap items-center gap-1">
+  <div *ngIf="selectedJobSheet || isJobLess" class="flex flex-nowrap items-center gap-6 border-b border-gray-100 dark:border-erp-border-dark pb-3">
+    <div class="flex min-w-0 flex-1 items-center gap-1">
+    <button
+      type="button"
+      class="grid h-7 w-7 shrink-0 place-content-center rounded-lg border border-gray-200 dark:border-erp-border-dark text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+      [disabled]="!canScrollLeft"
+      aria-label="Scroll tabs left"
+      (click)="tabStrip.scrollBy({ left: -200, behavior: 'smooth' })"
+    >
+      <ng-icon name="heroChevronLeft" class="h-3.5 w-3.5"></ng-icon>
+    </button>
+    <div #tabStrip data-tab-strip (scroll)="updateStripScroll()" (wheel)="onStripWheel($event)" class="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
       <button
         type="button"
         class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
-        [ngClass]="activeTab === 'items' ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 dark:border-erp-border-dark text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
-        (click)="tabSelected.emit('items')"
+        [ngClass]="shownTab === 'items' ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 dark:border-erp-border-dark text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
+        (click)="pickTab('items')"
       >
         Items
-        <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="activeTab === 'items' ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ itemCount() }}</span>
+        <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="shownTab === 'items' ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ itemCount() }}</span>
       </button>
       <div
         *ngFor="let t of supplierTabs"
         class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
-        [ngClass]="activeTab === t.id ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 dark:border-erp-border-dark text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
+        [ngClass]="shownTab === t.id ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 dark:border-erp-border-dark text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
       >
-        <button type="button" class="inline-flex items-center gap-1.5" (click)="tabSelected.emit(t.id)">
+        <button type="button" class="inline-flex items-center gap-1.5" (click)="pickTab(t.id)">
           <span class="max-w-[7rem] truncate">{{ t.name }}</span>
-          <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="activeTab === t.id ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ t.count }}<ng-container *ngIf="t.total != null">/{{ t.total }}</ng-container></span>
+          <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="shownTab === t.id ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ t.count }}<ng-container *ngIf="t.total != null">/{{ t.total }}</ng-container></span>
         </button>
         <button
-          *ngIf="selectedKeys.length && activeTab === 'items' && !readOnly"
+          *ngIf="selectedKeys.length && shownTab === 'items' && !readOnly"
           type="button"
           class="-mr-1 grid h-4 w-4 place-content-center rounded hover:bg-black/10"
           [attr.aria-label]="'Add ' + selectedKeys.length + ' selected item(s) to ' + t.name"
@@ -50,7 +60,7 @@
           <ng-icon name="heroPlus" class="h-3 w-3"></ng-icon>
         </button>
         <button
-          *ngIf="t.closable && !(selectedKeys.length && activeTab === 'items' && !readOnly)"
+          *ngIf="t.closable && !(selectedKeys.length && shownTab === 'items' && !readOnly)"
           type="button"
           class="-mr-1 grid h-4 w-4 place-content-center rounded hover:bg-black/10"
           aria-label="Close supplier tab"
@@ -60,7 +70,17 @@
         </button>
       </div>
     </div>
-    <div *ngIf="!readOnly" class="ml-auto flex items-center gap-2">
+    <button
+      type="button"
+      class="grid h-7 w-7 shrink-0 place-content-center rounded-lg border border-gray-200 dark:border-erp-border-dark text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+      [disabled]="!canScrollRight"
+      aria-label="Scroll tabs right"
+      (click)="tabStrip.scrollBy({ left: 200, behavior: 'smooth' })"
+    >
+      <ng-icon name="heroChevronRight" class="h-3.5 w-3.5"></ng-icon>
+    </button>
+    </div>
+    <div *ngIf="!readOnly" class="ml-auto flex shrink-0 items-center gap-2">
       <app-sf-combobox
         class="w-56"
         [options]="freeSuppliers"
@@ -78,6 +98,15 @@
 
   <!-- Read-only once the request has left In Progress: inert blocks typing, clicks and focus but keeps the lines visible. -->
   <div *ngIf="selectedJobSheet || isJobLess; else noJob" [attr.inert]="readOnly ? '' : null" [class.opacity-80]="readOnly">
+    <div *ngIf="switching" class="pr-skeleton space-y-2" aria-busy="true" aria-label="Loading items">
+      <div *ngFor="let r of skeletonRows" class="flex items-center gap-3">
+        <span class="pr-sk h-8 w-8 rounded"></span>
+        <span class="pr-sk h-8 flex-1 rounded"></span>
+        <span class="pr-sk h-8 w-20 rounded"></span>
+        <span class="pr-sk h-8 w-24 rounded"></span>
+      </div>
+    </div>
+    <div [class.hidden]="switching">
     <app-item-entry
       mode="purchase"
       [quoteLayout]="true"
@@ -101,6 +130,10 @@
       [supplierScope]="activeTab === 'items' ? null : activeTab"
       [supplierDiscounts]="purchaseForm.get('supplierDiscounts')?.value?.suppliers ?? null"
       [dealSupplierDiscounts]="dealSupplierDiscounts"
+      [dealExtraCosts]="dealExtraCosts"
+      [jobTotals]="jobTotals"
+      [prExtraCosts]="prExtraCosts"
+      [customerDiscountTotal]="customerDiscountTotal"
       [supplierScopeName]="activeTab === 'items' ? '' : activeTabName"
       [scopeLineKeys]="tabLineKeys"
       [scopeExcludedKeys]="tabExcludedKeys"
@@ -109,7 +142,8 @@
       (offerPicked)="offerPicked.emit($event)"
       (addToTab)="linesAddedToTab.emit($event)"
       (supplierDiscountEdited)="supplierDiscountEdited.emit($event)"
-      (createProductRequested)="createProductRequested.emit()"    ></app-item-entry>
+      (createProductRequested)="createProductRequested.emit($event)"></app-item-entry>
+    </div>
   </div>
 
   <ng-template #noJob>

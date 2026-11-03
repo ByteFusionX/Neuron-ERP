@@ -1,5 +1,5 @@
 import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/form-prompt.service';
-import { expandDealComponents } from 'src/app/shared/utils/deal-pricing.util';
+import { dealSheetPriceDetails, expandDealComponents } from 'src/app/shared/utils/deal-pricing.util';
 import { CommonModule } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -13,7 +13,7 @@ import { getJob } from 'src/app/shared/interfaces/job.interface';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { ToastrService } from 'ngx-toastr';
 import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
-import { Subscription } from 'rxjs';
+import { Subscription, debounceTime } from 'rxjs';
 import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber, SupplierLastPrice } from 'src/app/shared/interfaces/purchase.interface';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
 import { PrReviewStepComponent, ReviewAward, ReviewRow, ReviewSupplier } from './pr-review-step/pr-review-step.component';
@@ -270,16 +270,16 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   private lastPricesFor = '';
 
   /** Products linked on the editor's lines, saved or not. */
-  private entryProductIds(): string[] {
-    return (this.entryItems.getRawValue()?.[0]?.items || [])
+  private entryProductIds(raw: any[] = this.entryItems.getRawValue()): string[] {
+    return (raw?.[0]?.items || [])
       .flatMap((item: any) => (item.itemDetails || []).map((d: any) => String(d.productId || '')))
       .filter(Boolean);
   }
 
   /** A line linked to a product with no loaded prices yet reloads them, so its suppliers start at their last price. */
-  private refreshLastPricesForEntry(): void {
+  private refreshLastPricesForEntry(raw?: any[]): void {
     const loaded = new Set(this.lastPricesFor.split(','));
-    if (this.entryProductIds().some((id) => !loaded.has(id))) this.loadLastPrices();
+    if (this.entryProductIds(raw).some((id) => !loaded.has(id))) this.loadLastPrices();
   }
 
   private lastPricesByProduct = computed(() => {
@@ -402,6 +402,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     let total = 0;
     const inUse = new Set<string>();
     const removed = this.removedSuppliers();
+    const dealSuppliers = this.dealSupplierIds();
     items.forEach((item: any) => (item.itemDetails || []).forEach((d: any) => {
       total++;
       const ids = new Set<string>();
@@ -425,10 +426,18 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     // Keep each supplier where it first appeared, so awarding a line never reorders the tabs or pills.
     counts.forEach((_, id) => this.tabOrder.includes(id) || this.tabOrder.push(id));
     return [...counts]
-      .sort(([a], [b]) => this.tabOrder.indexOf(a) - this.tabOrder.indexOf(b))
+      // Deal-sheet suppliers always come first; suppliers added later follow them.
+      .sort(([a], [b]) => (Number(dealSuppliers.has(b)) - Number(dealSuppliers.has(a))) || this.tabOrder.indexOf(a) - this.tabOrder.indexOf(b))
       .map(([id, count]) => ({
-        id, name: name(id), count: count + Math.max(0, handedExtra.get(id) ?? 0), total, closable: !inUse.has(id),
+        id, name: name(id), count: count + Math.max(0, handedExtra.get(id) ?? 0), total, closable: !inUse.has(id) && !dealSuppliers.has(id),
       }));
+  });
+
+  /** Suppliers chosen on the deal sheet: their tabs are fixed; only tabs added later for comparison can be closed. */
+  private dealSupplierIds = computed(() => {
+    const ids = new Set<string>();
+    this.dealQty().forEach((v) => v.supplierId && ids.add(v.supplierId));
+    return ids;
   });
 
   /** Suppliers taken off the PR by hand: their saved comparisons are dropped on Save. */
@@ -444,6 +453,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   onSupplierTabClosed(id: string): void {
+    if (this.dealSupplierIds().has(id)) return;
     this.addedSuppliers.update((l) => l.filter((x) => x !== id));
     this.removedSuppliers.update((l) => [...new Set([...l, id])]);
     // Lines that defaulted to this supplier (e.g. from the deal) lose that default, or the tab would come straight back.
@@ -506,11 +516,11 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     this.markEntryDirty();
   }
 
-  private recomputeLiveTotal(): void {
+  private recomputeLiveTotal(raw: any[] = this.entryItems.getRawValue()): void {
     this.lineTick.update((n) => n + 1);
     const byKey = this.originalsByKey();
     let total = 0;
-    (this.entryItems.getRawValue()?.[0]?.items || []).forEach((item: any) =>
+    (raw?.[0]?.items || []).forEach((item: any) =>
       (item.itemDetails || []).forEach((d: any) => {
         if (d.lineKey && byKey.get(d.lineKey)?.fromMrRequest) return;
         total += (+d.quantity || 0) * (+d.unitCost || 0);
@@ -755,10 +765,14 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       this.updateTotalLpo();
     });
 
-    this.subscriptions.add(this.entryItems.valueChanges.subscribe(() => { this.recomputeLiveTotal(); this.refreshLastPricesForEntry(); }));
+    this.subscriptions.add(this.entryItems.valueChanges.subscribe(() => {
+      const raw = this.entryItems.getRawValue();
+      this.recomputeLiveTotal(raw);
+      this.refreshLastPricesForEntry(raw);
+    }));
 
     this.refreshHeader();
-    this.subscriptions.add(this.purchaseForm.valueChanges.subscribe(() => this.refreshHeader()));
+    this.subscriptions.add(this.purchaseForm.valueChanges.pipe(debounceTime(150)).subscribe(() => this.refreshHeader()));
   }
 
   ngAfterViewInit(): void {
@@ -974,9 +988,22 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     return true;
   }
 
+  /** True when a line has no item code or is not linked to a catalogue product (its partNo). */
+  private hasCatalogueGaps(): boolean {
+    return this.itemsList().some((item: any) => (item.itemDetails || []).some((d: any) =>
+      String(d.detail || '').trim() && (!String(d.itemCode || '').trim() || !d.partNo)));
+  }
+
   onSubmit(): void {
     if (!this.syncEntryToList()) return;
     if (!this.canSubmitForApproval()) return;
+    if (this.hasCatalogueGaps() || this.prFormCmp?.itemEntry?.hasSubmitProblems()) {
+      // Saving and awarding work without catalogue products; only sending for approval needs every line linked and valid.
+      this.toaster.warning('Fill the highlighted fields: every line needs a catalogue product with an item code before it can be sent for approval. Pick the product or use + Create product.');
+      this.goToStep(2);
+      setTimeout(() => this.prFormCmp?.itemEntry?.showCatalogueGaps(), 60);
+      return;
+    }
     if (!this.allAwarded) {
       this.toaster.error('Award every product in Compare & award before sending for approval');
       return;
@@ -1412,11 +1439,28 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** Awarded vs total product lines, for the Compare & award counter and the submit hint. */
   get awardStats(): { awarded: number; total: number } {
+    // Read by the footer on every change detection pass; rebuilding every line each time froze the drawer for seconds.
+    // Everything the count depends on is a signal (or bumps lineTick on a form change), so reuse it until one changes.
+    const version = this.awardVersion();
+    const dirty = this.entryDirty;
+    const hit = this.awardCache;
+    if (hit && hit.version === version && hit.dirty === dirty) return hit.value;
     // Unsaved awards and releases count too, so the counter moves as the pills are clicked.
-    const source = this.entryDirty ? (this.collectEntryItems(true) ?? this.itemsList()) : this.itemsList();
+    const source = dirty ? (this.collectEntryItems(true) ?? this.itemsList()) : this.itemsList();
     const lines = source.flatMap((item: any) => item.itemDetails || []).filter((d: any) => Number(d.quantity) > 0);
-    return { awarded: lines.filter((d: any) => this.isResolvedLine(d)).length, total: lines.length };
+    const value = { awarded: lines.filter((d: any) => this.isResolvedLine(d)).length, total: lines.length };
+    this.awardCache = { version, dirty, value };
+    return value;
   }
+
+  private awardCache?: { version: object; dirty: boolean; value: { awarded: number; total: number } };
+
+  /** A new object whenever something the award counter reads changes. */
+  private awardVersion = computed(() => {
+    this.lineTick(); this.itemsList(); this.tabLines(); this.tabExcluded(); this.removedSuppliers();
+    this.dealQty(); this.lastPrices(); this.supplierOptions();
+    return {};
+  });
 
   /** Why Submit for approval is disabled, or null when it can go. */
   get submitBlockedReason(): string | null {
@@ -1463,19 +1507,54 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** The deal sheet's cost and supplier for a line, the baseline the PR's awards are compared with. */
   lineDeal = (itemName: string, line: any): { cost: number | null; supplierId: string | null } | null => {
-    const hit = this.dealHit((line?.lineKey && this.groupByKey().get(line.lineKey)) || itemName, line?.detail);
+    const name = (line?.lineKey && this.groupByKey().get(line.lineKey)) || itemName;
+    // Several lines can share an item and detail (same product, different price/qty): match them in order, not all to the first.
+    const same = this.dealLinesByKey().get(CreatePurchaseComponent.dealKey(name, line?.detail));
+    if (same && same.length > 1) {
+      const n = line?.lineKey ? this.lineOrdinal().get(line.lineKey) : undefined;
+      const hit = same[n !== undefined && n < same.length ? n : 0];
+      return { cost: hit.cost, supplierId: hit.supplierId };
+    }
+    const hit = this.dealHit(name, line?.detail);
     return hit ? { cost: hit.cost, supplierId: hit.supplierId } : null;
   };
+
+  /** Every deal line per item+detail, unmerged and in order. */
+  private dealLinesByKey = signal<Map<string, { cost: number | null; supplierId: string | null }[]>>(new Map());
+
+  /** Which occurrence of its item+detail each saved PR line is, so it pairs with the same-numbered deal line. */
+  private lineOrdinal = computed(() => {
+    const seen = new Map<string, number>();
+    const out = new Map<string, number>();
+    this.itemsList().forEach((item: any, i: number) =>
+      (item.itemDetails || []).forEach((d: any, j: number) => {
+        const key = CreatePurchaseComponent.dealKey(item.itemName, d.detail);
+        const n = seen.get(key) ?? 0;
+        seen.set(key, n + 1);
+        out.set(this.lineKeyOf(i, j, d), n);
+      }));
+    return out;
+  });
 
   /** The deal sheet line for a PR line: same item and detail, else the only deal line with that detail (a saved PR can regroup its lines). */
   private dealHit(itemName: string, detail: string) {
     const deal = this.dealQty();
     const exact = deal.get(CreatePurchaseComponent.dealKey(itemName, detail));
     if (exact) return exact;
-    const d = (detail || '').trim().toLowerCase();
-    const same = [...deal.values()].filter((v) => v.detail.trim().toLowerCase() === d);
-    return same.length === 1 ? same[0] : undefined;
+    const same = this.dealByDetail().get((detail || '').trim().toLowerCase());
+    return same?.length === 1 ? same[0] : undefined;
   }
+
+  /** The deal lines grouped by detail, so a lookup by detail is not a scan of every deal line (it runs for every line on every check). */
+  private dealByDetail = computed(() => {
+    type DealLine = { itemName: string; detail: string; quantity: number; sellPrice: number | null; cost: number | null; supplierName: string; supplierId: string | null };
+    const map = new Map<string, DealLine[]>();
+    this.dealQty().forEach((v) => {
+      const k = v.detail.trim().toLowerCase();
+      map.set(k, [...(map.get(k) ?? []), v]);
+    });
+    return map;
+  });
   reviewBusy = signal(false);
 
   private static dealKey(itemName: string, detail: string): string {
@@ -1486,8 +1565,13 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   private refreshDealQty(): void {
     const deal = new Map<string, { itemName: string; detail: string; quantity: number; sellPrice: number | null; cost: number | null; supplierName: string; supplierId: string | null }>();
     const updated = expandDealComponents((this.selectedJobSheet as any)?.quotation?.dealData?.updatedItems);
+    const lines = new Map<string, { cost: number | null; supplierId: string | null }[]>();
     updated.forEach((item: any) => (item.itemDetails || []).forEach((d: any) => {
       const key = CreatePurchaseComponent.dealKey(item.itemName, d.detail);
+      lines.set(key, [...(lines.get(key) ?? []), {
+        cost: Number(d.unitCost) || null,
+        supplierId: d.supplierId?._id || d.supplierId ? String(d.supplierId?._id || d.supplierId) : null,
+      }]);
       const prev = deal.get(key);
       deal.set(key, {
         itemName: item.itemName || '', detail: d.detail || '', quantity: (prev?.quantity ?? 0) + (Number(d.quantity) || 0),
@@ -1496,6 +1580,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
         supplierId: prev?.supplierId || (d.supplierId?._id || d.supplierId ? String(d.supplierId?._id || d.supplierId) : null),
       });
     }));
+    this.dealLinesByKey.set(lines);
     this.dealQty.set(deal);
   }
 
@@ -1694,24 +1779,49 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   get extraCostsTotal(): number { return this.extraCosts.reduce((s, c) => s + (Number(c.value) || 0), 0); }
-  private get dealExtraCostsTotal(): number {
+  get dealExtraCostsTotal(): number {
     return this.dealCostList.filter((c) => (c.type || 'Additional Cost') === 'Additional Cost').reduce((s, c) => s + (Number(c.value) || 0), 0);
   }
 
   /** Totals bar: the lines' cost plus how far the PR's extra costs moved from the deal's (already in the deal baseline, like the discount). */
-  prTotalCost(ie: ItemEntryComponent): number { return ie.totalCost() + (this.extraCostsTotal - this.dealExtraCostsTotal); }
-  prMarginValue(ie: ItemEntryComponent): number { return ie.finalTotal() - this.prTotalCost(ie); }
+  /** Lines' cost less the supplier discount in force, plus all the PR's additional costs: same basis as the deal's Total cost. */
+  prTotalCost(ie: ItemEntryComponent): number { return ie.prTotalCost(); }
+  prMarginValue(ie: ItemEntryComponent): number { return ie.prMarginValue(); }
   prMarginPercent(ie: ItemEntryComponent): number {
-    const selling = ie.finalTotal();
+    const selling = ie.prPrice();
     return selling > 0 ? (this.prMarginValue(ie) / selling) * 100 : 0;
   }
   /** Against the deal's margin after the deal's own extra costs, so unchanged costs read as no change. */
+  /** Magnitude only, so the summary bar shows no minus sign. */
+  absNum(v: number | null | undefined): number {
+    return Math.abs(Number(v) || 0);
+  }
+
   prMarginTone(ie: ItemEntryComponent): string {
-    const diff = this.prMarginValue(ie) - (ie.dealFigures().marginValue - this.dealExtraCostsTotal);
+    const diff = this.prMarginValue(ie) - ie.dealNetMargin().value;
     if (Math.abs(diff) <= 0.005) return 'text-gray-900 dark:text-gray-100';
     return diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
   }
   get supplierDiscountTotal(): number { return this.supplierDiscountRows.filter((r) => r.awarded).reduce((s, r) => s + r.value, 0); }
+  /** Quotation discount plus the deal's extra customer discounts; read from the deal, so PR edits never move it. */
+  get dealCustomerDiscount(): number {
+    const quote = Number((this.selectedJobSheet as any)?.quotation?.dealData?.totalDiscount) || 0;
+    return quote + this.customerDiscountTotal;
+  }
+  /** The job's own Total cost and net price, exactly as the job sheet shows them. */
+  get jobTotals(): { cost: number; price: number } | null {
+    const d = (this.selectedJobSheet as any)?.quotation?.dealData;
+    if (!d?.updatedItems) return null;
+    // Same object each pass while the deal is the same, or the bound input would change on every check (NG0100).
+    if (this.jobTotalsFor !== d) {
+      const p = dealSheetPriceDetails(d.updatedItems, d.additionalCosts, d.totalDiscount);
+      this.jobTotalsFor = d;
+      this.jobTotalsCache = { cost: p.totalCost, price: p.totalSellingPrice };
+    }
+    return this.jobTotalsCache;
+  }
+  private jobTotalsFor: unknown = null;
+  private jobTotalsCache: { cost: number; price: number } | null = null;
   get customerDiscountTotal(): number { return this.customerDiscounts.reduce((s, c) => s + c.value, 0); }
 
   onNextClicks(target: 3 | 4 | 5 = 3): void {
@@ -2444,8 +2554,10 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   createProductOpen = false;
   createProductPrefill: { productSegment?: string; productCategoryName?: string; productDescription?: string } | null = null;
 
-  onCreatePartNumber(): void {
-    this.createProductPrefill = null;
+  onCreatePartNumber(req?: { itemName?: string; detail?: string }): void {
+    // Opened from a line: carry the description already typed there into the new product.
+    const detail = req?.detail?.trim();
+    this.createProductPrefill = detail ? { productDescription: detail } : null;
     this.createProductOpen = true;
   }
 
