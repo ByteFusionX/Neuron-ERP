@@ -1,4 +1,6 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, Validators, AbstractControl, ValidationErrors } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
@@ -12,6 +14,8 @@ import { ProfileEmploymentComponent } from '../../components/profile-employment/
 import { ProfileTargetsComponent } from '../../components/profile-targets/profile-targets.component';
 import { ProfileAccessComponent, AccessRow } from '../../components/profile-access/profile-access.component';
 import { ProfilePreferencesFormComponent } from '../../components/profile-preferences-form/profile-preferences-form.component';
+import { ProfileSessionsComponent } from '../../components/profile-sessions/profile-sessions.component';
+import { NotificationPreferencesComponent } from '../notification-preferences/notification-preferences.component';
 import { ProfilePasswordFormComponent } from '../../components/profile-password-form/profile-password-form.component';
 
 const passwordsMatch = (group: AbstractControl): ValidationErrors | null => {
@@ -27,7 +31,7 @@ const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
     selector: 'app-profile-info',
     templateUrl: './profile-info.component.html',
     styleUrls: ['../../profile-shared.css', './profile-info.component.css'],
-    imports: [SkeltonLoadingComponent, DatePipe, ProfileHeaderComponent, ProfileDetailsFormComponent, ProfileEmploymentComponent, ProfileTargetsComponent, ProfileAccessComponent, ProfilePreferencesFormComponent, ProfilePasswordFormComponent]
+    imports: [SkeltonLoadingComponent, DatePipe, ProfileHeaderComponent, ProfileDetailsFormComponent, ProfileEmploymentComponent, ProfileTargetsComponent, ProfileAccessComponent, ProfilePreferencesFormComponent, ProfilePasswordFormComponent, ProfileSessionsComponent, NotificationPreferencesComponent]
 })
 export class ProfileInfoComponent implements OnInit {
 
@@ -53,8 +57,20 @@ export class ProfileInfoComponent implements OnInit {
     { id: 'access', label: 'Access', icon: 'M9 12.75 11.25 15 15 9.75m-3-7.04A11.96 11.96 0 0 1 3.6 6 12 12 0 0 0 3 9.75c0 5.59 3.82 10.29 9 11.62 5.18-1.33 9-6.03 9-11.62 0-1.31-.21-2.57-.6-3.75h-.15c-3.2 0-6.1-1.25-8.25-3.29Z' },
     { id: 'preferences', label: 'Preferences', icon: 'M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75' },
     { id: 'security', label: 'Security', icon: 'M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z' },
+    { id: 'notifications', label: 'Notifications', icon: 'M14.86 17.08a23.85 23.85 0 0 0 5.45-1.31A8.97 8.97 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.97 8.97 0 0 1-2.31 6.02c1.73.64 3.56 1.09 5.45 1.31m5.72 0a24.26 24.26 0 0 1-5.72 0m5.72 0a3 3 0 1 1-5.72 0' },
   ] as const
-  activeTab = 'overview'
+  private destroyRef = inject(DestroyRef)
+  private route = inject(ActivatedRoute)
+  private router = inject(Router)
+  private _activeTab: string = 'overview'
+
+  /** Mirrored in the URL as ?tab=<id> so a tab can be linked to and survives refresh. */
+  get activeTab(): string { return this._activeTab }
+  set activeTab(id: string) {
+    if (!this.tabs.some((t) => t.id === id) || id === this._activeTab) return
+    this._activeTab = id
+    this.router.navigate([], { relativeTo: this.route, queryParams: { tab: id }, queryParamsHandling: 'merge' })
+  }
 
   detailsForm = this.fb.nonNullable.group({
     firstName: ['', [Validators.required, Validators.maxLength(50)]],
@@ -75,6 +91,10 @@ export class ProfileInfoComponent implements OnInit {
   }, { validators: passwordsMatch })
 
   ngOnInit() {
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((q) => {
+      const id = q.get('tab')
+      this._activeTab = this.tabs.some((t) => t.id === id) ? id! : 'overview'
+    })
     this.load()
   }
 
@@ -123,6 +143,20 @@ export class ProfileInfoComponent implements OnInit {
     ]
     const missing = checks.filter(([ok]) => !ok).map(([, label]) => label)
     return { percent: Math.round(((checks.length - missing.length) / checks.length) * 100), missing }
+  }
+
+  /** Security checkup items and score for the Security tab. */
+  get securityChecks(): { score: number; items: { ok: boolean; label: string; detail: string }[] } {
+    const s = this.profile?.security
+    if (!s) return { score: 0, items: [] }
+    const day = 86_400_000
+    const pwAge = s.passwordChangedAt ? Math.floor((Date.now() - new Date(s.passwordChangedAt).getTime()) / day) : null
+    const items = [
+      { ok: !!s.microsoftLinked, label: 'Microsoft account linked', detail: s.microsoftLinked ? 'Single sign-on is set up' : 'Link it to sign in with Microsoft' },
+      { ok: pwAge !== null && pwAge <= 90, label: 'Password updated recently', detail: pwAge === null ? 'No change on record' : pwAge === 0 ? 'Changed today' : `Changed ${pwAge} day${pwAge === 1 ? '' : 's'} ago` },
+      { ok: !!s.lastLoginAt, label: 'Sign-in activity recorded', detail: s.lastLoginAt ? 'Your recent sign-ins are tracked' : 'No sign-in recorded yet' },
+    ]
+    return { score: Math.round((items.filter((i) => i.ok).length / items.length) * 100), items }
   }
 
   load() {
