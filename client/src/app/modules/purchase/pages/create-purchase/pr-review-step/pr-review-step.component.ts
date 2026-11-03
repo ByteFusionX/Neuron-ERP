@@ -476,7 +476,7 @@ export class PrReviewStepComponent {
   statusChip(s: ReviewSupplier): string {
     return {
       awarded: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
-      default: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+      default: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
       priced: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
       option: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
       waiting: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
@@ -574,7 +574,6 @@ export class PrReviewStepComponent {
   cellClass(r: ReviewRow, s: ReviewSupplier | undefined): string {
     if (!s) return 'border border-dashed border-gray-200 dark:border-erp-border-dark';
     if (s.state === 'awarded') return 'border-2 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20';
-    if (s.state === 'default') return 'border border-violet-200 bg-violet-50/40 dark:border-violet-900/50 dark:bg-violet-950/20';
     return 'border border-gray-200 hover:shadow-md dark:border-erp-border-dark';
   }
 
