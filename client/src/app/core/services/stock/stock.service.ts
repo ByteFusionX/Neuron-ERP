@@ -35,6 +35,8 @@ export interface StockRow {
   availableQuantity: number;
   shortfallQuantity: number;
   quarantinedQuantity: number;
+  /** Job id (or the PO number when there is no job) the quarantined stock came from. */
+  quarantineRef?: string;
   stockValue: number;
   warehouses: StockWarehouseSplit[];
   warehouseText: string;

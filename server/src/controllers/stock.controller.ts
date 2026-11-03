@@ -3,6 +3,9 @@ import { Types } from "mongoose";
 import Product from "../models/products.model";
 import Warehouse from "../models/warehouse.model";
 import GRN from "../models/grn.model";
+import Job from "../models/job.model";
+import PurchaseOrder from "../models/purchaseOrder.model";
+import PurchaseRequest from "../models/purchaseRequest.model";
 import DeliveryNote from "../models/deliveryNote.model";
 import StockMovement, { ADJUSTMENT_REASONS } from "../models/stockMovement.model";
 import StockReservation from "../models/stockReservation.model";
@@ -37,6 +40,51 @@ const productLabel = (product: any) => ({
     productDescription: product?.productDescription || product?.productName || '',
     uom: product?.unitOfMeasure || '',
 });
+
+/**
+ * Where each product's quarantined stock came from: the job id, or the PO number when there is no job.
+ * A delivery-note rejection resolves through the note's job; a GRN rejection through its PO (and that PO's job).
+ */
+const quarantineRefsByProduct = async (productIds: string[]): Promise<Map<string, string>> => {
+    const result = new Map<string, string>();
+    if (!productIds.length) return result;
+    const moves: any[] = await StockMovement.find({
+        product: { $in: productIds.map(asObjectId) }, stockStatus: 'Quarantine', quantityIn: { $gt: 0 },
+        reversalOf: { $exists: false }, ...notDeleted,
+    }).select('product referenceType referenceId referenceNo lpoNo').lean();
+
+    const idsOf = (types: string[]) => [...new Set(moves.filter((m) => types.includes(m.referenceType) && m.referenceId).map((m) => String(m.referenceId)))];
+    const dns: any[] = await DeliveryNote.find({ _id: { $in: idsOf(['DnRejection', 'DeliveryNote']) } }).select('jobId').lean();
+    const grns: any[] = await GRN.find({ _id: { $in: idsOf(['GRN']) } }).select('purchaseOrderId').lean();
+    const pos: any[] = await PurchaseOrder.find({ _id: { $in: grns.map((g) => g.purchaseOrderId).filter(Boolean) } }).select('poNo jobId purchaseId').lean();
+    const prs: any[] = await PurchaseRequest.find({ _id: { $in: pos.map((p) => p.purchaseId).filter(Boolean) } }).select('jobId').lean();
+    const prJob = new Map(prs.map((p) => [String(p._id), p.jobId]));
+    const jobIds = [...dns.map((d) => d.jobId), ...pos.map((p) => p.jobId || prJob.get(String(p.purchaseId)))].filter(Boolean);
+    const jobs: any[] = await Job.find({ _id: { $in: jobIds } }).select('jobId').lean();
+    const jobNo = new Map(jobs.map((j) => [String(j._id), j.jobId]));
+    const dnById = new Map(dns.map((d) => [String(d._id), d]));
+    const grnById = new Map(grns.map((g) => [String(g._id), g]));
+    const poById = new Map(pos.map((p) => [String(p._id), p]));
+
+    const refs = new Map<string, Set<string>>();
+    moves.forEach((m) => {
+        let ref = '';
+        if (m.referenceType === 'DnRejection' || m.referenceType === 'DeliveryNote') {
+            ref = jobNo.get(String(dnById.get(String(m.referenceId))?.jobId)) || '';
+        } else if (m.referenceType === 'GRN') {
+            const po = poById.get(String(grnById.get(String(m.referenceId))?.purchaseOrderId));
+            ref = jobNo.get(String(po?.jobId || prJob.get(String(po?.purchaseId)))) || po?.poNo || m.lpoNo || '';
+        } else {
+            ref = m.lpoNo || '';
+        }
+        if (!ref) return;
+        const key = String(m.product);
+        if (!refs.has(key)) refs.set(key, new Set());
+        refs.get(key)!.add(ref);
+    });
+    refs.forEach((set, key) => result.set(key, [...set].join(', ')));
+    return result;
+};
 
 /**
  * Stock by product: on hand, reserved, available and quarantined, with the warehouse split.
@@ -88,6 +136,7 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
             getLastReceiptCosts([...byProduct.keys()]),
         ]);
         const warehouseName = new Map<string, string>(warehouses.map((w: any) => [String(w._id), w.wareHouseName]));
+        const quarantineRefs = await quarantineRefsByProduct(products.filter((p: any) => (byProduct.get(String(p._id))?.quarantined || 0) > 0).map((p: any) => String(p._id)));
 
         let rows = products.map((product: any) => {
             const id = String(product._id);
@@ -103,6 +152,7 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
                 availableQuantity: Math.max(0, entry.onHand - entry.reserved),
                 shortfallQuantity: Math.max(0, entry.reserved - entry.onHand),
                 quarantinedQuantity: entry.quarantined,
+                quarantineRef: quarantineRefs.get(id) || '',
                 stockValue: entry.onHand * unitCost,
                 warehouses: entry.warehouses
                     .map((w) => ({ warehouseId: w.warehouseId, warehouseName: warehouseName.get(w.warehouseId) || 'Warehouse', quantity: w.quantity, quarantined: w.quarantined }))

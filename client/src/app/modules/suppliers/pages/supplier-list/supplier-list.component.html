@@ -66,12 +66,12 @@
 
         <!-- left: optional, per-tab (outline) -->
         <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
-            <app-action-button *ngIf="tab === 'detail'"variant="outline" (click)="openEditDrawer(row)" icon="edit">Edit</app-action-button>
+            <app-action-button *ngIf="tab === 'overview'" variant="outline" (click)="openEditDrawer(row)" icon="edit">Edit</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">
             <ng-container [ngSwitch]="tab">
-                <ng-container *ngSwitchCase="'detail'">
+                <ng-container *ngSwitchCase="'overview'">
                     <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
                 </ng-container>
 

@@ -65,7 +65,7 @@ import { DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
           (previewFile)="onPreviewEventFile($event.file)"
           (deleteFile)="onDeleteEventFile($event.item, $event.file)"></app-detail-task-list>
 
-        <app-detail-documents *ngSwitchCase="'lpo'"
+        <app-detail-documents *ngSwitchCase="'documents'"
           title="Customer LPO"
           emptyMessage="No Documents uploaded yet."
           [documents]="lpoDocuments"
@@ -101,7 +101,7 @@ import { DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
         </ng-template>
       </ng-container>
       <app-action-button *ngIf="activeTab === 'events'" variant="outline" icon="plus" (click)="onAddEvent()">Add event</app-action-button>
-      <app-action-button *ngIf="activeTab === 'lpo' && canUploadLpo" variant="outline" (click)="uploadLpo.emit()">Upload LPO</app-action-button>
+      <app-action-button *ngIf="activeTab === 'documents' && canUploadLpo" variant="outline" (click)="uploadLpo.emit()">Upload LPO</app-action-button>
     </div>
   `,
   styles: [`
@@ -143,7 +143,7 @@ export class QuotationSidePanelComponent implements OnChanges {
   private readonly baseTabs: DataGridDetailTab[] = [
     { id: 'followups', label: 'Follow-ups', icon: 'chat' },
     { id: 'events', label: 'Events', icon: 'calendar' },
-    { id: 'lpo', label: 'Documents', icon: 'files' },
+    { id: 'documents', label: 'Documents', icon: 'files' },
     { id: 'terms', label: 'Terms', icon: 'info' },
   ];
   tabs: DataGridDetailTab[] = this.baseTabs;

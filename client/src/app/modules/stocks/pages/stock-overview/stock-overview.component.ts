@@ -108,6 +108,7 @@ export class StockOverviewComponent implements OnInit {
         cellClass: (r) => (r.availableQuantity > 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold')
       },
       { key: 'quarantinedQuantity', label: 'Quarantine', type: 'number', sortable: true, cellClass: (r) => (r.quarantinedQuantity > 0 ? 'text-red-600 font-semibold' : '') },
+      { key: 'quarantineRef', label: 'Ref', visible: this.activeViewId === 'quarantine', valueGetter: (r: StockRow) => r.quarantineRef || '-' },
       { key: 'stockValue', label: 'Value', type: 'currency', sortable: true, visible: false },
     ];
   }
@@ -169,6 +170,7 @@ export class StockOverviewComponent implements OnInit {
 
   onViewChange(view: DataGridView<StockRow>): void {
     this.activeViewId = view.id as StockOverviewParams['view'];
+    this.columns = this.columns.map((c) => (c.key === 'quarantineRef' ? { ...c, visible: this.activeViewId === 'quarantine' } : c));
     this.loadStock({ page: 1 });
   }
 

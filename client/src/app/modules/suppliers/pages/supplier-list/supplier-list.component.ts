@@ -72,7 +72,7 @@ export class SupplierListComponent implements OnInit, OnDestroy {
   breadcrumbs: DataGridBreadcrumb[] = buildBreadcrumbs('/suppliers').map((c, i, all) => ({ label: c.label, link: i === all.length - 1 ? undefined : c.route }));
 
   private readonly allDetailTabs: DataGridDetailTab[] = [
-    { id: 'detail', label: 'Detail', icon: 'info' },
+    { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'products', label: 'Products', icon: 'card' },
     { id: 'banking', label: 'Banking Info', icon: 'wallet' },
     { id: 'documents', label: 'Documents', icon: 'files' },

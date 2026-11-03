@@ -65,6 +65,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     { n: 2 as const, label: 'Items', hint: 'Line items and pricing' },
     { n: 3 as const, label: 'Notes & Terms', hint: 'What the customer reads' },
   ];
+  readonly stepLabels = this.steps.map(s => s.label);
+  readonly stepDone = (n: number): boolean => this.isStepValid(n as 1 | 2 | 3);
   /** Set when the wizard was opened from an enquiry; kept so the banner and the payload agree. */
   sourceEnquiry: getEnquiry | null = null;
   seedOptionalItems: any[] | null = null;

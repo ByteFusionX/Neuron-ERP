@@ -7,7 +7,7 @@ import employeeModel from "../models/employee.model";
 import { getNextSequence } from "../models/counter.model";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { logAudit } from "../services/audit.service";
-import { customerNameKeys, duplicateGroups, findCustomerDuplicates, PartyMatch } from "../common/utils/partyMatch";
+import { customerNameKeys, findCustomerDuplicates, PartyMatch } from "../common/utils/partyMatch";
 const { ObjectId } = require('mongodb')
 
 const normalizeEmail = (email?: string): string | undefined =>
@@ -732,29 +732,6 @@ export const checkCustomerDuplicate = async (req: Request, res: Response, next: 
             excludeId: q.excludeId ? String(q.excludeId) : undefined,
         });
         return res.status(200).json({ matches });
-    } catch (error) {
-        console.error(error);
-        next(error);
-    }
-}
-
-/** Customers that may be entered twice: same name, same TRN, similar name, same email, same phone. */
-export const getCustomerDuplicatesReport = async (_req: Request, res: Response, next: NextFunction) => {
-    try {
-        const fields = ['_id', 'companyName', 'clientRef', 'customerEmailId', 'contactNo', 'trn'];
-        const [sameName, sameTrn, similarName, sameEmail, samePhone] = await Promise.all([
-            duplicateGroups(Customer, 'nameKey', fields),
-            duplicateGroups(Customer, 'normalizedTrn', fields),
-            duplicateGroups(Customer, 'nameCore', fields),
-            duplicateGroups(Customer, 'normalizedEmail', fields),
-            duplicateGroups(Customer, 'normalizedPhone', fields),
-        ]);
-        // A pair already listed under "same name" is not repeated under "similar name".
-        const exact = new Set(sameName.map((g) => g.records.map((r: any) => String(r._id)).sort().join()));
-        return res.status(200).json({
-            sameName, sameTrn, sameEmail, samePhone,
-            similarName: similarName.filter((g) => !exact.has(g.records.map((r: any) => String(r._id)).sort().join())),
-        });
     } catch (error) {
         console.error(error);
         next(error);

@@ -128,7 +128,7 @@ export class QuotationListComponent implements AfterViewInit {
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'followups', label: 'Follow-ups', icon: 'chat' },
     { id: 'events', label: 'Events', icon: 'calendar' },
-    { id: 'lpo', label: 'Documents', icon: 'eye' },
+    { id: 'documents', label: 'Documents', icon: 'files' },
     { id: 'deal', label: 'Deal Sheet', icon: 'wallet' },
   ];
 
@@ -507,7 +507,7 @@ export class QuotationListComponent implements AfterViewInit {
         this.startLpoUpload(row);
         break;
       case 'viewLpo':
-        this.openDetailTab(row, 'lpo');
+        this.openDetailTab(row, 'documents');
         break;
       case 'viewDeal':
         this.openDealSheet(row);
@@ -537,7 +537,7 @@ export class QuotationListComponent implements AfterViewInit {
     }
   }
 
-  private openDetailTab(row: Quotatation, tab: 'events' | 'lpo' | 'followups'): void {
+  private openDetailTab(row: Quotatation, tab: 'events' | 'documents' | 'followups'): void {
     if (this.isCreatorOnlyView(row)) return;
     this.grid.activeTab = tab;
     this.grid.openRow(row);

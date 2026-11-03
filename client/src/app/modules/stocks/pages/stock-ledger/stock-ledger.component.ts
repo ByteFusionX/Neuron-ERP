@@ -53,7 +53,7 @@ export class StockLedgerComponent implements OnInit, OnDestroy {
     { key: 'createdBy', label: 'By', valueGetter: (r) => [r.createdBy?.firstName, r.createdBy?.lastName].filter(Boolean).join(' ') },
   ];
 
-  readonly detailTabs = [{ id: 'overview', label: 'Movement', icon: 'info' }];
+  readonly detailTabs = [{ id: 'overview', label: 'Details', icon: 'info' }];
   detailTitle = (r: StockMovement) => [r.movementType, r.referenceNo].filter(Boolean).join(' · ');
   detailSubtitle = (r: StockMovement) => [r.product?.itemCode || r.product?.partNo, r.product?.productDescription].filter(Boolean).join(' - ');
 
