@@ -59,10 +59,6 @@
       </ng-container>
       <ng-template #grnMeta>
         <div class="grn-meta">
-          <p class="grn-meta-label">Supplier</p>
-          <p class="grn-meta-value">{{ row.purchaseOrderId?.supplierId?.supplierName || 'N/A' }}</p>
-        </div>
-        <div class="grn-meta">
           <p class="grn-meta-label">LPO</p>
           <p class="grn-meta-value">{{ row.purchaseOrderId?.poNo || 'N/A' }}</p>
         </div>
@@ -71,15 +67,19 @@
           <p class="grn-meta-value">{{ row.warehouse?.wareHouseName || 'N/A' }}</p>
         </div>
         <div class="grn-meta">
-          <p class="grn-meta-label">Accepted Qty</p>
-          <p class="grn-meta-value">{{ totalAcceptedQty(row) }}</p>
+          <p class="grn-meta-label">Supplier</p>
+          <p class="grn-meta-value">{{ row.purchaseOrderId?.supplierId?.supplierName || 'N/A' }}</p>
+        </div>
+        <div class="grn-meta">
+          <p class="grn-meta-label">Date</p>
+          <p class="grn-meta-value">{{ formatDate(row.grnDate) }}</p>
         </div>
       </ng-template>
     </ng-template>
 
     <ng-template #detailFooterTemplate let-row let-tab="tab">
       <app-action-button *ngIf="isArrivingView" variant="primary" (click)="onCreateGRN(row._id)" icon="plus">Create GRN</app-action-button>
-      <app-action-button *ngIf="!isArrivingView" variant="primary" (click)="viewDetails(row)" icon="view">Open full GRN</app-action-button>
+      <app-action-button *ngIf="!isArrivingView" variant="primary" (click)="viewDetails(row)" icon="view">Detail view</app-action-button>
     </ng-template>
 
     <ng-template #detailTemplate let-row let-tab="tab">
@@ -93,6 +93,8 @@
             [title]="isArrivingView ? 'Ordered items' : 'Received items'"
             [columns]="isArrivingView ? arrivingItemColumns : itemColumns"
             [rows]="isArrivingView ? arrivingItemRows(row) : itemRows(row)"
+            [footRows]="isArrivingView ? [] : grnFootRows(row)"
+            [currency]="row.purchaseOrderId?.currency || 'QAR'"
             showTotals>
           </app-detail-table>
         </ng-container>

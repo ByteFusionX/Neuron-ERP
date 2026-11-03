@@ -66,6 +66,17 @@
           </app-detail-field>
         </app-detail-section>
 
+        <ng-container *ngSwitchCase="'poitems'">
+          <app-detail-table *ngIf="poItemRows.length; else noPoItems"
+            [columns]="poItemColumns"
+            [rows]="poItemRows"
+            [footRows]="poFootRows"
+            [currency]="grn?.purchaseOrderId?.currency || 'QAR'"
+            numbered
+            emptyMessage="No items on the POs"></app-detail-table>
+          <ng-template #noPoItems><p class="py-6 text-center text-sm text-gray-500">No items on the POs.</p></ng-template>
+        </ng-container>
+
         <ng-container *ngSwitchCase="'inspection'">
           <app-detail-section title="Inspection">
             <app-detail-field *ngFor="let f of inspectionFacts" [label]="f.label">
@@ -100,7 +111,7 @@
         spread
         bare
         tools
-        storageKey="grn-items-v2"
+        storageKey="grn-items-v3"
         searchKey="detail"
         emptyMessage="No items recorded on this GRN"></app-detail-table>
     </div>

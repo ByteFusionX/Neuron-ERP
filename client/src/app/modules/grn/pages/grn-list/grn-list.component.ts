@@ -8,7 +8,7 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
-import { DetailDocument, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocument, DetailFootRow, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { BehaviorSubject, Observable, forkJoin, of } from 'rxjs';
@@ -113,13 +113,12 @@ export class GrnListComponent implements OnInit {
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'itemDescription', label: 'Description' },
-    { key: 'unitPrice', label: 'Unit Price', type: 'currency' },
+    { key: 'itemDescription', label: 'Description', truncate: true },
+    { key: 'orderedQty', label: 'Ordered', type: 'number' },
+    { key: 'receivedQty', label: 'Received', type: 'number' },
+    { key: 'acceptedQty', label: 'Accepted', type: 'number' },
+    { key: 'rejectedQty', label: 'Rejected', type: 'number' },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
-    { key: 'orderedQty', label: 'Ordered', type: 'number', total: true },
-    { key: 'receivedQty', label: 'Received', type: 'number', total: true },
-    { key: 'acceptedQty', label: 'Accepted', type: 'number', total: true },
-    { key: 'rejectedQty', label: 'Rejected', type: 'number', total: true },
     { key: 'amount', label: 'Amount', type: 'currency', total: true },
   ];
 
@@ -183,8 +182,6 @@ export class GrnListComponent implements OnInit {
       { key: 'poNo', label: 'LPO No', valueGetter: (r) => r?.purchaseOrderId?.poNo || 'N/A' },
       { key: 'supplier', label: 'Supplier', valueGetter: (r) => r?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
       { key: 'warehouse', label: 'Warehouse', valueGetter: (r) => r?.warehouse?.wareHouseName || 'N/A' },
-      { key: 'receivedQty', label: 'Received Qty', type: 'number', align: 'right', valueGetter: (r) => this.totalReceivedQty(r) },
-      { key: 'rejectedQty', label: 'Rejected Qty', type: 'number', align: 'right', valueGetter: (r) => this.totalRejectedQty(r) },
       {
         key: 'outcomeStatus', label: 'Status', type: 'badge',
         valueGetter: (r) => r?.outcomeStatus || (this.totalRejectedQty(r) > 0 ? 'Return Required' : 'Completed'),
@@ -195,7 +192,6 @@ export class GrnListComponent implements OnInit {
           'Return in Progress': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
         },
       },
-      { key: 'invoiceStatus', label: 'Invoice', valueGetter: (r) => r?.invoiceStatus || (this.totalRejectedQty(r) > 0 ? 'Blocked by Return' : 'Ready for Invoice') },
       { key: 'createdBy', label: 'Created By', valueGetter: (r) => this.formatEmployeeName(r?.createdBy) },
     ];
     this.columns = this.grnColumns;
@@ -419,8 +415,8 @@ export class GrnListComponent implements OnInit {
           { type: 'field', label: 'Warehouse', value: row?.warehouse?.wareHouseName || 'N/A' },
           { type: 'field', label: 'Received By', value: this.formatEmployeeName(row?.receivedBy) || 'N/A' },
           { type: 'field', label: 'Created By', value: this.formatEmployeeName(row?.createdBy) || 'N/A' },
-          { type: 'field', label: 'Purchase Request', value: row?.purchaseOrderId?.purchaseId?.purchaseNo || 'N/A', pill: !!row?.purchaseOrderId?.purchaseId, tone: 'info' },
-          { type: 'field', label: 'LPO No', value: row?.purchaseOrderId?.poNo || 'N/A', pill: !!row?.purchaseOrderId, tone: 'neutral' },
+          { type: 'field', label: 'Purchase Request', value: row?.purchaseOrderId?.purchaseId?.purchaseNo || 'N/A' },
+          { type: 'field', label: 'LPO No', value: row?.purchaseOrderId?.poNo || 'N/A' },
           { type: 'field', label: 'Job No', value: row?.jobId?.jobId || row?.purchaseOrderId?.purchaseId?.jobId?.jobId || 'N/A' },
           { type: 'field', label: 'Supplier Invoice', value: row?.supplierInvoiceNo || 'N/A' },
           { type: 'field', label: 'Invoice Date', value: this.formatDate(row?.supplierInvoiceDate) },
@@ -445,8 +441,8 @@ export class GrnListComponent implements OnInit {
       columns: '2',
       fields: [
         { type: 'field', label: 'Received Value', value: fmt(sum((i) => Number(i.receivedQty) || 0)), numeric: true },
-        { type: 'field', label: 'Accepted Value', value: fmt(sum((i) => Number(i.acceptedQty) || 0)), numeric: true, tone: 'good' },
-        { type: 'field', label: 'Rejected Value', value: fmt(rejected), numeric: true, pill: rejected > 0, tone: rejected > 0 ? 'warn' : 'neutral' },
+        { type: 'field', label: 'Accepted Value', value: fmt(sum((i) => Number(i.acceptedQty) || 0)), numeric: true },
+        { type: 'field', label: 'Rejected Value', value: fmt(rejected), numeric: true },
         { type: 'field', label: 'LPO Discount', value: fmt(discount), numeric: true },
         { type: 'field', label: 'LPO Total', value: fmt(Math.max(gross - discount, 0)), numeric: true },
       ],
@@ -458,13 +454,30 @@ export class GrnListComponent implements OnInit {
       itemDescription: item?.itemDescription || '-',
       unitPrice: this.jobSellingPrice(row?.purchaseOrderId?.purchaseId, item?.partNo?._id ?? item?.partNo, item?.itemDescription),
       unitCost: this.poUnitCost(row, item),
-      amount: this.poUnitCost(row, item) * (Number(item?.receivedQty) || 0),
+      amount: this.poUnitCost(row, item) * (Number(item?.acceptedQty) || 0),
       orderedQty: item?.orderedQty || 0,
       receivedQty: item?.receivedQty || 0,
       acceptedQty: item?.acceptedQty || 0,
       rejectedQty: this.getRejectedQty(item),
       remarks: item?.remarks || '-',
     }));
+  }
+
+  /** Footer under the Received items: total, the LPO's discount, this GRN's share of it, net. */
+  grnFootRows(row: any): DetailFootRow[] {
+    const po = row?.purchaseOrderId || {};
+    const total = (row?.items || []).reduce((s: number, i: any) => s + this.poUnitCost(row, i) * (Number(i?.acceptedQty) || 0), 0);
+    const gross = (po.items || []).reduce((s: number, l: any) => s + (Number(l.totalCost) || (Number(l.unitCost) || 0) * (Number(l.quantity) || 0)), 0);
+    const poDiscount = Number(po.discount) || 0;
+    // the LPO discount is one figure for the whole order, so this GRN carries its share by value
+    const grnDiscount = gross > 0 ? Math.min(poDiscount * (total / gross), total) : 0;
+    const cell = (value: number) => ({ amount: { value, format: 'currency' as const } });
+    return [
+      { label: 'Total', cells: cell(total) },
+      { label: 'LPO Discount', cells: cell(poDiscount) },
+      { label: 'GRN Discount', cells: cell(grnDiscount) },
+      { label: 'Net Total', cells: cell(Math.max(total - grnDiscount, 0)), emphasis: true },
+    ];
   }
 
   /** GRN lines carry no price, so take it from the matching LPO line. */
@@ -525,7 +538,7 @@ export class GrnListComponent implements OnInit {
         fields: [
           { type: 'field', label: 'LPO No', value: row?.poNo || 'N/A', numeric: true },
           { type: 'field', label: 'Expected', value: this.formatDate(row?.expectedDeliveryDate) },
-          { type: 'field', label: 'Due', value: this.dueLabel(row), pill: true, tone: this.dueLabel(row).endsWith('late') ? 'warn' : 'neutral' },
+          { type: 'field', label: 'Due', value: this.dueLabel(row) },
           { type: 'field', label: 'Supplier', value: row?.supplierId?.supplierName || 'N/A' },
           { type: 'field', label: 'Placed By', value: this.formatEmployeeName(row?.placedBy) },
           { type: 'field', label: 'Delivery Location', value: row?.placeOfDelivery || 'N/A' },
@@ -590,7 +603,7 @@ export class GrnListComponent implements OnInit {
   }
 
   readonly arrivingItemColumns: DetailTableColumn[] = [
-    { key: 'itemDescription', label: 'Description' },
+    { key: 'itemDescription', label: 'Description', truncate: true },
     { key: 'orderedQty', label: 'Qty', type: 'number', total: true },
     { key: 'unitPrice', label: 'Unit Price', type: 'currency' },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency' },

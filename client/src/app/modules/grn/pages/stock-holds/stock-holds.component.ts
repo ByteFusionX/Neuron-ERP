@@ -66,7 +66,7 @@ export class GrnStockHoldsComponent implements OnInit {
     { id: 'resolved', label: 'Resolved', predicate: (r) => ['Resolved', 'Disposed'].includes(r.status) },
   ];
   detailTabs: DataGridDetailTab[] = [
-    { id: 'overview', label: 'Overview', icon: 'info' },
+    { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'logistics', label: 'Logistics', icon: 'transfer' },
     { id: 'resolution', label: 'Resolution', icon: 'wallet' },

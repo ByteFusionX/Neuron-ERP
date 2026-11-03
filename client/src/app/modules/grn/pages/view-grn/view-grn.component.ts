@@ -15,6 +15,8 @@ import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { DetailDocument, DetailFootRow, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
+import { PurchaseOrderStatusRow } from 'src/app/shared/interfaces/sales-rfq.interface';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { DETAIL_TONE, DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
@@ -41,7 +43,7 @@ interface GrnFact {
   state?: { dot: string; text: string };
 }
 
-type PanelTab = 'order' | 'inspection' | 'documents' | 'history';
+type PanelTab = 'order' | 'poitems' | 'inspection' | 'documents' | 'history';
 
 @Component({
   selector: 'app-view-grn',
@@ -68,6 +70,7 @@ export class ViewGrnComponent implements OnInit {
   private toastr = inject(ToastrService);
   private dialog = inject(MatDialog);
   private auditLog = inject(AuditLogService);
+  private salesRfqService = inject(SalesRfqService);
   auditEntries: DetailTimelineEntry[] = [];
 
   grnId!: string;
@@ -82,6 +85,7 @@ export class ViewGrnComponent implements OnInit {
   // stable array: a getter that builds a new one each change detection re-creates the buttons and swallows clicks
   readonly panelTabs: { id: PanelTab; label: string }[] = [
     { id: 'order', label: 'Order' },
+    { id: 'poitems', label: 'PO' },
     { id: 'inspection', label: 'Inspection' },
     { id: 'documents', label: 'Documents' },
     { id: 'history', label: 'History' },
@@ -103,6 +107,49 @@ export class ViewGrnComponent implements OnInit {
   inspectionFacts: GrnFact[] = [];
   returnFacts: GrnFact[] = [];
   inspectionNotes = '';
+  /** Every line on the LPO this GRN receives against, as the PR view's POs tab lists them. */
+  poLines = signal<PurchaseOrderStatusRow[]>([]);
+  readonly poItemColumns: DetailTableColumn[] = [
+    { key: 'poNo', label: 'PO No', type: 'text', width: '1%' },
+    { key: 'detail', label: 'Item Description', type: 'text', truncate: true, hoverOnly: true, width: '100%' },
+    { key: 'qtyText', label: 'Qty', type: 'text', align: 'right' },
+    { key: 'price', label: 'Unit Price', type: 'currency', align: 'right' },
+    { key: 'amount', label: 'Total', type: 'currency', align: 'right', total: true },
+    { key: 'supplierName', label: 'Supplier', type: 'text' },
+    { key: 'status', label: 'Status', type: 'badge', badgeTones: { Placed: 'good', Closed: 'good', Approved: 'info', Rejected: 'bad', Pending: 'warn' } },
+  ];
+  /** Every non-cancelled line on every PO of this GRN's purchase request. */
+  get poItemRows(): Record<string, any>[] {
+    const out: Record<string, any>[] = [];
+    this.poLines().forEach((row) => row.suppliers.forEach((s) => s.pos.forEach((p) => {
+      if (p.poStatus === 'Cancelled' || !(p.qty > 0)) return;
+      out.push({
+        poNo: p.poNo, detail: row.detail, qtyText: `${p.qty}${row.uom ? ' ' + row.uom : ''}`,
+        price: s.unitPrice ?? 0, amount: (s.unitPrice ?? 0) * p.qty,
+        supplierName: s.supplierName, status: p.poStatus, _link: ['/purchase-order/view-lpo', p._id],
+      });
+    })));
+    return out.sort((a, b) => String(a['poNo']).localeCompare(String(b['poNo'])));
+  }
+  /** Discount and net total under the PO items; discount is the PR's per-supplier one, counted for suppliers still on a PO. */
+  get poFootRows(): DetailFootRow[] {
+    const rows = this.poItemRows;
+    if (!rows.length) return [];
+    const idOf = (v: any) => String(v?._id || v || '');
+    const onPo = new Set<string>();
+    this.poLines().forEach((r) => r.suppliers.forEach((s) => {
+      if (s.pos.some((p) => p.poStatus !== 'Cancelled' && p.qty > 0)) onPo.add(idOf(s.supplierId));
+    }));
+    const list: any[] = this.grn?.purchaseOrderId?.purchaseId?.supplierDiscounts?.suppliers || [];
+    const discount = list.filter((d) => onPo.has(idOf(d.supplierId))).reduce((s, d) => s + (Number(d.discount) || 0), 0);
+    const total = rows.reduce((s, r) => s + (Number(r['amount']) || 0), 0);
+    const amt = (value: number) => ({ amount: { value, format: 'currency' as const } });
+    return [
+      { label: 'Total', cells: amt(total) },
+      { label: 'Discount', cells: amt(discount) },
+      { label: 'Net Total', emphasis: true, cells: amt(Math.max(total - discount, 0)) },
+    ];
+  }
   itemColumns: DetailTableColumn[] = [];
   itemRows: Record<string, any>[] = [];
   itemFootRows: DetailFootRow[] = [];
@@ -133,6 +180,13 @@ export class ViewGrnComponent implements OnInit {
           this.purchaseId = this.grn.purchaseOrderId?._id || this.grn.purchaseOrderId || '';
           this.buildDetails();
           this.isLoading.set(false);
+          const prId = this.grn.purchaseOrderId?.purchaseId?._id || this.grn.purchaseOrderId?.purchaseId;
+          if (prId) {
+            this.salesRfqService.getPurchaseOrderStatus(prId).subscribe({
+              next: (res) => this.poLines.set(res?.data?.rows || []),
+              error: () => this.poLines.set([]),
+            });
+          }
           this.auditLog.getHistory('grn', this.grnId).subscribe({ next: (e) => (this.auditEntries = toTimelineEntries(e)), error: () => (this.auditEntries = []) });
         } else {
           this.toastr.error('GRN not found');
@@ -233,7 +287,6 @@ export class ViewGrnComponent implements OnInit {
     ] : [];
 
     const items: any[] = g?.items || [];
-    const tracked = items.some((i) => i.batchNo || i.serialNos?.length || i.expiryDate);
     this.itemColumns = [
       { key: 'detail', label: 'Description', truncate: true, tooltipKey: 'detail' },
       { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
@@ -243,9 +296,11 @@ export class ViewGrnComponent implements OnInit {
       { key: 'acceptedQty', label: 'Accepted', type: 'number', align: 'right', emphasis: true },
       { key: 'rejectedQty', label: 'Rejected', type: 'number', align: 'right' },
       { key: 'remainingQty', label: 'Remaining', type: 'number', align: 'right' },
-      { key: 'reason', label: 'Rejection reason', wrap: true, hiddenByDefault: !items.some((i) => i.rejectionReason) },
-      { key: 'serials', label: 'Serial nos', wrap: true, hiddenByDefault: !tracked },
-      { key: 'remarks', label: 'Remarks', wrap: true, hiddenByDefault: !items.some((i) => i.remarks) },
+      { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
+      { key: 'amount', label: 'Total', type: 'currency', total: true },
+      { key: 'reason', label: 'Rejection reason', wrap: true, hiddenByDefault: true },
+      { key: 'serials', label: 'Serial nos', wrap: true, hiddenByDefault: true },
+      { key: 'remarks', label: 'Remarks', wrap: true, hiddenByDefault: true },
     ];
     this.itemRows = items.map((i) => ({
       detail: i.itemDescription || '-',
@@ -256,20 +311,28 @@ export class ViewGrnComponent implements OnInit {
       acceptedQty: i.acceptedQty || 0,
       rejectedQty: this.getRejectedQty(i),
       remainingQty: this.getRemainingQty(i),
+      unitCost: Number(this.findPoLine(i)?.unitCost) || 0,
+      amount: (Number(this.findPoLine(i)?.unitCost) || 0) * (Number(i.acceptedQty) || 0),
       reason: i.rejectionReason || '-',
       serials: i.serialNos?.length ? i.serialNos.join(', ') : '-',
       remarks: i.remarks || '-',
     }));
-    this.itemFootRows = items.length ? [{
-      label: 'Total',
-      emphasis: true,
-      cells: {
-        orderedQty: { value: this.getTotalOrderedQty(), format: 'number' },
-        acceptedQty: { value: this.getTotalAcceptedQty(), format: 'number' },
-        rejectedQty: { value: rejected, format: 'number' },
-        remainingQty: { value: this.sumItems((i) => this.getRemainingQty(i)), format: 'number' },
+    const poRef = g?.purchaseOrderId || {};
+    const amountTotal = this.sumItems((i) => (Number(this.findPoLine(i)?.unitCost) || 0) * (Number(i.acceptedQty) || 0));
+    const gross = (poRef.items || []).reduce((s: number, l: any) => s + (Number(l.totalCost) || (Number(l.unitCost) || 0) * (Number(l.quantity) || 0)), 0);
+    const poDiscount = Number(poRef.discount) || 0;
+    // the LPO discount is one figure for the whole order, so this GRN carries its share by value
+    const grnDiscount = gross > 0 ? Math.min(poDiscount * (amountTotal / gross), amountTotal) : 0;
+    const amt = (value: number) => ({ amount: { value, format: 'currency' as const } });
+    this.itemFootRows = items.length ? [
+      {
+        label: 'Total',
+        cells: amt(amountTotal),
       },
-    }] : [];
+      { label: 'LPO Discount', cells: amt(poDiscount) },
+      { label: 'GRN Discount', cells: amt(grnDiscount) },
+      { label: 'Net Total', emphasis: true, cells: amt(Math.max(amountTotal - grnDiscount, 0)) },
+    ] : [];
 
     this.docList = [];
     this.docFiles.clear();

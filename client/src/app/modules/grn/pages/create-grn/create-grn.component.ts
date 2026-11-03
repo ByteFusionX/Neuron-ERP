@@ -86,6 +86,8 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
   /** True after a failed attempt to leave or submit the current step; reset once the step changes. */
   stepAttempted = false;
 
+  readonly stepLabels = ['LPO & Documents', 'Items', 'Receiving'];
+  readonly stepDone = (n: number): boolean => this.isStepValid(n as 1 | 2 | 3);
   readonly steps = [
     { n: 1 as const, label: 'LPO & Documents', hint: 'Purchase order and supplier paperwork' },
     { n: 2 as const, label: 'Items', hint: 'Quantities received, accepted and rejected' },

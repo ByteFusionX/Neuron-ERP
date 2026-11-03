@@ -114,7 +114,7 @@ const itemSchema = new Schema({
 
 const grnSchema = new Schema<GRN>(
   {
-    grnNo: {
+    grnNo: {  
       type: String,
       required: true,
       unique: true,

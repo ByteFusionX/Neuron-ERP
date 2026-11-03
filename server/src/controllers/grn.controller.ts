@@ -14,6 +14,8 @@ import { createNotificationWithPrivileges } from "./notification.controller";
 import { Server } from "socket.io";
 import { StockHold } from "../models/stockHold.model";
 import { logAudit } from "../services/audit.service";
+import { notify } from "../services/notify.service";
+import { billingRecipients, jobOwnerOf, recipientsExcluding, safely } from "../services/workflowNotify.service";
 
 const logGrnAudit = (req: Request, grn: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
   logAudit(req, { entityType: 'grn', entityId: grn._id, entityLabel: grn.grnNo, action, summary, changes });
@@ -454,6 +456,24 @@ export const createGRN = async (req: Request, res: Response) => {
         socket
       );
     }
+
+    // Billing can now match the supplier invoice, and the job's owner sees the goods have arrived.
+    await safely('GrnCreated', async () => {
+      const grnJobId = populatedGrn.jobId?._id ?? populatedGrn.jobId
+        ?? populatedPurchaseOrder?.purchaseId?.jobId?._id ?? populatedPurchaseOrder?.purchaseId?.jobId;
+      const jobOwner = await jobOwnerOf(grnJobId);
+      const billing = await billingRecipients([jobOwner]);
+      await notify({
+        type: 'GrnCreated',
+        referenceModel: 'GRN',
+        title: 'Goods received',
+        message: `GRN ${grnNo} was created against ${populatedPurchaseOrder?.poNo || 'the LPO'}${populatedPurchaseOrder?.supplierId?.supplierName ? ` from ${populatedPurchaseOrder.supplierId.supplierName}` : ''}`,
+        sentBy: employee._id?.toString(),
+        recipients: recipientsExcluding([jobOwner, ...billing], employee),
+        referenceId: grn._id,
+        additionalData: { grnId: grn._id.toString(), purchaseOrderId: purchaseOrderId?.toString() },
+      });
+    });
 
     const response: any = {
       success: true,
