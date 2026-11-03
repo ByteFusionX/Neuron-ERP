@@ -20,3 +20,4 @@ export * from './sf-radio-group.component';
 export * from './sf-slider.component';
 export * from './sf-tags.component';
 export * from './sf-file.component';
+export * from './sf-stepper.component';

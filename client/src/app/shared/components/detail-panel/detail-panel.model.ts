@@ -97,6 +97,8 @@ export interface DetailTableColumn {
   total?: boolean;
   /** Row field holding the raw number to sum, when `key` holds a formatted string. */
   totalKey?: string;
+  /** Include muted (`_excludeFromTotal`) rows in this column's footer total. */
+  totalAll?: boolean;
   /** Angular number-pipe format for the footer total, e.g. '1.2-2'. */
   totalFormat?: string;
   /** Maps a badge cell's value to a semantic tone. Preferred over hand-written classes. */

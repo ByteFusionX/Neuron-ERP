@@ -100,7 +100,9 @@ interface DetailTableLine {
                     <app-detail-badge *ngIf="line.row['badge']" [label]="line.row['badge']" tone="warn"></app-detail-badge>
                     <span *ngIf="line.row['note']" class="truncate text-[11px] text-gray-500 dark:text-gray-400">{{ line.row['note'] }}</span>
                   </div>
-                  <span *ngIf="(line.groupCount ?? 0) > 1 && bandTotal(line) as bt" class="text-[12px] font-semibold tabular-nums text-gray-600 dark:text-gray-300"
+                  <span *ngIf="line.row['bandText']" class="text-[12px] font-semibold tabular-nums text-gray-600 dark:text-gray-300"
+                    [ngClass]="centerGroups ? 'absolute right-0' : 'ml-auto'">{{ line.row['bandText'] }}</span>
+                  <span *ngIf="!line.row['bandText'] && (line.groupCount ?? 0) > 1 && bandTotal(line) as bt" class="text-[12px] font-semibold tabular-nums text-gray-600 dark:text-gray-300"
                     [ngClass]="centerGroups ? 'absolute right-0' : 'ml-auto'">{{ bt }}</span>
                 </div>
               </td>
@@ -643,6 +645,6 @@ export class DetailTableComponent implements OnInit {
   }
 
   sum(c: DetailTableColumn): number {
-    return this.rows.reduce((s, r) => (r['_group'] || r['_sub'] || r['_excludeFromTotal'] ? s : s + (Number(r[c.totalKey ?? c.key]) || 0)), 0);
+    return this.rows.reduce((s, r) => (r['_group'] || r['_sub'] || (r['_excludeFromTotal'] && !c.totalAll) ? s : s + (Number(r[c.totalKey ?? c.key]) || 0)), 0);
   }
 }

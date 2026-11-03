@@ -14,6 +14,9 @@ import { RouterLink } from '@angular/router';
         <path *ngSwitchCase="'edit'" d="M11 2.5l2.5 2.5L5.5 13H3v-2.5L11 2.5z" />
         <path *ngSwitchCase="'download'" d="M8 2.5v8M4.5 7.5L8 11l3.5-3.5M2.5 13.5h11" />
         <path *ngSwitchCase="'upload'" d="M8 10.5v-8M4.5 6L8 2.5 11.5 6M2.5 13.5h11" />
+        <path *ngSwitchCase="'send'" d="M14 2L7 9M14 2l-4.5 12-2.5-5-5-2.5L14 2z" />
+        <path *ngSwitchCase="'refresh'" transform="scale(0.6667)" d="M4 4v6h6M20 20v-6h-6M5.5 15A7 7 0 0018 17.5M18.5 9A7 7 0 006 6.5" />
+        <path *ngSwitchCase="'trash'" transform="scale(0.6667)" d="M4 7h16M10 11v6m4-6v6M5 7l1 12a2 2 0 002 2h8a2 2 0 002-2l1-12M9 7V4h6v3" />
         <g *ngSwitchCase="'withdraw'"><circle cx="8" cy="8" r="5.5" /><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" /></g>
         <g *ngSwitchCase="'view'"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></g>
       </svg>
@@ -68,7 +71,7 @@ import { RouterLink } from '@angular/router';
 export class ActionButtonComponent {
   @Input() variant: 'primary' | 'secondary' | 'tool' | 'ghost' | 'outline' | 'warning' = 'secondary';
   /** Optional leading icon. */
-  @Input() icon: 'plus' | 'edit' | 'view' | 'download' | 'upload' | 'withdraw' | null = null;
+  @Input() icon: 'plus' | 'edit' | 'view' | 'download' | 'upload' | 'withdraw' | 'send' | 'refresh' | 'trash' | null = null;
   @Input() type: 'button' | 'submit' = 'button';
   @Input() form = '';
   @Input() disabled = false;
