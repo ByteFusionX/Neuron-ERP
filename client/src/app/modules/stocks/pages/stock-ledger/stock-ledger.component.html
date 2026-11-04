@@ -24,7 +24,8 @@
     [detailTitle]="detailTitle"
     [detailSubtitle]="detailSubtitle"
     (queryChange)="onQueryChange($event)"
-    (viewChange)="onViewChange($event)">
+    (viewChange)="onViewChange($event)"
+    (rowOpen)="onRowOpen($event)">
 
     <ng-template #detailMetaTemplate let-row>
       <app-detail-meta [items]="metaFor(row)"></app-detail-meta>

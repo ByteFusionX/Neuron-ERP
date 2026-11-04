@@ -101,6 +101,7 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
                     _id: { product: '$product', warehouse: '$warehouse' },
                     onHand: { $sum: { $cond: [{ $eq: ['$stockStatus', 'Quarantine'] }, 0, { $subtract: ['$quantityIn', '$quantityOut'] }] } },
                     quarantined: { $sum: { $cond: [{ $eq: ['$stockStatus', 'Quarantine'] }, { $subtract: ['$quantityIn', '$quantityOut'] }, 0] } },
+                    lastDate: { $max: '$movementDate' },
                 },
             },
         ]);
@@ -109,15 +110,16 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
             { $group: { _id: '$product', quantity: { $sum: '$quantity' } } },
         ]);
 
-        const byProduct = new Map<string, { onHand: number; quarantined: number; reserved: number; warehouses: { warehouseId: string; quantity: number; quarantined: number }[] }>();
+        const byProduct = new Map<string, { onHand: number; quarantined: number; reserved: number; lastDate: Date | null; warehouses: { warehouseId: string; quantity: number; quarantined: number }[] }>();
         const entryFor = (id: string) => {
-            if (!byProduct.has(id)) byProduct.set(id, { onHand: 0, quarantined: 0, reserved: 0, warehouses: [] });
+            if (!byProduct.has(id)) byProduct.set(id, { onHand: 0, quarantined: 0, reserved: 0, lastDate: null, warehouses: [] });
             return byProduct.get(id)!;
         };
         grouped.forEach((g) => {
             const entry = entryFor(String(g._id.product));
             entry.onHand += g.onHand || 0;
             entry.quarantined += g.quarantined || 0;
+            if (g.lastDate && (!entry.lastDate || g.lastDate > entry.lastDate)) entry.lastDate = g.lastDate;
             if (g._id.warehouse && (g.onHand || g.quarantined)) entry.warehouses.push({ warehouseId: String(g._id.warehouse), quantity: g.onHand || 0, quarantined: g.quarantined || 0 });
         });
         reservedRows.forEach((r) => { entryFor(String(r._id)).reserved = r.quantity || 0; });
@@ -135,25 +137,40 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
             Warehouse.find({}).select('wareHouseName').lean(),
             getLastReceiptCosts([...byProduct.keys()]),
         ]);
+        // Items with no usable receipt cost (e.g. everything still in quarantine) are valued at their last PO price.
+        const uncosted = [...byProduct.keys()].filter((id) => !costs.get(id)?.unitCost);
+        const poCosts = new Map<string, number>();
+        if (uncosted.length) {
+            const poRows: any[] = await PurchaseOrder.find({ 'items.partNo': { $in: uncosted }, poStatus: { $nin: ['Cancelled', 'Rejected', 'Draft'] } })
+                .select('items.partNo items.unitCost poDate').sort({ poDate: -1, createdAt: -1 }).lean();
+            for (const po of poRows) {
+                for (const line of po.items || []) {
+                    const pid = String(line.partNo);
+                    if (uncosted.includes(pid) && !poCosts.has(pid) && Number(line.unitCost) > 0) poCosts.set(pid, Number(line.unitCost));
+                }
+            }
+        }
         const warehouseName = new Map<string, string>(warehouses.map((w: any) => [String(w._id), w.wareHouseName]));
         const quarantineRefs = await quarantineRefsByProduct(products.filter((p: any) => (byProduct.get(String(p._id))?.quarantined || 0) > 0).map((p: any) => String(p._id)));
 
         let rows = products.map((product: any) => {
             const id = String(product._id);
             const entry = byProduct.get(id)!;
-            const unitCost = costs.get(id)?.unitCost || 0;
+            const unitCost = costs.get(id)?.unitCost || poCosts.get(id) || 0;
+            const totalQuantity = entry.onHand + entry.quarantined;
             return {
                 productId: id,
                 ...productLabel(product),
                 productCategory: product.productCategory?.categoryName || '',
                 reorderPoint: product.reorderPoint || 0,
-                onHandQuantity: entry.onHand,
+                onHandQuantity: totalQuantity,
                 reservedQuantity: entry.reserved,
                 availableQuantity: Math.max(0, entry.onHand - entry.reserved),
                 shortfallQuantity: Math.max(0, entry.reserved - entry.onHand),
                 quarantinedQuantity: entry.quarantined,
                 quarantineRef: quarantineRefs.get(id) || '',
-                stockValue: entry.onHand * unitCost,
+                lastMovementDate: entry.lastDate,
+                stockValue: totalQuantity * unitCost,
                 warehouses: entry.warehouses
                     .map((w) => ({ warehouseId: w.warehouseId, warehouseName: warehouseName.get(w.warehouseId) || 'Warehouse', quantity: w.quantity, quarantined: w.quarantined }))
                     .sort((a, b) => b.quantity - a.quantity),
@@ -170,10 +187,16 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
         if (view === 'reserved') rows = rows.filter((r) => r.reservedQuantity > 0);
         if (view === 'quarantine') rows = rows.filter((r) => r.quarantinedQuantity > 0);
 
-        const key = typeof sortKey === 'string' && sortKey ? sortKey : 'partNo';
-        const dir = sortDir === 'desc' ? -1 : 1;
+        // Default order: most recent stock movement first.
+        const hasSort = typeof sortKey === 'string' && !!sortKey;
+        const key = hasSort ? (sortKey as string) : 'lastMovementDate';
+        const dir = hasSort ? (sortDir === 'desc' ? -1 : 1) : -1;
         rows.sort((a: any, b: any) => {
-            const av = a[key], bv = b[key];
+            let av = a[key], bv = b[key];
+            if (av instanceof Date || bv instanceof Date || key === 'lastMovementDate') {
+                av = av ? new Date(av).getTime() : 0;
+                bv = bv ? new Date(bv).getTime() : 0;
+            }
             if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
             return String(av ?? '').localeCompare(String(bv ?? ''), undefined, { numeric: true }) * dir;
         });
@@ -201,7 +224,6 @@ export const getStockLedger = async (req: Request, res: Response, next: NextFunc
         const filter: any = { ...notDeleted };
         if (product && ObjectId.isValid(String(product))) filter.product = asObjectId(product);
         if (warehouse && ObjectId.isValid(String(warehouse))) filter.warehouse = asObjectId(warehouse);
-        if (movementType) filter.movementType = String(movementType);
 
         const searchTerm = typeof search === 'string' ? search.trim() : '';
         if (searchTerm) {
@@ -209,10 +231,13 @@ export const getStockLedger = async (req: Request, res: Response, next: NextFunc
             const matches = await Product.find({ ...notDeleted, $or: [{ partNo: regex }, { itemCode: regex }, { productDescription: regex }] }).select('_id').limit(200).lean();
             filter.$or = [{ referenceNo: regex }, { remarks: regex }, { product: { $in: matches.map((p: any) => p._id) } }];
         }
+        // Tab counts ignore the type tab itself so every tab shows its own total.
+        const baseFilter = { ...filter };
+        if (movementType) filter.movementType = String(movementType);
 
         const pageNum = Math.max(parseInt(page as string, 10) || 1, 1);
         const rowNum = Math.min(Math.max(parseInt(row as string, 10) || 20, 1), 200);
-        const [movements, total] = await Promise.all([
+        const [movements, total, typeCounts] = await Promise.all([
             StockMovement.find(filter)
                 .populate('product', 'partNo itemCode productDescription unitOfMeasure')
                 .populate('warehouse', 'wareHouseName')
@@ -222,11 +247,16 @@ export const getStockLedger = async (req: Request, res: Response, next: NextFunc
                 .limit(rowNum)
                 .lean(),
             StockMovement.countDocuments(filter),
+            StockMovement.aggregate([{ $match: baseFilter }, { $group: { _id: '$movementType', count: { $sum: 1 } } }]),
         ]);
+        const counts: Record<string, number> = {};
+        let all = 0;
+        for (const c of typeCounts) { counts[c._id] = c.count; all += c.count; }
+        counts['all'] = all;
         return res.status(200).json({
             success: true,
             message: 'Stock ledger fetched successfully',
-            data: { movements, pagination: { total, page: pageNum, pages: Math.ceil(total / rowNum), limit: rowNum } },
+            data: { movements, counts, pagination: { total, page: pageNum, pages: Math.ceil(total / rowNum), limit: rowNum } },
         });
     } catch (error) {
         return fail(res, next, error);
@@ -334,6 +364,10 @@ interface ReturnLine {
     description: string;
     uom: string;
     maxQuantity: number;
+    /** GRN lines only: what arrived and what was rejected on the receipt. */
+    receivedQty?: number;
+    rejectedQty?: number;
+    rejectionReason?: string;
     perWarehouse: { warehouse: string; quantity: number }[];
 }
 
@@ -375,7 +409,7 @@ const loadReturnSource = async (kind: ReturnKind, sourceId: string) => {
     const products = await Product.find({ _id: { $in: [...remaining.keys()].map(asObjectId) } }).select('partNo itemCode productDescription unitOfMeasure').lean();
     const lines: ReturnLine[] = products.map((p: any) => {
         const perWarehouse = [...(remaining.get(String(p._id))?.entries() || [])].filter(([, q]) => q > 0).map(([warehouse, quantity]) => ({ warehouse, quantity }));
-        return {
+        const line: ReturnLine = {
             product: String(p._id),
             partNo: p.partNo || p.itemCode || '',
             description: p.productDescription || '',
@@ -383,6 +417,25 @@ const loadReturnSource = async (kind: ReturnKind, sourceId: string) => {
             maxQuantity: perWarehouse.reduce((sum, w) => sum + w.quantity, 0),
             perWarehouse,
         };
+        if (!isCustomer) {
+            const codes = [p.itemCode, p.partNo].filter(Boolean).map((c: string) => String(c).trim().toLowerCase());
+            const desc = String(p.productDescription || '').trim().toLowerCase();
+            const matches = (doc.items || []).filter((i: any) => {
+                const itemCode = String(i.partNo || i.itemCode || '').trim().toLowerCase();
+                return (itemCode && codes.includes(itemCode)) || (desc && String(i.description || i.productDescription || '').trim().toLowerCase() === desc);
+            });
+            line.receivedQty = matches.reduce((s: number, i: any) => s + (Number(i.receivedQty) || 0), 0);
+            line.rejectedQty = matches.reduce((s: number, i: any) => s + (Number(i.rejectedQty) || 0), 0);
+            // Whatever the GRN sent to quarantine for this product is what it rejected, even if the line could not be matched.
+            if (!line.rejectedQty) {
+                line.rejectedQty = moved.filter((m: any) => String(m.product) === String(p._id)).reduce((s: number, m: any) => s + (m.quantityIn - m.quantityOut), 0);
+            }
+            // The reason typed on the GRN line; if the line could not be matched, use the lone rejected GRN line's reason.
+            const reasonSource = matches.length ? matches : (doc.items || []).filter((i: any) => Number(i.rejectedQty) > 0);
+            const reasonItems = matches.length || reasonSource.length === 1 ? reasonSource : [];
+            line.rejectionReason = Array.from(new Set(reasonItems.map((i: any) => String(i.rejectionReason || '').trim()).filter(Boolean))).join('; ');
+        }
+        return line;
     }).filter((l) => l.maxQuantity > 0);
 
     return { doc, lines, sourceType, returnType, number: isCustomer ? doc.dnNo : doc.grnNo };
@@ -410,13 +463,13 @@ export const createStockReturn = async (req: Request, res: Response, next: NextF
         if (!employee) return res.status(401).json({ success: false, message: 'Unauthorized' });
         if (kind !== 'customer' && kind !== 'supplier') throw new StockError('Unknown return type', 400);
         if (!String(reason || '').trim()) throw new StockError('A reason is required', 400);
-        if (kind === 'supplier' && !['Replacement', 'Credit Note'].includes(resolution)) throw new StockError('Choose Replacement or Credit Note', 400);
+        if (kind === 'supplier' && !String(resolution || '').trim()) throw new StockError('Enter the resolution', 400);
         const requested = (Array.isArray(lines) ? lines : []).filter((l: any) => Number(l.quantity) > 0);
         if (!requested.length) throw new StockError('Enter a quantity for at least one item', 400);
 
         const source = await loadReturnSource(kind, String(sourceId));
         const isCustomer = kind === 'customer';
-        const plan: { product: string; warehouse: string; quantity: number }[] = [];
+        const plan: { product: string; warehouse: string; quantity: number; remarks: string }[] = [];
         for (const line of requested) {
             const sourceLine = source.lines.find((l) => l.product === String(line.product));
             if (!sourceLine) throw new StockError('An item on the return is not on this document', 400);
@@ -426,7 +479,7 @@ export const createStockReturn = async (req: Request, res: Response, next: NextF
             for (const w of sourceLine.perWarehouse) {
                 if (remaining <= 0) break;
                 const take = Math.min(remaining, w.quantity);
-                plan.push({ product: sourceLine.product, warehouse: w.warehouse, quantity: take });
+                plan.push({ product: sourceLine.product, warehouse: w.warehouse, quantity: take, remarks: String(line.remarks || '').trim() });
                 remaining -= take;
             }
         }
@@ -452,7 +505,7 @@ export const createStockReturn = async (req: Request, res: Response, next: NextF
                 referenceId: sourceId,
                 referenceNo: source.number,
                 reason,
-                remarks,
+                remarks: [step.remarks, remarks].filter(Boolean).join(' - ') || remarks,
                 createdBy: employee._id,
             });
         }
@@ -461,7 +514,7 @@ export const createStockReturn = async (req: Request, res: Response, next: NextF
                 $set: {
                     outcomeStatus: 'Return in Progress',
                     invoiceStatus: 'Blocked by Return',
-                    returnResolution: resolution,
+                    returnResolution: String(resolution || '').trim() || undefined,
                     returnDispatchedAt: new Date(),
                 }
             });
@@ -507,6 +560,104 @@ export const getStockReservations = async (req: Request, res: Response, next: Ne
             .limit(200)
             .lean();
         return res.status(200).json({ success: true, data: reservations });
+    } catch (error) {
+        return fail(res, next, error);
+    }
+};
+
+export const getStockItemDetails = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const productId = String(req.query.product || '');
+        if (!ObjectId.isValid(productId)) return res.status(400).json({ success: false, message: 'Invalid product' });
+        const pid = asObjectId(productId);
+
+        const product: any = await Product.findById(pid)
+            .populate('productCategory', 'categoryName')
+            .populate('defaultVendor', 'supplierName')
+            .lean();
+        if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+        // Last order: the most recent PO that carries this product (cancelled and rejected orders do not count).
+        const lastPo: any = await PurchaseOrder.findOne({ 'items.partNo': pid, poStatus: { $nin: ['Cancelled', 'Rejected', 'Draft'] } })
+            .sort({ poDate: -1, createdAt: -1 })
+            .populate('supplierId', 'supplierName')
+            .populate('jobId', 'jobId')
+            .lean();
+        const poLine = lastPo?.items?.find((i: any) => String(i.partNo) === productId);
+
+        // Last receipt: newest GRN whose line is this product, matched by item code, part no, then description.
+        const codes = [product.itemCode, product.partNo].filter(Boolean).map((c: string) => String(c).trim().toLowerCase());
+        const grns: any[] = await GRN.find({ isDeleted: { $ne: true } })
+            .sort({ grnDate: -1 })
+            .limit(300)
+            .populate({ path: 'purchaseOrderId', select: 'poNo supplierId currency items', populate: { path: 'supplierId', select: 'supplierName' } })
+            .lean();
+        let lastGrn: any = null;
+        let grnLine: any = null;
+        for (const g of grns) {
+            const line = (g.items || []).find((i: any) => codes.includes(String(i.partNo || '').trim().toLowerCase()))
+                || (g.items || []).find((i: any) => String(i.itemDescription || '').trim().toLowerCase() === String(product.productDescription || '').trim().toLowerCase());
+            if (line) { lastGrn = g; grnLine = line; break; }
+        }
+        const grnPoLine = lastGrn?.purchaseOrderId?.items?.find((i: any) => String(i.partNo) === productId);
+
+        // Jobs holding this product, with the job's own status.
+        const reservations: any[] = await StockReservation.find({ ...getActiveReservationFilter(), product: pid, job: { $ne: null } })
+            .populate({ path: 'job', select: 'jobId status', })
+            .populate('customer', 'companyName')
+            .sort({ createdDate: -1 })
+            .lean();
+        const jobs = reservations.map((r) => ({
+            jobId: r.job?.jobId || '-',
+            status: r.job?.status || '-',
+            customer: r.customer?.companyName || '-',
+            reservedQty: r.quantity,
+            reservedOn: r.createdDate,
+        }));
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                item: {
+                    itemCode: product.itemCode,
+                    partNo: product.partNo,
+                    description: product.productDescription,
+                    brand: product.brand,
+                    category: product.productCategory?.categoryName,
+                    uom: product.unitOfMeasure,
+                    type: product.type,
+                    specs: product.specs,
+                    reorderPoint: product.reorderPoint,
+                    leadTimeDays: product.leadTimeDays,
+                    defaultVendor: product.defaultVendor?.supplierName,
+                    estimatedCost: product.estimatedCost,
+                    defaultSellingPrice: product.defaultSellingPrice,
+                },
+                lastPo: lastPo ? {
+                    poNo: lastPo.poNo,
+                    poDate: lastPo.poDate,
+                    status: lastPo.poStatus,
+                    supplier: lastPo.supplierId?.supplierName,
+                    currency: lastPo.currency,
+                    quantity: poLine?.quantity,
+                    unitCost: poLine?.unitCost,
+                    totalCost: poLine?.totalCost,
+                    job: lastPo.jobId?.jobId,
+                } : null,
+                lastGrn: lastGrn ? {
+                    grnNo: lastGrn.grnNo,
+                    grnDate: lastGrn.grnDate,
+                    poNo: lastGrn.purchaseOrderId?.poNo,
+                    supplier: lastGrn.purchaseOrderId?.supplierId?.supplierName,
+                    currency: lastGrn.purchaseOrderId?.currency,
+                    receivedQty: grnLine.receivedQty,
+                    acceptedQty: grnLine.acceptedQty,
+                    rejectedQty: grnLine.rejectedQty,
+                    unitCost: grnPoLine?.unitCost,
+                } : null,
+                jobs,
+            }
+        });
     } catch (error) {
         return fail(res, next, error);
     }

@@ -122,6 +122,10 @@ export interface StockReturnLine {
   description: string;
   uom: string;
   maxQuantity: number;
+  /** Supplier returns only: what arrived and what was rejected on the GRN. */
+  receivedQty?: number;
+  rejectedQty?: number;
+  rejectionReason?: string;
 }
 
 export interface StockReturnSource {
@@ -135,8 +139,8 @@ export interface StockReturnPayload {
   reason: string;
   remarks?: string;
   toQuarantine?: boolean;
-  resolution?: 'Replacement' | 'Credit Note';
-  lines: { product: string; quantity: number }[];
+  resolution?: string;
+  lines: { product: string; quantity: number; remarks?: string }[];
 }
 
 export interface StockReservationRow {
@@ -149,6 +153,13 @@ export interface StockReservationRow {
   quantity: number;
   expiresAt?: string;
   createdDate: string;
+}
+
+export interface StockItemDetails {
+  item: Record<string, any>;
+  lastPo: Record<string, any> | null;
+  lastGrn: Record<string, any> | null;
+  jobs: { jobId: string; status: string; customer: string; reservedQty: number; reservedOn: string }[];
 }
 
 export const ADJUSTMENT_REASONS = ['Opening stock', 'Count correction', 'Damaged', 'Lost / missing', 'Found', 'Other'] as const;
@@ -177,8 +188,8 @@ export class StockService {
     return this.http.get<StockOverviewResponse>(`${this.api}/overview`, { params: this.toParams(params), context: context() });
   }
 
-  getLedger(params: StockLedgerParams = {}): Observable<{ success: boolean; data: { movements: StockMovement[]; pagination: StockPagination } }> {
-    return this.http.get<{ success: boolean; data: { movements: StockMovement[]; pagination: StockPagination } }>(`${this.api}/ledger`, { params: this.toParams(params), context: context() });
+  getLedger(params: StockLedgerParams = {}): Observable<{ success: boolean; data: { movements: StockMovement[]; counts?: Record<string, number>; pagination: StockPagination } }> {
+    return this.http.get<{ success: boolean; data: { movements: StockMovement[]; counts?: Record<string, number>; pagination: StockPagination } }>(`${this.api}/ledger`, { params: this.toParams(params), context: context() });
   }
 
   /** On hand, reserved and available for products, keyed by product id. Open to every module. */
@@ -207,6 +218,10 @@ export class StockService {
 
   resolveSupplierReturn(grnId: string): Observable<{ success: boolean; message: string }> {
     return this.http.patch<{ success: boolean; message: string }>(`${this.api}/returns/supplier/${grnId}/resolve`, {}, { context: context() });
+  }
+
+  getItemDetails(product: string): Observable<{ success: boolean; data: StockItemDetails }> {
+    return this.http.get<{ success: boolean; data: StockItemDetails }>(`${this.api}/item-details`, { params: this.toParams({ product }), context: context() });
   }
 
   getReservations(product?: string): Observable<{ success: boolean; data: StockReservationRow[] }> {

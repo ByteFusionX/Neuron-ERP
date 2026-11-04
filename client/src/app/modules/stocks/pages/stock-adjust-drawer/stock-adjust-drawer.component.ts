@@ -28,6 +28,8 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
   @Input() open = false;
   /** Product to adjust; leave empty to let the user choose one. */
   @Input() productId = '';
+  /** Warehouse to preselect (the one the stock sits in on the Stock Balance row). */
+  @Input() warehouseId = '';
   @Output() saved = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
 
@@ -106,6 +108,8 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
     if (!changes['open'] || !this.open) return;
     this.reset();
     if (this.productId) this.form.controls.product.setValue(this.productId);
+    // set after the product, which defaults the warehouse to the product's master-data one
+    if (this.warehouseId) this.form.controls.warehouse.setValue(this.warehouseId);
   }
 
   /** A product created here is added to the list and selected. */
