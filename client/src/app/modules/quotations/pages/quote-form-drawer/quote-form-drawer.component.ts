@@ -488,7 +488,18 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     this.createProductOpen = true;
   }
 
-  onProductCreated(_product: any): void {}
+  onProductCreated(product: any): void {
+    if (!product?._id) return;
+    this.itemEntry?.applyCreatedProduct({
+      _id: product._id,
+      categoryName: product.productCategory?.categoryName || '',
+      description: product.productDescription || '',
+      source: 'catalogue',
+      itemCode: product.itemCode || '',
+      partNo: product.partNo || '',
+      uom: product.unitOfMeasure || '',
+    });
+  }
 
   onSupplierCreated(_supplier: any): void {
     this.createSupplierOpen = false;

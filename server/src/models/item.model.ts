@@ -11,7 +11,10 @@ export interface ItemDetail {
     availability: string;
     uom?: string;
     itemCode?: string;
-    partNo?: Types.ObjectId;
+    /** Part number text as typed or copied from the catalogue. */
+    partNo?: string;
+    /** The catalogue product this line is linked to. */
+    productId?: Types.ObjectId;
     supplierName?: string;
     supplierId?: Types.ObjectId;
     email?: string;
@@ -70,7 +73,12 @@ const itemDetailSchema = new Schema({
         type: String,
         trim: true
     },
+    // Part number text; the catalogue link lives in productId.
     partNo: {
+        type: String,
+        trim: true
+    },
+    productId: {
         type: Schema.Types.ObjectId,
         ref: 'Product',
     },

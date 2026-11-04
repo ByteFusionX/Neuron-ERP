@@ -39,6 +39,9 @@
         [lineAwarded]="lineAwarded"
         [lineLocked]="lineLocked"
         [lineHardLocked]="lineHardLocked"
+        [lineFixed]="lineFixed"
+        [lineMinQty]="lineMinQty"
+        [discountFloor]="discountFloor"
     [readOnly]="!canSaveDraft"
         [lineBadge]="lineBadge"
         [linePills]="linePills"
@@ -111,6 +114,9 @@
         [lineLocked]="lineLocked"
     [readOnly]="!canSaveDraft"
         [lineHardLocked]="lineHardLocked"
+        [lineFixed]="lineFixed"
+        [lineMinQty]="lineMinQty"
+        [discountFloor]="discountFloor"
     [lineBadge]="lineBadge"
     [linePills]="linePills"
     [lineOffers]="lineOffers"
@@ -308,21 +314,24 @@
         <div class="flex flex-wrap items-center gap-2">
           <ng-container *ngFor="let l of c.lpos">
             <app-action-button *ngIf="l.poStatus === 'Approved'" variant="primary" [disabled]="placingId === l._id" (click)="onPlacePo(l)">{{ placingId === l._id ? 'Placing…' : 'Place order' }}</app-action-button>
-            <app-action-button *ngIf="canCancelPo && l.poStatus === 'Placed'" variant="ghost" [disabled]="cancellingId === l._id" (click)="onCancelPlacedPo(l)">{{ cancellingId === l._id ? 'Cancelling…' : 'Cancel PO' }}</app-action-button>
           </ng-container>
-          <app-action-button *ngIf="t.toOrder > 0 || (!orderRows().length && !c.lpos.length)" [variant]="c.lpos.length ? 'ghost' : 'primary'" (click)="onCreatePo(c.supplierId)">
-            <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> {{ c.lpos.length ? 'PO for the rest' : 'Create PO' }}
+          <button *ngIf="c.lpos.length && (t.toOrder > 0 || !orderRows().length)" type="button" (click)="onCreatePo(c.supplierId)"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-violet-600 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 dark:border-violet-400 dark:bg-transparent dark:text-violet-300 dark:hover:bg-violet-950/30">
+            <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> PO for the rest
+          </button>
+          <app-action-button *ngIf="!c.lpos.length && (t.toOrder > 0 || !orderRows().length)" variant="primary" (click)="onCreatePo(c.supplierId)">
+            <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Create PO
           </app-action-button>
         </div>
       </div>
 
       <!-- The supplier's lines: its share, what its POs hold, and what is left to order or move -->
       <div *ngIf="openPoCards.has(c.supplierId)" class="border-t border-gray-100 px-4 pb-3 pt-2 dark:border-erp-border-dark">
-        <div class="hidden grid-cols-[minmax(0,4fr)_repeat(4,minmax(0,1fr))_minmax(0,1.6fr)] gap-2 pb-1 text-[11px] uppercase tracking-wide text-gray-400 min-[900px]:grid">
-          <span>Item</span><span class="text-right">Awarded</span><span class="text-right">On PO</span><span class="text-right">Received</span><span class="text-right">To order</span><span></span>
+        <div class="hidden grid-cols-[minmax(0,4fr)_repeat(3,minmax(0,1fr))] gap-2 pb-1 text-[11px] uppercase tracking-wide text-gray-400 min-[900px]:grid">
+          <span>Item</span><span class="text-right">Awarded</span><span class="text-right">On PO</span><span class="text-right">To order</span>
         </div>
         <div class="divide-y divide-gray-100 dark:divide-erp-border-dark">
-          <div *ngFor="let x of poCardLines(c.supplierId); trackBy: trackPoCardLine" class="grid grid-cols-3 items-center gap-2 py-2 text-xs min-[900px]:grid-cols-[minmax(0,4fr)_repeat(4,minmax(0,1fr))_minmax(0,1.6fr)]">
+          <div *ngFor="let x of poCardLines(c.supplierId); trackBy: trackPoCardLine" class="grid grid-cols-3 items-center gap-2 py-2 text-xs min-[900px]:grid-cols-[minmax(0,4fr)_repeat(3,minmax(0,1fr))]">
             <div class="col-span-3 min-w-0 min-[900px]:col-span-1">
               <p class="line-clamp-2 whitespace-pre-line break-words text-[13px] font-medium text-gray-900 dark:text-gray-100"
                 [matTooltip]="x.row.detail" matTooltipPosition="above" matTooltipClass="erp-tooltip-detail" [matTooltipShowDelay]="250">{{ x.row.detail }}</p>
@@ -334,11 +343,7 @@
             </div>
             <span class="text-right tabular-nums">{{ x.s.awardedQty }}</span>
             <span class="text-right tabular-nums">{{ x.s.orderedQty }}</span>
-            <span class="text-right tabular-nums">{{ x.s.receivedQty }}</span>
             <span class="text-right font-medium tabular-nums" [ngClass]="x.s.freeQty ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'">{{ x.s.freeQty || 0 }}</span>
-            <div class="text-right">
-              <button *ngIf="canCancelPo && x.s.freeQty > 0" type="button" class="text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-400" (click)="onReassign(x.row, x.s)">Replace supplier</button>
-            </div>
           </div>
           <p *ngIf="!poCardLines(c.supplierId).length" class="py-3 text-center text-xs text-gray-500">Loading lines…</p>
         </div>
@@ -367,14 +372,14 @@
     <ng-container *ngIf="!viewOnly">
       <app-action-button *ngIf="step > 2" variant="secondary" (click)="onBackClicks()"><ng-icon name="heroArrowLeft" class="h-3.5 w-3.5"></ng-icon> Back</app-action-button>
       <app-action-button *ngIf="canSaveDraft" variant="tool" (click)="onDraftClicks()"><ng-icon name="heroArrowDownTray" class="h-3.5 w-3.5"></ng-icon> Save</app-action-button>
-      <app-action-button *ngIf="step === 2" variant="primary" (click)="onNextClicks()" title="Saves the items, then opens Compare & award"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Save & compare</app-action-button>
-      <app-action-button *ngIf="step === 3" variant="primary" (click)="goToStep(4)"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Next: Additional costs</app-action-button>
-      <app-action-button *ngIf="step === 4 && isApproved" variant="primary" (click)="goToStep(5)"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Next: POs</app-action-button>
+      <app-action-button *ngIf="step === 2" variant="primary" (click)="onNextClicks()" [title]="canSaveDraft ? 'Saves the items, then opens Compare & award' : ''"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> {{ canSaveDraft ? 'Save & compare' : 'Next' }}</app-action-button>
+      <app-action-button *ngIf="step === 3" variant="primary" (click)="goToStep(4)"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Next</app-action-button>
+      <app-action-button *ngIf="step === 4 && isApproved" variant="primary" (click)="goToStep(5)"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Next</app-action-button>
     </ng-container>
     <span *ngIf="step === 4 && canSaveDraft">
       <app-action-button variant="primary" [disabled]="!!submitBlockedReason" (click)="onSubmit()">
-        <ng-icon name="heroPaperAirplane" class="h-3.5 w-3.5"></ng-icon> Send for approval
-      </app-action-button>
+        <ng-icon name="heroPaperAirplane" class="h-3.5 w-3.5"></ng-icon> {{ isResend ? 'Resend' : 'Send' }}
+</app-action-button>
     </span>
   </ng-container>
 </app-sf-drawer>

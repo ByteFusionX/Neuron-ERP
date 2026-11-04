@@ -16,6 +16,7 @@ export interface QuoteItemDetails {
     unitSellingPrice: number;
     availability: string;
     partNo?: string | ProductPartNumber;
+    productId?: string;
     supplierName?: string;
     email?: string;
     phoneNo?: string;

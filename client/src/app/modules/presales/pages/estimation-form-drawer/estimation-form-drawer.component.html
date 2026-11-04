@@ -89,4 +89,4 @@
     </ng-container>
 </app-sf-drawer>
 
-<app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (closed)="createProductOpen = false"></app-product-form-drawer>
+<app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>

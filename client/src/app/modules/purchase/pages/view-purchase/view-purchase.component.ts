@@ -111,12 +111,12 @@ export class ViewPurchaseComponent {
   }
   // stable arrays: a getter that builds a new one each change detection re-creates the buttons and swallows clicks
   private readonly tabsBase: { id: 'pricing' | 'approval' | 'history' | 'pos'; label: string }[] = [
-    { id: 'pricing', label: 'Costs' },
+    { id: 'pricing', label: 'Pricing' },
     { id: 'approval', label: 'Approval' },
     { id: 'history', label: 'History' },
   ];
   private readonly tabsWithPos: { id: 'pricing' | 'approval' | 'history' | 'pos'; label: string }[] = [
-    { id: 'pricing', label: 'Costs' },
+    { id: 'pricing', label: 'Pricing' },
     { id: 'pos', label: 'POs' },
     { id: 'approval', label: 'Approval' },
     { id: 'history', label: 'History' },
@@ -285,7 +285,7 @@ export class ViewPurchaseComponent {
         this.isLoading = false;
         if (!['New', 'In Progress', 'Pending', 'Rejected', 'Revoked'].includes(this.purchase?.status ?? '')) this.loadPos();
         this.auditLog.getHistory(this.isManual ? 'generalPurchaseRequest' : 'purchaseRequest', this.purchaseId).subscribe({
-          next: (entries) => (this.auditEntries = toTimelineEntries((entries || []).filter((e) => e.action !== 'approved' && e.action !== 'rejected'))),
+          next: (entries) => (this.auditEntries = toTimelineEntries((entries || []).filter((e) => e.action !== 'approved'))),
           error: () => (this.auditEntries = []),
         });
       },
@@ -412,6 +412,7 @@ export class ViewPurchaseComponent {
       !!p.updatedAt && { label: 'Last Updated', value: date(p.updatedAt) },
       { label: 'Currency', value: p.currency || '-' },
       { label: 'Status', value: p.status || '-', state: { dot: tone.dot, text: tone.text } },
+      p.status === 'Rejected' && !!p.rejectedReason?.length && { label: 'Rejection Note', value: p.rejectedReason[p.rejectedReason.length - 1]?.comment || '-' },
     ];
     this.detailFacts = facts.filter((f): f is PurchaseFact => !!f);
     const hidden = ['Currency', 'Last Updated'];
@@ -704,7 +705,7 @@ export class ViewPurchaseComponent {
     const { confirmed, reason } = await this.confirmDialog.open({
       tone: 'reject',
       title: 'Revoke purchase request',
-      message: 'This approved purchase request goes back to its creator to be edited and sent for approval again.',
+      message: 'This approved purchase request goes back to its creator to be edited and sent for approval again. Products already on a purchase order keep their quantity and ordered suppliers; the rest can change.',
       details: [{ label: 'PR No', value: this.purchase.purchaseNo || '-' }],
       confirmLabel: 'Revoke',
       reason: true,

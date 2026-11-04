@@ -175,9 +175,18 @@ export class PurchaseService {
     const data: any = purchaseData;
     const currency = data.currency || data.quoteId?.currency || data.quoteId?.dealData?.currency || '';
     const money = (v: any) => `${this.currencySymbol(currency)}${this.formatNumber(Number(v) || 0)}`;
+    // the Total Cost header already names the currency
+    const plain = (v: any) => this.formatNumber(Number(v) || 0);
     const supplier = data.supplierId || {};
     const contact = supplier.contacts?.find((c: any) => c.isPrimary) || supplier.contactDetails || supplier.contacts?.[0] || {};
-    const address = supplier.addresses?.find((a: any) => a.isPrimary) || supplier.address || supplier.addresses?.[0] || {};
+    const formatAddress = (a: any) => [a?.buildingNo && `Building ${a.buildingNo}`, a?.streetNo && `Street ${a.streetNo}`, a?.zoneNo && `Zone ${a.zoneNo}`, a?.poBox && `P.O. Box ${a.poBox}`, a?.location, a?.city].filter(Boolean).join(', ');
+    // the primary address first, then any other that actually has content (an empty one must not hide a filled one)
+    const addressCandidates = [supplier.addresses?.find((a: any) => a.isPrimary), supplier.address, ...(supplier.addresses || [])];
+    const addressText = addressCandidates.map(formatAddress).find(Boolean) || '';
+    // entered on the PO, otherwise the terms agreed on the job's quotation ("Not specified" is a placeholder, not a term)
+    const usable = (t: any) => { const s = String(t ?? '').trim(); return s && !/^(not specified|n\/a|-)$/i.test(s) ? s : ''; };
+    const quote = data.quoteId || data.purchaseId?.jobId?.quoteId || {};
+    const paymentTerms = usable(purchaseData.paymentTerms) || usable(quote.dealData?.paymentTerms) || usable(quote.paymentTerms);
     const creator = data.createdBy || {};
     const creatorName = `${creator.firstName || ''} ${creator.lastName || ''}`.trim();
     const creatorPhone = this.qatarPhone(creator.contactNo);
@@ -194,7 +203,7 @@ export class PurchaseService {
         { text: item.detail || '', style: 'tableText' },
         { text: item.quantity, style: 'tableText', alignment: 'center' },
         { text: money(item.unitCost), style: 'tableText', alignment: 'right' },
-        { text: money(item.totalCost), style: 'tableText', alignment: 'right' },
+        { text: plain(item.totalCost), style: 'tableText', alignment: 'right' },
       ]);
     });
 
@@ -215,12 +224,12 @@ export class PurchaseService {
           ],
           ...tableBody,
           ...(discount ? [
-            [{ text: 'Sub total', style: 'tableFooter', colSpan: 4, alignment: 'right' }, '', '', '', { text: money(totalCost), style: 'tableFooter', alignment: 'right' }],
-            [{ text: 'Discount', style: 'tableFooter', colSpan: 4, alignment: 'right' }, '', '', '', { text: `-${money(discount)}`, style: 'tableFooter', alignment: 'right' }],
+            [{ text: 'Sub total', style: 'tableFooter', colSpan: 4, alignment: 'right' }, '', '', '', { text: plain(totalCost), style: 'tableFooter', alignment: 'right' }],
+            [{ text: 'Discount', style: 'tableFooter', colSpan: 4, alignment: 'right' }, '', '', '', { text: plain(discount), style: 'tableFooter', alignment: 'right' }],
           ] : []),
           [
             { text: `TOTAL${currency ? `(${currency})` : ''}: ${this.amountInWords(netTotal, currency)}`, style: 'tableFooter', colSpan: 4 }, '', '', '',
-            { text: money(netTotal), style: 'tableFooter', alignment: 'right' }
+            { text: plain(netTotal), style: 'tableFooter', alignment: 'right' }
           ]
         ]
       }
@@ -294,8 +303,8 @@ export class PurchaseService {
             widths: [85, '*', 95, '*'],
             body: [
               infoRow('Supplier:', supplier.supplierName, 'Delivery terms', purchaseData.etaTerms),
-              infoRow('Address', [address.buildingNo, address.streetNo, address.zoneNo, address.location, address.city].filter(Boolean).join(', '), 'Place of Delivery', purchaseData.placeOfDelivery),
-              infoRow('Contact Person', contact.name, 'Payment Terms', purchaseData.paymentTerms),
+              infoRow('Address', addressText, 'Place of Delivery', purchaseData.placeOfDelivery),
+              infoRow('Contact Person', contact.name, 'Payment Terms', paymentTerms),
               infoRow('Phone', contact.phoneNumber, 'Shipping Terms', purchaseData.shippingTerms),
               infoRow('E-mail', contact.email, 'PO Date:', purchaseData.poDate ? new Date(purchaseData.poDate).toLocaleDateString('en-GB') : ''),
               infoRow('Quote Ref:', purchaseData.quoteId?.quoteId, 'PO No:', purchaseData.poNo),
@@ -306,7 +315,7 @@ export class PurchaseService {
         itemsTable,
         ...section('PO Details:', purchaseData.subject || ''),
         ...section('Point Of Contact:', creatorName ? `PLEASE COORDINATE WITH ${creatorName}${creatorPhone ? ` - ${creatorPhone}` : ''}` : ''),
-        ...section('Payment terms', purchaseData.paymentTerms || ''),
+        ...section('Payment terms', paymentTerms),
         { text: 'General Terms & Conditions:', style: 'subHeading' },
         {
           ul: [

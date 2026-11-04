@@ -39,6 +39,19 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
     this.createProductOpen = true;
   }
 
+  onProductCreated(product: any): void {
+    if (!product?._id) return;
+    this.itemEntry?.applyCreatedProduct({
+      _id: product._id,
+      categoryName: product.productCategory?.categoryName || '',
+      description: product.productDescription || '',
+      source: 'catalogue',
+      itemCode: product.itemCode || '',
+      partNo: product.partNo || '',
+      uom: product.unitOfMeasure || '',
+    });
+  }
+
   saving = false;
   step: 1 | 2 = 1;
   readonly steps = [

@@ -164,9 +164,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       itemName: item.itemName || '',
       itemDetails: (item.itemDetails || []).map((d: any, j: number) => ({
         itemCode: d.itemCode || '',
-        // The PR's partNo is the product link; the editor keeps that in productId and the code in partNo.
-        productId: this.getPartNumberValue(d.partNo) || null,
-        partNo: typeof d.partNo === 'object' ? d.partNo?.partNo || '' : '',
+        productId: this.getPartNumberValue(d.productId) || null,
+        partNo: typeof d.partNo === 'object' ? d.partNo?.partNo || '' : d.partNo || '',
         detail: d.detail || '',
         quantity: d.quantity ?? null,
         unitCost: d.unitCost ?? null,
@@ -217,12 +216,40 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   /** Lines already on a live PO, by line id -> the PO holding them. They change only after that PO is rejected or cancelled. */
   poLockedLines: Record<string, string> = {};
 
-  lineHardLocked = (i: number, j: number, k: number): boolean => {
+  /** What live POs already took of each line, by line id (ordered qty and the qty per supplier); a line with quantity left over stays editable within limits. */
+  poUsage: Record<string, { ordered: number; po: string; suppliers: Record<string, number> }> = {};
+  /** Discount per supplier already carried by live POs: it cannot be lowered below this. */
+  poDiscounts: Record<string, number> = {};
+  discountFloor = (supplierId: string): number => this.poDiscounts[supplierId] || 0;
+
+  private lineKeyAt(i: number, j: number, k: number): string | undefined {
     const items = this.entryItems.at(i)?.get('items') as FormArray | null;
     const details = items?.at(j)?.get('itemDetails') as FormArray | null;
-    const key = details?.at(k)?.get('lineKey')?.value;
+    return details?.at(k)?.get('lineKey')?.value || undefined;
+  }
+
+  /** Lines fully on live POs: nothing on them changes. */
+  lineHardLocked = (i: number, j: number, k: number): boolean => {
+    const key = this.lineKeyAt(i, j, k);
     return !!key && !!this.poLockedLines[key];
   };
+
+  /** Lines with part of their quantity on a PO: product and quantity are fixed and the line stays; the quantity left can go to other suppliers. */
+  lineFixed = (i: number, j: number, k: number): boolean => {
+    const key = this.lineKeyAt(i, j, k);
+    return !!key && !!this.poUsage[key] && !this.poLockedLines[key];
+  };
+
+  /** The quantity of a line can go up but not below what is already on POs. */
+  lineMinQty = (i: number, j: number, k: number): number => {
+    const key = this.lineKeyAt(i, j, k);
+    return (key && this.poUsage[key]?.ordered) || 0;
+  };
+
+  /** Suppliers that already have quantity ordered on a PO, so their tab and award stay. */
+  private orderedSupplierIds(): Set<string> {
+    return new Set(Object.values(this.poUsage).flatMap((u) => Object.keys(u.suppliers)));
+  }
 
   /** For the item form's "Not awarded" filter: the line's saved copy says whether a supplier won it. */
   lineAwarded = (line: any): boolean => {
@@ -255,7 +282,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   /** Loads the last prices of the request's products, so a supplier added to a line starts at its last price. */
   private loadLastPrices(): void {
     const ids = [...new Set([
-      ...this.itemsList().flatMap((item: any) => (item.itemDetails || []).map((d: any) => String(d.partNo?._id || d.partNo || ''))),
+      ...this.itemsList().flatMap((item: any) => (item.itemDetails || []).map((d: any) => String(d.productId?._id || d.productId || ''))),
       ...this.entryProductIds(),
     ].filter(Boolean))];
     this.lastPricesFor = ids.slice().sort().join(',');
@@ -320,8 +347,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   lineOffers = (line: any): LineSupplierOffer[] => {
     // Called for every line on every change detection pass: hand back the same array until the inputs change.
     const cache = this.offerCache();
-    // Editor lines carry the product in productId; saved lines in partNo.
-    const product = String(line?.productId || line?.partNo || '');
+    const product = String(line?.productId?._id || line?.productId || '');
     const key = `${line?.lineKey ?? ''}|${line?.supplierId ?? ''}|${product}`;
     const hit = cache.get(key);
     if (hit) return hit;
@@ -454,6 +480,10 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   onSupplierTabClosed(id: string): void {
     if (this.dealSupplierIds().has(id)) return;
+    if (this.orderedSupplierIds().has(id)) {
+      this.toaster.warning('This supplier already has quantity on a purchase order, so its tab stays.');
+      return;
+    }
     this.addedSuppliers.update((l) => l.filter((x) => x !== id));
     this.removedSuppliers.update((l) => [...new Set([...l, id])]);
     // Lines that defaulted to this supplier (e.g. from the deal) lose that default, or the tab would come straight back.
@@ -500,6 +530,13 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   onLinesRemovedFromTab(lineKeys: string[]): void {
     const id = this.activeTab;
     if (id === 'items' || !lineKeys.length) return;
+    // A supplier cannot be taken off a line it already has ordered quantity on.
+    const kept = lineKeys.filter((k) => this.poUsage[k]?.suppliers[id]);
+    if (kept.length) {
+      this.toaster.warning('This supplier already has quantity ordered on that product, so it stays on it.');
+      lineKeys = lineKeys.filter((k) => !kept.includes(k));
+      if (!lineKeys.length) return;
+    }
     this.tabLines.update((m) => ({ ...m, [id]: (m[id] ?? []).filter((k) => !lineKeys.includes(k)) }));
     this.tabExcluded.update((m) => ({ ...m, [id]: [...new Set([...(m[id] ?? []), ...lineKeys])] }));
     this.lineTick.update((n) => n + 1);
@@ -550,12 +587,14 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
         const line = {
           ...(original ?? { isNewlyAdded: true, merged: false, comparisons: [] }),
           ...fields,
-          partNo: productId || '',
+          partNo: String(_partCode ?? '').trim(),
+          productId: productId || '',
           supplierId: fields.supplierId || (this.removedSuppliers().includes(String(original?.supplierId)) ? '' : original?.supplierId) || '',
         };
         // The deal's cost stays the baseline; the line's own cost is the award.
         const deal = this.dealHit(groups.get(lineKey) ?? formName, fields.detail);
-        if (deal?.cost != null) line.dealUnitCost = deal.cost;
+        // A baseline already on the line is kept: a later deal sheet change must not rewrite this request's diffs.
+        if (deal?.cost != null && !(Number(line.dealUnitCost) > 0)) line.dealUnitCost = deal.cost;
         line.comparisons = this.lineComparisons({ ...d, ...line });
         // A supplier cannot be offered more than the deal asks for on the line.
         const over = line.comparisons.find((c: any) => Number(c.quantity) > Number(line.quantity) + 0.0001);
@@ -622,8 +661,12 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     });
     if (shares) {
       list.forEach((c) => { c.selected = false; c.awardedQty = undefined; });
-      shares.filter((s) => s.qty > 0).forEach((s) => {
-        const c = upsert(s.supplierId, s.cost > 0 ? s.cost : null, s.qty);
+      const live = shares.filter((s) => s.qty > 0);
+      live.forEach((s) => {
+        // A line awarded whole to its own supplier is priced by the line's cost, which the buyer may have edited since the award (the share keeps the old price).
+        const edited = live.length === 1 && s.supplierId === String(d.supplierId || '') && Number(d.unitCost) > 0;
+        const cost = edited ? Number(d.unitCost) : s.cost;
+        const c = upsert(s.supplierId, cost > 0 ? cost : null, s.qty);
         if (!c) return;
         c.selected = true;
         c.awardedQty = s.qty;
@@ -795,6 +838,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   formTitle(): string {
     if (this.viewOnly) return this.isJobLess ? 'View general purchase' : 'View purchase requisition';
+    if (this.isEditing && this.isApproved) return 'Initiate POs';
     if (this.isJobLess) return this.isEditing ? 'Edit general purchase' : 'New general purchase';
     return this.isEditing ? 'Edit purchase requisition' : 'New purchase requisition';
   }
@@ -916,6 +960,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             });
 
             this.poLockedLines = purchase.lockedLines || {};
+            this.poUsage = purchase.poUsage || {};
+            this.poDiscounts = (purchase as any).poDiscounts || {};
             if (purchase.items) {
               this.itemsList.set(purchase.items);
               this.patchItemsValuesWithPartNoIds(purchase.items);
@@ -988,10 +1034,10 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     return true;
   }
 
-  /** True when a line has no item code or is not linked to a catalogue product (its partNo). */
+  /** True when a line has no item code. Part no (the catalogue link) is optional. */
   private hasCatalogueGaps(): boolean {
     return this.itemsList().some((item: any) => (item.itemDetails || []).some((d: any) =>
-      String(d.detail || '').trim() && (!String(d.itemCode || '').trim() || !d.partNo)));
+      String(d.detail || '').trim() && !String(d.itemCode || '').trim()));
   }
 
   onSubmit(): void {
@@ -1031,10 +1077,10 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     return 'In Progress';
   }
 
-  /** Save is offered on a new request and on one still being prepared, never on a submitted or rejected one. */
+  /** Save and Send for approval are offered on a new request, one still being prepared, and a rejected or revoked one being reworked; never on a submitted one. */
   get canSaveDraft(): boolean {
     if (this.viewOnly) return false;
-    return !this.isEditing || ['New', 'In Progress'].includes(this.purchaseForm.get('status')?.value);
+    return !this.isEditing || ['New', 'In Progress', 'Rejected', 'Revoked'].includes(this.purchaseForm.get('status')?.value);
   }
 
   onDraftClicks() {
@@ -1190,6 +1236,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       unitSellingPrice: [''],
       availability: [''],
       partNo: [''],
+      productId: [''],
       supplierName: [''],
       email: [''],
       phoneNo: [''],
@@ -1372,7 +1419,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       unitSellingPrice: [item.unitSellingPrice || 0],
       unitCost: [item.unitCost || 0, Validators.required],
       availability: [item.availability || ''],
-      partNo: [typeof item.partNo === 'object' && item.partNo?._id ? item.partNo._id : (item.partNo || '')],
+      partNo: [typeof item.partNo === 'object' ? (item.partNo as any)?.partNo || '' : (item.partNo || '')],
+      productId: [(item as any).productId?._id ?? (item as any).productId ?? (typeof item.partNo === 'object' ? (item.partNo as any)?._id : '') ?? ''],
       supplierName: [item.supplierName || ''],
       email: [item.email || ''],
       phoneNo: [item.phoneNo || ''],
@@ -1586,9 +1634,12 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** Once per opening: an approved PR opens on its POs, one with the approvers on its awards. */
   private stepChosen = false;
+  /** Opened as rejected/revoked, so the submit button reads "Resend". */
+  isResend = false;
   private openFirstStep(status: string): void {
     if (this.stepChosen) return;
     this.stepChosen = true;
+    this.isResend = status === 'Rejected' || status === 'Revoked';
     // The view opens on Items; once approved, its POs tab sits next to the supplier tabs.
     if (this.viewOnly) {
       if (status === 'Approved') this.loadPos();
@@ -1893,7 +1944,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
         if (!id || !name || suppliers.some((s) => s.supplierId === id)) return;
         suppliers.push({ supplierId: id, name, state: price != null ? 'priced' : 'waiting', price, qty: 0, offerQty: price != null ? Math.min(offered && offered > 0 ? offered : prQty, prQty) : null });
       };
-      const offers = this.lineOffers({ ...d, lineKey: key, partNo: this.getPartNumberValue(d.partNo), supplierId: this.lineSupplierId(d) });
+      const offers = this.lineOffers({ ...d, lineKey: key, productId: this.getPartNumberValue(d.productId), supplierId: this.lineSupplierId(d) });
       offers.filter((o) => !o.pastOnly).forEach((o) => addOption(o.supplierId, o.supplierName, o.price ?? null, o.savedQty));
       Object.entries(this.tabLines()).forEach(([sid, keys]) => {
         const o = offers.find((x) => x.supplierId === sid);
@@ -2062,7 +2113,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** One card per awarded supplier: what it was awarded and the POs raised for it. */
   poCards = computed(() => {
-    type Card = { supplierId: string; name: string; lines: number; value: number; lpos: { _id: string; poNo: string; poStatus: string; discount: number }[] };
+    type Card = { supplierId: string; name: string; lines: number; value: number; lpos: { _id: string; poNo: string; poStatus: string; discount: number; hasGrn: boolean }[] };
     const cards = new Map<string, Card>();
     // On an approved request the order status is the truth: shares moved after approval show up here.
     if (this.orderRows().length) {
@@ -2088,7 +2139,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       const id = String(l.supplierId?._id ?? l.supplierId ?? '');
       const c: Card | null = cards.get(id) ?? (id ? { supplierId: id, name: l.supplierId?.supplierName || l.supplierName || 'Supplier', lines: 0, value: 0, lpos: [] } : null);
       if (!c) return;
-      c.lpos.push({ _id: l._id, poNo: l.poNo, poStatus: l.poStatus, discount: Number(l.discount) || 0 });
+      c.lpos.push({ _id: l._id, poNo: l.poNo, poStatus: l.poStatus, discount: Number(l.discount) || 0, hasGrn: (Number(l.receivedQuantity) || 0) > 0 || (Array.isArray(l.grns) && l.grns.length > 0) });
       cards.set(id, c);
     });
     return [...cards.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -2458,26 +2509,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   convertPartNoIdsToObjects(items: any[]): any[] {
-    return items.map(item => ({
-      ...item,
-      itemDetails: (item.itemDetails || []).map((detail: any) => {
-        const partNoId = typeof detail.partNo === 'string' ? detail.partNo : detail.partNo?._id;
-        if (partNoId) {
-          const option = this.partNumberOptions().find(opt => opt.value === partNoId);
-          if (option?.data) {
-            return {
-              ...detail,
-              partNo: {
-                _id: option.data._id,
-                partNo: option.data.partNo,
-                productDescription: option.data.productDescription
-              }
-            };
-          }
-        }
-        return detail;
-      })
-    }));
+    // Lines keep the part number as text and the catalogue link in productId, so nothing is converted.
+    return items;
   }
 
   cleanItemsForBackend(items: any[]): any[] {
@@ -2499,6 +2532,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             supplierName: detail.supplierName || '',
             supplierId: typeof detail.supplierId === 'object' && detail.supplierId !== null ? detail.supplierId._id : (detail.supplierId || null),
             uom: detail.uom || '',
+            itemCode: String(detail.itemCode || '').trim(),
             email: detail.email || '',
             phoneNo: detail.phoneNo || '',
             dealSelected: detail.dealSelected || false,
@@ -2508,6 +2542,9 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             fromMrRequest: detail.fromMrRequest === true
           };
 
+          // The deal's cost is the baseline the diffs are measured from; it must survive a save.
+          if (Number(detail.dealUnitCost) > 0) cleanedDetail.dealUnitCost = Number(detail.dealUnitCost);
+
           // Handle unitSellingPrice - only include if it's a valid number
           if (detail.unitSellingPrice !== undefined && detail.unitSellingPrice !== null && detail.unitSellingPrice !== '') {
             const sellingPrice = typeof detail.unitSellingPrice === 'number' ? detail.unitSellingPrice : parseFloat(String(detail.unitSellingPrice));
@@ -2516,14 +2553,11 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             }
           }
 
-          // Handle partNo - convert to ObjectId string if it's an object
-          if (detail.partNo) {
-            if (typeof detail.partNo === 'object' && detail.partNo !== null && detail.partNo._id) {
-              cleanedDetail.partNo = detail.partNo._id;
-            } else if (typeof detail.partNo === 'string' && detail.partNo.trim() !== '') {
-              cleanedDetail.partNo = detail.partNo.trim();
-            }
-          }
+          // Part number text and the catalogue link (productId) are kept separately.
+          const partText = typeof detail.partNo === 'object' ? detail.partNo?.partNo : detail.partNo;
+          if (String(partText ?? '').trim()) cleanedDetail.partNo = String(partText).trim();
+          const linkedId = typeof detail.productId === 'object' ? detail.productId?._id : detail.productId;
+          if (linkedId) cleanedDetail.productId = linkedId;
 
           // Only include _id if it's a valid MongoDB ObjectId (not a temporary ID)
           // MongoDB ObjectIds are 24 hex characters
@@ -2562,7 +2596,18 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   onProductCreated(result: any): void {
-    if (!result?.partNo || !result?._id) return;
+    if (!result?._id) return;
+    // Put the new product straight on the line that asked for it (item code, part no, UOM, description).
+    this.prFormCmp?.itemEntry?.applyCreatedProduct({
+      _id: result._id,
+      categoryName: result.productCategory?.categoryName || '',
+      description: result.productDescription || '',
+      source: 'catalogue',
+      itemCode: result.itemCode || '',
+      partNo: result.partNo || '',
+      uom: result.unitOfMeasure || '',
+    });
+    if (!result?.partNo) return;
     const option: PartNumberDropdownOption = {
       label: this.composePartNumberLabel({
         partNo: result.partNo,

@@ -276,7 +276,7 @@ export class GeneralPurchaseListComponent {
       subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
       this.historyCache.set(row._id, subject);
       this.auditLog.getHistory('generalPurchaseRequest', row._id).subscribe({
-        next: (entries) => subject!.next(toTimelineEntries((entries || []).filter((e) => e.action !== 'approved' && e.action !== 'rejected'))),
+        next: (entries) => subject!.next(toTimelineEntries((entries || []).filter((e) => e.action !== 'approved'))),
         error: () => this.historyCache.delete(row._id),
       });
     }

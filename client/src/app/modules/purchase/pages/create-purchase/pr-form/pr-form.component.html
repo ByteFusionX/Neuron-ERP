@@ -96,8 +96,8 @@
     </div>
   </div>
 
-  <!-- Read-only once the request has left In Progress: inert blocks typing, clicks and focus but keeps the lines visible. -->
-  <div *ngIf="selectedJobSheet || isJobLess; else noJob" [attr.inert]="readOnly ? '' : null" [class.opacity-80]="readOnly">
+  <!-- Read-only once the request has left In Progress: item-entry makes the lines inert but keeps its search/filter/density toolbar live. -->
+  <div *ngIf="selectedJobSheet || isJobLess; else noJob">
     <div *ngIf="switching" class="pr-skeleton space-y-2" aria-busy="true" aria-label="Loading items">
       <div *ngFor="let r of skeletonRows" class="flex items-center gap-3">
         <span class="pr-sk h-8 w-8 rounded"></span>
@@ -118,9 +118,13 @@
       [supplierOptions]="supplierOptions()"
       [allowCreateProduct]="true"
       [bulkSelect]="true"
+      [readOnly]="readOnly"
       [flat]="true"
       [lineLocked]="lineLocked"
       [lineHardLocked]="lineHardLocked"
+      [lineFixed]="lineFixed"
+      [lineMinQty]="lineMinQty"
+      [discountFloor]="discountFloor"
       [lineAwarded]="lineAwarded"
       [lineBadge]="lineBadge"
       [linePills]="linePills"

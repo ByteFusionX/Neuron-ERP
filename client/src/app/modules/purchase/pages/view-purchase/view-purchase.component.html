@@ -50,20 +50,20 @@
     <ng-container headerActions *ngIf="purchase as p">
       <app-action-button variant="outline" *ngIf="(p.status === 'Rejected' || p.status === 'Revoked') && p.rejectedReason?.length" (click)="showStatusHistory()" icon="view">View reason</app-action-button>
       <app-action-button variant="outline" *ngIf="purchaseId !== 'none' && (p.status === 'Pending' || p.status === 'Approved')" (click)="viewDrawerOpen = true" icon="view">View PR</app-action-button>
-      <app-action-button variant="outline" *ngIf="purchaseId !== 'none' && p.status === 'Approved'" (click)="posDrawerOpen = true" icon="view">POs</app-action-button>
+      <app-action-button variant="outline" *ngIf="purchaseId !== 'none' && p.status === 'Approved'" (click)="posDrawerOpen = true" icon="send">POs</app-action-button>
       <ng-container *ngIf="p.status === 'Pending' && !isManual">
-        <app-action-button variant="outline" *ngIf="hasNewItemsToMerge()" [disabled]="isMerging" (click)="onMergeItems()">
+        <app-action-button variant="outline" *ngIf="hasNewItemsToMerge()" [disabled]="isMerging" (click)="onMergeItems()" icon="plus">
           {{ isMerging ? 'Merging…' : 'Merge items' }}
         </app-action-button>
-        <app-action-button variant="outline" *ngIf="hasMergedItems()" [disabled]="isRevoking" (click)="onRevokeMerge()">
+        <app-action-button variant="outline" *ngIf="hasMergedItems()" [disabled]="isRevoking" (click)="onRevokeMerge()" icon="withdraw">
           {{ isRevoking ? 'Revoking…' : 'Revoke merge' }}
         </app-action-button>
       </ng-container>
       <app-action-button variant="outline" *ngIf="purchaseId !== 'none' && (p.status === 'Rejected' || p.status === 'Revoked' || p.status === 'New' || p.status === 'In Progress')" (click)="onEdit()" icon="edit">Edit PR</app-action-button>
-      <app-action-button variant="outline" *ngIf="p.status === 'Approved' && canApproveOrReject()" [disabled]="isRevokingPr" (click)="onRevoke()">{{ isRevokingPr ? 'Revoking…' : 'Revoke' }}</app-action-button>
+      <app-action-button variant="outline" *ngIf="p.status === 'Approved' && canApproveOrReject()" [disabled]="isRevokingPr" (click)="onRevoke()" icon="withdraw">{{ isRevokingPr ? 'Revoking…' : 'Revoke' }}</app-action-button>
       <ng-container *ngIf="p.status === 'Pending' && canApproveOrReject()">
-        <app-action-button variant="outline" [disabled]="isRejecting" (click)="onReject()">{{ isRejecting ? 'Rejecting…' : 'Reject' }}</app-action-button>
-        <app-action-button variant="primary" [disabled]="isApproving" (click)="onApprove()">{{ isApproving ? 'Approving…' : 'Approve' }}</app-action-button>
+        <app-action-button variant="outline" [disabled]="isRejecting" (click)="onReject()" icon="withdraw">{{ isRejecting ? 'Rejecting…' : 'Reject' }}</app-action-button>
+        <app-action-button variant="primary" [disabled]="isApproving" (click)="onApprove()" icon="check">{{ isApproving ? 'Approving…' : 'Approve' }}</app-action-button>
       </ng-container>
     </ng-container>
 

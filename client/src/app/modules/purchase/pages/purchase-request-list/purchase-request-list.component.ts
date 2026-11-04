@@ -8,6 +8,7 @@ import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/comp
 import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/follow-up-create-modal.component';
 import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/follow-up-panel/follow-up-panel.component';
 import { FollowUpViewModel, followUpCellClass, followUpViewer } from 'src/app/shared/utils/follow-up.util';
+import { dealSheetPriceDetails } from 'src/app/shared/utils/deal-pricing.util';
 import { Component, ViewChild, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -75,7 +76,7 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
   Revoked: 'bg-orange-50 text-orange-700 ring-orange-200 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-900 dark:border-orange-900',
 };
 
-const PR_VIEW_IDS = ['overdue', 'today', 'upcoming', 'new', 'inProgress', 'rejected', 'revoked', 'all', 'pending', 'readyToPo', 'remainingPo', 'completed'];
+const PR_VIEW_IDS = ['followUp', 'new', 'inProgress', 'rejected', 'revoked', 'all', 'pending', 'readyToPo', 'remainingPo', 'completed'];
 
 @Component({
   selector: 'app-purchase-request-list',
@@ -120,14 +121,14 @@ export class PurchaseRequestListComponent {
 
   private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
 
-  /** Audit-log events for a PR; approve/reject are left out because the Approval tab already shows them. */
+  /** Audit-log events for a PR; approvals are left out (rejections are kept) because the Approval tab already shows them. */
   historyFor(row: any): Observable<DetailTimelineEntry[]> {
     let subject = this.historyCache.get(row._id);
     if (!subject) {
       subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
       this.historyCache.set(row._id, subject);
       this.auditLog.getHistory(row.sourceType === 'manual' ? 'generalPurchaseRequest' : 'purchaseRequest', row._id).subscribe({
-        next: (entries) => subject!.next(toTimelineEntries((entries || []).filter((e) => e.action !== 'approved' && e.action !== 'rejected'))),
+        next: (entries) => subject!.next(toTimelineEntries((entries || []).filter((e) => e.action !== 'approved'))),
         error: () => this.historyCache.delete(row._id),
       });
     }
@@ -151,9 +152,7 @@ export class PurchaseRequestListComponent {
   private readonly newView: DataGridView<any> = { id: 'new', label: 'New' };
   private baseViews: DataGridView<any>[] = [
     { id: 'all', label: 'All', hidePill: true },
-    { id: 'overdue', label: 'Overdue' },
-    { id: 'today', label: 'Today' },
-    { id: 'upcoming', label: 'Upcoming' },
+    { id: 'followUp', label: 'Follow Up' },
     { id: 'inProgress', label: 'In Progress' },
     { id: 'pending', label: 'Pending' },
     { id: 'readyToPo', label: 'Ready to PO' },
@@ -399,11 +398,11 @@ export class PurchaseRequestListComponent {
         hidden: (r) => !this.canDecide(r),
       },
       {
-        id: 'reject', label: 'Reject', icon: 'close',
+        id: 'reject', label: 'Reject', icon: 'close', quick: true,
         hidden: (r) => !this.canDecide(r),
       },
-      { id: 'revoke', label: 'Revoke', icon: 'close', hidden: (r) => r.status !== 'Approved' || !this.canApprovePR },
-      { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', quick: true, hidden: (r) => r.status !== 'Pending' || !this.isSuperAdmin },
+      { id: 'revoke', label: 'Revoke', icon: 'close', quick: true, variant: 'danger', hidden: (r) => r.status !== 'Approved' || !this.canApprovePR },
+      { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', hidden: (r) => r.status !== 'Pending' || !this.isSuperAdmin },
     ];
   }
 
@@ -463,7 +462,7 @@ export class PurchaseRequestListComponent {
       sourceType: this.sourceTypeForView(this.activeViewId),
       poProgress: this.poProgressForView(this.activeViewId),
       allocation: this.allocationForView(this.activeViewId),
-      followUpView: ['overdue', 'today', 'upcoming'].includes(this.activeViewId) ? this.activeViewId : undefined,
+      followUpView: this.activeViewId === 'followUp' ? 'followUp' : undefined,
     };
 
     this.subscriptions.add(
@@ -497,7 +496,7 @@ export class PurchaseRequestListComponent {
           sourceType: this.sourceTypeForView(view.id),
           poProgress: this.poProgressForView(view.id),
           allocation: this.allocationForView(view.id),
-          followUpView: ['overdue', 'today', 'upcoming'].includes(view.id) ? view.id : undefined,
+          followUpView: view.id === 'followUp' ? 'followUp' : undefined,
         })),
       }).subscribe({
         next: ({ counts }) => {
@@ -664,7 +663,7 @@ export class PurchaseRequestListComponent {
     const { confirmed, reason } = await this.confirmDialog.open({
       tone: 'reject',
       title: 'Revoke purchase request',
-      message: 'This approved purchase request goes back to its creator to be edited and sent for approval again.',
+      message: 'This approved purchase request goes back to its creator to be edited and sent for approval again. Products already on a purchase order keep their quantity and ordered suppliers; the rest can change.',
       details: [{ label: 'PR No', value: row.purchaseNo || '-' }],
       confirmLabel: 'Revoke',
       reason: true,
@@ -783,31 +782,48 @@ export class PurchaseRequestListComponent {
     return stages;
   }
 
+  /** Same figures as the Summary on the PR view page. */
+  private prSummaryFields(row: any, money: (v: number) => string): DetailOverviewSection['fields'] {
+    const num = (v: any) => Number(v) || 0;
+    const deal = row.jobId?.quoteId?.dealData;
+    const price = dealSheetPriceDetails(deal?.updatedItems, deal?.additionalCosts, deal?.totalDiscount);
+    const sumOf = (type: string) => (deal?.additionalCosts || []).filter((c: any) => c.type === type).reduce((s: number, c: any) => s + num(c.value), 0);
+    const customerDiscount = num(deal?.totalDiscount) + sumOf('Customer Discount');
+    const jobCostDiscount = sumOf('Supplier Discount');
+    let grossCost = 0;
+    const suppliers = new Set<string>();
+    const idOf = (ref: any): string => String(ref && typeof ref === 'object' ? ref._id : ref ?? '');
+    for (const item of row.items || []) {
+      for (const d of item.itemDetails || []) {
+        const won = (d.comparisons || []).filter((c: any) => c.selected);
+        for (const c of won) { grossCost += num(c.unitPrice) * num(c.quantity); suppliers.add(idOf(c.supplierId)); }
+        if (!won.length) suppliers.add(idOf(d.supplierId));
+      }
+    }
+    const extras = Array.isArray(row.additionalCosts)
+      ? row.additionalCosts
+      : (deal?.additionalCosts || []).filter((c: any) => (c.type || 'Additional Cost') === 'Additional Cost');
+    const prExtra = extras.reduce((s: number, c: any) => s + num(c.value), 0);
+    const saved: any[] = row.supplierDiscounts?.suppliers || [];
+    const discRows = saved.length ? saved : (deal?.additionalCosts || []).filter((c: any) => c.type === 'Supplier Discount' && c.supplierId).map((c: any) => ({ supplierId: c.supplierId, discount: c.value }));
+    const prDiscount = discRows.filter((d: any) => suppliers.has(idOf(d.supplierId))).reduce((s: number, d: any) => s + num(d.discount), 0);
+    const f = (label: string, v: number) => ({ type: 'field' as const, label, value: money(v), numeric: true, noHover: true });
+    return [
+      f('Total Price', price.totalSellingPrice + customerDiscount),
+      f('Discount', customerDiscount),
+      f('Net Total Price', price.totalSellingPrice),
+      f('Total Cost', price.totalCost + jobCostDiscount),
+      f('Cost Discount', jobCostDiscount),
+      f('Net Total Cost', price.totalCost),
+      f('Total PR Cost', grossCost + prExtra),
+      f('PR Cost Discount', prDiscount),
+      f('Net PR Total Cost', grossCost + prExtra - prDiscount),
+    ];
+  }
+
   overviewSections(row: any): DetailOverviewSection[] {
     const isNewJob = row.status === 'New' && !this.hasItems(row);
-    const rows = this.itemRows(row);
     const money = (v: number) => `${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency ?? ''}`.trim();
-    const estimated = rows.reduce((s, r) => s + (r['amount'] || 0), 0);
-    const awarded = rows.filter((r) => r['award'] === 'Awarded').reduce((s, r) => s + (r['amount'] || 0), 0);
-    const totalQty = rows.reduce((s, r) => s + (Number(r['qty']) || 0), 0);
-    const lpo = Number(row.totalLpo) || 0;
-    const financials: DetailOverviewSection['fields'] = [
-      { type: 'field', label: 'Line Items', value: rows.length, numeric: true, noHover: true },
-      { type: 'field', label: 'Total Quantity', value: totalQty, numeric: true, noHover: true },
-    ];
-    if (!isNewJob) {
-      financials.push({ type: 'field', label: 'Quoted Value', value: money(estimated), numeric: true, noHover: true });
-    }
-    if (isNewJob) {
-      // No PR yet, so the LPO value is the job's deal value (deal sheet lines × unit cost).
-      financials.push({ type: 'field', label: 'LPO Value', value: money(estimated), numeric: true, noHover: true });
-    } else {
-      financials.push(
-        { type: 'field', label: 'Awarded Value', value: money(awarded), numeric: true, noHover: true },
-        { type: 'field', label: 'Pending Award', value: money(estimated - awarded), numeric: true, noHover: true },
-        { type: 'field', label: 'LPO Value', value: money(lpo), numeric: true, noHover: true },
-      );
-    }
     const person = (p: any) => p?.firstName ? `${p.firstName} ${p.lastName ?? ''}`.trim() : '-';
     if (isNewJob) {
       const d = row.dealSummary ?? {};
@@ -856,12 +872,15 @@ export class PurchaseRequestListComponent {
           { type: 'field', label: 'Date', value: this.datePipe.transform(row.approvedDate || row.createdAt, 'dd MMM yyyy') },
           { type: 'field', label: 'Created By', value: row.createdBy ? `${row.createdBy.firstName} ${row.createdBy.lastName}` : '-' },
           { type: 'field', label: 'Procurement Person', value: row.procurementPerson?.firstName ? `${row.procurementPerson.firstName} ${row.procurementPerson.lastName}` : '-' },
+          ...(row.status === 'Rejected' && row.rejectedReason?.length
+            ? [{ type: 'field' as const, label: 'Rejection Note', value: row.rejectedReason[row.rejectedReason.length - 1]?.comment || '-' }]
+            : []),
         ],
       },
       {
-        title: 'Overview',
+        title: 'Summary',
         columns: '2',
-        fields: financials,
+        fields: this.prSummaryFields(row, money),
       },
     ];
   }
@@ -924,8 +943,8 @@ export class PurchaseRequestListComponent {
         row.followUp = response.followUp;
         this.followUpSaving = false;
         this.notificationService.success(successMessage);
-        // The Overdue / Today / Upcoming views depend on the new date, so reload them.
-        if (['overdue', 'today', 'upcoming'].includes(this.activeViewId)) this.getPurchases();
+        // The Follow Up view depends on the new date, so reload it.
+        if (this.activeViewId === 'followUp') this.getPurchases();
         else { this.rows = [...this.rows]; this.loadViewCounts(); }
       },
       error: (err) => {
