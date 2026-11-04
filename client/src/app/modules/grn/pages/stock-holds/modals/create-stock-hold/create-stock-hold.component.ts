@@ -35,7 +35,23 @@ export class CreateStockHoldComponent implements OnInit {
     { label: 'No Physical Return (waived/disposed)', value: 'NoPhysicalReturn' }
   ];
 
+  reasonOptions = [
+    { label: 'Damaged', value: 'Damaged' },
+    { label: 'Wrong item', value: 'WrongItem' },
+    { label: 'Wrong spec', value: 'WrongSpec' },
+    { label: 'Short qty', value: 'ShortQty' },
+    { label: 'Quality', value: 'Quality' },
+    { label: 'Expired', value: 'Expired' },
+    { label: 'Other', value: 'Other' }
+  ];
+
+  get isDn(): boolean { return this.data?.source === 'DN'; }
+
+  supplierOptions: { label: string; value: string }[] = [];
+
   holdForm: FormGroup = this.fb.group({
+    supplierId: [''],
+    reasonCode: [''],
     vendorAuthorizationNo: [''],
     returnReason: [''],
     returnNotes: [''],
@@ -51,6 +67,17 @@ export class CreateStockHoldComponent implements OnInit {
       qty: this.data?.rejectedQty || 1,
       returnReason: this.data?.rejectionReason || ''
     });
+
+    if (this.isDn) {
+      // Goods are already back in quarantine, so "no physical return" is not an option for a DN rejection.
+      this.logisticsOptions = this.logisticsOptions.filter((o) => o.value !== 'NoPhysicalReturn');
+      this.supplierOptions = (this.data?.suppliers || []).map((s: any) => ({ label: s.supplierName, value: s._id }));
+      this.holdForm.get('supplierId')?.setValidators([Validators.required]);
+      this.holdForm.get('reasonCode')?.setValidators([Validators.required]);
+      if (this.supplierOptions.length === 1) this.holdForm.patchValue({ supplierId: this.supplierOptions[0].value });
+      this.holdForm.get('supplierId')?.updateValueAndValidity();
+      this.holdForm.get('reasonCode')?.updateValueAndValidity();
+    }
 
     this.holdForm.get('logisticsType')?.valueChanges.subscribe((value) => {
       const trackingRef = this.holdForm.get('trackingRef');
@@ -72,8 +99,8 @@ export class CreateStockHoldComponent implements OnInit {
       this.holdForm.markAllAsTouched();
       return;
     }
-    if (!this.data?.grnId || this.data?.itemIndex === undefined) {
-      this.toastr.error('Missing GRN item context');
+    if (this.isDn ? (!this.data?.dnId || !this.data?.dnItemId) : (!this.data?.grnId || this.data?.itemIndex === undefined)) {
+      this.toastr.error(this.isDn ? 'Missing delivery note item context' : 'Missing GRN item context');
       return;
     }
 
@@ -84,9 +111,11 @@ export class CreateStockHoldComponent implements OnInit {
     }
 
     this.isSubmitting = true;
+    const target = this.isDn
+      ? { source: 'DN' as const, dnId: this.data.dnId, dnItemId: this.data.dnItemId, supplierId: this.holdForm.value.supplierId || undefined, reasonCode: this.holdForm.value.reasonCode || undefined }
+      : { grnId: this.data.grnId, itemIndex: this.data.itemIndex };
     this.stockHoldService.createStockHold({
-      grnId: this.data.grnId,
-      itemIndex: this.data.itemIndex,
+      ...target,
       qty,
       logisticsType: this.holdForm.value.logisticsType,
       trackingRef: this.holdForm.value.trackingRef || undefined,

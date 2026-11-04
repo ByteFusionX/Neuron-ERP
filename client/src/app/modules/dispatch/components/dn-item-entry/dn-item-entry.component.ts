@@ -4,7 +4,7 @@ import { AbstractControl, FormArray, FormGroup, FormsModule, ReactiveFormsModule
 import { NgIcon } from '@ng-icons/core';
 import { SF_STYLES, SmartFormModule } from 'src/app/shared/components/smart-form';
 
-type DnFilter = 'selected' | 'pending' | 'unavailable' | 'done';
+type DnFilter = 'pending' | 'unavailable' | 'done';
 
 /**
  * The item-entry layout for a delivery note: a work toolbar (search, filter chips, collapse, density),
@@ -44,11 +44,9 @@ export class DnItemEntryComponent {
 
   lineSearch = '';
   lineFilter: DnFilter | null = null;
-  collapsed = false;
   compact = false;
 
   readonly chips: { key: DnFilter; label: string; hint: string }[] = [
-    { key: 'selected', label: 'In this DN', hint: 'Lines selected for this delivery' },
     { key: 'pending', label: 'Open', hint: 'Lines with a balance still to deliver' },
     { key: 'unavailable', label: 'Not in inventory', hint: 'Lines with no PO or stock yet' },
     { key: 'done', label: 'Delivered', hint: 'Lines with nothing left to deliver' },
@@ -156,7 +154,6 @@ export class DnItemEntryComponent {
 
   private matchesFilter(l: AbstractControl, i: number, key: DnFilter): boolean {
     switch (key) {
-      case 'selected': return this.isSelected(i);
       case 'pending': return !this.locked(l) && this.balance(l) > 0;
       case 'unavailable': return this.isUnavailable(l);
       case 'done': return this.isDone(l);
@@ -172,6 +169,26 @@ export class DnItemEntryComponent {
 
   get visibleCount(): number {
     return this.lines.filter((l, i) => this.visible(l, i)).length;
+  }
+
+  /** Lines that can go on a DN and are currently shown (respects search and filter). */
+  private get selectable(): number[] {
+    return this.lines.map((l, i) => i).filter(i => !this.locked(this.lines[i]) && this.visible(this.lines[i], i));
+  }
+
+  get allSelected(): boolean {
+    const s = this.selectable;
+    return s.length > 0 && s.every(i => this.isSelected(i));
+  }
+
+  get canSelectAll(): boolean {
+    return this.selectable.length > 0;
+  }
+
+  /** Selects every available line, or clears them all when they are already selected. */
+  toggleAll(): void {
+    const target = !this.allSelected;
+    this.selectable.filter(i => this.isSelected(i) !== target).forEach(i => this.toggle.emit(i));
   }
 
   toggleFilter(key: DnFilter): void {

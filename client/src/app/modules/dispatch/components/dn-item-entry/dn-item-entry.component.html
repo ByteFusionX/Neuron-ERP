@@ -16,10 +16,6 @@
       <button *ngIf="filterActive" type="button" (click)="clearFilters()" class="text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-400">Clear</button>
 
       <div class="ml-auto flex items-center gap-1">
-        <button type="button" title="Collapse item" aria-label="Collapse item" (click)="collapsed = true"
-          class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><ng-icon name="heroChevronUp" class="h-4 w-4"></ng-icon></button>
-        <button type="button" title="Expand item" aria-label="Expand item" (click)="collapsed = false"
-          class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><ng-icon name="heroChevronDown" class="h-4 w-4"></ng-icon></button>
         <button type="button" [title]="compact ? 'Comfortable rows' : 'Compact rows'" (click)="compact = !compact"
           class="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
           [ngClass]="compact ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300' : ''">
@@ -36,16 +32,14 @@
 
   <!-- The job's card ----------------------------------------------------------------------- -->
   <div *ngIf="lines.length" class="rounded-xl border border-gray-200 bg-white dark:border-erp-border-dark dark:bg-erp-surface-dark">
-    <div class="flex flex-wrap items-center gap-2 border-gray-100 px-3 py-2 dark:border-erp-border-dark" [class.border-b]="!collapsed">
-      <button type="button" (click)="collapsed = !collapsed" [attr.aria-label]="collapsed ? 'Expand item' : 'Collapse item'" [attr.aria-expanded]="!collapsed"
-        class="grid h-6 w-6 shrink-0 place-content-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
-        <ng-icon [name]="collapsed ? 'heroChevronRight' : 'heroChevronDown'" class="h-4 w-4"></ng-icon>
-      </button>
+    <div class="flex flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2 dark:border-erp-border-dark">
+      <app-sf-checkbox class="shrink-0" [ngModelOptions]="{ standalone: true }" [ngModel]="allSelected" (ngModelChange)="toggleAll()" [disabled]="!canSelectAll"
+        [attr.aria-label]="allSelected ? 'Deselect all lines' : 'Select all lines'" [attr.title]="allSelected ? 'Deselect all' : 'Select all'"></app-sf-checkbox>
       <span class="min-w-0 flex-1 truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{{ title }}</span>
       <span class="hidden shrink-0 text-[11px] tabular-nums text-gray-500 md:inline">{{ selectedCount }} of {{ lines.length }} line{{ lines.length === 1 ? '' : 's' }} selected</span>
     </div>
 
-    <ng-container *ngIf="!collapsed">
+    <ng-container>
       <!-- Column labels: standing headers for the numeric strip, hidden below the width where it wraps. -->
       <div class="hidden items-start gap-2 px-3 pt-2 min-[900px]:flex">
         <span class="w-5 shrink-0"></span>

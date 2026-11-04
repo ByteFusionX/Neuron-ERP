@@ -29,6 +29,17 @@ const logDnAudit = (req: any, dn: any, action: string, summary: string, changes?
  * The stock lines a delivery note takes out of the warehouse: its inventory items with a positive
  * delivery quantity, resolved to catalogue products. Throws when an inventory item is not a catalogue product.
  */
+export const resolveDeliveryProduct = async (item: any): Promise<any> => {
+    let product: any = null;
+    if (item.itemId) {
+        const po: any = await PurchaseOrder.findOne({ 'items.prLineKey': String(item.itemId), 'items.partNo': { $ne: null } }).select('items').lean();
+        const linked = po?.items?.find((l: any) => String(l.prLineKey) === String(item.itemId) && l.partNo);
+        if (linked) product = await Product.findOne({ _id: linked.partNo, isDeleted: { $ne: true } }).select('_id partNo');
+    }
+    if (!product && String(item.partNo || '').trim()) product = await Product.findOne({ partNo: item.partNo, isDeleted: { $ne: true } }).select('_id partNo');
+    return product;
+};
+
 const buildDeliveryLines = async (items: any[] | undefined): Promise<{ product: any; quantity: number; partNo: string }[]> => {
     const lines: { product: any; quantity: number; partNo: string }[] = [];
     for (const item of items || []) {
@@ -37,13 +48,7 @@ const buildDeliveryLines = async (items: any[] | undefined): Promise<{ product: 
         if (quantity <= 0) continue;
         // The PO line GRN linked to this job line is the most reliable product link (generic products have no part no).
         // A blank part no must never be looked up: it would match any product that also has none.
-        let product: any = null;
-        if (item.itemId) {
-            const po: any = await PurchaseOrder.findOne({ 'items.prLineKey': String(item.itemId), 'items.partNo': { $ne: null } }).select('items').lean();
-            const linked = po?.items?.find((l: any) => String(l.prLineKey) === String(item.itemId) && l.partNo);
-            if (linked) product = await Product.findOne({ _id: linked.partNo, isDeleted: { $ne: true } }).select('_id partNo');
-        }
-        if (!product && String(item.partNo || '').trim()) product = await Product.findOne({ partNo: item.partNo, isDeleted: { $ne: true } }).select('_id partNo');
+        const product = await resolveDeliveryProduct(item);
         if (!product) throw new StockError(`"${item.description || item.partNo}" is marked as a stock item but has no product in the catalogue yet; receive it through a GRN or link a product first`, 400);
         lines.push({ product: product._id, quantity, partNo: item.partNo || item.description || String(product._id) });
     }
@@ -1091,9 +1096,9 @@ export const completeDnPod = async (req: Request, res: Response) => {
 const restoreRejectedItemToQuarantine = async (dn: any, item: any, rejectedQty: number, reason: string, userId?: string): Promise<string | null> => {
     if (!item.isInventoryItem || rejectedQty <= 0) return null;
 
-    const product = await Product.findOne({ partNo: item.partNo, isDeleted: { $ne: true } });
+    const product = await resolveDeliveryProduct(item);
     if (!product) {
-        return `Item "${item.description || item.partNo}": Product not found for part number "${item.partNo}" — rejection recorded, but stock was not restored to quarantine`;
+        return `Item "${item.description || item.partNo}": catalogue product not found — rejection recorded, but stock was not restored to quarantine`;
     }
 
     const delivered: any[] = await StockMovement.find({
@@ -1411,7 +1416,7 @@ export const getPendingDeliveriesSummary = async (req: Request, res: Response) =
                     from: 'purchaseorders',
                     let: {
                         prId: '$_id',
-                        itemPartNo: '$items.itemDetails.partNo',
+                        itemPartNo: '$items.itemDetails.productId',
                         itemDetail: { $toLower: { $trim: { input: { $ifNull: ['$items.itemDetails.detail', ''] } } } }
                     },
                     pipeline: [
@@ -1764,7 +1769,7 @@ export const getDnItemsForJob = async (req: Request, res: Response) => {
             {
                 $lookup: {
                     from: 'products',
-                    localField: 'items.itemDetails.partNo',
+                    localField: 'items.itemDetails.productId',
                     foreignField: '_id',
                     as: 'productInfo'
                 }

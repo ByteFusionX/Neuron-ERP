@@ -30,6 +30,17 @@ const stockHoldSchema = new Schema({
     },
     // The quarantine row in the stock ledger. Only set for holds with a physical quarantine (logisticsType !== 'NoPhysicalReturn')
     stockEntryId: { type: Schema.Types.ObjectId, ref: 'StockMovement' },
+    // Where the rejection came from. GRN: rejected at receipt from the supplier. DN: rejected by the customer on
+    // delivery, so the job it was for is carried on the hold and is not lost while the supplier is dealt with.
+    source: { type: String, enum: ['GRN', 'DN'], default: 'GRN' },
+    dnId: { type: Schema.Types.ObjectId, ref: 'DeliveryNote' },
+    dnItemId: { type: String },
+    jobId: { type: Schema.Types.ObjectId, ref: 'Job' },
+    productId: { type: Schema.Types.ObjectId, ref: 'Product' },
+    reasonCode: {
+        type: String,
+        enum: ['Damaged', 'WrongItem', 'WrongSpec', 'ShortQty', 'Quality', 'Expired', 'Other']
+    },
     grnId: { type: Schema.Types.ObjectId, ref: 'GRN' },
     itemId: { type: String },
     partNo: { type: String },
@@ -94,5 +105,7 @@ const stockHoldSchema = new Schema({
 
 stockHoldSchema.index({ stockEntryId: 1 });
 stockHoldSchema.index({ grnId: 1, itemId: 1 });
+stockHoldSchema.index({ dnId: 1, dnItemId: 1 });
+stockHoldSchema.index({ jobId: 1 });
 
 export const StockHold = model('StockHold', stockHoldSchema);
