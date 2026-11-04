@@ -36,5 +36,5 @@
     </ng-template>
   </app-data-grid>
 
-  <app-create-project class="contents" [open]="createOpen" (saved)="onProjectCreated()" (closed)="createOpen = false"></app-create-project>
+  <app-create-project class="contents" [open]="createOpen" [projectId]="editProjectId" (saved)="onProjectCreated()" (closed)="onProjectDrawerClosed()"></app-create-project>
 </div>

@@ -491,7 +491,8 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
       }
 
       if (Object.keys(accessFilter).length > 0) {
-         pipeline.push({ $match: accessFilter });
+         // Scope by privilege, but an engineer always sees projects assigned to them.
+         pipeline.push({ $match: { $or: [accessFilter, { 'assignedTo._id': employee._id }] } });
       }
 
       const gridMatch = buildGridFilterMatch(filters, PROJECT_GRID_FIELDS);

@@ -1,36 +1,109 @@
-<app-sf-drawer title="Create Project" subtitle="Assign a project or AMC to an engineer" width="640px"
+<app-sf-drawer [title]="isEdit ? 'Edit Project' : 'Create Project'"
+    [subtitle]="isEdit ? (editInfo?.customer || 'Update project details') : 'Assign a project or AMC to an engineer'" width="640px"
     [open]="open" [dirty]="projectForm.dirty" (closed)="onDrawerClosed($event)">
 
     <form id="project-form" [formGroup]="projectForm" (ngSubmit)="submit()" novalidate>
-        <app-sf-section title="Project" columns="2">
-            <app-sf-field full label="Customer" [control]="projectForm.controls.customerId">
-                <app-sf-combobox formControlName="customerId" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
-            </app-sf-field>
-            <app-sf-field label="Project Type" [control]="projectForm.controls.projectType">
-                <app-sf-select formControlName="projectType" [options]="projectTypeOptions" placeholder="Select type"></app-sf-select>
-            </app-sf-field>
-            <app-sf-field label="Priority" [control]="projectForm.controls.priority">
-                <app-sf-select formControlName="priority" [options]="priorityOptions" placeholder="Select priority"></app-sf-select>
-            </app-sf-field>
-            <app-sf-field label="Estimated Cost" hint="Optional" [control]="projectForm.controls.estimatedCost">
-                <app-sf-currency formControlName="estimatedCost" placeholder="0.00"></app-sf-currency>
-            </app-sf-field>
-        </app-sf-section>
+        @if (!isEdit) {
+            <app-sf-section title="Project" columns="2">
+                <app-sf-field full label="Customer" [control]="projectForm.controls.customerId">
+                    <app-sf-combobox formControlName="customerId" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
+                </app-sf-field>
+                <app-sf-field label="Project Type" [control]="projectForm.controls.projectType">
+                    <app-sf-select formControlName="projectType" [options]="projectTypeOptions" placeholder="Select type"></app-sf-select>
+                </app-sf-field>
+                <app-sf-field label="Priority" [control]="projectForm.controls.priority">
+                    <app-sf-select formControlName="priority" [options]="priorityOptions" placeholder="Select priority"></app-sf-select>
+                </app-sf-field>
+                <app-sf-field label="Estimated Cost" hint="Optional" [control]="projectForm.controls.estimatedCost">
+                    <app-sf-currency formControlName="estimatedCost" placeholder="0.00"></app-sf-currency>
+                </app-sf-field>
+            </app-sf-section>
 
-        <app-sf-section title="Assignment" columns="2">
-            <app-sf-field full label="Assign Engineer" [control]="projectForm.controls.engineerId">
-                <app-sf-combobox formControlName="engineerId" [options]="engineerOptions" placeholder="Select engineer"></app-sf-combobox>
-            </app-sf-field>
-            <app-sf-field full label="Scope / Notes" hint="Optional" [control]="projectForm.controls.comment">
-                <app-sf-textarea formControlName="comment" [rows]="5" placeholder="Scope, site details or instructions for the engineer"></app-sf-textarea>
-            </app-sf-field>
-        </app-sf-section>
+            <app-sf-section title="Assignment" columns="2">
+                <app-sf-field full label="Assign Engineer" [control]="projectForm.controls.engineerId">
+                    <app-sf-combobox formControlName="engineerId" [options]="engineerOptions" placeholder="Select engineer"></app-sf-combobox>
+                </app-sf-field>
+                <app-sf-field full label="Scope / Notes" hint="Optional" [control]="projectForm.controls.comment">
+                    <app-sf-textarea formControlName="comment" [rows]="5" placeholder="Scope, site details or instructions for the engineer"></app-sf-textarea>
+                </app-sf-field>
+            </app-sf-section>
+        } @else {
+            @if (loadingProject) {
+                <p class="py-8 text-center text-sm text-gray-500">Loading project…</p>
+            } @else {
+                <app-sf-section title="Project" columns="2">
+                    <div class="col-span-2 grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg bg-gray-50 p-3 text-[13px] dark:bg-white/5">
+                        <div><span class="block text-xs text-gray-500">Job ID</span>{{ editInfo?.jobId || 'Not attached' }}</div>
+                        <div><span class="block text-xs text-gray-500">Customer</span>{{ editInfo?.customer || '-' }}</div>
+                        <div><span class="block text-xs text-gray-500">Type</span>{{ editInfo?.projectType || '-' }}</div>
+                        <div><span class="block text-xs text-gray-500">Assigned engineer</span>{{ editInfo?.assignedTo || '-' }}</div>
+                        <div><span class="block text-xs text-gray-500">Assigned by</span>{{ editInfo?.assignedBy || '-' }}</div>
+                    </div>
+                    <app-sf-field label="Status" [control]="projectForm.controls.status">
+                        <app-sf-select formControlName="status" [options]="statusOptions" placeholder="Select status"></app-sf-select>
+                    </app-sf-field>
+                    <app-sf-field label="Priority" [control]="projectForm.controls.priority">
+                        <app-sf-select formControlName="priority" [options]="priorityOptions" placeholder="Select priority"></app-sf-select>
+                    </app-sf-field>
+                </app-sf-section>
+
+                <app-sf-section title="Notes" columns="1">
+                    <app-sf-field label="Project notes" hint="Optional" [control]="projectForm.controls.notes">
+                        <app-sf-textarea formControlName="notes" [rows]="4" placeholder="Add any project notes"></app-sf-textarea>
+                    </app-sf-field>
+                </app-sf-section>
+
+                <app-sf-section title="Users and involved persons" columns="1">
+                    <app-sf-field label="Supervisors" hint="Optional" [control]="projectForm.controls.supervisors">
+                        <div class="max-h-44 overflow-y-auto rounded-lg border border-gray-200 p-3 dark:border-white/10">
+                            <app-sf-checkbox-group formControlName="supervisors" [options]="supervisorOptions" [columns]="2"></app-sf-checkbox-group>
+                        </div>
+                    </app-sf-field>
+
+                    <div>
+                        <div class="mb-2 flex items-center justify-between">
+                            <span class="text-[13px] font-medium text-gray-700 dark:text-gray-300">Involved persons</span>
+                            <app-action-button variant="secondary" type="button" (click)="addPerson()">Add person</app-action-button>
+                        </div>
+                        <div formArrayName="involvedPersons" class="space-y-2">
+                            @for (p of personsArray.controls; track p; let i = $index) {
+                                <div [formGroupName]="i" class="flex items-start gap-2">
+                                    <div class="flex-1"><app-sf-input formControlName="name" placeholder="Name"></app-sf-input></div>
+                                    <div class="flex-1"><app-sf-input formControlName="designation" placeholder="Designation"></app-sf-input></div>
+                                    <app-action-button variant="secondary" type="button" (click)="removePerson(i)">Remove</app-action-button>
+                                </div>
+                            }
+                            @if (!personsArray.length) {
+                                <p class="text-xs text-gray-500">No involved persons added.</p>
+                            }
+                        </div>
+                    </div>
+                </app-sf-section>
+
+                <app-sf-section title="Costing" columns="2">
+                    <app-sf-field label="Estimated cost for project" hint="Optional" [control]="projectForm.controls.estimatedCost">
+                        <app-sf-currency formControlName="estimatedCost" placeholder="0.00"></app-sf-currency>
+                    </app-sf-field>
+                    <app-sf-field label="Estimated cost for manpower" hint="Optional" [control]="projectForm.controls.manpowerCost">
+                        <app-sf-currency formControlName="manpowerCost" placeholder="0.00"></app-sf-currency>
+                    </app-sf-field>
+                </app-sf-section>
+            }
+        }
     </form>
 
     <ng-container sfDrawerFooter>
+        @if (isEdit) {
+            <app-action-button variant="secondary" class="mr-auto" [disabled]="saving" (click)="openWorkspace()">Tasks, issues &amp; billing</app-action-button>
+            <app-action-button variant="secondary" [disabled]="saving" (click)="openMaterialRequest()">Material Request</app-action-button>
+        }
         <app-action-button variant="secondary" [disabled]="saving" (click)="cancel()">Cancel</app-action-button>
-        <app-action-button variant="primary" type="submit" form="project-form" [disabled]="saving">
-            {{ saving ? 'Creating…' : 'Create Project' }}
+        <app-action-button variant="primary" type="submit" form="project-form" [disabled]="saving || loadingProject">
+            {{ saving ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Update Project' : 'Create Project') }}
         </app-action-button>
     </ng-container>
 </app-sf-drawer>
+
+@if (isEdit) {
+    <app-material-request-drawer [open]="materialOpen" [projectId]="projectId" (closed)="materialOpen = false"></app-material-request-drawer>
+}
