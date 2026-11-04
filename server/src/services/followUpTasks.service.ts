@@ -116,6 +116,7 @@ export const followUpViewFilter = (field: string, view: unknown): Record<string,
         case 'overdue': return { [field]: { $lt: todayStart } };
         case 'today': return { [field]: { $gte: todayStart, $lte: todayEnd } };
         case 'upcoming': return { [field]: { $gt: todayEnd } };
+        case 'followUp': return { [field]: { $type: 'date' } };
         case 'none': return { [field]: { $exists: false } };
         default: return {};
     }

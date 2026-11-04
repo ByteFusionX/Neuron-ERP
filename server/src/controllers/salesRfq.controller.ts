@@ -2275,7 +2275,7 @@ const purchaseLines = (purchase: any) => {
             quantity: toNumber(detail.quantity),
             itemCode: detail.itemCode,
             estimatedUnitCost: toNumber(detail.unitCost) || undefined,
-            partNo: detail.partNo,
+            partNo: detail.productId,
             uom: detail.uom,
             awardedSupplier: winner?.supplierName,
             // Suppliers already tied to the line (offers on file), so the RFQ editor can open one tab per supplier.
@@ -2733,6 +2733,8 @@ const purchaseOrderState = async (purchase: any) => {
             .reduce((s: number, gi: any) => s + (Number(gi.receivedQty) || 0), 0), 0);
 
     const rows: any[] = [];
+    const liveLineIds = new Set<string>();
+    (purchase.items || []).forEach((item: any) => (item.itemDetails || []).forEach((d: any) => liveLineIds.add(String(d._id))));
     (purchase.items || []).forEach((item: any) => (item.itemDetails || []).forEach((detail: any) => {
         const key = String(detail._id);
         const lineQty = toNumber(detail.quantity);
@@ -2747,9 +2749,13 @@ const purchaseOrderState = async (purchase: any) => {
             const s = entry(String(c.supplierId), c.supplierName);
             s.awardedQty += toNumber(c.awardedQty) || toNumber(c.quantity) || lineQty;
             s.unitPrice = toNumber(c.unitPrice);
+            s.discountType = c.discountType === 'percent' ? 'percent' : 'amount';
+            s.discountValue = toNumber(c.discountValue);
         });
         pos.forEach((po) => (po.items || []).forEach((poItem: any) => {
-            const covers = poItem.prLineKey ? String(poItem.prLineKey) === key
+            // A link to a line id that no longer exists (the line was re-saved) falls back to the product match.
+            const linked = poItem.prLineKey && liveLineIds.has(String(poItem.prLineKey));
+            const covers = linked ? String(poItem.prLineKey) === key
                 : (poItem.partNo && detail.partNo ? String(poItem.partNo) === String(detail.partNo) : clean(poItem.detail) === clean(detail.detail));
             if (!covers || !po.supplierId) return;
             const s = entry(String(po.supplierId), '');

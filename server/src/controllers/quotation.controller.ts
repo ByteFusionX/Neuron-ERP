@@ -2687,10 +2687,10 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
                 // The job's own reservation below takes over from any hold placed when the quote was won.
                 await releaseQuoteStockHolds(quote._id, `Taken over by job ${jobId}`, approverData?._id, 'Converted');
                 const selectedLines = selectedDealLines(quote.dealData.updatedItems)
-                    .filter((line: any) => hasReferenceValue(line?.partNo) && isPositiveNumber(line?.quantity));
+                    .filter((line: any) => hasReferenceValue(line?.productId) && isPositiveNumber(line?.quantity));
                 // A job's reservation has no expiry: it holds the stock until a delivery takes it, or the job is lost or revoked.
                 for (const line of selectedLines) {
-                    const productId = typeof line.partNo === 'object' ? line.partNo._id : line.partNo;
+                    const productId = typeof line.productId === 'object' ? line.productId._id : line.productId;
                     try {
                         await reserveStock({
                             product: productId,
