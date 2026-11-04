@@ -1,4 +1,5 @@
 import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
+import { poShareDiscount } from 'src/app/shared/utils/po-discount.util';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -34,6 +35,7 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { PlaceOrderModalComponent, PlaceOrderModalResult } from '../place-order-modal/place-order-modal.component';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { MatDialog } from '@angular/material/dialog';
+import { GrnListModalComponent, GrnListModalData } from 'src/app/shared/components/grn-list-modal/grn-list-modal.component';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 
 const ALL_STATUSES = ['Pending for Approval', 'Approved', 'Placed', 'Closed', 'Rejected'];
@@ -58,10 +60,12 @@ const BILLING_BADGE_CLASSES: Record<string, string> = {
 
 const statusLabel = (status: string) => status === 'Pending for Approval' ? 'Pending' : status;
 
+import { InitiateLpoComponent } from '../initiate-lpo/initiate-lpo.component';
+
 @Component({
   selector: 'app-lpo-approval',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailDocumentsComponent, DetailTimelineComponent, ActionButtonComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailDocumentsComponent, DetailTimelineComponent, ActionButtonComponent, InitiateLpoComponent],
   providers: [DatePipe],
   templateUrl: './lpo-approval.component.html',
   styleUrl: './lpo-approval.component.css',
@@ -83,6 +87,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   private auditLog = inject(AuditLogService);
   private poWorkflowSteps: { id: string; label: string }[] = [];
   isSuperAdmin = false;
+  canCancelPo = false;
   canInitiateLPO = false;
   canApprovePOs = false;
   private currentEmployeeId: string | null = null;
@@ -156,6 +161,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
         this.isSuperAdmin = /^superadmin$/i.test(employee?.category?.role ?? '');
         this.canInitiateLPO = !!employee?.category?.privileges?.purchaseOrder?.canInitiateLPO;
         this.canApprovePOs = !!employee?.category?.privileges?.purchaseOrder?.canApprovePOs;
+        this.canCancelPo = this.isSuperAdmin || /^admin$/i.test(employee?.category?.role ?? '') || !!employee?.category?.privileges?.purchaseOrder?.canCancel;
         this.currentEmployeeId = employee?._id ?? null;
         this.currentCategoryId = employee?.category?._id ?? null;
       })
@@ -206,12 +212,15 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
       { id: 'openFullLpo', label: 'Details View', icon: 'eye', quick: true, panel: true },
       { id: 'approve', label: 'Approve', icon: 'check', quick: true, hidden: (r) => !this.canApproveOrReject(r) },
       { id: 'reject', label: 'Reject', icon: 'close', quick: true, hidden: (r) => !this.canApproveOrReject(r) },
+      { id: 'edit', label: 'Edit PO', icon: 'edit', quick: true, hidden: (r) => !this.canResend(r) },
       { id: 'resend', label: 'Resend for approval', icon: 'refresh', quick: true, hidden: (r) => !this.canResend(r) },
+      { id: 'viewGrn', label: 'View GRN', icon: 'eye', quick: true, hidden: (r) => !r.grns?.length },
       { id: 'previewPdf', label: 'Preview PDF', icon: 'eye' },
       { id: 'downloadPdf', label: 'Download PDF', icon: 'download' },
       { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', quick: true, hidden: (r) => r.poStatus !== 'Pending for Approval' || !this.isSuperAdmin },
       { id: 'place', label: 'Place order', icon: 'check', quick: true, hidden: (r) => r.poStatus !== 'Approved' || !this.canInitiateLPO },
       { id: 'uploadDocuments', label: 'Upload documents', icon: 'upload', quick: true, hidden: (r) => !['Approved', 'Placed'].includes(r.poStatus) || !(this.isSuperAdmin || this.canInitiateLPO) },
+      { id: 'cancelOrder', label: 'Revoke PO', variant: 'danger', icon: 'close', quick: true, hidden: (r) => r.poStatus !== 'Placed' || !!r.grns?.length || !this.canCancelPo },
     ];
   }
 
@@ -318,14 +327,34 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     setTimeout(() => (this.detailLoading = false), 200);
   }
 
+  async cancelOrder(row: any): Promise<void> {
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'reject',
+      title: `Revoke ${row.poNo}?`,
+      message: 'The order stops here and the quantities go back to the request to be ordered again. This cannot be undone.',
+      details: [{ label: 'PO no', value: row.poNo || '-' }, { label: 'Supplier', value: row.supplierId?.supplierName || '-' }],
+      confirmLabel: 'Revoke PO',
+      reason: true,
+      reasonLabel: 'Revoke reason',
+    });
+    if (!confirmed || !reason?.trim()) return;
+    this.subscriptions.add(this.purchaseOrderService.cancelPurchaseOrder(row._id, reason.trim()).subscribe({
+      next: () => { this.notificationService.success(`${row.poNo} revoked`); this.loadData(); },
+      error: (err) => this.notificationService.error(err?.error?.message || 'Could not cancel the PO.'),
+    }));
+  }
+
   onRowAction(event: DataGridRowActionEvent<any>): void {
     if (event.action.id === 'openFullLpo') this.openFullLpo(event.row);
     if (event.action.id === 'resetWorkflow') this.resetWorkflow(event.row);
     if (event.action.id === 'place') this.placeOrder(event.row);
+    if (event.action.id === 'cancelOrder') this.cancelOrder(event.row);
     if (event.action.id === 'uploadDocuments') this.uploadDocuments(event.row);
     if (event.action.id === 'approve') this.approve(event.row);
     if (event.action.id === 'reject') this.reject(event.row);
+    if (event.action.id === 'edit') this.editRow = event.row;
     if (event.action.id === 'resend') this.resend(event.row);
+    if (event.action.id === 'viewGrn') this.viewGrn(event.row);
     if (event.action.id === 'previewPdf') this.openPdf(event.row, true);
     if (event.action.id === 'downloadPdf') this.openPdf(event.row, false);
   }
@@ -346,6 +375,17 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   }
 
   /** A rejected PO can go back for approval by whoever raised it (or a Super Admin). */
+  /** The rejected PO open in the edit drawer. */
+  editRow: any = null;
+
+  idOf(v: any): string {
+    return String(v?._id ?? v ?? '');
+  }
+
+  onEditSaved(): void {
+    this.loadData();
+  }
+
   canResend(row: any): boolean {
     if (row?.poStatus !== 'Rejected') return false;
     if (this.isSuperAdmin) return true;
@@ -423,6 +463,18 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   }
 
   /** The list row isn't fully populated (supplier contacts, quote, terms), so the PO is loaded in full first. */
+  /** One GRN opens directly; several open the picker so the user chooses which one. */
+  private viewGrn(row: any): void {
+    const grns = row?.grns ?? [];
+    if (grns.length === 1) {
+      this.router.navigate(['/grn/view-grn', grns[0]._id]);
+      return;
+    }
+    this.dialog.open(GrnListModalComponent, {
+      data: { lpoId: row._id, lpoNo: row.poNo, grns, hasBalanceQty: false } as GrnListModalData,
+    });
+  }
+
   private openPdf(row: any, preview: boolean): void {
     this.purchaseOrderService.getPurchaseOrderById(row._id).subscribe({
       next: (response: any) => {
@@ -617,8 +669,8 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
 
   itemFootRows(row: any): DetailFootRow[] {
     const total = this.itemRows(row).reduce((s, r) => s + (Number(r['amount']) || 0), 0);
-    const discount = Number(row?.discount) || 0;
-    const cell = (value: number) => ({ amount: { value, format: 'currency' as const } });
+    const discount = poShareDiscount(row);
+    const cell =(value: number) => ({ amount: { value, format: 'currency' as const } });
     return [
       { label: 'Total', cells: cell(total) },
       { label: 'Discount', cells: cell(discount) },
@@ -651,28 +703,19 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     ];
   }
 
-  /** Cost is the job's (deal sheet) cost, Price is what the PO pays; both for this PO's items only. */
+  /** Total cost, discount and net total for this PO's items only; the discount is this PO's share. */
   private summarySection(row: any): DetailOverviewSection {
     const lines: any[] = row?.items || [];
-    const details: any[] = (row?.purchaseId?.items || []).flatMap((i: any) => i?.itemDetails || []);
-    const key = (v: any) => String(v?._id ?? v ?? '').trim().toLowerCase();
-    const jobUnitCost = (line: any) => {
-      const match = details.find((d) => line?.partNo && key(d.partNo) === key(line.partNo))
-        || details.find((d) => key(d.detail) === key(line?.detail));
-      return Number(match?.dealUnitCost) || Number(match?.unitCost) || Number(line?.unitCost) || 0;
-    };
-    const totalCost = lines.reduce((s, l) => s + jobUnitCost(l) * (Number(l.quantity) || 0), 0);
     const totalPrice = lines.reduce((s, l) => s + (Number(l.totalCost) || (Number(l.unitCost) || 0) * (Number(l.quantity) || 0)), 0);
-    const discount = Number(row?.discount) || 0;
+    const discount = poShareDiscount(row);
     const currency = row?.currency || row?.quoteId?.currency || 'QAR';
     const fmt = (n: number) => `${currency} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     return {
       title: 'Summary',
       columns: '2',
       fields: [
-        { type: 'field', label: 'Total Price', value: fmt(totalPrice), numeric: true },
-        { type: 'field', label: 'Total Cost', value: fmt(totalCost), numeric: true },
-        { type: 'field', label: 'Total Discount', value: fmt(discount), numeric: true },
+        { type: 'field', label: 'Total Cost', value: fmt(totalPrice), numeric: true },
+        { type: 'field', label: 'Discount', value: fmt(discount), numeric: true },
         { type: 'field', label: 'Net Total', value: fmt(Math.max(totalPrice - discount, 0)), numeric: true },
       ],
     };

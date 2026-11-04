@@ -92,6 +92,13 @@ export class InitiateLpoComponent implements OnInit {
   @Input() initialSupplierId: string | null = null;
   /** Shows this existing PO read-only (the PR view's PO tab): its lines, delivery details and terms, nothing to issue. */
   @Input() viewPoId: string | null = null;
+  /** Opens this rejected PO for correction against its purchase request; saving resends it for approval. */
+  @Input() editPoId: string | null = null;
+  /** The PO being corrected when editPoId is set. */
+  editPo: any = null;
+  get editMode(): boolean {
+    return !!this.editPoId;
+  }
   /** The PO shown when viewPoId is set. */
   viewPo: any = null;
   get readOnly(): boolean {
@@ -259,12 +266,27 @@ export class InitiateLpoComponent implements OnInit {
           const open = !item.isIssued && (Number(item.remainingQuantity) || 0) > 0;
           return { item, picked: open, qty: open ? Number(item.remainingQuantity) || 0 : 0 };
         }));
+        this.applyEditPicks(key);
         if (this.loadingLinesFor === key) this.loadingLinesFor = null;
       },
       error: () => {
         if (this.loadingLinesFor === key) this.loadingLinesFor = null;
         this.notificationService.error('Failed to load items for this supplier');
       },
+    });
+  }
+
+  /** Editing a rejected PO: only its own lines start ticked, at the quantity and price it carried. */
+  private applyEditPicks(key: string): void {
+    const po = this.editPo;
+    const lines = this.lines.get(key);
+    if (!po || !lines) return;
+    const byLine = new Map<string, any>((po.items || []).map((it: any) => [String(it.prLineKey), it]));
+    lines.forEach((l) => {
+      const own = byLine.get(String(l.item._id));
+      l.picked = !!own;
+      l.qty = own ? Number(own.quantity) || 0 : 0;
+      if (own) { l.price = Number(own.unitCost) || 0; l.uom = own.uom || l.uom; }
     });
   }
 
@@ -304,6 +326,12 @@ export class InitiateLpoComponent implements OnInit {
       return;
     }
     this.poForm.patchValue({ discount: this.discountOf(group) });
+    if (!this.poForm.value.subject) {
+      const p: any = this.purchase;
+      const q = p?.jobId?.quoteId;
+      const subject = q?.subject || q?.dealData?.subject || p?.quoteId?.subject || p?.description || '';
+      if (subject) this.poForm.patchValue({ subject });
+    }
     this.step = 2;
   }
 
@@ -406,7 +434,7 @@ export class InitiateLpoComponent implements OnInit {
       this.notificationService.error('Please fill in all required fields');
       return;
     }
-    if (!this.generatedPONumber()) {
+    if (!this.generatedPONumber() && !this.editMode) {
       this.notificationService.error('PO number not generated. Please try again.');
       this.generatePONumber();
       return;
@@ -419,14 +447,14 @@ export class InitiateLpoComponent implements OnInit {
 
     const { confirmed } = await this.confirm.open({
       tone: 'approve',
-      title: `Issue LPO to ${group.supplierName}?`,
-      message: 'The LPO goes to Purchase Orders as pending approval.',
+      title: this.editMode ? `Save and resend ${this.generatedPONumber()}?` : `Issue LPO to ${group.supplierName}?`,
+      message: this.editMode ? 'Your changes are saved and the LPO goes through approval again.' : 'The LPO goes to Purchase Orders as pending approval.',
       details: [
         { label: 'PO no', value: this.generatedPONumber() },
         { label: 'Items', value: String(picked.length) },
         { label: 'Total', value: `${this.discountedTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${this.currency()}`.trim() },
       ],
-      confirmLabel: 'Issue LPO',
+      confirmLabel: this.editMode ? 'Save and resend' : 'Issue LPO',
     });
     if (!confirmed) return;
 
@@ -460,6 +488,23 @@ export class InitiateLpoComponent implements OnInit {
     };
 
     this.isCreatingPO.set(true);
+    if (this.editMode) {
+      const { poNo: _poNo, poStatus: _status, supplierId: _supplier, purchaseId: _purchase, jobId: _job, quoteId: _quote, ...edits } = payload;
+      this.purchaseOrderService.resendPurchaseOrder(this.editPoId!, edits).subscribe({
+        next: () => {
+          this.isCreatingPO.set(false);
+          this.saveDeliveryNotes(form.placeOfDelivery, form.shippingTerms);
+          this.notificationService.success(`LPO ${payload.poNo} saved and sent for approval`);
+          this.issued = true;
+          this.closeDrawer();
+        },
+        error: (err) => {
+          this.isCreatingPO.set(false);
+          this.notificationService.error(err?.error?.message || 'Failed to resend the LPO. Please try again.');
+        },
+      });
+      return;
+    }
     this.purchaseOrderService.createPurchaseOrder(payload).subscribe({
       next: (res) => {
         this.isCreatingPO.set(false);
@@ -593,7 +638,8 @@ export class InitiateLpoComponent implements OnInit {
     if (this.readOnly) this.loadViewPo();
     else {
       this.loadNotes();
-      this.generatePONumber();
+      if (this.editMode) this.loadEditPo();
+      else this.generatePONumber();
       this.checkPrivileges();
     }
     this.loadPurchase()
@@ -609,6 +655,32 @@ export class InitiateLpoComponent implements OnInit {
         console.log(error);
       }
     })
+  }
+
+  /** Editing: the rejected PO's number and terms fill the form; its lines are ticked once the supplier's lines load. */
+  private loadEditPo(): void {
+    this.purchaseOrderService.getPurchaseOrderById(this.editPoId!).subscribe({
+      next: (response: any) => {
+        const po = response?.success ? response.data : response;
+        if (!po?._id || po.poStatus !== 'Rejected') {
+          this.notificationService.error('Only a rejected PO can be edited');
+          this.closeDrawer();
+          return;
+        }
+        this.editPo = po;
+        this.generatedPONumber.set(po.poNo || '');
+        this.poForm.patchValue({
+          subject: po.subject || '',
+          shippingTerms: po.shippingTerms || '',
+          placeOfDelivery: po.placeOfDelivery || '',
+          poDate: po.poDate ? new Date(po.poDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          termsAndCondition: po.termsAndCondition || '',
+          discount: Number(po.discount) || 0,
+        });
+        this.lines.forEach((_, key) => this.applyEditPicks(key));
+      },
+      error: () => { this.notificationService.error('Failed to load the PO'); this.closeDrawer(); },
+    });
   }
 
   /** Read-only: the PO's lines as fully issued rows, its terms in the step 2 form, all locked. */

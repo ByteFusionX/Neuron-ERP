@@ -54,7 +54,7 @@ export interface PlaceOrderModalResult {
         <p class="mb-4 text-xs text-gray-500">
           Confirm this LPO has been sent to <span class="font-medium text-gray-700 dark:text-gray-300">{{ data?.supplierName || 'the supplier' }}</span>
           <ng-container *ngIf="data?.amount"> ({{ data?.amount }})</ng-container>.
-          The receiving team is notified and the LPO shows in GRN &gt; Upcoming, then Arriving on the delivery day.
+          The receiving team is notified and the LPO shows in GRN &gt; Arriving, ordered by expected delivery date.
         </p>
         <div class="grid gap-4 sm:grid-cols-2">
           <app-sf-field label="Expected delivery date" hint="The receiving team gets a reminder on this day.">

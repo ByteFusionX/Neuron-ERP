@@ -191,7 +191,7 @@ export class InvoiceService {
                         [cell('PI No'), cell(invoice.invoiceNo || '-', { bold: true }), cell('PI Date'), cell(new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-'))],
                         [cell('Client'), cell((invoice.customer?.companyName || '-').toUpperCase()), cell('Payment Terms'), cell((invoice.paymentTerms || '-').toUpperCase(), { bold: true })],
                         [cell('Atten'), cell(invoice.attention || '-'), cell('LPO, No:'), cell(invoice.lpoRef || '-')],
-                        [cell('Ship To'), cell((invoice.shipTo || invoice.customer?.companyName || '-').toUpperCase()), cell('Job No:'), cell(invoice.jobId?.jobId || '-')],
+                        [cell('Ship To'), cell((invoice.shipTo || invoice.customer?.companyName || '-').toUpperCase()), cell('Job No:'), cell(invoice.jobId?.jobId || invoice.jobNo || '-')],
                     ]
                 }
             },
@@ -319,7 +319,7 @@ export class InvoiceService {
                                 { style: 'tableHead', text: 'Sub:', alignment: 'left' },
                                 { style: 'tableHead', text: invoice.subject || '-', alignment: 'left', colSpan: 3 }, {}, {},
                                 { style: 'tableHead', text: 'Job No:', alignment: 'left' },
-                                { style: 'tableHead', text: invoice.jobId?.jobId || '-', alignment: 'left' }
+                                { style: 'tableHead', text: invoice.jobId?.jobId || invoice.jobNo || '-', alignment: 'left' }
                             ]
                         ]
                     }

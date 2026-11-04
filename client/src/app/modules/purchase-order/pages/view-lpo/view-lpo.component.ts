@@ -10,6 +10,7 @@ import { PurchaseService } from 'src/app/core/services/purchase/purchase.service
 import { GrnService } from 'src/app/core/services/grn/grn.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { PlaceOrderModalComponent, PlaceOrderModalResult } from '../place-order-modal/place-order-modal.component';
+import { poShareDiscount } from 'src/app/shared/utils/po-discount.util';
 import { buildApprovalTimeline } from 'src/app/shared/utils/approval-timeline.util';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
@@ -40,6 +41,8 @@ interface LpoFact {
 
 type LpoPanelTab = 'pricing' | 'grn' | 'terms' | 'documents' | 'approval' | 'history';
 
+import { InitiateLpoComponent } from '../initiate-lpo/initiate-lpo.component';
+
 @Component({
   selector: 'app-view-lpo',
   standalone: true,
@@ -55,7 +58,8 @@ type LpoPanelTab = 'pricing' | 'grn' | 'terms' | 'documents' | 'approval' | 'his
     DetailFieldComponent,
     DetailFieldsMenuComponent,
     DetailViewShellComponent,
-    NgIcon
+    NgIcon,
+    InitiateLpoComponent
   ],
   templateUrl: './view-lpo.component.html'
 })
@@ -213,7 +217,7 @@ export class ViewLpoComponent implements OnInit {
     const pr = this.purchase;
     const date = (v: any) => v ? new Date(v).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
     const subtotal = this.getSubTotal();
-    const discount = Number(l.discount) || 0;
+    const discount = this.poDiscount();
 
     this.subtitle = [s?.supplierName, l.subject].filter(Boolean).join(' · ');
 
@@ -252,24 +256,15 @@ export class ViewLpoComponent implements OnInit {
     const hidden = ['Phone', 'Email', 'Shipping Terms', 'Currency', 'Created On'];
     this.detailItems = this.detailFacts.map((f) => ({ key: f.label, label: f.label, hiddenByDefault: hidden.includes(f.label) }));
 
-    // Cost is the job's (deal sheet) cost, Price is what the PO pays; both for this PO's items only.
-    const key = (v: any) => String(v?._id ?? v ?? '').trim().toLowerCase();
-    const details: any[] = (pr?.items || []).flatMap((i: any) => i?.itemDetails || []);
-    const jobUnitCost = (line: any) => {
-      const match = details.find((d) => line?.partNo && key(d.partNo) === key(line.partNo))
-        || details.find((d) => key(d.detail) === key(line?.detail));
-      return Number(match?.dealUnitCost) || Number(match?.unitCost) || Number(line?.unitCost) || 0;
-    };
-    const totalCost = this.items().reduce((sum, i) => sum + jobUnitCost(i) * (Number(i.quantity) || 0), 0);
+    // This PO's items only; the discount is its share of the supplier's discount on the PR.
     this.pricingLines = [
-      { label: 'Total Price', value: subtotal },
-      { label: 'Total Cost', value: totalCost },
-      { label: 'Total Discount', value: discount },
+      { label: 'Total Cost', value: subtotal },
+      { label: 'Discount', value: discount },
       { label: 'Net Total', value: Math.max(subtotal - discount, 0) },
     ];
 
     this.panelTabs = [
-      { id: 'pricing', label: 'Costs' },
+      { id: 'pricing', label: 'Pricing' },
       ...(l.termsAndCondition ? [{ id: 'terms' as const, label: 'Terms' }] : []),
       ...(this.showDocuments ? [{ id: 'documents' as const, label: 'Documents' }] : []),
       { id: 'approval', label: 'Approval' },
@@ -295,7 +290,6 @@ export class ViewLpoComponent implements OnInit {
     { key: 'acceptedQty', label: 'Accepted', type: 'number', align: 'right' },
     { key: 'rejectedQty', label: 'Rejected', type: 'number', align: 'right' },
     { key: 'value', label: 'Cost', type: 'currency', align: 'right', total: true },
-    { key: 'status', label: 'Status', type: 'badge' },
     { key: 'date', label: 'Date', type: 'date' },
   ];
   grnRows: Record<string, any>[] = [];
@@ -333,7 +327,7 @@ export class ViewLpoComponent implements OnInit {
               acceptedQty: accepted,
               rejectedQty: Math.max(received - accepted, 0),
               value: accepted * unitCost(i),
-              status: g.outcomeStatus || '-',
+              _reject: accepted === 0,
               date: g.grnDate,
             });
           }
@@ -360,6 +354,21 @@ export class ViewLpoComponent implements OnInit {
   isRejecting = false;
   isPlacing = false;
   isResending = false;
+  editOpen = false;
+
+  get editPurchaseId(): string {
+    const p: any = this.lpo?.purchaseId;
+    return String(p?._id ?? p ?? '');
+  }
+
+  get editSupplierId(): string {
+    const sup: any = this.lpo?.supplierId;
+    return String(sup?._id ?? sup ?? '');
+  }
+
+  onEditSaved(): void {
+    this.loadLpo();
+  }
   canApprovePOs = signal<boolean>(false);
   canInitiateLPO = signal<boolean>(false);
   currentEmployeeId: string | null = null;
@@ -492,13 +501,18 @@ export class ViewLpoComponent implements OnInit {
     return this.items().reduce((total, item) => total + (item.totalCost || 0), 0);
   }
 
+  /** This PO's share of the supplier's PR discount. */
+  private poDiscount(): number {
+    return this.lpo ? poShareDiscount(this.lpo, this.purchase ?? this.lpo.purchaseId) : 0;
+  }
+
   getSubTotal(): number {
     return this.items().reduce((total, item) => total + (item.totalCost || 0), 0);
   }
 
   getTotalAfterDiscount(): number {
     const subtotal = this.getSubTotal();
-    const discount = this.lpo?.discount || 0;
+    const discount = this.poDiscount();
     return subtotal - discount;
   }
 
@@ -739,7 +753,7 @@ export class ViewLpoComponent implements OnInit {
 
   itemFootRows(): DetailFootRow[] {
     const totalQty = this.items().reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
-    const discount = Number(this.lpo?.discount) || 0;
+    const discount = this.poDiscount();
     const cost = (value: number) => ({ totalCost: { value, format: 'currency' as const } });
     return [
       { label: 'Total', cells: { quantity: { value: totalQty, format: 'number' }, ...cost(this.getSubTotal()) } },

@@ -10,7 +10,8 @@ import { CustomerInvoiceService } from 'src/app/core/services/customer-invoice.s
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { InvoiceService } from 'src/app/core/services/invoice.service';
 import { MatDialog } from '@angular/material/dialog';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { GrnListModalComponent, GrnListModalData } from 'src/app/shared/components/grn-list-modal/grn-list-modal.component';
 import { ToastrService } from 'ngx-toastr';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
@@ -59,6 +60,7 @@ export class VendorBillsComponent implements OnInit {
   private readonly notificationService = inject(ToastrService);
   private readonly dialog = inject(MatDialog);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly invoices = inject(CustomerInvoiceService);
   private readonly employeeService = inject(EmployeeService);
   private readonly auditLog = inject(AuditLogService);
@@ -111,10 +113,9 @@ export class VendorBillsComponent implements OnInit {
       hidden: (row: any) => this.activeViewId !== 'pdc' || !this.canApprovePdc || this.updatingPdc || row.pdcStatus !== (status === 'Revoked' ? 'Approved' : 'Pending'),
     })),
     { id: 'view-po', label: 'View PO', icon: 'card', quick: true, panel: false, hidden: () => this.isInvoiceView },
+    { id: 'view-grn', label: 'View GRN', icon: 'eye', quick: true, panel: false, hidden: (row) => this.isInvoiceView || !row.grns?.length },
     { id: 'view-documents', label: 'View documents', icon: 'files', quick: true, panel: false, hidden: () => this.isInvoiceView },
-    { id: 'preview-dn', label: 'Preview delivery note', icon: 'note', quick: true, panel: false, hidden: (row) => this.isInvoiceView || !this.deliveryNote(row) },
     { id: 'download-dn', label: 'Download delivery note', icon: 'download', panel: false, hidden: (row) => this.isInvoiceView || !this.deliveryNote(row) },
-    { id: 'preview-invoice', label: 'Preview invoice', icon: 'wallet', quick: true, panel: false, hidden: (row) => this.isInvoiceView || !this.invoiceDeliveryNote(row) },
     { id: 'download-invoice', label: 'Download invoice', icon: 'download', panel: false, hidden: (row) => this.isInvoiceView || !this.invoiceDeliveryNote(row) },
   ];
   readonly poColumns: DataGridColumn<any>[] = [
@@ -155,7 +156,7 @@ export class VendorBillsComponent implements OnInit {
     return this.isInvoiceView ? 'No customer invoices yet' : 'No approved purchase orders are waiting for finance';
   }
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'description', label: 'Description', wrap: true },
+    { key: 'description', label: 'Description', truncate: true },
     { key: 'ordered', label: 'Ordered', type: 'number' },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
     { key: 'total', label: 'Total', type: 'currency', total: true },
@@ -199,11 +200,16 @@ export class VendorBillsComponent implements OnInit {
       return;
     }
     if (action.id === 'view-po') this.previewPo(row);
+    if (action.id === 'view-grn') this.viewGrn(row);
     if (action.id === 'view-documents') this.grid.openRow(row, 'documents');
-    if (action.id === 'preview-dn') this.renderDeliveryNote(this.deliveryNote(row), false);
     if (action.id === 'download-dn') this.renderDeliveryNote(this.deliveryNote(row), true);
-    if (action.id === 'preview-invoice') this.previewDnInvoice(this.invoiceDeliveryNote(row));
     if (action.id === 'download-invoice') this.downloadDnInvoice(this.invoiceDeliveryNote(row));
+  }
+
+  private viewGrn(row: any): void {
+    const grns = row?.grns ?? [];
+    if (grns.length === 1) { this.router.navigate(['/grn/view-grn', grns[0]._id]); return; }
+    this.dialog.open(GrnListModalComponent, { data: { lpoId: row._id, lpoNo: row.poNo, grns, hasBalanceQty: false } as GrnListModalData });
   }
 
   /** The list row isn't fully populated (supplier contacts, quote, terms), so the PO is loaded in full first. */

@@ -123,8 +123,8 @@ export class PurchaseOrderService {
   }
 
   /** A rejected LPO goes back through the approval workflow. */
-  resendPurchaseOrder(id: string): Observable<any> {
-    return this.http.patch<any>(`${this.baseUrl}/${id}/resend`, {}, { context: context() });
+  resendPurchaseOrder(id: string, edits: any = {}): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${id}/resend`, edits, { context: context() });
   }
 
   /** Super Admin restarts a pending PO's approval route; `stepRoleIds` are the stages that get another chance. */

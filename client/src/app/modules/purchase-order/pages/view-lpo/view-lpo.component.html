@@ -50,6 +50,7 @@
         <app-action-button variant="outline" [disabled]="isApproving || isRejecting" (click)="onReject()"><ng-icon name="heroXMark" class="h-4 w-4"></ng-icon>{{ isRejecting ? 'Rejecting…' : 'Reject' }}</app-action-button>
         <app-action-button variant="primary" [disabled]="isApproving || isRejecting" (click)="onApprove()"><ng-icon name="heroCheck" class="h-4 w-4"></ng-icon>{{ isApproving ? 'Approving…' : 'Approve' }}</app-action-button>
       </ng-container>
+      <app-action-button *ngIf="canResend()" variant="outline" (click)="editOpen = true"><ng-icon name="heroPencilSquare" class="h-4 w-4"></ng-icon>Edit</app-action-button>
       <app-action-button *ngIf="canResend()" variant="primary" [disabled]="isResending" (click)="onResend()"><ng-icon name="heroArrowPath" class="h-4 w-4"></ng-icon>{{ isResending ? 'Resending…' : 'Resend' }}</app-action-button>
       <app-action-button *ngIf="canPlace()" variant="primary" [disabled]="isPlacing" (click)="onPlace()">{{ isPlacing ? 'Placing…' : 'Place order' }}</app-action-button>
     </ng-container>
@@ -132,3 +133,6 @@
     </div>
   </app-detail-view-shell>
 </div>
+
+<app-initiate-lpo *ngIf="editOpen && editPurchaseId" [purchaseIdInput]="editPurchaseId" [initialSupplierId]="editSupplierId" [editPoId]="lpoId"
+  (issued)="onEditSaved()" (closed)="editOpen = false"></app-initiate-lpo>

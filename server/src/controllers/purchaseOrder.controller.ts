@@ -10,7 +10,7 @@ import mongoose from "mongoose";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { getNextSequence } from "../models/counter.model";
-import { issueDocNo } from "../services/docNumber.service";
+import { issueDocNo, peekDocNo } from "../services/docNumber.service";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
@@ -21,6 +21,41 @@ import { notify, notifyByPrivilege } from "../services/notify.service";
 import { recipientsExcluding, safely, viewersOf } from "../services/workflowNotify.service";
 import { SupplierPriceSource } from "../models/supplierPrice.model";
 import { logAudit } from "../services/audit.service";
+
+/** Stable key of a line: its catalogue product (PR productId, or the id a PO item keeps in partNo), else the description. */
+const lineItemKey = (entry: any): string => {
+  const candidate = entry?.productId ?? entry?.partNo;
+  const id = String((candidate && typeof candidate === "object" ? candidate._id ?? candidate : candidate) ?? "");
+  return /^[a-f0-9]{24}$/i.test(id) ? id : entry?.detail;
+};
+
+/** What an edit actually changed on a PO, as label / from / to rows for the history. */
+const diffPoEdits = (before: any, edits: any): { label: string; from?: string; to?: string }[] => {
+  const out: { label: string; from?: string; to?: string }[] = [];
+  const text = (v: any) => (v === undefined || v === null || v === '' ? '—' : String(v));
+  const labels: Record<string, string> = { placeOfDelivery: 'Place of delivery', shippingTerms: 'Shipping terms', subject: 'Subject', termsAndCondition: 'Terms and conditions', discount: 'Discount' };
+  Object.keys(labels).forEach((k) => {
+    if (edits[k] !== undefined && text(edits[k]) !== text(before?.[k])) out.push({ label: labels[k], from: text(before?.[k]), to: text(edits[k]) });
+  });
+  if (edits.poDate && new Date(edits.poDate).getTime() !== new Date(before?.poDate).getTime()) {
+    out.push({ label: 'PO date', from: text(before?.poDate && new Date(before.poDate).toISOString().slice(0, 10)), to: new Date(edits.poDate).toISOString().slice(0, 10) });
+  }
+  if (Array.isArray(edits.items)) {
+    const keyOf = (i: any) => String(i.prLineKey ?? i.detail);
+    const old = new Map<string, any>((before?.items || []).map((i: any) => [keyOf(i), i]));
+    const seen = new Set<string>();
+    edits.items.forEach((n: any) => {
+      const o = old.get(keyOf(n));
+      seen.add(keyOf(n));
+      const name = String(n.detail ?? 'Item').slice(0, 60);
+      if (!o) { out.push({ label: `${name} · added`, from: '—', to: `${n.quantity} × ${n.unitCost}` }); return; }
+      if (Number(o.quantity) !== Number(n.quantity)) out.push({ label: `${name} · quantity`, from: text(o.quantity), to: text(n.quantity) });
+      if (Number(o.unitCost) !== Number(n.unitCost)) out.push({ label: `${name} · unit price`, from: text(o.unitCost), to: text(n.unitCost) });
+    });
+    old.forEach((o, k) => { if (!seen.has(k)) out.push({ label: `${String(o.detail ?? 'Item').slice(0, 60)} · removed`, from: `${o.quantity} × ${o.unitCost}`, to: '—' }); });
+  }
+  return out;
+};
 
 const logPoAudit = (req: Request, po: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
   logAudit(req, { entityType: 'purchaseOrder', entityId: po._id, entityLabel: po.poNo, action, summary, changes });
@@ -86,10 +121,39 @@ const lineSuppliers = (detail: any): { supplierId: any; quantity: number; unitPr
   return [{ supplierId: detail.supplierId, quantity: Number(detail.quantity) || 0, unitPrice: Number(detail.unitCost), comparison: own || {} }];
 };
 
+/**
+ * A price changed on the LPO is the price the supplier really charges, so the PR line follows it: the supplier's
+ * selected comparison (or the line cost when nobody was selected). Quantity is left alone: what the LPO does not
+ * take stays free on the PR for another LPO to this supplier, or for another award once the PR is revoked.
+ */
+const syncPrPrices = async (pr: any, supplierId: any, items: any[]) => {
+  if (!pr?._id) return;
+  for (const item of items || []) {
+    if (!item?.prLineKey) continue;
+    const price = Number(item.unitCost);
+    if (!(price >= 0)) continue;
+    const detail = (pr.items || []).flatMap((i: any) => i.itemDetails || []).find((d: any) => String(d._id) === String(item.prLineKey));
+    if (!detail) continue;
+    const hasWinner = (detail.comparisons || []).some((c: any) => c.selected === true && c.supplierId && String(c.supplierId) === String(supplierId));
+    if (hasWinner) {
+      await purchaseRequest.updateOne(
+        { _id: pr._id },
+        { $set: { 'items.$[].itemDetails.$[d].comparisons.$[c].unitPrice': price } },
+        { arrayFilters: [{ 'd._id': detail._id }, { 'c.supplierId': new mongoose.Types.ObjectId(String(supplierId)), 'c.selected': true }] }
+      );
+    } else {
+      await purchaseRequest.updateOne(
+        { _id: pr._id },
+        { $set: { 'items.$[].itemDetails.$[d].unitCost': price } },
+        { arrayFilters: [{ 'd._id': detail._id }] }
+      );
+    }
+  }
+};
+
 export const createPurchaseOrder = async (req: Request, res: Response) => {
   try {
     const {
-      poNo,
       items,
       supplierId,
       purchaseId,
@@ -127,10 +191,10 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     }
 
     // Validate required fields
-    if (!poNo || !supplierId || !purchaseId || !items || !Array.isArray(items) || items.length === 0) {
+    if (!supplierId || !purchaseId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields: poNo, supplierId, purchaseId, and items are required",
+        message: "Missing required fields: supplierId, purchaseId, and items are required",
       });
     }
 
@@ -184,7 +248,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
 
     // Quantities are checked per PR line (prLineKey = PR itemDetail _id), so two lines with the same part stay apart.
     // An item without prLineKey (older payloads) falls back to the first awarded line with the same part/detail.
-    const itemKey = (entry: any) => (entry.partNo ? entry.partNo.toString() : entry.detail);
+    const itemKey = lineItemKey;
     const allowedByItem = new Map<string, number>();
     const lineByItemKey = new Map<string, string>();
     (existingPurchaseRequest.items || []).forEach((item: any) => {
@@ -246,7 +310,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
 
     // Create purchase order data with validated fields
     const purchaseOrderData: any = {
-      poNo,
+      poNo: "",
       items,
       supplierId,
       purchaseId,
@@ -308,9 +372,12 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     purchaseOrderData.approvalStatus = workflowSteps;
     if (workflowSteps.length === 0) purchaseOrderData.poStatus = 'Approved';
 
+    // The number shown on the form is only a preview; it is taken now, so abandoned forms never use one up.
+    purchaseOrderData.poNo = await issueDocNo('PO');
     const purchaseOrder = new PurchaseOrder(purchaseOrderData);
     await purchaseOrder.save();
 
+    try { await syncPrPrices(existingPurchaseRequest, supplierId, items); } catch (e) { console.error('PR price sync failed:', e); }
     await logPoAudit(req, purchaseOrder, 'created', `Purchase order ${purchaseOrder.poNo} created`);
     if (purchaseOrder.poStatus === 'Pending for Approval') await logPoAudit(req, purchaseOrder, 'submitted', 'Sent for approval');
 
@@ -318,7 +385,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     await recordPrices(
       items.map((item: any) => ({ supplierId, productId: item.partNo, price: Number(item.unitCost) })),
       SupplierPriceSource.PO,
-      { currency: String(purchaseOrder.currency || existingPurchaseRequest.currency), sourceNo: poNo, sourceId: purchaseOrder._id, employeeId: employee._id }
+      { currency: String(purchaseOrder.currency || existingPurchaseRequest.currency), sourceNo: purchaseOrder.poNo, sourceId: purchaseOrder._id, employeeId: employee._id }
     );
 
     const socket = req.app.get('io') as Server;
@@ -1275,7 +1342,7 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
 
 export const generateLpoNo = async (req: Request, res: Response) => {
   try {
-    const poNo = await issueDocNo('PO');
+    const poNo = await peekDocNo('PO');
 
     return res.status(200).json({
       success: true,
@@ -1890,6 +1957,24 @@ export const resendPurchaseOrder = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: "Only the person who raised this LPO can resend it" });
     }
 
+    // The sender may have corrected the LPO before resending: lines, delivery details, terms, discount.
+    const edits: any = {};
+    let auditBefore: any = purchaseOrder.toObject();
+    const body = req.body || {};
+    if (Array.isArray(body.items) && body.items.length) {
+      if (body.items.some((i: any) => !i?.detail || !(Number(i.quantity) > 0) || !(Number(i.unitCost) >= 0))) {
+        return res.status(400).json({ success: false, message: "Each line needs a description, a quantity above zero and a unit cost" });
+      }
+      edits.items = body.items.map((i: any) => ({ ...i, quantity: Number(i.quantity), unitCost: Number(i.unitCost), totalCost: Number(i.quantity) * Number(i.unitCost) }));
+      auditBefore = (purchaseOrder.toObject() as any);
+      purchaseOrder.set('items', edits.items);
+    }
+    for (const key of ['placeOfDelivery', 'shippingTerms', 'subject', 'termsAndCondition'] as const) {
+      if (typeof body[key] === 'string') edits[key] = body[key];
+    }
+    if (body.poDate) edits.poDate = new Date(body.poDate);
+    if (body.discount !== undefined && Number(body.discount) >= 0) edits.discount = Number(body.discount);
+
     // Rejected LPOs stop reserving PR quantity, so make sure it is still free before it counts again.
     const pr = await purchaseRequest.findById(purchaseOrder.purchaseId);
     if (!pr || pr.status !== 'Approved') {
@@ -1928,11 +2013,14 @@ export const resendPurchaseOrder = async (req: Request, res: Response) => {
     const poStatus = workflowSteps.length === 0 ? 'Approved' : 'Pending for Approval';
     const updated = await PurchaseOrder.findByIdAndUpdate(
       purchaseOrder._id,
-      { $set: { poStatus, approvalStatus: workflowSteps, updatedAt: new Date() } },
+      { $set: { ...edits, poStatus, approvalStatus: workflowSteps, updatedAt: new Date() } },
       { new: true }
     );
 
-    await logPoAudit(req, purchaseOrder, 'submitted', 'Resent for approval');
+    if (edits.items) {
+      try { await syncPrPrices(pr, purchaseOrder.supplierId, edits.items); } catch (e) { console.error('PR price sync failed:', e); }
+    }
+    await logPoAudit(req, purchaseOrder, 'submitted', edits.items || Object.keys(edits).length ? 'Edited and resent for approval' : 'Resent for approval', diffPoEdits(auditBefore, edits));
     if (updated && poStatus === 'Pending for Approval') {
       await notifyLpoApprovers(updated, employee._id, req.app.get('io') as Server);
     }
@@ -2043,7 +2131,7 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
     // Key items by partNo (stable item reference) rather than the free-text
     // `detail` field, which can differ slightly between the purchase request
     // and issued POs and cause required/issued quantities to fail to match up.
-    const itemKey = (entry: any) => (entry.partNo ? entry.partNo.toString() : entry.detail);
+    const itemKey = lineItemKey;
 
     const supplierMap = new Map();
 
@@ -2272,7 +2360,7 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
       PurchaseOrder.find(pendingQuery)
     ]);
 
-    const itemKey = (entry: any) => (entry.partNo ? entry.partNo.toString() : entry.detail);
+    const itemKey = lineItemKey;
 
     const issuedItemsMap = new Map();
     existingPurchaseOrders.forEach((po: any) => {
@@ -2314,7 +2402,7 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
                 _id: itemDetail._id ? itemDetail._id.toString() : `${itemDetail.detail}-${selectedComparison.quantity}`,
                 itemName: item.itemName,
                 detail: itemDetail.detail,
-                partNo: itemDetail.partNo,
+                partNo: itemDetail.productId,
                 originalQuantity: totalQuantity,
                 remainingQuantity: remainingQuantity,
                 issuedQuantity: totalIssued,

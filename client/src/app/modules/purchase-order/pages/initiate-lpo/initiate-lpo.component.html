@@ -1,4 +1,4 @@
-<app-sf-drawer [title]="(readOnly ? 'LPO ' + (viewPo?.poNo || '') : 'Initiate LPO') +(purchase?.purchaseNo ? ' · PR ' + purchase?.purchaseNo : '')" [subtitle]="subtitle"
+<app-sf-drawer [title]="(readOnly ? 'LPO ' + (viewPo?.poNo || '') : editMode ? 'Edit LPO ' + (generatedPONumber() || '') : 'Initiate LPO') +(purchase?.purchaseNo ? ' · PR ' + purchase?.purchaseNo : '')" [subtitle]="subtitle"
   width="min(1320px, 97vw)" [open]="drawerShown" (closed)="requestClose()">
 
   <div *ngIf="isLoading" class="py-16 text-center text-sm text-gray-500">Loading purchase…</div>
@@ -12,7 +12,7 @@
     <app-sf-stepper class="block [&_ol]:mb-1" [labels]="stepLabels" [current]="step" [isComplete]="stepDone" (stepClick)="goToStep($any($event))"></app-sf-stepper>
 
     <!-- banner: the purchase at a glance, step 1 only -->
-    <section *ngIf="step === 1" class="rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-erp-border-dark dark:bg-erp-surface-dark">
+    <section *ngIf="step === 1" class="rounded-xl border border-gray-800 bg-gray-900 px-4 py-3 text-white dark:border-white/10 dark:bg-gray-800">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <p class="text-[11px] font-medium uppercase tracking-wide text-gray-400">Purchase details</p>
         <span class="rounded-full px-2.5 py-0.5 text-xs font-medium ring-1"
@@ -22,8 +22,8 @@
       </div>
       <dl class="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
         <div *ngFor="let b of banner" class="min-w-0">
-          <dt class="text-[11px] text-gray-500 dark:text-gray-400">{{ b.label }}</dt>
-          <dd class="mt-0.5 break-words text-sm font-medium text-gray-900 dark:text-gray-100">{{ b.value }}</dd>
+          <dt class="text-[11px] text-gray-400">{{ b.label }}</dt>
+          <dd class="mt-0.5 break-words text-sm font-medium text-white">{{ b.value }}</dd>
         </div>
       </dl>
     </section>
@@ -75,7 +75,7 @@
           <p *ngIf="!readOnly" class="mb-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">Template</p>
           <app-sf-select *ngIf="!readOnly" [ngModel]="null" [ngModelOptions]="{ standalone: true }" [options]="termsAndConditionOptions()" placeholder="Select a saved terms &amp; notes template" (ngModelChange)="onTermsTemplate($event)"></app-sf-select>
           <app-sf-field class="mt-3 block" label="Terms and Conditions" required [control]="f['termsAndCondition']">
-            <app-sf-textarea formControlName="termsAndCondition" placeholder="Enter terms and conditions" [rows]="5" autoresize></app-sf-textarea>
+            <app-sf-textarea formControlName="termsAndCondition" placeholder="Enter terms and conditions" [rows]="5" bullets autoresize></app-sf-textarea>
           </app-sf-field>
         </div>
       </app-sf-section>
@@ -97,7 +97,7 @@
     <ng-container *ngIf="step === 2 && !readOnly">
       <app-action-button variant="secondary" class="mr-auto" [disabled]="isCreatingPO()" (click)="backToItems()">Back</app-action-button>
       <app-action-button variant="secondary" [disabled]="isCreatingPO()" (click)="requestClose()">Cancel</app-action-button>
-      <app-action-button variant="primary" [disabled]="isCreatingPO() || !isFullyApproved" (click)="issueLpo()">{{ isCreatingPO() ? 'Issuing…' : 'Issue LPO' }}</app-action-button>
+      <app-action-button variant="primary" [disabled]="isCreatingPO() || !isFullyApproved" (click)="issueLpo()">{{ isCreatingPO() ? (editMode ? 'Resending…' : 'Issuing…') : (editMode ? 'Save and resend' : 'Issue LPO') }}</app-action-button>
     </ng-container>
   </ng-container>
 </app-sf-drawer>

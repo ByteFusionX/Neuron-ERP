@@ -81,3 +81,6 @@
     </ng-template>
   </app-data-grid>
 </div>
+
+<app-initiate-lpo *ngIf="editRow" [purchaseIdInput]="idOf(editRow.purchaseId)" [initialSupplierId]="idOf(editRow.supplierId)" [editPoId]="editRow._id"
+  (issued)="onEditSaved()" (closed)="editRow = null"></app-initiate-lpo>
