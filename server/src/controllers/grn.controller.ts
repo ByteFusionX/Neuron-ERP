@@ -139,9 +139,10 @@ export const createGRN = async (req: Request, res: Response) => {
       const quantityVariance = Number(item.quantityVariance) || 0;
       if (rejectedQty > 0 || quantityVariance !== 0) {
         item.discrepancyType = quantityVariance < 0 ? 'Shortage' : quantityVariance > 0 ? 'Excess' : 'Damaged';
-        item.rejectionReason = quantityVariance !== 0
+        // Keep a reason the user entered; generate one only when none was given.
+        item.rejectionReason = String(item.rejectionReason || '').trim() || (quantityVariance !== 0
           ? `Quantity variance: ${quantityVariance}`
-          : `${rejectedQty} unit(s) rejected`;
+          : `${rejectedQty} unit(s) rejected`);
       }
 
       item.rejectedQty = rejectedQty;
@@ -261,20 +262,34 @@ export const createGRN = async (req: Request, res: Response) => {
       const partNoStr = String(typeof grnItem.partNo === 'string' ? grnItem.partNo : (grnItem.partNo?.partNo || '')).trim();
       const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-      const matchingLpoItem: any = (purchaseOrder.items || []).find((lpoItem: any) =>
-        lpoItem.detail && description && lpoItem.detail.trim().toLowerCase() === description.toLowerCase());
+      // Item code first: the GRN line's code resolves to a product, which identifies the LPO line by its
+      // linked product. Only when there is no code (or no match on it) do we fall back to the description.
+      const hasItemCode = !!partNoStr && partNoStr !== '-';
+      let codeProduct: any = null;
+      if (hasItemCode) {
+        codeProduct = await Product.findOne({ partNo: new RegExp(`^${escape(partNoStr)}$`, 'i'), isDeleted: { $ne: true } });
+      } else {
+        warnings.push(`"${description}" has no item code on the GRN line; matched by description instead`);
+      }
+      const lpoPartId = (lpoItem: any) => String(lpoItem.partNo?._id || lpoItem.partNo || '');
+
+      let matchingLpoItem: any = codeProduct
+        ? (purchaseOrder.items || []).find((lpoItem: any) => lpoPartId(lpoItem) === String(codeProduct._id))
+        : null;
+      if (!matchingLpoItem) {
+        matchingLpoItem = (purchaseOrder.items || []).find((lpoItem: any) =>
+          lpoItem.detail && description && lpoItem.detail.trim().toLowerCase() === description.toLowerCase());
+      }
 
       if (!matchingLpoItem) {
         warnings.push(`"${description}" was not added to stock: it does not match any line on the LPO`);
         continue;
       }
 
-      // Product: the LPO line's link, then the part number, then an exact description match. Lines with
+      // Product: the item code, then the LPO line's link, then an exact description match. Lines with
       // no matching product are skipped with a warning; GRN never creates products.
-      let product: any = matchingLpoItem.partNo ? await Product.findOne({ _id: matchingLpoItem.partNo, isDeleted: { $ne: true } }) : null;
-      if (!product && partNoStr && partNoStr !== '-') {
-        product = await Product.findOne({ partNo: new RegExp(`^${escape(partNoStr)}$`, 'i'), isDeleted: { $ne: true } });
-      }
+      let product: any = codeProduct
+        || (matchingLpoItem.partNo ? await Product.findOne({ _id: matchingLpoItem.partNo, isDeleted: { $ne: true } }) : null);
       if (!product && description) {
         product = await Product.findOne({ productDescription: new RegExp(`^${escape(description)}$`, 'i'), isDeleted: { $ne: true } });
       }
@@ -756,9 +771,6 @@ export const getArrivingPurchaseOrders = async (req: Request, res: Response) => 
     const search = String(req.query.search || '').trim();
     const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const stage = String(req.query.stage || '');
-    const startOfTomorrow = new Date();
-    startOfTomorrow.setHours(0, 0, 0, 0);
-    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
@@ -774,16 +786,14 @@ export const getArrivingPurchaseOrders = async (req: Request, res: Response) => 
           grnCount: { $size: "$grns" },
         }
       },
-      { $match: { $expr: { $lt: ["$acceptedQty", "$orderedQty"] } } },
-      // Upcoming: expected after today and no GRN yet; once any GRN exists it is tracked in the other tabs.
-      // Arriving: due today or no date given.
-      // Missed (Nothing received tab): the expected date has passed and the order is not fully accepted, whether or not some goods arrived.
-      ...(stage === 'upcoming' ? [{ $match: { expectedDeliveryDate: { $gte: startOfTomorrow }, grnCount: 0 } }] : []),
-      ...(stage === 'arriving' ? [{ $match: { $or: [{ expectedDeliveryDate: { $gte: startOfToday, $lt: startOfTomorrow } }, { expectedDeliveryDate: null }, { expectedDeliveryDate: { $exists: false } }] } }] : []),
+      // Arriving: every LPO with nothing received yet, soonest expected first (sorted below).
+      // Once any goods are received (even partly) it leaves this list and is tracked in the other tabs.
+      { $match: { receivedQty: 0 } },
+      // Missed (Not arrived tab): same, and the expected date has passed.
       ...(stage === 'missed' ? [{ $match: { expectedDeliveryDate: { $lt: startOfToday } } }] : []),
       { $lookup: { from: "suppliers", localField: "supplierId", foreignField: "_id", as: "supplierId", pipeline: [{ $project: { supplierName: 1 } }] } },
       { $unwind: { path: "$supplierId", preserveNullAndEmptyArrays: true } },
-      { $lookup: { from: "purchases", localField: "purchaseId", foreignField: "_id", as: "purchaseId", pipeline: [{ $project: { purchaseNo: 1, jobId: 1, "items.itemDetails.detail": 1, "items.itemDetails.partNo": 1, "items.itemDetails.unitCost": 1, "items.itemDetails.dealUnitCost": 1 } }] } },
+      { $lookup: { from: "purchases", localField: "purchaseId", foreignField: "_id", as: "purchaseId", pipeline: [{ $project: { purchaseNo: 1, jobId: 1, "items.itemDetails.detail": 1, "items.itemDetails.partNo": 1, "items.itemDetails.productId": 1, "items.itemDetails.unitCost": 1, "items.itemDetails.dealUnitCost": 1 } }] } },
       { $unwind: { path: "$purchaseId", preserveNullAndEmptyArrays: true } },
       { $lookup: { from: "jobs", localField: "jobId", foreignField: "_id", as: "jobId", pipeline: [{ $project: { jobId: 1 } }] } },
       { $unwind: { path: "$jobId", preserveNullAndEmptyArrays: true } },
@@ -872,6 +882,27 @@ export const getAllGRNs = async (req: Request, res: Response) => {
       { $unwind: { path: "$jobId", preserveNullAndEmptyArrays: true } },
       {
         $lookup: {
+          from: "quotations",
+          localField: "jobId.quoteId",
+          foreignField: "_id",
+          pipeline: [{ $project: { client: 1 } }],
+          as: "jobQuote"
+        }
+      },
+      { $unwind: { path: "$jobQuote", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "customers",
+          localField: "jobQuote.client",
+          foreignField: "_id",
+          pipeline: [{ $project: { companyName: 1 } }],
+          as: "customer"
+        }
+      },
+      { $unwind: { path: "$customer", preserveNullAndEmptyArrays: true } },
+      { $unset: "jobQuote" },
+      {
+        $lookup: {
           from: "warehouses",
           localField: "warehouse",
           foreignField: "_id",
@@ -950,8 +981,10 @@ export const getAllGRNs = async (req: Request, res: Response) => {
       ...(receiptStatus === "returns"
         ? [{
             $match: {
+              // Resolved GRNs live in their own tab.
+              outcomeStatus: { $ne: "Resolved" },
               $or: [
-                { outcomeStatus: { $in: ["Return Required", "Return in Progress", "Resolved"] } },
+                { outcomeStatus: { $in: ["Return Required", "Return in Progress"] } },
                 {
                   $expr: {
                     $gt: [
@@ -964,6 +997,7 @@ export const getAllGRNs = async (req: Request, res: Response) => {
             }
           }]
         : []),
+      ...(receiptStatus === "resolved" ? [{ $match: { outcomeStatus: "Resolved" } }] : []),
       { $unset: 'receiptTotals' },
       { $sort: { createdAt: -1 } },
       {

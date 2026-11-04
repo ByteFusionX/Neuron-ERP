@@ -60,11 +60,6 @@
       </nav>
 
       <div class="dv-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel" [ngSwitch]="panelTab">
-        <app-detail-section *ngSwitchCase="'order'" title="Purchase order">
-          <app-detail-field *ngFor="let f of orderFacts" [label]="f.label">
-            <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
-          </app-detail-field>
-        </app-detail-section>
 
         <ng-container *ngSwitchCase="'poitems'">
           <app-detail-table *ngIf="poItemRows.length; else noPoItems"
@@ -75,6 +70,12 @@
             numbered
             emptyMessage="No items on the POs"></app-detail-table>
           <ng-template #noPoItems><p class="py-6 text-center text-sm text-gray-500">No items on the POs.</p></ng-template>
+        </ng-container>
+
+        <ng-container *ngSwitchCase="'pricing'">
+          <app-detail-section title="Summary">
+            <app-detail-field *ngFor="let f of pricingSummary" [label]="f.label">{{ f.value }}</app-detail-field>
+          </app-detail-section>
         </ng-container>
 
         <ng-container *ngSwitchCase="'inspection'">

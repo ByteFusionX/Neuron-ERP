@@ -662,7 +662,8 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
         ? `${rejectedQty} unit(s) rejected`
         : '';
     discrepancyTypeControl?.setValue(discrepancyType, { emitEvent: false });
-    rejectionReasonControl?.setValue(rejectionReason, { emitEvent: false });
+    // A reason the user typed is theirs; only fill the generated one while the field is untouched.
+    if (!rejectionReasonControl?.dirty) rejectionReasonControl?.setValue(rejectionReason, { emitEvent: false });
   }
 
   onReceivedQtyChanged(itemGroup: FormGroup): void {
@@ -693,7 +694,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
       slNo: [index + 1],
       partNo: [this.formatPartNumber(item.partNo) || item.partNo || ''],
       itemDescription: [item.itemDescription || item.detail || ''],
-      uom: [item.uom || '', [Validators.required]],
+      uom: [item.uom || ''],
       orderedQty: [item.orderedQty || item.quantity || 0],
       receivedQty: [
         item.receivedQty || 0,

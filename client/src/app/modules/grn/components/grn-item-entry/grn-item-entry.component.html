@@ -53,9 +53,12 @@
       <!-- Column labels: standing headers for the numeric strip, hidden below the width where it wraps. -->
       <div class="hidden items-start gap-2 px-3 pt-2 min-[900px]:flex">
         <span class="w-6 shrink-0"></span>
+        <span *ngIf="compact" class="ge-labels w-56 shrink-0">Item description</span>
         <div class="ge-strip ge-labels min-w-0 flex-1">
-          <span>Item</span><span class="text-right">Ordered</span><span class="text-right">Balance</span>
-          <span>Received</span><span class="text-right">Accepted</span><span>Rejected</span><span>UoM</span><span>Remarks</span><span>Serial No.</span>
+          <span class="text-right">Ordered</span><span class="text-right">Balance</span>
+          <span>Received</span><span class="text-right">Accepted</span><span>Rejected</span>
+          <span class="text-right">Cost</span><span class="text-right">Total cost</span>
+          <span>Remarks</span><span>Serial No.</span><span>Reject reason</span>
         </div>
       </div>
 
@@ -65,12 +68,16 @@
             [ngClass]="compact ? 'py-1.5' : 'py-2.5'" [class.opacity-50]="isDone(line)">
             <span class="mt-2 grid h-6 w-6 shrink-0 place-content-center rounded-md bg-gray-100 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ line.get('slNo')?.value || i + 1 }}</span>
             <div class="min-w-0 flex-1 space-y-2">
-              <div class="ge-strip">
-                <div class="col-span-3 min-w-0 py-1.5 min-[900px]:col-span-1">
-                  <p [title]="text(line, 'itemDescription')" class="line-clamp-2 whitespace-pre-line text-xs font-normal text-gray-900 dark:text-gray-100">{{ text(line, 'itemDescription') || '-' }}</p>
-                  <p *ngIf="text(line, 'partNo') && text(line, 'partNo') !== '-'" class="text-xs text-gray-500">{{ text(line, 'partNo') }}</p>
-                  <span *ngIf="isDone(line)" class="text-xs font-semibold text-orange-600">Fully received</span>
-                </div>
+              <!-- Compact: description and every field share one line (wide screens). Comfortable: description above. -->
+              <div [ngClass]="compact ? 'space-y-2 min-[900px]:flex min-[900px]:items-start min-[900px]:gap-2 min-[900px]:space-y-0' : 'space-y-2'">
+              <div class="min-w-0" [ngClass]="compact ? 'min-[900px]:w-56 min-[900px]:shrink-0' : ''">
+                <app-sf-textarea formControlName="itemDescription" [readonly]="true" [rows]="1" expandOnFocus placeholder="Item description"
+                  [attr.aria-label]="'Item description'"></app-sf-textarea>
+                <p *ngIf="text(line, 'partNo') && text(line, 'partNo') !== '-'" class="text-xs text-gray-500">{{ text(line, 'partNo') }}</p>
+                <span *ngIf="isDone(line)" class="text-xs font-semibold text-orange-600">Fully received</span>
+              </div>
+
+              <div class="ge-strip min-w-0" [ngClass]="compact ? 'min-[900px]:flex-1' : ''">
                 <div class="ge-cell ge-num" title="Ordered">{{ num(line, 'orderedQty') }}</div>
                 <div class="ge-cell ge-num font-medium" title="Balance" [class.!text-red-600]="num(line, 'balanceQty') === 0">{{ num(line, 'balanceQty') }}</div>
                 <div>
@@ -85,13 +92,16 @@
                     [attr.aria-label]="'Rejected qty for ' + text(line, 'itemDescription')"></app-sf-number>
                   <p *ngIf="line.get('rejectedQty')?.hasError('max')" class="mt-1 text-[11px] text-orange-600 dark:text-orange-400" role="status">Qty exceeded</p>
                 </div>
-                <app-sf-input formControlName="uom" [readonly]="disabled || (!locked && isDone(line))" placeholder="UoM"
-                  [attr.aria-label]="'UoM for ' + text(line, 'itemDescription')"></app-sf-input>
+                <div class="ge-cell ge-num" title="Cost (unit)">{{ unitCost(line, i) | number: '1.2-2' }}</div>
+                <div class="ge-cell ge-num font-medium" title="Total cost (accepted qty × cost)">{{ lineCost(line, i) | number: '1.2-2' }}</div>
                 <app-sf-input formControlName="remarks" [readonly]="disabled || (!locked && isDone(line))" placeholder="Remarks"
                   [attr.aria-label]="'Remarks for ' + text(line, 'itemDescription')"></app-sf-input>
                 <app-sf-textarea formControlName="serialNos" [readonly]="locked || disabled" [rows]="1"
                   expandOnFocus commaOnEnter placeholder="Scan or enter serial numbers"
                   [attr.aria-label]="'Serial numbers for ' + text(line, 'itemDescription')"></app-sf-textarea>
+                <app-sf-input formControlName="rejectionReason" [readonly]="locked || disabled || (!locked && isDone(line))" placeholder="Reject reason"
+                  [attr.aria-label]="'Reject reason for ' + text(line, 'itemDescription')"></app-sf-input>
+              </div>
               </div>
 
               <!-- Batch tracking remains below the main item row when applicable. -->
@@ -108,42 +118,18 @@
 
   <!-- Compare PR awards with the job baseline for this receipt's items. -->
   <div *ngIf="lines.length" class="sticky bottom-0 z-20 rounded-xl border border-gray-200 bg-gray-50/95 px-4 py-3 backdrop-blur dark:border-erp-border-dark dark:bg-gray-900/85">
-    <div *ngIf="costSummary as summary" class="flex flex-wrap items-end justify-between gap-5">
-      <div class="flex flex-wrap items-end gap-5">
-        <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Total PR price</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ summary.prPrice | number: '1.2-2' }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Total PR cost</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ summary.prCost | number: '1.2-2' }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Total PR discount</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ summary.prDiscount | number: '1.2-2' }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Net PR total</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ summary.prCost - summary.prDiscount | number: '1.2-2' }}</p>
-        </div>
+    <div *ngIf="costSummary as summary" class="flex flex-wrap items-end justify-end gap-5 text-right" aria-label="PR totals">
+      <div>
+        <p class="text-[11px] uppercase tracking-wide text-gray-500">Total cost</p>
+        <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ summary.prCost | number: '1.2-2' }}</p>
       </div>
-      <div class="ml-auto flex flex-wrap items-end justify-end gap-5 text-right" aria-label="Job totals">
-        <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Total price</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ summary.jobPrice | number: '1.2-2' }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Total cost</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ summary.jobCost | number: '1.2-2' }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Total discount</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ summary.jobDiscount | number: '1.2-2' }}</p>
-        </div>
-        <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Net total</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ summary.jobCost - summary.jobDiscount | number: '1.2-2' }}</p>
-        </div>
+      <div>
+        <p class="text-[11px] uppercase tracking-wide text-gray-500">Discount</p>
+        <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ summary.prDiscount | number: '1.2-2' }}</p>
+      </div>
+      <div>
+        <p class="text-[11px] uppercase tracking-wide text-gray-500">Net total</p>
+        <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ summary.prCost - summary.prDiscount | number: '1.2-2' }}</p>
       </div>
     </div>
   </div>

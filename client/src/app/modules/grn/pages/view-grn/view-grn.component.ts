@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { poShareDiscount } from 'src/app/shared/utils/po-discount.util';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
@@ -43,7 +44,7 @@ interface GrnFact {
   state?: { dot: string; text: string };
 }
 
-type PanelTab = 'order' | 'poitems' | 'inspection' | 'documents' | 'history';
+type PanelTab = 'poitems' | 'pricing' | 'inspection' | 'documents' | 'history';
 
 @Component({
   selector: 'app-view-grn',
@@ -81,10 +82,10 @@ export class ViewGrnComponent implements OnInit {
 
   // view model — rebuilt by buildDetails() on every load
   panelOpen = true;
-  panelTab: PanelTab = 'order';
+  panelTab: PanelTab = 'pricing';
   // stable array: a getter that builds a new one each change detection re-creates the buttons and swallows clicks
   readonly panelTabs: { id: PanelTab; label: string }[] = [
-    { id: 'order', label: 'Order' },
+    { id: 'pricing', label: 'Pricing' },
     { id: 'poitems', label: 'PO' },
     { id: 'inspection', label: 'Inspection' },
     { id: 'documents', label: 'Documents' },
@@ -103,7 +104,14 @@ export class ViewGrnComponent implements OnInit {
     return this.detailFacts.filter((f) => !this.hiddenDetail.has(f.label)).sort((a, b) => pos(a.label) - pos(b.label));
   }
   trackFact = (_: number, f: GrnFact) => f.label;
-  orderFacts: GrnFact[] = [];
+  /** Pricing tab: the same cost columns as the GRN table, plus the summary figures. */
+  readonly pricingColumns: DetailTableColumn[] = [
+    { key: 'detail', label: 'Description', truncate: true, tooltipKey: 'detail' },
+    { key: 'acceptedQty', label: 'Accepted', type: 'number', align: 'right' },
+    { key: 'unitCost', label: 'Unit Cost', type: 'currency', align: 'right' },
+    { key: 'amount', label: 'Total', type: 'currency', align: 'right', total: true },
+  ];
+  pricingSummary: GrnFact[] = [];
   inspectionFacts: GrnFact[] = [];
   returnFacts: GrnFact[] = [];
   inspectionNotes = '';
@@ -115,34 +123,35 @@ export class ViewGrnComponent implements OnInit {
     { key: 'qtyText', label: 'Qty', type: 'text', align: 'right' },
     { key: 'price', label: 'Unit Price', type: 'currency', align: 'right' },
     { key: 'amount', label: 'Total', type: 'currency', align: 'right', total: true },
-    { key: 'supplierName', label: 'Supplier', type: 'text' },
-    { key: 'status', label: 'Status', type: 'badge', badgeTones: { Placed: 'good', Closed: 'good', Approved: 'info', Rejected: 'bad', Pending: 'warn' } },
   ];
-  /** Every non-cancelled line on every PO of this GRN's purchase request. */
+  /**
+   * The LPO's own lines exactly as on the LPO (qty, unit cost). The LPO's single discount is spread over the lines
+   * in proportion to their value, so the Discount column adds up to the LPO's discount.
+   */
   get poItemRows(): Record<string, any>[] {
-    const out: Record<string, any>[] = [];
-    this.poLines().forEach((row) => row.suppliers.forEach((s) => s.pos.forEach((p) => {
-      if (p.poStatus === 'Cancelled' || !(p.qty > 0)) return;
-      out.push({
-        poNo: p.poNo, detail: row.detail, qtyText: `${p.qty}${row.uom ? ' ' + row.uom : ''}`,
-        price: s.unitPrice ?? 0, amount: (s.unitPrice ?? 0) * p.qty,
-        supplierName: s.supplierName, status: p.poStatus, _link: ['/purchase-order/view-lpo', p._id],
-      });
-    })));
-    return out.sort((a, b) => String(a['poNo']).localeCompare(String(b['poNo'])));
+    const po = this.grn?.purchaseOrderId;
+    if (!po) return [];
+    const items: any[] = po.items || [];
+    return items.map((item) => {
+      const qty = Number(item.quantity) || 0;
+      const price = Number(item.unitCost) || 0;
+      return {
+        poNo: po.poNo, detail: item.detail, qtyText: `${qty}${item.uom ? ' ' + item.uom : ''}`,
+        price, amount: qty * price, _link: ['/purchase-order/view-lpo', po._id],
+      };
+    });
   }
-  /** Discount and net total under the PO items; discount is the PR's per-supplier one, counted for suppliers still on a PO. */
+  /** This LPO's own discount: its share of the supplier discount, same as the LPO view page. */
+  private poDiscount(): number {
+    const po = this.grn?.purchaseOrderId;
+    return po ? poShareDiscount(po, po.purchaseId) : 0;
+  }
+  /** Total, discount and net total under the PO items. The discount is the LPO's own. */
   get poFootRows(): DetailFootRow[] {
     const rows = this.poItemRows;
     if (!rows.length) return [];
-    const idOf = (v: any) => String(v?._id || v || '');
-    const onPo = new Set<string>();
-    this.poLines().forEach((r) => r.suppliers.forEach((s) => {
-      if (s.pos.some((p) => p.poStatus !== 'Cancelled' && p.qty > 0)) onPo.add(idOf(s.supplierId));
-    }));
-    const list: any[] = this.grn?.purchaseOrderId?.purchaseId?.supplierDiscounts?.suppliers || [];
-    const discount = list.filter((d) => onPo.has(idOf(d.supplierId))).reduce((s, d) => s + (Number(d.discount) || 0), 0);
     const total = rows.reduce((s, r) => s + (Number(r['amount']) || 0), 0);
+    const discount = Math.min(this.poDiscount(), total);
     const amt = (value: number) => ({ amount: { value, format: 'currency' as const } });
     return [
       { label: 'Total', cells: amt(total) },
@@ -183,7 +192,7 @@ export class ViewGrnComponent implements OnInit {
           const prId = this.grn.purchaseOrderId?.purchaseId?._id || this.grn.purchaseOrderId?.purchaseId;
           if (prId) {
             this.salesRfqService.getPurchaseOrderStatus(prId).subscribe({
-              next: (res) => this.poLines.set(res?.data?.rows || []),
+              next: (res) => { this.poLines.set(res?.data?.rows || []); this.buildDetails(); },
               error: () => this.poLines.set([]),
             });
           }
@@ -233,20 +242,22 @@ export class ViewGrnComponent implements OnInit {
     const money = this.priceSummary();
     this.stats = [
       { label: 'Received value', value: money.received },
-      { label: 'Rejected value', value: money.rejected, danger: rejected > 0 },
       { label: 'Discount', value: money.discount },
-      { label: 'Total cost (LPO)', value: money.total },
+      { label: 'Rejected value', value: money.rejected },
+      { label: 'Discount after rejection', value: money.netDiscount },
+      { label: 'Accepted value', value: money.total },
     ];
 
     const facts: (GrnFact | false)[] = [
       // what was received and against which order
+      { label: 'GRN No', value: g?.grnNo || '-' },
+      { label: 'GRN Date', value: this.formatDate(g?.grnDate) },
       { label: 'LPO No', value: po?.poNo || '-' },
       { label: 'Supplier', value: supplier || '-' },
       !!pr?.purchaseNo && { label: 'PR No', value: pr.purchaseNo, link: ['/purchase/view-purchase', pr._id] },
       { label: 'Job ID', value: job?.jobId || '-', link: job?._id && job?.jobId ? ['/job-sheet/view', job._id] : undefined },
       { label: 'Customer', value: this.getCompanyName() || '-' },
       // where and when
-      { label: 'GRN Date', value: this.formatDate(g?.grnDate) },
       { label: g?.destinationType === 'site' ? 'Delivered To' : 'Warehouse', value: destination },
       !!g?.quarantineWarehouse && { label: 'Quarantine', value: g.quarantineWarehouse.wareHouseName || '-' },
       { label: 'Received By', value: this.receiver || '-' },
@@ -263,13 +274,7 @@ export class ViewGrnComponent implements OnInit {
     const hidden = ['Created On', 'Supplier Invoice Date'];
     this.detailItems = this.detailFacts.map((f) => ({ key: f.label, label: f.label, hiddenByDefault: hidden.includes(f.label) }));
 
-    this.orderFacts = [
-      { label: 'LPO No', value: po?.poNo || '-' },
-      { label: 'LPO Status', value: po?.poStatus || '-', state: po?.poStatus ? this.state(po.poStatus) : undefined },
-      { label: 'LPO Date', value: this.formatDate(po?.poDate || po?.createdAt) },
-      { label: 'Expected Delivery', value: this.formatDate(po?.expectedDeliveryDate) },
-      { label: 'Currency', value: po?.currency || '-' },
-    ];
+    this.pricingSummary = this.stats.map((s) => ({ label: s.label, value: String(s.value) }));
 
     const inspection = g?.inspectionResult || 'Passed';
     this.inspectionFacts = [
@@ -322,8 +327,13 @@ export class ViewGrnComponent implements OnInit {
     const gross = (poRef.items || []).reduce((s: number, l: any) => s + (Number(l.totalCost) || (Number(l.unitCost) || 0) * (Number(l.quantity) || 0)), 0);
     const poDiscount = Number(poRef.discount) || 0;
     // the LPO discount is one figure for the whole order, so this GRN carries its share by value
-    const grnDiscount = gross > 0 ? Math.min(poDiscount * (amountTotal / gross), amountTotal) : 0;
-    const amt = (value: number) => ({ amount: { value, format: 'currency' as const } });
+    // same figure as "Discount after rejection" in the Summary (priceSummary runs first in buildDetails)
+    void gross;
+    const grnDiscount = Math.min(this.netDiscountValue, amountTotal);
+    // plain 2-decimal text, no currency suffix
+    const amt = (value: number) => ({
+      amount: { value: value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), format: 'text' as const },
+    });
     this.itemFootRows = items.length ? [
       {
         label: 'Total',
@@ -418,21 +428,33 @@ export class ViewGrnComponent implements OnInit {
     return Math.max(0, (item?.orderedQty || 0) - (item?.receivedQty || 0));
   }
 
-  private priceSummary(): { received: string; rejected: string; discount: string; total: string } {
+  private netDiscountValue = 0;
+
+  private priceSummary(): { received: string; rejected: string; discount: string; netDiscount: string; total: string } {
     const po = this.grn?.purchaseOrderId || {};
-    const lines: any[] = po.items || [];
     const unitCost = (item: any): number => Number(this.findPoLine(item)?.unitCost) || 0;
-    const supplierId = po.supplierId?._id || po.supplierId;
-    const prDiscount = (Array.isArray(po.purchaseId?.supplierDiscounts?.suppliers) ? po.purchaseId.supplierDiscounts.suppliers : [])
-      .find((d: any) => String(d.supplierId?._id || d.supplierId) === String(supplierId))?.discount;
-    const discount = Number(po.discount) || Number(prDiscount) || 0;
-    const gross = lines.reduce((sum, l) => sum + (Number(l.totalCost) || (Number(l.unitCost) || 0) * (Number(l.quantity) || 0)), 0);
-    const fmt = (n: number) => `${po.currency || 'QAR'} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    // same figures as the POs tab: LPO qty/price and the LPO's discount
+    const discount = this.poDiscount();
+    const fmt = (n: number) => `${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const receivedVal = this.sumItems((i) => (Number(i.receivedQty) || 0) * unitCost(i));
+    const rejectedVal = this.sumItems((i) => this.getRejectedQty(i) * unitCost(i));
+    // the discount is spread over the received value, so the rejected goods carry their proportional share
+    const acceptedVal = this.sumItems((i) => Math.max((Number(i.receivedQty) || 0) - this.getRejectedQty(i), 0) * unitCost(i));
+    const poGross = (po.items || []).reduce((s: number, l: any) => s + (Number(l.totalCost) || (Number(l.unitCost) || 0) * (Number(l.quantity) || 0)), 0);
+    // the GRN's discount is the LPO discount in proportion to what this GRN actually accepted
+    const netDiscount = poGross > 0 ? Math.min(discount * (acceptedVal / poGross), discount) : 0;
+    const rejectedDiscount = discount - netDiscount;
+    this.netDiscountValue = netDiscount;
     return {
-      received: fmt(this.sumItems((i) => (Number(i.receivedQty) || 0) * unitCost(i))),
-      rejected: fmt(this.sumItems((i) => this.getRejectedQty(i) * unitCost(i))),
+      received: fmt(receivedVal),
+      rejected: fmt(rejectedVal),
       discount: fmt(discount),
-      total: fmt(Math.max(gross - discount, 0)),
+      netDiscount: fmt(netDiscount),
+      // accepted goods at LPO price, less the discount that belongs to them (total discount minus the rejected share)
+      total: fmt(Math.max(
+        this.sumItems((i) => Math.max((Number(i.receivedQty) || 0) - this.getRejectedQty(i), 0) * unitCost(i)) - (discount - rejectedDiscount),
+        0,
+      )),
     };
   }
 

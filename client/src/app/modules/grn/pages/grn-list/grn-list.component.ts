@@ -1,4 +1,5 @@
 import { CommonModule, DatePipe } from '@angular/common';
+import { poShareDiscount } from 'src/app/shared/utils/po-discount.util';
 import { Component, OnInit, ViewChild, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
@@ -61,7 +62,7 @@ export class GrnListComponent implements OnInit {
   private auditLog = inject(AuditLogService);
   private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
 
-  /** Arriving / Upcoming rows are LPOs, so they show the LPO's history; GRN rows show the GRN's. */
+  /** Arriving / Not arrived rows are LPOs, so they show the LPO's history; GRN rows show the GRN's. */
   historyFor(row: any): Observable<DetailTimelineEntry[]> {
     const type = this.isArrivingView ? 'purchaseOrder' : 'grn';
     const key = `${type}:${row._id}`;
@@ -96,13 +97,13 @@ export class GrnListComponent implements OnInit {
   columns: DataGridColumn<any>[] = [];
   rowActions: DataGridRowAction<any>[] = [];
   views: DataGridView<any>[] = [
-    { id: 'upcoming', label: 'Upcoming', hideCount: true },
     { id: 'arriving', label: 'Arriving', hideCount: true },
-    { id: 'pending', label: 'Nothing received', hideCount: true },
+    { id: 'pending', label: 'Not arrived', hideCount: true },
     { id: 'all', label: 'All' },
     { id: 'partial', label: 'Partly received', hideCount: true },
     { id: 'arrived', label: 'Fully received', hideCount: true },
     { id: 'returns', label: 'Returns', hideCount: true },
+    { id: 'resolved', label: 'Resolved', hideCount: true },
   ];
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'GRN' }];
   detailTabs: DataGridDetailTab[] = [
@@ -133,12 +134,12 @@ export class GrnListComponent implements OnInit {
     this.getGRNs();
   }
 
-  /** Upcoming, Arriving and Nothing received (missed their date) list placed LPOs rather than GRNs. */
+  /** Arriving and Not arrived (missed their date) list placed LPOs rather than GRNs. */
   get isArrivingView(): boolean {
-    return this.activeViewId === 'arriving' || this.activeViewId === 'upcoming' || this.activeViewId === 'pending';
+    return this.activeViewId === 'arriving' || this.activeViewId === 'pending';
   }
 
-  /** Upcoming: expected after today. Arriving: due today, overdue or undated. Both list LPOs still short of goods. */
+  /** Arriving: every LPO with nothing received yet. Not arrived: those past their expected date. */
   private readonly arrivingColumns: DataGridColumn<any>[] = [
     { key: 'expectedDeliveryDate', label: 'Expected', type: 'date', width: '130px' },
     { key: 'due', label: 'Due', valueGetter: (r) => this.dueLabel(r) },
@@ -179,6 +180,7 @@ export class GrnListComponent implements OnInit {
       { key: 'grnDate', label: 'GRN Date', type: 'date', sortable: true, width: '130px' },
       { key: 'grnNo', label: 'GRN No', sortable: true },
       { key: 'jobId', label: 'Job No', valueGetter: (r) => r?.jobId?.jobId || r?.purchaseOrderId?.purchaseId?.jobId?.jobId || 'N/A' },
+      { key: 'customer', label: 'Customer', valueGetter: (r) => r?.customer?.companyName || 'N/A' },
       { key: 'poNo', label: 'LPO No', valueGetter: (r) => r?.purchaseOrderId?.poNo || 'N/A' },
       { key: 'supplier', label: 'Supplier', valueGetter: (r) => r?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
       { key: 'warehouse', label: 'Warehouse', valueGetter: (r) => r?.warehouse?.wareHouseName || 'N/A' },
@@ -200,13 +202,13 @@ export class GrnListComponent implements OnInit {
   private buildRowActions(): void {
     this.grnActions = [
       { id: 'view', label: 'Open GRN', icon: 'eye', quick: true, panel: true },
-      { id: 'edit', label: 'Edit GRN', icon: 'pencil', quick: true },
+      { id: 'edit', label: 'Edit GRN', icon: 'pencil' },
       { id: 'viewPo', label: 'View PO', icon: 'shoppingBag', quick: true },
       { id: 'previewPo', label: 'Preview PO', icon: 'card' },
       { id: 'viewPurchase', label: 'View Purchase', icon: 'files', hidden: (r) => !this.purchaseId(r) },
       { id: 'previewReceipt', label: 'Preview receipt', icon: 'eye', hidden: () => !['partial', 'arrived'].includes(this.activeViewId) },
-      { id: 'supplierReturn', label: 'Create Return', hidden: (r) => this.totalRejectedQty(r) <= 0 || ['Return in Progress', 'Resolved'].includes(r?.outcomeStatus) },
-      { id: 'resolveReturn', label: 'Mark Return Resolved', hidden: (r) => r?.outcomeStatus !== 'Return in Progress' },
+      { id: 'supplierReturn', label: 'Resolve Rejected', icon: 'transfer', quick: true, hidden: (r) => this.totalRejectedQty(r) <= 0 || ['Return in Progress', 'Resolved'].includes(r?.outcomeStatus) },
+      { id: 'resolveReturn', label: 'Mark Resolved', icon: 'check', quick: true, hidden: (r) => r?.outcomeStatus !== 'Return in Progress' },
     ];
     this.rowActions = this.grnActions;
   }
@@ -550,21 +552,19 @@ export class GrnListComponent implements OnInit {
     ];
   }
 
-  /** Cost is the job's (deal sheet) cost, Price is what the PR/LPO actually pays; both for the LPO's items only. */
+  /** Total cost, discount and net total for this LPO's items only; the discount is this LPO's share. */
   private poSummarySection(row: any, po: any = row): DetailOverviewSection {
     const pr = this.isArrivingView ? row?.purchaseId : row?.purchaseOrderId?.purchaseId;
     const lines: any[] = po?.items || [];
-    const totalCost = lines.reduce((s, l) => s + this.jobUnitCost(pr, l) * (Number(l.quantity) || 0), 0);
     const totalPrice = lines.reduce((s, l) => s + this.linePrice(l), 0);
-    const discount = Number(po?.discount) || 0;
+    const discount = poShareDiscount(po, pr);
     const fmt = (n: number) => `${po?.currency || 'QAR'} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     return {
       title: 'Summary',
       columns: '2',
       fields: [
-        { type: 'field', label: 'Total Price', value: fmt(totalPrice), numeric: true },
-        { type: 'field', label: 'Total Cost', value: fmt(totalCost), numeric: true },
-        { type: 'field', label: 'Total Discount', value: fmt(discount), numeric: true },
+        { type: 'field', label: 'Total Cost', value: fmt(totalPrice), numeric: true },
+        { type: 'field', label: 'Discount', value: fmt(discount), numeric: true },
         { type: 'field', label: 'Net Total', value: fmt(Math.max(totalPrice - discount, 0)), numeric: true },
       ],
     };
@@ -574,20 +574,11 @@ export class GrnListComponent implements OnInit {
     return Number(line?.totalCost) || (Number(line?.unitCost) || 0) * (Number(line?.quantity) || 0);
   }
 
-  /** The job's unit cost for an LPO line, from the matching PR item (deal sheet cost); falls back to the line's own cost. */
-  private jobUnitCost(pr: any, line: any): number {
-    const key = (v: any) => String(v?._id ?? v ?? '').trim().toLowerCase();
-    const details: any[] = (pr?.items || []).flatMap((i: any) => i?.itemDetails || []);
-    const match = details.find((d) => line?.partNo && key(d.partNo) === key(line.partNo))
-      || details.find((d) => key(d.detail) === key(line?.detail));
-    return Number(match?.dealUnitCost) || Number(match?.unitCost) || Number(line?.unitCost) || 0;
-  }
-
   /** Unit Price is the job's selling price for the product (matched on the PR's item details). */
   private jobSellingPrice(pr: any, partNo: any, detail: any): number {
     const key = (v: any) => String(v?._id ?? v ?? '').trim().toLowerCase();
     const details: any[] = (pr?.items || []).flatMap((i: any) => i?.itemDetails || []);
-    const match = details.find((d) => partNo && key(d.partNo) === key(partNo))
+    const match = details.find((d) => partNo && key(d.productId ?? d.partNo) === key(partNo))
       || details.find((d) => key(d.detail) === key(detail));
     return Number(match?.unitSellingPrice) || 0;
   }
@@ -670,7 +661,7 @@ export class GrnListComponent implements OnInit {
   private refreshViewCounts(): void {
     const countOf = (id: string) => {
       const params: any = { page: 1, row: 1, search: this.searchQuery };
-      const arriving = id === 'upcoming' || id === 'arriving' || id === 'pending';
+      const arriving = id === 'arriving' || id === 'pending';
       if (arriving) params.stage = id === 'pending' ? 'missed' : id;
       else if (id !== 'all') params.status = id;
       const request = arriving ? this.grnService.getArrivingPurchaseOrders(params) : this.grnService.getAllGRNs(params);

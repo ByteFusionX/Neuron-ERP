@@ -52,7 +52,7 @@ export class GrnService {
   }
 
   /** Placed LPOs still waiting on goods, soonest expected delivery first. */
-  getArrivingPurchaseOrders(params?: { page?: number; row?: number; search?: string; stage?: 'upcoming' | 'arriving' | 'missed' }): Observable<any> {
+  getArrivingPurchaseOrders(params?: { page?: number; row?: number; search?: string; stage?: 'arriving' | 'missed' }): Observable<any> {
     return this.http.get<any>(`${this.baseUrl}/arriving`, { params: params as any, context: context() });
   }
 
@@ -87,55 +87,50 @@ export class GrnService {
 
     const tableBody: any[] = [];
     let serialNumber = 1;
-    let totalOrdered = 0, totalReceived = 0, totalAccepted = 0, totalRejected = 0;
+    let totalOrdered = 0, totalReceived = 0, totalRejected = 0;
 
     items.forEach((item: any) => {
       const rejectedQty = item.rejectedQty ?? ((item.receivedQty || 0) - (item.acceptedQty || 0));
-      const partNo = typeof item.partNo === 'string' ? item.partNo : (item.partNo?.partNo || '-');
       totalOrdered += item.orderedQty || 0;
       totalReceived += item.receivedQty || 0;
-      totalAccepted += item.acceptedQty || 0;
       totalRejected += rejectedQty || 0;
       tableBody.push([
         { text: serialNumber++, style: 'tableText', alignment: 'center' },
-        { text: partNo, style: 'tableText' },
         { text: item.itemDescription || '-', style: 'tableText' },
-        { text: item.uom || '-', style: 'tableText', alignment: 'center' },
         { text: String(item.orderedQty || 0), style: 'tableText', alignment: 'center' },
         { text: String(item.receivedQty || 0), style: 'tableText', alignment: 'center' },
-        { text: String(item.acceptedQty || 0), style: 'tableText', alignment: 'center' },
         { text: String(rejectedQty || 0), style: 'tableText', alignment: 'center' },
-        { text: [item.rejectionReason, item.remarks].filter(Boolean).join(' / ') || '-', style: 'tableText' },
       ]);
     });
+
+    // Pad with empty rows so the table fills the page body.
+    const minRows = 16;
+    for (let i = tableBody.length; i < minRows; i++) {
+      tableBody.push([1, 2, 3, 4, 5].map(() => ({ text: ' ', style: 'tableText' })));
+    }
 
     const itemsTable = {
       table: {
         headerRows: 1,
-        widths: [28, 55, '*', 35, 42, 45, 45, 45, 70],
+        widths: [35, '*', 70, 70, 70],
         body: [
           [
             { text: 'Sl. No.', style: 'tableHeader' },
-            { text: 'Part No.', style: 'tableHeader' },
-            { text: 'Description', style: 'tableHeader' },
-            { text: 'UOM', style: 'tableHeader' },
-            { text: 'Ordered', style: 'tableHeader' },
-            { text: 'Received', style: 'tableHeader' },
-            { text: 'Accepted', style: 'tableHeader' },
-            { text: 'Rejected', style: 'tableHeader' },
-            { text: 'Remarks', style: 'tableHeader' },
+            { text: 'Item Description', style: 'tableHeader' },
+            { text: 'Arrived Qty', style: 'tableHeader' },
+            { text: 'Received Qty', style: 'tableHeader' },
+            { text: 'Rejected Qty', style: 'tableHeader' },
           ],
           ...tableBody,
           [
-            { text: 'TOTAL', style: 'tableFooter', colSpan: 4 }, '', '', '',
+            { text: 'TOTAL', style: 'tableFooter', colSpan: 2, alignment: 'right' }, '',
             { text: String(totalOrdered), style: 'tableFooter', alignment: 'center' },
             { text: String(totalReceived), style: 'tableFooter', alignment: 'center' },
-            { text: String(totalAccepted), style: 'tableFooter', alignment: 'center' },
             { text: String(totalRejected), style: 'tableFooter', alignment: 'center' },
-            { text: '', style: 'tableFooter' },
           ]
         ]
-      }
+      },
+      layout: { paddingTop: () => 4, paddingBottom: () => 4 },
     };
 
     const infoRow = (l1: string, v1: any, l2: string, v2: any) => [

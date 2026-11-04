@@ -19,7 +19,7 @@ interface GRN extends Document {
   outcomeStatus: "Completed" | "Return Required" | "Return in Progress" | "Resolved";
   receiptStatus: "Not Received" | "Partially Received" | "Fully Received" | "Fully Rejected";
   invoiceStatus: "Ready for Invoice" | "Blocked by Return";
-  returnResolution?: "Replacement" | "Credit Note";
+  returnResolution?: string;
   returnDispatchedAt?: Date;
   returnResolvedAt?: Date;
   returnResolvedBy?: Types.ObjectId;
@@ -179,7 +179,7 @@ const grnSchema = new Schema<GRN>(
       enum: ["Ready for Invoice", "Blocked by Return"],
       default: "Ready for Invoice"
     },
-    returnResolution: { type: String, enum: ["Replacement", "Credit Note"] },
+    returnResolution: { type: String, trim: true },
     returnDispatchedAt: { type: Date },
     returnResolvedAt: { type: Date },
     returnResolvedBy: { type: Schema.Types.ObjectId, ref: "Employee" },
