@@ -142,7 +142,7 @@
         No lines match. <button *ngIf="lineSearch.trim() || lineFilter" type="button" (click)="clearFilters()" class="font-medium text-violet-700 hover:underline dark:text-violet-400">Clear filters</button>
       </p>
 
-      <div class="flex flex-col gap-3" cdkDropList [cdkDropListDisabled]="isDeal || dragLocked" (cdkDropListDropped)="dropItem($event, i)">
+      <div class="flex flex-col gap-3" [attr.inert]="readOnly ? '' : null" [class.opacity-80]="readOnly" cdkDropList [cdkDropListDisabled]="isDeal || dragLocked || readOnly" (cdkDropListDropped)="dropItem($event, i)">
       <div *ngFor="let item of itemsAt(i).controls; let j = index" cdkDrag [cdkDragDisabled]="isDeal || dragLocked || isItemLocked(i, j)" [formGroup]="$any(item)" (focusin)="trackItem(i, j)"
         [id]="itemDomId(i, j)" [class.hidden]="!itemVisible(i, j)" [style.order]="itemOrder(i, j)"
         class="scroll-mt-16 rounded-xl border bg-white transition-shadow dark:bg-erp-surface-dark"
@@ -222,9 +222,10 @@
               <span>Item code</span><span>Part no</span><span>Qty</span><span>UoM</span><span>Unit cost</span><span *ngIf="!dropsMargin">Margin</span>
               <span>Unit price</span><span>Total cost</span><span>Total price</span><span>Supplier</span><span>Availability</span>
             </div>
-            <div *ngIf="isRfq" class="ie-strip ie-strip-rfq ie-labels min-w-0 flex-1" [class.ie-strip-rfq-priced]="rfqQuoted">
+            <div *ngIf="isRfq" class="ie-strip ie-strip-rfq ie-labels min-w-0 flex-1" [class.ie-strip-rfq-priced]="rfqQuoted" [class.ie-strip-rfq-extra]="!!lineStripTemplate">
               <span>Item code</span><span>Part no</span><span>Qty</span><span>UoM</span>
               <ng-container *ngIf="rfqQuoted"><span>Supplier price</span><span>Availability</span><span>Total</span></ng-container>
+              <ng-container *ngIf="lineStripTemplate"><span *ngFor="let l of lineStripLabels">{{ l }}</span></ng-container>
             </div>
           </div>
           <span *ngIf="!isDeal" class="w-6 shrink-0"></span>
@@ -234,7 +235,7 @@
         <div class="flex flex-col divide-y divide-gray-100 dark:divide-erp-border-dark" cdkDropList [cdkDropListDisabled]="isDeal"
           (cdkDropListDropped)="dropDetail($event, i, j)">
           <div *ngFor="let detail of detailsAt(i, j)?.controls; let k = index" cdkDrag appLineViewport #vp="lineViewport" [cdkDragDisabled]="isDeal || dragLocked || isLineLocked(i, j, k)" [formGroup]="$any(detail)" [id]="itemDomId(i, j) + '-l' + k" (focusin)="trackLine(i, j, k)"
-            [class.hidden]="!lineVisible(i, j, k)" [style.order]="lineActive(i, j, k) ? 0 : 1" [class.opacity-50]="!lineActive(i, j, k)"
+            [class.hidden]="!lineVisible(i, j, k)" [style.order]="lineActive(i, j, k) ? 0 : 1" [class.opacity-50]="!lineActive(i, j, k)" [class.opacity-60]="isLineMuted(i, j, k)" [class.grayscale]="isLineMuted(i, j, k)"
             class="flex items-start gap-2 px-3 dark:bg-erp-surface-dark"
             [ngClass]="[compact ? 'py-1.5' : 'py-2.5', isSelected(i, j, k) ? 'bg-violet-50/70 dark:!bg-violet-950/30' : 'bg-white']">
 
@@ -301,7 +302,7 @@
                 </div>
               </div>
 
-              <div *ngIf="isRfq" class="ie-strip ie-strip-rfq" [class.ie-strip-rfq-priced]="rfqQuoted" [class.min-w-0]="compact" [class.flex-1]="compact">
+              <div *ngIf="isRfq" class="ie-strip ie-strip-rfq" [class.ie-strip-rfq-priced]="rfqQuoted" [class.ie-strip-rfq-extra]="!!lineStripTemplate" [class.min-w-0]="compact" [class.flex-1]="compact">
                 <app-sf-input [class.ie-code-missing]="codeMissing(detail)" [ngClass]="codeMissing(detail) ? '[&_.sf-input]:!border-red-500' : ''" formControlName="itemCode" placeholder="Item code" (input)="queueCodeLookup(i, j, k, 'itemCode')" (focusout)="lookupByCode(i, j, k, 'itemCode')" (keydown.enter)="lookupByCode(i, j, k, 'itemCode')"></app-sf-input>
                 <app-sf-input formControlName="partNo" placeholder="Part no" (input)="queueCodeLookup(i, j, k, 'partNo')" (focusout)="lookupByCode(i, j, k, 'partNo')" (keydown.enter)="lookupByCode(i, j, k, 'partNo')"></app-sf-input>
                 <app-sf-number formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
@@ -311,15 +312,16 @@
                   <app-sf-combobox formControlName="availability" [options]="resolvedAvailabilityOptions" placeholder="Availability" footerLabel="Add availability" (footerAction)="openAddMasterOption('availability', detail.get('availability'))"></app-sf-combobox>
                   <span class="ie-total">{{ lineCost(i, j, k) | number: '1.2-2' }}</span>
                 </ng-container>
+                <ng-container *ngIf="lineStripTemplate" [ngTemplateOutlet]="lineStripTemplate"
+                  [ngTemplateOutletContext]="{ $implicit: detail, i: i, j: j, k: k }"></ng-container>
               </div>
 
-              <div *ngIf="!isRfq" class="ie-strip"[class.min-w-0]="compact" [class.flex-1]="compact" [class.opacity-60]="isDeal && !detail.get('dealSelected')?.value" [class.ie-strip-purchase]="dropsMargin"
-                [class.ring-1]="!!detail.get('productId')?.value" [class.ring-emerald-400]="!!detail.get('productId')?.value">
+              <div *ngIf="!isRfq" class="ie-strip"[class.min-w-0]="compact" [class.flex-1]="compact" [class.opacity-60]="isDeal && !detail.get('dealSelected')?.value" [class.ie-strip-purchase]="dropsMargin">
                 <span *ngIf="isDeal && !dealAdded(detail)" class="ie-cell ie-x">{{ detail.get('itemCode')?.value || '—' }}</span>
                 <span *ngIf="isDeal && !dealAdded(detail)" class="ie-cell ie-x">{{ detail.get('partNo')?.value || '—' }}</span>
                 <app-sf-input *ngIf="(!isDeal || dealAdded(detail)) && !dropsMargin" class="ie-x" [class.ie-code-missing]="codeMissing(detail)" [ngClass]="codeMissing(detail) ? '[&_.sf-input]:!border-red-500' : ''" formControlName="itemCode" placeholder="Item code" (input)="queueCodeLookup(i, j, k, 'itemCode')" (focusout)="lookupByCode(i, j, k, 'itemCode')" (keydown.enter)="lookupByCode(i, j, k, 'itemCode')"></app-sf-input>
                 <app-sf-input *ngIf="(!isDeal || dealAdded(detail)) && !dropsMargin" class="ie-x" formControlName="partNo" placeholder="Part no" (input)="queueCodeLookup(i, j, k, 'partNo')" (focusout)="lookupByCode(i, j, k, 'partNo')" (keydown.enter)="lookupByCode(i, j, k, 'partNo')"></app-sf-input>
-                <span *ngIf="dropsMargin" class="ie-cell ie-x">{{ detail.get('itemCode')?.value || '—' }}</span>
+                <span *ngIf="dropsMargin" class="ie-cell ie-x ie-code-cell" tabindex="0" [attr.title]="detail.get('itemCode')?.value">{{ detail.get('itemCode')?.value || '—' }}</span>
                 <div *ngIf="dropsMargin" class="ie-x flex min-w-0 gap-1">
                   <app-sf-input class="min-w-0 flex-1" formControlName="partNo" placeholder="Part no" (input)="queueCodeLookup(i, j, k, 'partNo')" (focusout)="lookupByCode(i, j, k, 'partNo')" (keydown.enter)="lookupByCode(i, j, k, 'partNo')"></app-sf-input>
                   <button *ngIf="allowCreateProduct && !isLineLocked(i, j, k)" type="button" aria-label="Create part number"
@@ -329,10 +331,10 @@
                   </button>
                 </div>
                 <div *ngIf="isPurchase && quoteLayout" class="relative min-w-0">
-                  <app-sf-number *ngIf="!usesScopeQty(i, j, k)" formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
+                  <app-sf-number *ngIf="!usesScopeQty(i, j, k)" formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="minQty(i, j, k)"></app-sf-number>
                   <app-sf-number *ngIf="usesScopeQty(i, j, k)" [formControl]="scopeQtyControl(i, j, k)" [placeholder]="defaultHint(i, j, k, 'quantity')" [stepper]="false" [min]="0"></app-sf-number>
                 </div>
-                <app-sf-number *ngIf="!(isPurchase && quoteLayout)" formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
+                <app-sf-number *ngIf="!(isPurchase && quoteLayout)" formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="minQty(i, j, k)"></app-sf-number>
                 <span *ngIf="isDeal && !dealAdded(detail) && !usesScopeQty(i, j, k)" class="ie-cell">{{ detail.get('uom')?.value || '—' }}</span>
                 <div *ngIf="usesScopeQty(i, j, k)" class="min-w-0">
                   <app-sf-combobox [formControl]="scopeUomControl(i, j, k)" [options]="resolvedUomOptions" placeholder="UoM" footerLabel="Add unit" (footerAction)="openAddMasterOption('unit', scopeUomControl(i, j, k))"></app-sf-combobox>
@@ -347,15 +349,18 @@
                 </div>
                 <div *ngIf="usesScopeCost(i, j, k)" class="relative min-w-0">
                   <app-sf-number [formControl]="scopeCostControl(i, j, k)" [placeholder]="defaultHint(i, j, k, 'unitCost')" [stepper]="false" [min]="0"></app-sf-number>
+                  <p *ngIf="isPurchase && !previousQuote(i, j, k) && !lastPrice(i, j, k) && unitCostDiff(i, j, k) as ud" class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums" [ngClass]="ud < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">{{ ud > 0 ? '+' : '-' }}{{ (ud < 0 ? -ud : ud) | number: '1.2-2' }}</p>
                   <ng-container *ngIf="previousQuote(i, j, k) as pq">
                     <p class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
                       {{ pq.awarded ? 'Awarded ' + (pq.awardedAt | date: 'dd MMM yyyy') : 'Quoted ' + (pq.quotedAt | date: 'dd MMM yyyy') }} · {{ pq.unitPrice | number: '1.2-2' }} {{ pq.currency }} · {{ pq.rfqNo }}
                       <span *ngIf="previousQuoteOver(i, j, k) as over" class="text-amber-600 dark:text-amber-400">· {{ over }}</span>
+                      <span *ngIf="isPurchase && unitCostDiff(i, j, k) as ud" [ngClass]="ud < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'" title="Against the deal cost">· {{ ud > 0 ? '+' : '-' }}{{ (ud < 0 ? -ud : ud) | number: '1.2-2' }}</span>
                     </p>
                   </ng-container>
                   <p *ngIf="!previousQuote(i, j, k) && lastPrice(i, j, k) as lp" class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
                     Last {{ lp.last.source }} {{ lp.last.lastPrice | number: '1.2-2' }}<ng-container *ngIf="lp.last.sourceNo"> · {{ lp.last.sourceNo }}</ng-container>
                     <span *ngIf="lp.diff != null" [ngClass]="lp.diff > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">{{ lp.diff > 0 ? '▲' : '▼' }} {{ (lp.diff < 0 ? -lp.diff : lp.diff) | number: '1.1-1' }}%</span>
+                    <span *ngIf="isPurchase && unitCostDiff(i, j, k) as ud" [ngClass]="ud < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'" title="Against the deal cost">· {{ ud > 0 ? '+' : '-' }}{{ (ud < 0 ? -ud : ud) | number: '1.2-2' }}</span>
                   </p>
                 </div>
                 <div *ngIf="isPurchase && quoteLayout" class="ie-x relative min-w-0">
@@ -443,11 +448,11 @@
                 class="grid h-6 w-6 place-content-center rounded text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40">
                 <ng-icon [name]="isLineUnlocked(i, j, k) ? 'heroLockClosed' : 'heroPencilSquare'" class="h-3.5 w-3.5"></ng-icon>
               </button>
-              <button *ngIf="!isLineLocked(i, j, k)" type="button" aria-label="Remove line" [disabled]="(detailsAt(i, j)?.length ?? 0) <= 1" (click)="removeDetail(i, j, k)"
+              <button *ngIf="!isLineLocked(i, j, k) && !isLineFixed(i, j, k)" type="button" aria-label="Remove line" [disabled]="(detailsAt(i, j)?.length ?? 0) <= 1" (click)="removeDetail(i, j, k)"
                 class="grid h-6 w-6 place-content-center rounded text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-400 dark:hover:bg-red-950/40">
                 <ng-icon name="heroXMark" class="h-3.5 w-3.5"></ng-icon>
               </button>
-              <button *ngIf="!isLineLocked(i, j, k)" type="button" aria-label="Clear line" (click)="clearDetail(i, j, k)"
+              <button *ngIf="!isLineLocked(i, j, k) && !isLineFixed(i, j, k)" type="button" aria-label="Clear line" (click)="clearDetail(i, j, k)"
                 class="grid h-6 w-6 place-content-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-800 dark:hover:text-gray-200">
                 <ng-icon name="heroArrowPath" class="h-3.5 w-3.5"></ng-icon>
               </button>
@@ -479,7 +484,7 @@
           <div *ngIf="isPurchase" class="flex flex-wrap items-end gap-5 text-left">
             <div class="flex items-center gap-2">
               <div [style.width]="discountFieldWidth()" style="min-width:5.5rem;max-width:100%">
-                <app-sf-number formControlName="totalDiscount" placeholder="Discount" [stepper]="false" [min]="0"
+                <app-sf-number formControlName="totalDiscount" placeholder="Discount" [stepper]="false" [min]="discountMin()"
                   [hint]="discountDiff() !== 0 ? (discountDiff() > 0 ? '+' : '') + (discountDiff() | number: '1.2-2') : ''"
                   [hintClass]="discountDiff() > 0 ? 'text-green-600' : 'text-red-600'"></app-sf-number>
                 <p *ngIf="option.errors?.['discountExceedsTotal']" class="mt-1 text-[11px] text-red-600">Discount is more than the selling total</p>

@@ -103,6 +103,8 @@ export interface LineShare {
       /* RFQ asks suppliers for prices: identifiers, quantity and unit; the supplier's price only once it replies. */
       .ie-strip.ie-strip-rfq { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
       .ie-strip.ie-strip-rfq.ie-strip-rfq-priced { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr); }
+      /* Host-supplied cells (material request: est. cost, required on, remarks, status). */
+      .ie-strip.ie-strip-rfq.ie-strip-rfq-extra { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 2fr); }
     }
     .ie-short { display: grid; gap: 0.375rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
     @media (min-width: 900px) { .ie-short { grid-template-columns: minmax(0, 6fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.6fr) minmax(0, 1.6fr); } }
@@ -113,6 +115,9 @@ export interface LineShare {
     .ie-labels.ie-strip-purchase > span:nth-child(n+3):nth-child(-n+6), .ie-labels.ie-strip-purchase > span:nth-child(n+9) { text-align: right; }
     .ie-labels.ie-strip-rfq > span:nth-child(4), .ie-labels.ie-strip-rfq > span:nth-child(6) { text-align: left; }
     .ie-cell { display: flex; align-items: center; min-height: 2.25rem; border-radius: 0.5rem; padding: 0 0.5rem; font-size: 0.75rem; background: #f9fafb; color: #111827; }
+    .ie-code-cell { position: relative; display: block; line-height: 2.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; outline: none; }
+    /* Clicked / focused: grow to the full code length, floating over the neighbouring fields. */
+    .ie-code-cell:focus { overflow: visible; text-overflow: clip; width: max-content; min-width: 100%; z-index: 30; box-shadow: 0 0 0 2px #8b5cf6, 0 4px 12px rgba(0,0,0,.12); }
     :host-context(html.dark) .ie-cell { background: rgba(31, 41, 55, 0.5); color: #f3f4f6; }
     .ie-total { display: flex; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; align-items: center; justify-content: flex-end; border-radius: 0.5rem; padding: 0 0.5rem; font-size: 0.75rem; font-variant-numeric: tabular-nums; font-weight: 500; background: #f9fafb; color: #111827; }
     :host-context(html.dark) .ie-total { background: rgba(31, 41, 55, 0.5); color: #f3f4f6; }
@@ -147,6 +152,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
   /** Rendered under each line; context `{ $implicit: lineGroup, i, j, k }`. For host-specific status (stock, suppliers asked). */
   @Input() lineExtraTemplate: TemplateRef<any> | null = null;
+  /** RFQ mode: extra cells rendered in the same one-line strip as code / part no / qty / UoM. */
+  @Input() lineStripTemplate: TemplateRef<any> | null = null;
+  /** Column headings for the cells of `lineStripTemplate`, in order. */
+  @Input() lineStripLabels: string[] = [];
   /** Rendered in the bulk bar while lines are selected; context `{ $implicit: selectedLineGroups }`. */
   @Input() bulkExtraTemplate: TemplateRef<any> | null = null;
   /** The sticky totals bar. A host that shows its own summary (deal adjustments, say) turns it off. */
@@ -201,8 +210,14 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   @Input() compareLabel: ((i: number, j: number, k: number) => string) | null = null;
   /** Purchase mode: lines the host has frozen (already committed upstream) render read-only. */
   @Input() lineLocked: ((i: number, j: number, k: number) => boolean) | null = null;
+  /** Lines can't be edited, but the toolbar (search, filters, jump, collapse, density) stays usable. */
+  @Input() readOnly = false;
   /** Lines that stay locked with no way to unlock (already on a purchase order). */
   @Input() lineHardLocked: ((i: number, j: number, k: number) => boolean) | null = null;
+  /** Purchase mode: lines whose product and quantity are fixed (part of the quantity is already on a purchase order); they can't be removed, the rest stays editable. */
+  @Input() lineFixed: ((i: number, j: number, k: number) => boolean) | null = null;
+  /** Purchase mode: the least quantity a line can be set to (what is already on purchase orders). */
+  @Input() lineMinQty: ((i: number, j: number, k: number) => number) | null = null;
   /** Purchase mode: a short badge shown beside a line's description. */
   @Input() lineBadge: ((i: number, j: number, k: number) => string | null) | null = null;
   /** Purchase mode: the suppliers to show as pills under a line (its RFQ suppliers and the current one). */
@@ -424,15 +439,30 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   private dealCost(d: AbstractControl): number | null {
+    // Purchase: the baseline saved on the line wins, so later changes to the deal sheet never move this request's diffs.
+    const saved = this.isPurchase ? Number(d.get('dealUnitCost')?.value) : 0;
+    if (saved > 0) {
+      this.baseCosts.set(d, saved);
+      if (!this.baseSuppliers.has(d)) this.baseSuppliers.set(d, this.dealOf(d)?.supplierId || String(d.get('supplierId')?.value || ''));
+      return saved;
+    }
+    // Purchase with no baseline saved yet: freeze the first one seen on the line, so awarding or editing a supplier cost can never become the baseline.
+    const freeze = (v: number | null) => {
+      if (this.isPurchase && v != null && v > 0) d.get('dealUnitCost')?.setValue(v, { emitEvent: false, onlySelf: true });
+    };
+    if (this.isPurchase && this.baseCosts.get(d)) return this.baseCosts.get(d) ?? null;
     const deal = this.dealOf(d);
     if (deal?.cost != null) {
       this.baseCosts.set(d, deal.cost);
       this.baseSuppliers.set(d, deal.supplierId || this.baseSuppliers.get(d) || String(d.get('supplierId')?.value || ''));
+      freeze(deal.cost);
       return deal.cost;
     }
     if (!this.baseCosts.has(d)) {
-      this.baseCosts.set(d, Number(d.get('dealUnitCost')?.value) || Number(d.get('unitCost')?.value) || null);
+      const first = Number(d.get('unitCost')?.value) || null;
+      this.baseCosts.set(d, first);
       this.baseSuppliers.set(d, String(d.get('supplierId')?.value || ''));
+      freeze(first);
     }
     return this.baseCosts.get(d) ?? null;
   }
@@ -455,8 +485,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   /** Purchase: the line's unit cost minus the deal's (negative = saving), or null while unchanged. */
   unitCostDiff(i: number, j: number, k: number): number | null {
     const d = this.detailsAt(i, j)?.at(k);
-    const base = d ? this.baseCosts.get(d) : null;
+    const base = d ? this.dealCost(d) : null;
     if (!d || base == null) return null;
+    // A supplier tab with no price typed yet has nothing to compare (would otherwise read as a full saving).
+    if (this.usesScopeCost(i, j, k) && !(Number(this.scopeCostControl(i, j, k).value) > 0)) return null;
     const diff = this.shownUnitCost(i, j, k) - base;
     return Math.abs(diff) < 0.005 ? null : diff;
   }
@@ -757,7 +789,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
    */
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['supplierOptions'] && this.supplierOptions) this.resolvedSupplierOptions = this.supplierOptions;
-    if (changes['lineLocked'] && !changes['lineLocked'].isFirstChange()) this.applyLineLocks();
+    if ((changes['lineLocked'] && !changes['lineLocked'].isFirstChange()) || (changes['lineFixed'] && !changes['lineFixed'].isFirstChange())) this.applyLineLocks();
 
     const seed = changes['seedOptionalItems'];
     if (seed && !seed.isFirstChange() && this.seedOptionalItems?.length) this.patchOptions(this.seedOptionalItems);
@@ -896,7 +928,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   /** The deal's margin on its Total cost (after supplier discount and additional costs). */
   dealNetMargin(): { value: number; percent: number } {
     // Sum of all items' total price less the quote's discount, against the Total cost.
-    const price = this.dealFigures().selling - (this.supplierScope ? 0 : this.dealTotalDiscount());
+    // Price and cost must cover the same lines: the job's net price against the job's Total cost (or this tab's lines against this tab's cost).
+    const price = this.supplierScope ? this.dealFigures().selling : this.dealTotalPrice();
     const value = price - this.dealTotalCost();
     return { value, percent: price > 0 ? (value / price) * 100 : 0 };
   }
@@ -943,12 +976,20 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     else if (!editable && ctrl.enabled) ctrl.disable({ emitEvent: false });
   }
 
+  /** Discount of the active supplier tab already on live POs: it cannot be typed below this. */
+  @Input() discountFloor: ((supplierId: string) => number) | null = null;
+  discountMin(): number {
+    return (this.isPurchase && this.supplierScope && this.discountFloor?.(this.supplierScope)) || 0;
+  }
+
   /** A typed discount on a supplier tab is kept for that supplier. */
   private captureDiscountEdit(): void {
     if (!this.isPurchase || !this.supplierScope) return;
     const ctrl = this.optionalItems?.at(this.selectedOption)?.get('totalDiscount');
     // Only a typed value is an edit: a reseed rebuilds the group with an empty discount, which is not the user zeroing it.
     if (!ctrl || ctrl.disabled || !ctrl.dirty) return;
+    const floor = this.discountMin();
+    if (floor > 0 && (Number(ctrl.value) || 0) < floor) ctrl.setValue(floor, { emitEvent: false });
     const value = Number(ctrl.value) || 0;
     if (value === this.discountFor(this.supplierScope)) return;
     this.discountEdits.set(this.supplierScope, value);
@@ -1266,6 +1307,23 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     return Math.abs(diff) < 0.005 ? null : diff;
   }
 
+  /** What stays fixed on a line that has part of its quantity on a purchase order. */
+  private static readonly FIXED = ['itemCode', 'partNo', 'detail', 'uom'];
+
+  /** Quantity floor for a line with part of its quantity already on purchase orders. */
+  minQty(i: number, j: number, k: number): number {
+    return (this.isPurchase && this.lineMinQty?.(i, j, k)) || 0;
+  }
+
+  /** A line fully on purchase orders: read-only and shown muted. */
+  isLineMuted(i: number, j: number, k: number): boolean {
+    return this.isPurchase && !!this.lineHardLocked?.(i, j, k);
+  }
+
+  isLineFixed(i: number, j: number, k: number): boolean {
+    return this.isPurchase && !!this.lineFixed?.(i, j, k);
+  }
+
   private static readonly LOCKABLE = ['itemCode', 'partNo', 'detail', 'quantity', 'unitCost', 'profit', 'unitSellingPrice', 'availability', 'supplierId', 'uom'];
 
   /**
@@ -1280,12 +1338,14 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
         let allLocked = details.length > 0;
         details.forEach((line, k) => {
           const locked = this.isLineLocked(i, j, k);
+          const fixed = this.isLineFixed(i, j, k);
           if (!locked) allLocked = false;
           ItemEntryComponent.LOCKABLE.forEach((name) => {
             const c = line.get(name);
             if (!c) return;
-            if (locked && c.enabled) c.disable({ emitEvent: false });
-            else if (!locked && c.disabled) c.enable({ emitEvent: false });
+            const off = locked || (fixed && ItemEntryComponent.FIXED.includes(name));
+            if (off && c.enabled) c.disable({ emitEvent: false });
+            else if (!off && c.disabled) c.enable({ emitEvent: false });
           });
         });
         const name = item.get('itemName');
@@ -1554,7 +1614,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   private isItemHardLocked(i: number, j: number): boolean {
-    return (this.detailsAt(i, j)?.controls || []).some((_, k) => !!this.lineHardLocked?.(i, j, k));
+    return (this.detailsAt(i, j)?.controls || []).some((_, k) => !!this.lineHardLocked?.(i, j, k) || this.isLineFixed(i, j, k));
   }
 
   removeItem(i: number, j: number): void {
@@ -1575,7 +1635,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   removeDetail(i: number, j: number, k: number): void {
     const details = this.detailsAt(i, j);
-    if (!details || details.length <= 1 || this.lineHardLocked?.(i, j, k)) return;
+    if (!details || details.length <= 1 || this.lineHardLocked?.(i, j, k) || this.isLineFixed(i, j, k)) return;
     this.removedItemDetails.push({ item: details.at(k).value, i, j, k });
     details.removeAt(k);
     this.offerUndo('line');
@@ -1584,7 +1644,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   /** Wipes every field of the line but keeps its row. */
   clearDetail(i: number, j: number, k: number): void {
     const details = this.detailsAt(i, j);
-    if (!details || !details.at(k) || this.lineHardLocked?.(i, j, k)) return;
+    if (!details || !details.at(k) || this.lineHardLocked?.(i, j, k) || this.isLineFixed(i, j, k)) return;
     details.setControl(k, this.createDetail());
     this.seedMargin(i, j, k);
     details.markAsDirty();
@@ -2372,7 +2432,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     let sum = 0;
     (option?.items || []).forEach((item: any, j: number) => {
       if (!this.countsTowardsTotal(item)) return;
-      (item.itemDetails || []).forEach((d: any, k: number) => {
+      (item.itemDetails || []).forEach((vd: any, k: number) => {
+        const ctrl = this.detailsAt(this.selectedOption, j)?.at(k);
+        const d: any = ctrl ? (ctrl as any).getRawValue?.() ?? vd : vd;
         if (this.isDeal && !d.dealSelected) return;
         if (this.isPurchase && this.supplierScope && !this.inSupplierScope(d)) return;
         sum += line(j, k);
@@ -2458,9 +2520,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     const option = this.optionalItems.value[this.selectedOption];
     (option?.items || []).forEach((item: any, j: number) => {
       if (!this.countsTowardsTotal(item)) return;
-      (item.itemDetails || []).forEach((d: any, k: number) => {
-        if (this.supplierScope && !this.inSupplierScope(d)) return;
+      (item.itemDetails || []).forEach((vd: any, k: number) => {
         const ctrl = this.detailsAt(this.selectedOption, j)?.at(k);
+        // `.value` leaves out disabled (locked) fields, which would zero those lines' price: read the raw values.
+        const d: any = ctrl ? (ctrl as any).getRawValue?.() ?? vd : vd;
+        if (this.supplierScope && !this.inSupplierScope(d)) return;
         // In a supplier tab the deal is taken at the quantity entered here, so a part-supplied line is compared like for like.
         const qty = this.supplierScope ? this.bannerQty(this.selectedOption, j, k) : (ctrl && this.dealQty(ctrl)) ?? (Number(d.quantity) || 0);
         const lineSelling = qty * (Number(d.unitSellingPrice) || 0);
@@ -2495,6 +2559,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       : this.finalTotal();
   }
 
+  /** Margin = net price minus the Total PR cost shown beside it (the awarded lines' cost, or this supplier tab's lines' cost). */
   prMarginValue(): number {
     return this.prPrice() - this.prTotalCost();
   }
@@ -2711,7 +2776,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   codeMissing(detail: AbstractControl): boolean {
-    return this.highlightCodes && (!detail.get('productId')?.value || !String(detail.get('itemCode')?.value || '').trim());
+    return this.highlightCodes && !String(detail.get('itemCode')?.value || '').trim();
   }
 
   clearFilters(): void {
@@ -2727,7 +2792,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     if (!filled) return { missingPrice: false, notInCatalogue: false, notAwarded: false, errors: false };
     return {
       missingPrice: this.isRfq ? this.rfqPriced && v.unitCost == null : !(Number(v.unitSellingPrice) > 0),
-      notInCatalogue: (!v.productId || !String(v.itemCode || '').trim()) && !!detail,
+      notInCatalogue: !String(v.itemCode || '').trim() && !!detail,
       notAwarded: !!this.lineAwarded && !this.lineAwarded(v),
       errors: line.invalid || this.missingSupplier(v),
     };

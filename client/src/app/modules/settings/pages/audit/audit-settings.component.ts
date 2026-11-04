@@ -69,6 +69,7 @@ export class AuditSettingsComponent implements OnInit {
       case 'customer': return { commands: ['/customers'], queryParams: search };
       case 'supplier': return { commands: ['/suppliers'], queryParams: search };
       case 'product': return { commands: ['/products'], queryParams: search };
+      case 'stock': return { commands: ['/stock/ledger'], queryParams: { product: id } };
       default: return null;
     }
   }
@@ -131,7 +132,7 @@ export class AuditSettingsComponent implements OnInit {
     // Fixed tab order; any other recorded module is appended after these.
     const ordered = [
       'enquiry', 'presale', 'quotation', 'dealSheet', 'job', 'product', 'supplier',
-      'purchaseRequest', 'purchaseOrder', 'grn', 'deliveryNote', 'proformaInvoice', 'customerInvoice',
+      'purchaseRequest', 'purchaseOrder', 'grn', 'deliveryNote', 'proformaInvoice', 'customerInvoice', 'stock',
     ];
     const extra = this.entityTypes.filter((t) => !ordered.includes(t));
     this.views = [

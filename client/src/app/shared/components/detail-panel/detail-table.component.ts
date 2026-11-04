@@ -108,7 +108,7 @@ interface DetailTableLine {
               </td>
             </tr>
 
-            <tr *ngIf="line.kind === 'data'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos" [class.bg-gray-50]="striped && line.stripe" [class.opacity-60]="line.excluded" [class.dt-sub]="line.sub" [class.cursor-pointer]="!!line.row['_link']" (click)="openRow(line.row, $event)"
+            <tr *ngIf="line.kind === 'data'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos" [class.bg-gray-50]="striped && line.stripe" [class.opacity-60]="line.excluded" [class.bg-red-50]="!!line.row['_reject']" [class.text-red-700]="!!line.row['_reject']" [class.dt-sub]="line.sub" [class.cursor-pointer]="!!line.row['_link']" (click)="openRow(line.row, $event)"
               [ngClass]="[(striped && line.stripe ? 'dark:bg-white/[0.02]' : ''), (groupDividers && line.groupEnd ? 'border-b-2 border-gray-300 dark:border-gray-700' : '')]"
               class="border-b border-gray-100 transition-colors last:border-0 hover:bg-violet-50/60 dark:border-white/5 dark:hover:bg-white/[0.06]">
               <td *ngIf="numbered" class="px-3 py-2.5 text-right align-top text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{{ line.sub ? line.label : line.index }}</td>

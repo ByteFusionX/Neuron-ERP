@@ -18,6 +18,8 @@ export interface DetailOverviewField {
   /** Renders the value as a status pill, using `tone`. Only used for type 'field'. */
   pill?: boolean;
   stacked?: boolean;
+  /** Spans both columns of a two-column section. Only used for type 'field'. */
+  fullRow?: boolean;
   noHover?: boolean;
   /** Highlights the value semantically. Used by 'field', 'badge' and 'progress'. */
   tone?: DetailTone;

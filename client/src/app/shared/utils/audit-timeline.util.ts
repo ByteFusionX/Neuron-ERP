@@ -21,7 +21,7 @@ const AUDIT_MODULE_LABELS: Record<string, string> = {
   supplier: 'Supplier', product: 'Product', masterList: 'Master List', announcement: 'Announcement',
   purchaseRequest: 'Purchase Request', generalPurchaseRequest: 'General Purchase Request',
   purchaseOrder: 'Purchase Order (LPO)', grn: 'GRN', deliveryNote: 'Delivery Note', proformaInvoice: 'Proforma Invoice',
-  customerInvoice: 'Customer Invoice',
+  customerInvoice: 'Customer Invoice', stock: 'Stock Balance',
 };
 
 export function auditModuleLabel(type: string): string {

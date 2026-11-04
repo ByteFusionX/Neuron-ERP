@@ -234,7 +234,7 @@ export class NotificationService {
                     routeData: { purchaseId: rejectedPurchaseId }
                 };
             case 'LpoPlaced':
-                return { routePath: '/grn/grn-list', routeData: { view: 'upcoming' } };
+                return { routePath: '/grn/grn-list', routeData: { view: 'arriving' } };
             case 'LpoDeliveryDue':
                 return { routePath: '/grn/grn-list', routeData: { view: 'arriving' } };
             case 'LpoPlacedBilling':
