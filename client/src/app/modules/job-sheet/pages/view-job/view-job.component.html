@@ -48,8 +48,11 @@
         </app-detail-section>
 
         <ng-container headerActions *ngIf="job">
+            <app-action-button variant="outline" (click)="onBack()">
+                <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3L5 8l5 5M5 8h9" /></svg>
+                Back
+            </app-action-button>
             <app-action-button variant="outline" *ngIf="canChangeStatus" (click)="onUpdateStatus()" icon="edit">Update status</app-action-button>
-            <app-action-button variant="outline" *ngIf="canMarkLost" (click)="onMarkLost()" icon="trash">Mark as lost</app-action-button>
             <app-action-button variant="primary" *ngIf="canAllocate" (click)="onAllocate()" icon="refresh">Allocate</app-action-button>
         </ng-container>
 

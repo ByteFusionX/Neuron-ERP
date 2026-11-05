@@ -18,8 +18,6 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { ModalService } from 'src/app/shared/components/modal';
 import { AllocateTypeModalComponent, AllocateTypeResult } from '../allocate-type-modal/allocate-type-modal.component';
-import { MarkLostModalComponent } from '../mark-lost-modal/mark-lost-modal.component';
-import { HoldJobModalComponent, HoldJobResult } from '../hold-job-modal/hold-job-modal.component';
 import { TransferProcurementPersonComponent, TransferProcurementPersonResult } from '../transfer-procurement-person/transfer-procurement-person.component';
 
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
@@ -60,11 +58,19 @@ const JOB_STATUS_TONES: Record<string, StatusTone> = {
   [JobStatus.onHold]: 'warning',
   [JobStatus.cancelled]: 'danger',
 };
-/** Statuses a user can set by hand; the server maps each to the list tab it moves the job into. */
-const JOB_STATUSES: readonly JobStatus[] = [
-  JobStatus.WorkInProgress, JobStatus.Delivered, JobStatus.partiallyDelivered, JobStatus.partiallyInvoiced, JobStatus.invoiced, JobStatus.completed, JobStatus.onHold,
-];
 /** Stored value stays 'Work In Progress'; only the wording on screen changes. */
+/** Not a stored job status: picking it in the status modal runs the mark-lost flow. */
+const LOST_STATUS = 'Lost';
+/** Why a job is held. Only advance payment sends it to Finance > Invoices > New Jobs. */
+const holdChoices = (allowAdvance: boolean) => ({
+  label: 'Hold reason',
+  options: [
+    ...(allowAdvance ? [{ label: 'Advance payment', value: 'advance-payment', description: 'Sends the job to Finance > Invoices > New Jobs for a proforma; returns to Pending once paid.', reasonOptional: true }] : []),
+    { label: 'Other', value: 'other', description: 'Held with a note. Does not appear in Finance invoices.' },
+  ],
+});
+/** Statuses set by hand, named by allocate status (values match the matching JobStatus where one exists). */
+const MANUAL_STATUSES: readonly string[] = [allocateStatus.OnHold, allocateStatus.Completed, LOST_STATUS];
 const jobStatusLabel = (v: unknown): string => (v === JobStatus.WorkInProgress ? 'In Progress' : v ? String(v) : '—');
 const allocateStatusLabel =(v: unknown): string => ALLOCATE_STATUS_LABELS[String(v)] ?? (v ? String(v) : '—');
 
@@ -284,7 +290,7 @@ export class JobListComponent {
       },
       { key: 'customerName', label: 'Customer', sortable: true, valueGetter: (r) => r.clientDetails?.companyName },
       { key: 'description', label: 'Subject', sortable: true, valueGetter: (r) => r.quotation?.subject },
-      { key: 'procurementPerson', label: 'Allocated To', sortable: true, visible: false, locked: true, valueGetter: (r) => this.fullName(r.procurementPerson) },
+      { key: 'procurementPerson', label: 'Allocated To', sortable: true, visible: false, valueGetter: (r) => this.fullName(r.procurementPerson) },
       { key: 'lpoValue', label: 'LPO Value (QAR)', type: 'currency', currencyCode: 'QAR', sortable: true, valueGetter: (r) => r.lpoValue ?? 0 },
       { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (r) => this.fullName(r.salesPersonDetails?.[0]) },
       { key: 'department', label: 'Department', sortable: true, valueGetter: (r) => r.departmentDetails?.[0]?.departmentName ?? '' },
@@ -301,20 +307,12 @@ export class JobListComponent {
         hidden: (r) => !this.canChangeStatus(r),
       },
       {
-        id: 'hold', label: 'Put on hold', icon: 'flag', quick: true,
-        hidden: (r) => !this.canHold(r),
-      },
-      {
         id: 'allocate', label: 'Allocate', icon: 'refresh', quick: true,
         hidden: (r) => !this.canAllocate(r),
       },
       {
         id: 'reallocate', label: 'Reallocate', icon: 'refresh', quick: true,
         hidden: (r) => !this.canTransfer(r),
-      },
-      {
-        id: 'lost', label: 'Mark as lost', icon: 'trash', variant: 'danger',
-        hidden: (r) => !this.canMarkLost(r),
       },
     ];
   }
@@ -498,17 +496,11 @@ export class JobListComponent {
       case 'status':
         this.onUpdateStatus(row);
         break;
-      case 'hold':
-        this.onHold(row);
-        break;
       case 'allocate':
         this.openAllocateTypeSelecter(row);
         break;
       case 'reallocate':
         this.onTransferProcurementPerson(row);
-        break;
-      case 'lost':
-        this.onMarkLost(row);
         break;
     }
   }
@@ -524,49 +516,53 @@ export class JobListComponent {
       row.allocateStatus !== allocateStatus.Completed && row.allocateStatus !== allocateStatus.Lost;
   }
 
-  onHold(row: getJob): void {
-    if (!this.canHold(row)) {
-      this.toast.warning('You cannot put this job on hold');
-      return;
-    }
-    this.modal.open<HoldJobResult>(HoldJobModalComponent, { width: '520px', data: row }).afterClosed().subscribe((result) => {
-      if (!result) return;
-      this._jobService.updateJobStatus(row._id, JobStatus.onHold, result.reason, { holdType: result.holdType, note: result.note }).subscribe({
-        next: () => {
-          this.toast.success(result.holdType === 'advance-payment' ? 'Job on hold and sent to Finance for an advance payment' : 'Job put on hold');
-          this.getJobs(true);
-        },
-        error: (err) => this.toast.error(err?.error?.message || 'Failed to put the job on hold'),
-      });
-    });
-  }
-
   onUpdateStatus(row: getJob): void {
     if (!this.canChangeStatus(row)) {
       this.toast.warning('You cannot update the status of this job');
       return;
     }
     // The shared status modal injects MatDialogRef, so it must be opened through MatDialog (as the quotation list does).
-    this.matDialog.open<StatusChangeModalComponent, any, StatusChangeResult<JobStatus> | null>(StatusChangeModalComponent, {
+    this.matDialog.open<StatusChangeModalComponent, any, StatusChangeResult | null>(StatusChangeModalComponent, {
       width: '480px',
       data: {
-        currentStatus: row.status,
-        statuses: JOB_STATUSES,
-        formatStatus: jobStatusLabel,
-        requireReasonFor: [JobStatus.onHold],
-        reasonLabels: { [JobStatus.onHold]: { label: 'Reason for holding', placeholder: 'Why is this job being put on hold?' } },
+        // Allocate status: Pending / In Progress follow allocation, so only these three are set by hand.
+        currentStatus: row.allocateStatus,
+        // Lost is saved through the mark-lost flow.
+        statuses: this.canMarkLost(row) ? MANUAL_STATUSES : MANUAL_STATUSES.filter((s) => s !== LOST_STATUS),
+        formatStatus: allocateStatusLabel,
+        requireReasonFor: [JobStatus.onHold, LOST_STATUS],
+        reasonLabels: {
+          [JobStatus.onHold]: { label: 'Reason for holding', placeholder: 'Why is this job being put on hold?' },
+          [LOST_STATUS]: { label: 'Reason', placeholder: 'Why was this job lost?' },
+        },
         warnings: {
           [JobStatus.completed]: 'The job moves to the Completed tab.',
           [JobStatus.onHold]: 'The job moves to the On Hold tab. Saving purchase requests will not resume it.',
+          [LOST_STATUS]: 'The quotation and enquiry behind this job are marked lost too, and its open purchase requests, purchase orders, delivery notes and invoices are cancelled.',
         },
+        choices: { [JobStatus.onHold]: holdChoices(this.canHold(row)) },
         title: `Update status — ${row.jobId}`,
         subtitle: 'Choose where this job stands now.',
       },
     }).afterClosed().subscribe((result) => {
       if (!result) return;
-      this._jobService.updateJobStatus(row._id, result.status, result.reason).subscribe({
+      if (result.status === LOST_STATUS) {
+        this._jobService.markJobLost({ id: row._id, reason: result.reason }).subscribe({
+          next: (res) => {
+            this.toast.success(res?.message || 'Job marked lost');
+            this.getJobs(true);
+          },
+          error: (err) => this.toast.error(err?.error?.message || 'Failed to mark job as lost'),
+        });
+        return;
+      }
+      const advance = result.status === JobStatus.onHold && result.choice === 'advance-payment';
+      const request$ = advance
+        ? this._jobService.updateJobStatus(row._id, JobStatus.onHold, 'Proceed for advance payment', { holdType: 'advance-payment', note: result.reason })
+        : this._jobService.updateJobStatus(row._id, result.status as JobStatus, result.reason);
+      request$.subscribe({
         next: () => {
-          this.toast.success('Job status updated');
+          this.toast.success(advance ? 'Job on hold and sent to Finance for an advance payment' : 'Job status updated');
           this.getJobs(true);
         },
         error: (err) => this.toast.error(err?.error?.message || 'Failed to update job status'),
@@ -582,23 +578,6 @@ export class JobListComponent {
   /** Losing a job is the other way out of Pending, so it shares the allocate permission. */
   canMarkLost(row: getJob): boolean {
     return this.canAllocateJobs && row.allocateStatus !== allocateStatus.Completed && row.allocateStatus !== allocateStatus.Lost;
-  }
-
-  onMarkLost(row: getJob): void {
-    if (!this.canMarkLost(row)) {
-      this.toast.warning('You do not have permission to mark this job as lost');
-      return;
-    }
-    this.modal.open<string>(MarkLostModalComponent, { width: '520px', data: row }).afterClosed().subscribe((reason) => {
-      if (!reason) return;
-      this._jobService.markJobLost({ id: row._id, reason }).subscribe({
-        next: (res) => {
-          this.toast.success(res?.message || 'Job marked lost');
-          this.getJobs(true);
-        },
-        error: (err) => this.toast.error(err?.error?.message || 'Failed to mark job as lost'),
-      });
-    });
   }
 
   openAllocateTypeSelecter(row: getJob): void {
