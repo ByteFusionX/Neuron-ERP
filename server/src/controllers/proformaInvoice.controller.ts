@@ -27,7 +27,7 @@ const normalizeBody = (body: any) => {
         .map((item: any) => {
             const quantity = Number(item.quantity) || 0;
             const unitPrice = Number(item.unitPrice) || 0;
-            return { description: String(item.description || '').trim(), quantity, unitPrice, amount: money(quantity * unitPrice) };
+            return { itemCode: String(item.itemCode || '').trim(), partNo: String(item.partNo || '').trim(), description: String(item.description || '').trim(), quantity, unitPrice, amount: money(quantity * unitPrice) };
         })
         .filter((item: any) => item.description && item.quantity > 0);
     return {

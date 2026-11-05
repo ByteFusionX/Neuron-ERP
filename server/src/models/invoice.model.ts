@@ -28,6 +28,8 @@ const invoiceSchema = new Schema({
             quantity: { type: Number }
         }],
         itemId: { type: String },
+        itemCode: { type: String },
+        partNo: { type: String },
         description: String,
         amount: Number,
         quantity: Number

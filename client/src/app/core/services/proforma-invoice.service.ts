@@ -27,6 +27,8 @@ export interface ProformaStatusPayload {
 }
 
 export interface ProformaItem {
+  itemCode?: string;
+  partNo?: string;
   description: string;
   quantity: number;
   unitPrice: number;

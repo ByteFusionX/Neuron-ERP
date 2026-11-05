@@ -309,7 +309,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
       const group = this.fb.group({
         slNo: [index + 1],
             itemCode: [item.itemCode || ''],
-            partNo: [item.partNo?.partNo || item.partNo || ''],
+            partNo: [typeof item.partNo === 'string' ? item.partNo : (item.partNo?.partNo || item.itemPartNo || '')],
             description: [item.detail || ''],
             totalQuantity: [item.totalQuantity || 0],
             orderedQty: [item.orderedQty || 0],
@@ -480,7 +480,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
       const group = this.fb.group({
         slNo: [index + 1],
             itemCode: [item.itemCode || ''],
-            partNo: [item.partNo?.partNo || item.partNo || ''],
+            partNo: [typeof item.partNo === 'string' ? item.partNo : (item.partNo?.partNo || item.itemPartNo || '')],
             description: [item.detail || ''],
             totalQuantity: [item.totalQuantity || 0],
             orderedQty: [item.orderedQty || 0],

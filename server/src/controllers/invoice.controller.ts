@@ -487,6 +487,8 @@ export const rejectInvoiceByCustomer = async (req: Request, res: Response) => {
         // Reconcile the invoiced amount via a CreditNote rather than mutating invoice.amount/items.
         const creditNoteItems = ((invoice.items as any[]) || []).map((item: any) => ({
             itemId: item.itemId,
+            itemCode: item.itemCode,
+            partNo: item.partNo,
             description: item.description,
             rejectedQty: item.quantity || 0,
             unitPrice: item.quantity ? (item.amount || 0) / item.quantity : (item.amount || 0),

@@ -304,7 +304,7 @@ export class ViewGrnComponent implements OnInit {
       { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
       { key: 'amount', label: 'Total', type: 'currency', total: true },
       { key: 'reason', label: 'Rejection reason', wrap: true, hiddenByDefault: true },
-      { key: 'serials', label: 'Serial nos', wrap: true, hiddenByDefault: true },
+      { key: 'serials', label: 'Serial nos', truncate: true, hiddenByDefault: true },
       { key: 'remarks', label: 'Remarks', wrap: true, hiddenByDefault: true },
     ];
     this.itemRows = items.map((i) => ({

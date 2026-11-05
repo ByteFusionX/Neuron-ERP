@@ -7,6 +7,7 @@ import Quotation from "../models/quotation.model";
 import Rfq, { RfqType } from "../models/rfq.model";
 import jobModel from "../models/job.model";
 import mongoose from "mongoose";
+import Product from "../models/products.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { getNextSequence } from "../models/counter.model";
@@ -21,6 +22,21 @@ import { notify, notifyByPrivilege } from "../services/notify.service";
 import { recipientsExcluding, safely, viewersOf } from "../services/workflowNotify.service";
 import { SupplierPriceSource } from "../models/supplierPrice.model";
 import { logAudit } from "../services/audit.service";
+
+/** Copies each line's product item code and part no onto the line, so the PO (and the GRN built from it) carries them. */
+const stampItemCodes = async (items: any[]) => {
+  const ids = Array.from(new Set((items || []).map((i: any) => String(i?.partNo?._id ?? i?.partNo ?? '')).filter((id) => mongoose.Types.ObjectId.isValid(id))));
+  if (!ids.length) return items;
+  const products: any[] = await Product.find({ _id: { $in: ids } }, { itemCode: 1, partNo: 1 }).lean();
+  const byId = new Map(products.map((p) => [String(p._id), p]));
+  (items || []).forEach((item: any) => {
+    const product = byId.get(String(item?.partNo?._id ?? item?.partNo ?? ''));
+    if (!product) return;
+    item.itemCode = product.itemCode || item.itemCode || '';
+    item.productPartNo = product.partNo || item.productPartNo || '';
+  });
+  return items;
+};
 
 /** Stable key of a line: its catalogue product (PR productId, or the id a PO item keeps in partNo), else the description. */
 const lineItemKey = (entry: any): string => {
@@ -374,6 +390,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
 
     // The number shown on the form is only a preview; it is taken now, so abandoned forms never use one up.
     purchaseOrderData.poNo = await issueDocNo('PO');
+    await stampItemCodes(items);
     const purchaseOrder = new PurchaseOrder(purchaseOrderData);
     await purchaseOrder.save();
 
@@ -1967,6 +1984,7 @@ export const resendPurchaseOrder = async (req: Request, res: Response) => {
       }
       edits.items = body.items.map((i: any) => ({ ...i, quantity: Number(i.quantity), unitCost: Number(i.unitCost), totalCost: Number(i.quantity) * Number(i.unitCost) }));
       auditBefore = (purchaseOrder.toObject() as any);
+      await stampItemCodes(edits.items);
       purchaseOrder.set('items', edits.items);
     }
     for (const key of ['placeOfDelivery', 'shippingTerms', 'subject', 'termsAndCondition'] as const) {

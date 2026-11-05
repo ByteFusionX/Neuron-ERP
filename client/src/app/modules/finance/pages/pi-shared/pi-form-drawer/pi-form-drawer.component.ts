@@ -61,7 +61,7 @@ export function piDefaultsFromJob(job: getJob) {
     items: ((quotation?.dealData?.updatedItems ?? []) as any[]).flatMap((item) =>
       (item.itemDetails ?? [])
         .filter((d: any) => d.dealSelected)
-        .map((d: any) => ({ description: d.detail || '', quantity: Number(d.quantity) || 0, unitPrice: Number(d.unitSellingPrice) || 0 })),
+        .map((d: any) => ({ itemCode: d.itemCode || '', partNo: d.partNo || '', description: d.detail || '', quantity: Number(d.quantity) || 0, unitPrice: Number(d.unitSellingPrice) || 0 })),
     ),
   };
 }
@@ -167,8 +167,10 @@ export class PiFormDrawerComponent implements OnInit, OnChanges {
     this.closed.emit();
   }
 
-  addItem(item: { description?: string; quantity?: number; unitPrice?: number } = {}): void {
+  addItem(item: { itemCode?: string; partNo?: string; description?: string; quantity?: number; unitPrice?: number } = {}): void {
     const group = this.fb.group({
+      itemCode: [item.itemCode ?? ''],
+      partNo: [item.partNo ?? ''],
       description: [item.description ?? '', [Validators.required]],
       quantity: [item.quantity ?? 1, [Validators.required, Validators.min(0.0001)]],
       unitPrice: [item.unitPrice ?? 0, [Validators.required, Validators.min(0)]],
@@ -295,7 +297,7 @@ export class PiFormDrawerComponent implements OnInit, OnChanges {
       summary: Object.fromEntries(SUMMARY_KEYS.map((k) => [k, Number(v[k]) || 0])) as unknown as ProformaSummary,
       expectedAmount: Number(v.expectedAmount) || 0,
       expectedDate: v.expectedDate,
-      items: v.items.map((i: any) => ({ description: i.description, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) })),
+      items: v.items.map((i: any) => ({ itemCode: i.itemCode, partNo: i.partNo, description: i.description, quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) })),
     };
     this.saving.set(true);
     const request = this.pi ? this.piService.update(this.pi._id, payload) : this.piService.create(payload);

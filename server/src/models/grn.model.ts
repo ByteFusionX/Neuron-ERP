@@ -33,6 +33,7 @@ interface GRN extends Document {
     originalname: string;
   }[];
   items: {
+    itemCode?: string;
     partNo?: string;
     itemDescription: string;
     uom?: string;
@@ -57,6 +58,11 @@ interface GRN extends Document {
 }
 
 const itemSchema = new Schema({
+  // The product's item code: stock movement and balance are posted against the product it identifies.
+  itemCode: {
+    type: String,
+    trim: true
+  },
   partNo: {
     type: String,
     trim: true

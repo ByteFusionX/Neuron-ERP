@@ -67,7 +67,7 @@
             <span class="w-4 shrink-0"></span>
             <div class="le-strip le-labels min-w-0 flex-1">
               <span>Item</span><span class="text-right">Total qty</span><span class="text-right">Issued</span><span class="text-right">Pending</span><span class="text-right">Remaining</span>
-              <span>Issue qty</span><span>UoM</span><span class="text-right">Unit price</span><span class="text-right">Total</span>
+              <span>Issue qty</span><span class="text-right">Unit price</span><span class="text-right">Total</span>
             </div>
           </div>
 
@@ -92,11 +92,6 @@
                       [ngModel]="line.qty" (ngModelChange)="setQty(line, $event)" [attr.aria-label]="'Issue qty for ' + line.item.detail"></app-sf-number>
                     <ng-template #noQty><div class="le-cell le-num" [class.text-gray-400]="!allIssued">{{ allIssued ? totalQty(line) : '-' }}</div></ng-template>
                     <p *ngIf="qtyError(line)" class="mt-1 text-[11px] text-red-600">{{ qtyError(line) }}</p>
-                  </div>
-                  <div>
-                    <app-sf-combobox *ngIf="line.picked; else noUom" [options]="uomOptions" [ngModel]="uom(line)" (ngModelChange)="setUom(line, $event)" placeholder="UoM"
-                      [attr.aria-label]="'UoM for ' + line.item.detail"></app-sf-combobox>
-                    <ng-template #noUom><div class="le-cell">{{ uom(line) || '-' }}</div></ng-template>
                   </div>
                   <div>
                     <app-sf-number *ngIf="line.picked; else noPrice" [min]="0" [stepper]="false" [ngModel]="unitPrice(line)" (ngModelChange)="setPrice(line, $event)"

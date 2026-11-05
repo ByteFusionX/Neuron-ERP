@@ -695,6 +695,8 @@ export const getDnInvoice = async (req: Request, res: Response) => {
                         dnId: dn._id,
                         dnRefs: [{ dnId: dn._id, quantity }],
                         itemId: item.itemId,
+                        itemCode: item.itemCode,
+                        partNo: item.partNo,
                         description: item.description || item.partNo || '',
                         quantity,
                         amount: quantity * unitPrice
@@ -1691,6 +1693,7 @@ export const getPendingDeliveryDetails = async (req: Request, res: Response) => 
             itemsResult.push({
                 slNo: index + 1,
                 itemId: item._id,
+                itemCode: item.itemCode || '',
                 partNo: item.partNo || item.itemName || '',
                 description: item.detail || item.itemDescription || '',
                 orderedQty,
@@ -1793,6 +1796,8 @@ export const getDnItemsForJob = async (req: Request, res: Response) => {
                     purchaseRequestId: { $toString: '$_id' },
                     itemName: '$items.itemName',
                     detail: '$items.itemDetails.detail',
+                    itemCode: '$items.itemDetails.itemCode',
+                    itemPartNo: '$items.itemDetails.partNo',
                     totalQuantity: '$items.itemDetails.quantity',
                     orderedQty: '$closedQty',
                     partNo: {

@@ -156,7 +156,9 @@ export class VendorBillsComponent implements OnInit {
     return this.isInvoiceView ? 'No customer invoices yet' : 'No approved purchase orders are waiting for finance';
   }
   readonly itemColumns: DetailTableColumn[] = [
+    { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
     { key: 'description', label: 'Description', truncate: true },
+    { key: 'partNo', label: 'Part No', hiddenByDefault: true },
     { key: 'ordered', label: 'Ordered', type: 'number' },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
     { key: 'total', label: 'Total', type: 'currency', total: true },
@@ -330,6 +332,8 @@ export class VendorBillsComponent implements OnInit {
 
   itemRows(row: any): Record<string, any>[] {
     return (row.items || []).map((item: any) => ({
+      itemCode: item.itemCode || '',
+      partNo: item.partNo || item.productPartNo || '',
       description: item.description || item.detail || '-',
       ordered: Number(item.quantity || 0),
       unitCost: Number(item.unitCost || 0),

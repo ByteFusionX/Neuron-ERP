@@ -24,6 +24,8 @@ const proformaInvoiceSchema = new Schema({
     // Which letterhead the PDF prints on (the security company has its own header).
     quoteCompany: { type: String, default: '' },
     items: [{
+        itemCode: { type: String, default: '' },
+        partNo: { type: String, default: '' },
         description: { type: String, required: true },
         quantity: { type: Number, required: true, min: 0 },
         unitPrice: { type: Number, required: true, min: 0 },
