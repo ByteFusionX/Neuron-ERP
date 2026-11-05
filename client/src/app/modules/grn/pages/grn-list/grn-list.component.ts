@@ -596,9 +596,8 @@ export class GrnListComponent implements OnInit {
   readonly arrivingItemColumns: DetailTableColumn[] = [
     { key: 'itemDescription', label: 'Description', truncate: true },
     { key: 'orderedQty', label: 'Qty', type: 'number', total: true },
-    { key: 'unitPrice', label: 'Unit Price', type: 'currency' },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
-    { key: 'totalCost', label: 'Amount', type: 'currency', total: true },
+    { key: 'totalCost', label: 'Total Cost', type: 'currency', total: true },
   ];
 
   viewDetails(grn: any): void {

@@ -373,7 +373,7 @@ export const createGRN = async (req: Request, res: Response) => {
         });
       }
       if (acceptedQty > 0 || rejectedQty > 0) {
-        stockNotes.push(`${product.itemCode || 'No item code'} - ${description}: ${acceptedQty > 0 ? `${acceptedQty} added to stock` : ''}${acceptedQty > 0 && rejectedQty > 0 ? ', ' : ''}${rejectedQty > 0 ? `${rejectedQty} to quarantine` : ''}`);
+        stockNotes.push(`${product.itemCode || 'No item code'}: ${acceptedQty > 0 ? `${acceptedQty} added to stock` : ''}${acceptedQty > 0 && rejectedQty > 0 ? ', ' : ''}${rejectedQty > 0 ? `${rejectedQty} to quarantine` : ''}`);
       }
     }
 

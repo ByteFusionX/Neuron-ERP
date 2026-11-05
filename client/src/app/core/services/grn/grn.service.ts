@@ -103,12 +103,6 @@ export class GrnService {
       ]);
     });
 
-    // Pad with empty rows so the table fills the page body.
-    const minRows = 16;
-    for (let i = tableBody.length; i < minRows; i++) {
-      tableBody.push([1, 2, 3, 4, 5].map(() => ({ text: ' ', style: 'tableText' })));
-    }
-
     const itemsTable = {
       table: {
         headerRows: 1,
