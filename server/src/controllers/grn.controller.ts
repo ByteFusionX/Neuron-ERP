@@ -247,6 +247,7 @@ export const createGRN = async (req: Request, res: Response) => {
       .populate('createdBy', '-password');
 
     const warnings: string[] = [];
+    const stockNotes: string[] = [];
     const populatedPurchaseOrder = populatedGrn.purchaseOrderId as any;
 
     for (let i = 0; i < items.length; i++) {
@@ -259,27 +260,34 @@ export const createGRN = async (req: Request, res: Response) => {
       }
 
       const description = String(grnItem.itemDescription || '').trim();
-      const partNoStr = String(typeof grnItem.partNo === 'string' ? grnItem.partNo : (grnItem.partNo?.partNo || '')).trim();
+      const clean = (v: any) => { const t = String(v ?? '').trim(); return t === '-' ? '' : t; };
+      const partNoStr = clean(typeof grnItem.partNo === 'string' ? grnItem.partNo : grnItem.partNo?.partNo);
       const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-      // Item code first: the GRN line's code resolves to a product, which identifies the LPO line by its
-      // linked product. Only when there is no code (or no match on it) do we fall back to the description.
-      const hasItemCode = !!partNoStr && partNoStr !== '-';
-      let codeProduct: any = null;
-      if (hasItemCode) {
-        codeProduct = await Product.findOne({ partNo: new RegExp(`^${escape(partNoStr)}$`, 'i'), isDeleted: { $ne: true } });
-      } else {
-        warnings.push(`"${description}" has no item code on the GRN line; matched by description instead`);
-      }
+      const exact = (s: string) => new RegExp(`^${escape(s)}$`, 'i');
       const lpoPartId = (lpoItem: any) => String(lpoItem.partNo?._id || lpoItem.partNo || '');
 
-      let matchingLpoItem: any = codeProduct
-        ? (purchaseOrder.items || []).find((lpoItem: any) => lpoPartId(lpoItem) === String(codeProduct._id))
-        : null;
-      if (!matchingLpoItem) {
-        matchingLpoItem = (purchaseOrder.items || []).find((lpoItem: any) =>
-          lpoItem.detail && description && lpoItem.detail.trim().toLowerCase() === description.toLowerCase());
+      // Item code first. The code on the GRN line (or the one the LPO line carries) identifies the product;
+      // the product identifies the LPO line. The description is only a fallback for older lines with no code.
+      const lpoByDescription = (purchaseOrder.items || []).find((lpoItem: any) =>
+        lpoItem.detail && description && lpoItem.detail.trim().toLowerCase() === description.toLowerCase());
+      const itemCodeStr = clean(grnItem.itemCode) || clean(lpoByDescription?.itemCode);
+
+      let codeProduct: any = null;
+      if (itemCodeStr) {
+        codeProduct = await Product.findOne({ itemCode: exact(itemCodeStr), isDeleted: { $ne: true } });
       }
+      if (!codeProduct && partNoStr) {
+        codeProduct = await Product.findOne({ partNo: exact(partNoStr), isDeleted: { $ne: true } });
+      }
+
+      let matchingLpoItem: any = null;
+      if (itemCodeStr) {
+        matchingLpoItem = (purchaseOrder.items || []).find((lpoItem: any) => clean(lpoItem.itemCode).toLowerCase() === itemCodeStr.toLowerCase());
+      }
+      if (!matchingLpoItem && codeProduct) {
+        matchingLpoItem = (purchaseOrder.items || []).find((lpoItem: any) => lpoPartId(lpoItem) === String(codeProduct._id));
+      }
+      if (!matchingLpoItem) matchingLpoItem = lpoByDescription;
 
       if (!matchingLpoItem) {
         warnings.push(`"${description}" was not added to stock: it does not match any line on the LPO`);
@@ -289,18 +297,28 @@ export const createGRN = async (req: Request, res: Response) => {
       // Product: the item code, then the LPO line's link, then an exact description match. Lines with
       // no matching product are skipped with a warning; GRN never creates products.
       let product: any = codeProduct
-        || (matchingLpoItem.partNo ? await Product.findOne({ _id: matchingLpoItem.partNo, isDeleted: { $ne: true } }) : null);
+        || (matchingLpoItem.partNo ? await Product.findOne({ _id: matchingLpoItem.partNo?._id || matchingLpoItem.partNo, isDeleted: { $ne: true } }) : null);
       if (!product && description) {
-        product = await Product.findOne({ productDescription: new RegExp(`^${escape(description)}$`, 'i'), isDeleted: { $ne: true } });
+        product = await Product.findOne({ productDescription: exact(description), isDeleted: { $ne: true } });
       }
       if (!product) {
         warnings.push(`"${description}" was not added to stock: it is not in the product catalogue`);
         continue;
       }
-      if (!matchingLpoItem.partNo) {
-        const lineIndex = purchaseOrder.items.indexOf(matchingLpoItem);
-        await PurchaseOrder.updateOne({ _id: purchaseOrderId }, { $set: { [`items.${lineIndex}.partNo`]: product._id } });
-        matchingLpoItem.partNo = product._id;
+      if (!product.itemCode) {
+        warnings.push(`"${description}" is linked to a product with no item code`);
+      }
+
+      // Keep the code on the GRN line, and on the LPO line if it was raised before lines carried one.
+      await GRN.updateOne({ _id: grn._id }, { $set: { [`items.${i}.itemCode`]: product.itemCode || '', ...(partNoStr || !product.partNo ? {} : { [`items.${i}.partNo`]: product.partNo }) } });
+      const lineIndex = purchaseOrder.items.indexOf(matchingLpoItem);
+      const lpoPatch: any = {};
+      if (!matchingLpoItem.partNo) lpoPatch[`items.${lineIndex}.partNo`] = product._id;
+      if (!clean(matchingLpoItem.itemCode) && product.itemCode) lpoPatch[`items.${lineIndex}.itemCode`] = product.itemCode;
+      if (!clean(matchingLpoItem.productPartNo) && product.partNo) lpoPatch[`items.${lineIndex}.productPartNo`] = product.partNo;
+      if (lineIndex >= 0 && Object.keys(lpoPatch).length) {
+        await PurchaseOrder.updateOne({ _id: purchaseOrderId }, { $set: lpoPatch });
+        if (!matchingLpoItem.partNo) matchingLpoItem.partNo = product._id;
       }
 
       const unitCost = Number(matchingLpoItem.unitCost) || 0;
@@ -354,9 +372,12 @@ export const createGRN = async (req: Request, res: Response) => {
           reason: grnItem.rejectionReason || grnItem.discrepancyType,
         });
       }
+      if (acceptedQty > 0 || rejectedQty > 0) {
+        stockNotes.push(`${product.itemCode || 'No item code'} - ${description}: ${acceptedQty > 0 ? `${acceptedQty} added to stock` : ''}${acceptedQty > 0 && rejectedQty > 0 ? ', ' : ''}${rejectedQty > 0 ? `${rejectedQty} to quarantine` : ''}`);
+      }
     }
 
-    const allGRNs = await GRN.find({ 
+    const allGRNs = await GRN.find({
       purchaseOrderId,
       isDeleted: { $ne: true }
     });
@@ -498,6 +519,9 @@ export const createGRN = async (req: Request, res: Response) => {
 
     if (warnings.length > 0) {
       response.warnings = warnings;
+    }
+    if (stockNotes.length > 0) {
+      response.stockNotes = stockNotes;
     }
 
     return res.status(200).json(response);

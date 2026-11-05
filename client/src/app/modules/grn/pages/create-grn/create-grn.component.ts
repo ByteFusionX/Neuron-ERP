@@ -584,7 +584,8 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
       const orderedQty = item.quantity || 0;
       const itemGroup = this.fb.group({
         slNo: [index + 1],
-        partNo: [this.formatPartNumber(item.partNo) || ''],
+        itemCode: [item.itemCode || item.partNo?.itemCode || ''],
+        partNo: [item.productPartNo || this.formatPartNumber(item.partNo) || ''],
         itemDescription: [item.detail || ''],
         uom: [''],
         orderedQty: [orderedQty],
@@ -692,6 +693,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
   createItemGroup(item: any, index: number): FormGroup {
     const itemGroup = this.fb.group({
       slNo: [index + 1],
+      itemCode: [item.itemCode || item.partNo?.itemCode || ''],
       partNo: [this.formatPartNumber(item.partNo) || item.partNo || ''],
       itemDescription: [item.itemDescription || item.detail || ''],
       uom: [item.uom || ''],
@@ -908,7 +910,8 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
       inspectionNotes: formValue.inspectionNotes || undefined,
       inspectedBy: formValue.inspectedBy || undefined,
       items: formValue.items.map((item: any) => ({
-        partNo: item.partNo !== '-' ? item.partNo : undefined,
+        itemCode: item.itemCode || undefined,
+        partNo: item.partNo && item.partNo !== '-' ? item.partNo : undefined,
         itemDescription: item.itemDescription,
         uom: item.uom || undefined,
         orderedQty: item.orderedQty,
@@ -955,6 +958,11 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
       next: (response: any) => {
         if (response.success) {
           this.toastr.success(response.data?.grnNo ? `${response.data.grnNo} saved` : 'GRN saved successfully');
+          if (response.stockNotes && response.stockNotes.length > 0) {
+            response.stockNotes.forEach((note: string) => {
+              this.toastr.success(note, '', { timeOut: 5000 });
+            });
+          }
           if (response.warnings && response.warnings.length > 0) {
             response.warnings.forEach((warning: string) => {
               this.toastr.warning(warning, '', { timeOut: 5000 });
