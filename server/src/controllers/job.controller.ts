@@ -251,9 +251,10 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
 
         const qatarUsdRate = await getUSDRated();
         const gridQuery = buildJobGridQuery(search, gridFilters, sortKey, sortDir);
-        // piState narrows jobs by their latest proforma: none (no PI yet), inProcess (a PI that is not Received), received.
-        const piState: string | null = req.body.withoutPi === true ? 'none' : (['none', 'inProcess', 'received', 'completed'].includes(req.body.piState) ? req.body.piState : null);
+        // piState filters by the presence or status of the latest non-deleted proforma.
+        const piState: string | null = req.body.withoutPi === true ? 'none' : (['exists', 'none', 'inProcess', 'received', 'completed'].includes(req.body.piState) ? req.body.piState : null);
         const piStateMatch: Record<string, any> = {
+            exists: { 'linkedPi.0': { $exists: true } },
             none: { 'linkedPi.0': { $exists: false } },
             inProcess: { 'linkedPi.0': { $exists: true }, 'linkedPi.0.status': { $nin: ['Received', 'Completed'] } },
             received: { 'linkedPi.0.status': 'Received' },

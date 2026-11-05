@@ -13,7 +13,7 @@ export interface filterJob {
     allocateStatus?: allocateStatus | null;
     allocateStatuses?: allocateStatus[];
     withoutPi?: boolean;
-    piState?: 'none' | 'inProcess' | 'received' | 'completed';
+    piState?: 'exists' | 'none' | 'inProcess' | 'received' | 'completed';
     /** With On Hold among allocateStatuses, keeps only the held jobs of this type. */
     onHoldType?: 'advance-payment' | 'other';
     sortKey?: string | null;

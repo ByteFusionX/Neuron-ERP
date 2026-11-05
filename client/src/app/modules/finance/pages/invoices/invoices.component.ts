@@ -151,8 +151,9 @@ export class InvoicesComponent implements OnInit, OnDestroy {
   private isAdv(viewId: string): boolean { return viewId === 'newjob' || viewId === 'inprocess' || viewId === 'received' || viewId === 'completed'; }
 
   /** Which jobs a tab lists, by job status and by the state of their latest proforma. */
-  private tabFilter(viewId: string): { statuses?: allocateStatus[]; piState?: 'none' | 'inProcess' | 'received' | 'completed'; onHoldType?: 'advance-payment' } {
+  private tabFilter(viewId: string): { statuses?: allocateStatus[]; piState?: 'exists' | 'none' | 'inProcess' | 'received' | 'completed'; onHoldType?: 'advance-payment' } {
     switch (viewId) {
+      case 'all': return { piState: 'exists' };
       case 'newjob': return { statuses: NEW_JOB_STATUSES, piState: 'none', onHoldType: 'advance-payment' };
       case 'inprocess': return { statuses: IN_PROCESS_STATUSES, piState: 'inProcess' };
       case 'received': return { piState: 'received' };

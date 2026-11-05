@@ -7,6 +7,7 @@ import { ToastrService } from 'ngx-toastr';
 import saveAs from 'file-saver';
 
 import { JobService } from 'src/app/core/services/job/job.service';
+import { ProformaInvoice, ProformaInvoiceService } from 'src/app/core/services/proforma-invoice.service';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { DomSanitizer } from '@angular/platform-browser';
 import { ParseBoldTextPipe } from 'src/app/shared/pipes/boldParse.pipe';
@@ -56,7 +57,7 @@ interface PricingLine {
   divider?: boolean;
 }
 
-type PanelTab = 'costs' | 'documents' | StageKey | 'workflow' | 'history';
+type PanelTab = 'costs' | 'documents' | 'pi' | StageKey | 'workflow' | 'history';
 
 const ALLOCATE_STATUS_LABELS: Record<string, string> = {
   [allocateStatus.Pending]: 'Pending',
@@ -102,6 +103,7 @@ export class ViewJobComponent implements OnInit {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private jobService = inject(JobService);
+  private piService = inject(ProformaInvoiceService);
   private jobHistoryService = inject(JobHistoryService);
   private employeeService = inject(EmployeeService);
   private toast = inject(ToastrService);
@@ -125,6 +127,7 @@ export class ViewJobComponent implements OnInit {
     { id: 'costs', label: 'Pricing' },
     { id: 'documents', label: 'Documents' },
     { id: 'workflow', label: 'Workflow' },
+    { id: 'pi', label: 'PI' },
     { id: 'pr', label: 'PR' },
     { id: 'po', label: 'PO' },
     { id: 'grn', label: 'GRN' },
@@ -133,6 +136,49 @@ export class ViewJobComponent implements OnInit {
     { id: 'history', label: 'History' },
   ];
   historyEntries: DetailTimelineEntry[] = [];
+  proformas: ProformaInvoice[] = [];
+  piStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
+
+  get piTotalPrice(): number {
+    const d = this.quote?.dealData;
+    return d ? dealSheetPriceDetails(d.updatedItems, d.additionalCosts, d.totalDiscount).totalSellingPrice : 0;
+  }
+
+  piRequested(pi: ProformaInvoice): number {
+    return Number(pi.expectedAmount ?? pi.summary?.totalPrice ?? pi.amount) || 0;
+  }
+
+  piReceived(pi: ProformaInvoice): number {
+    return pi.status === 'Received' || pi.status === 'Completed' ? this.piRequested(pi) : 0;
+  }
+
+  get piReceivedValue(): number {
+    return this.proformas.reduce((sum, pi) => sum + this.piReceived(pi), 0);
+  }
+
+  get piRemainingValue(): number {
+    return Math.max(0, Math.round((this.piTotalPrice - this.piReceivedValue) * 100) / 100);
+  }
+
+  private loadProformas(force = false): void {
+    if (!this.job || (!force && (this.piStatus === 'loading' || this.piStatus === 'ready'))) return;
+    const job = this.job._id;
+    this.piStatus = 'loading';
+    this.proformas = [];
+    const rows: ProformaInvoice[] = [];
+    const loadPage = (page: number) => this.piService.list({ job, page, limit: 100 }).subscribe({
+      next: (res) => {
+        if (this.job?._id !== job) return;
+        if (!res.success) { this.piStatus = 'error'; return; }
+        rows.push(...res.data);
+        if (rows.length < res.total && res.data.length) { loadPage(page + 1); return; }
+        this.proformas = rows;
+        this.piStatus = 'ready';
+      },
+      error: () => { if (this.job?._id === job) this.piStatus = 'error'; },
+    });
+    loadPage(1);
+  }
 
   stats: DetailViewStat[] = [];
   detailFacts: JobFact[] = [];
@@ -358,6 +404,7 @@ export class ViewJobComponent implements OnInit {
           attention: job.attention ?? job.quotation?.attention,
         };
         this.rebuildView();
+        if (this.panelTab === 'pi') this.loadProformas(true);
         if (this.panelTab === 'workflow') this.loadWorkflow(true);
         if (this.isStageTab(this.panelTab)) this.loadStages(true);
         // Same job audit log as the job list's History tab.
@@ -375,6 +422,7 @@ export class ViewJobComponent implements OnInit {
 
   selectTab(tab: PanelTab): void {
     this.panelTab = tab;
+    if (tab === 'pi') this.loadProformas();
     if (tab === 'workflow') this.loadWorkflow();
     if (this.isStageTab(tab)) this.loadStages();
   }

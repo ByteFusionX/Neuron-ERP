@@ -93,6 +93,32 @@
                     (open)="onDocumentOpen($event)"
                     (download)="onDocumentDownload($event)"></app-detail-documents>
 
+                <ng-container *ngSwitchCase="'pi'">
+                    <p *ngIf="piStatus === 'loading'" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Loading PI details&hellip;</p>
+                    <p *ngIf="piStatus === 'error'" class="py-6 text-center text-[13px] text-red-600 dark:text-red-400">Could not load PI details. Reopen this tab to retry.</p>
+                    <ng-container *ngIf="piStatus === 'ready'">
+                        <app-detail-section title="Payment summary">
+                            <app-detail-field label="Total price" numeric>{{ piTotalPrice | currency:(quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field label="Received value" numeric>{{ piReceivedValue | currency:(quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field label="Remaining to pay" numeric>{{ piRemainingValue | currency:(quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                        </app-detail-section>
+                        <app-detail-section *ngFor="let pi of proformas" [title]="pi.piNo">
+                            <app-detail-field label="PI ID">{{ pi.piNo }}</app-detail-field>
+                            <app-detail-field label="Status">{{ pi.status }}</app-detail-field>
+                            <app-detail-field label="Date">{{ pi.createdAt | date:'dd MMM yyyy' }}</app-detail-field>
+                            <app-detail-field label="Subject">{{ pi.subject || '-' }}</app-detail-field>
+                            <app-detail-field label="Payment terms">{{ pi.paymentTerms || '-' }}</app-detail-field>
+                            <app-detail-field label="Expected date">{{ (pi.expectedDate | date:'dd MMM yyyy') || '-' }}</app-detail-field>
+                            <app-detail-field label="Requested value" numeric>{{ piRequested(pi) | currency:(pi.currency || quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field label="Received value" numeric>{{ piReceived(pi) | currency:(pi.currency || quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field *ngIf="pi.payment?.receivedAt" label="Received date">{{ pi.payment?.receivedAt | date:'dd MMM yyyy' }}</app-detail-field>
+                            <app-detail-field *ngIf="pi.payment?.method" label="Payment method">{{ pi.payment?.method === 'Other' ? pi.payment?.otherMethod : pi.payment?.method }}</app-detail-field>
+                            <app-detail-field *ngIf="pi.payment?.referenceNo" label="Reference">{{ pi.payment?.referenceNo }}</app-detail-field>
+                        </app-detail-section>
+                        <p *ngIf="!proformas.length" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">No proforma invoices for this job yet.</p>
+                    </ng-container>
+                </ng-container>
+
                 <ng-container *ngSwitchCase="isStageTab(panelTab) ? panelTab : ''">
                     <p *ngIf="stagesStatus === 'loading'" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Loading details&hellip;</p>
                     <p *ngIf="stagesStatus === 'error'" class="py-6 text-center text-[13px] text-red-600 dark:text-red-400">Could not load this stage. Reopen this tab to retry.</p>
