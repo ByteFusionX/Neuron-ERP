@@ -314,7 +314,7 @@ export class PurchaseRequestListComponent {
   private isAllocated(d: any): boolean {
     if (d.short && String(d.shortReason || '').trim()) return true;
     const won = (d.comparisons ?? []).filter((c: any) => c.selected);
-    if (!won.length) return !!d.supplierId && Number(d.unitCost) > 0;
+    if (!won.length) return false;
     if (won.some((c: any) => !c.supplierId || !(Number(c.unitPrice) > 0))) return false;
     if (!won.some((c: any) => c.awardedQty)) return true;
     return won.reduce((sum: number, c: any) => sum + (Number(c.awardedQty) || Number(d.quantity) || 0), 0) + 0.0001 >= Number(d.quantity);
@@ -334,7 +334,7 @@ export class PurchaseRequestListComponent {
   /** `explicitOnly` leaves out lines that only have the deal supplier as default, so the grid counts real awards. */
   awardStats(r: any, explicitOnly = false): { awarded: number; total: number } {
     const lines = (r.items ?? []).flatMap((item: any) => item.itemDetails ?? []).filter((d: any) => Number(d.quantity) > 0);
-    return { awarded: lines.filter((d: any) => (!explicitOnly && d.supplierId) || (d.comparisons ?? []).some((c: any) => c.selected)).length, total: lines.length };
+    return { awarded: lines.filter((d: any) => (d.comparisons ?? []).some((c: any) => c.selected)).length, total: lines.length };
   }
 
   /** The one thing this request is waiting on, shown in the grid and the details panel. */
@@ -733,7 +733,9 @@ export class PurchaseRequestListComponent {
     source.forEach((item: any) => {
       (item.itemDetails ?? []).forEach((d: any) => {
         const won = (d.comparisons ?? []).find((c: any) => c.selected);
-        rows.push({ item: String(d.detail ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'), award: won ? 'Awarded' : 'Not awarded', qty: d.quantity, unitPrice: d.unitSellingPrice ?? 0, price: d.unitCost, amount: (d.quantity ?? 0) * (d.unitCost ?? 0) });
+        // The base unit cost, never the awarded supplier's price.
+        const base = Number(d.dealUnitCost) > 0 ? Number(d.dealUnitCost) : d.unitCost;
+        rows.push({ item: String(d.detail ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'), award: won ? 'Awarded' : 'Not awarded', qty: d.quantity, unitPrice: d.unitSellingPrice ?? 0, price: base, amount: (d.quantity ?? 0) * (base ?? 0) });
       });
     });
     return rows;

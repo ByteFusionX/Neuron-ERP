@@ -59,12 +59,12 @@ const prLines = (items: any[]) => (items || []).flatMap((item: any) => item.item
 
 /**
  * Lines that cannot go for approval: not fully allocated to chosen suppliers, or a chosen supplier without a price.
- * A line marked short (with a reason) goes as it is; a line nobody chose goes with its default supplier at its own cost.
+ * A line marked short (with a reason) goes as it is; a line must be awarded in Compare & award even when it has a default supplier.
  */
 const unallocatedLines = (lines: any[]) => lines.filter((detail: any) => {
     if (detail.short && String(detail.shortReason || '').trim()) return false;
     const won = (detail.comparisons || []).filter((c: any) => c.selected);
-    if (!won.length) return !detail.supplierId || !(Number(detail.unitCost) > 0);
+    if (!won.length) return true;
     if (won.some((c: any) => !c.supplierId || !(Number(c.unitPrice) > 0))) return true;
     if (!won.some((c: any) => c.awardedQty)) return false;
     return won.reduce((sum: number, c: any) => sum + (Number(c.awardedQty) || Number(detail.quantity) || 0), 0) + 0.0001 < Number(detail.quantity);
@@ -228,10 +228,10 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
     const withPr: any[] = await PurchaseRequest.distinct('jobId', { isDeleted: false, jobId: { $exists: true, $ne: null } });
     const jobs: any[] = await jobModel.find({
         isDeleted: { $ne: true },
-        productDistribution: true,
-        allocateStatus: allocateStatus.OpenToWork,
-        // A super admin oversees every buyer's allocated jobs; everyone else sees only their own.
-        ...(isSuperAdmin ? { procurementPerson: { $exists: true, $ne: null } } : { procurementPerson: new ObjectId(String(employeeId)) }),
+        // A super admin oversees every job allocated to any buyer, in any status; everyone else sees only their own open ones.
+        ...(isSuperAdmin
+            ? { procurementPerson: { $exists: true, $ne: null } }
+            : { productDistribution: true, allocateStatus: allocateStatus.OpenToWork, procurementPerson: new ObjectId(String(employeeId)) }),
         _id: { $nin: withPr },
     }).populate({
         path: 'quoteId',
@@ -289,7 +289,8 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
             dealItems: (job.quoteId?.dealData?.updatedItems ?? []).map((item: any) => ({
                 itemName: item.itemName,
                 // A line with a cost breakdown is bought part by part, so list the parts (and what the parts leave).
-                itemDetails: (item.itemDetails ?? []).flatMap((d: any) => {
+                // Quoted lines that are not part of the deal are left out.
+                itemDetails: (item.itemDetails ?? []).filter((d: any) => d.dealSelected).flatMap((d: any) => {
                     const parts = (d.components ?? []).filter((c: any) => Number(c.quantity) > 0);
                     if (!parts.length) return [{ detail: d.detail, quantity: d.quantity, unitCost: d.unitCost }];
                     const rest = (Number(d.unitCost) || 0) - parts.reduce((s: number, c: any) => s + Number(c.quantity) * (Number(c.unitCost) || 0), 0);
@@ -298,7 +299,7 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
                         ...parts.map((c: any) => ({ detail: c.description, quantity: Number(c.quantity) * (Number(d.quantity) || 0), unitCost: c.unitCost })),
                     ];
                 }),
-            })),
+            })).filter((item: any) => item.itemDetails.length > 0),
             jobId: job,
             customerId: job.quoteId?.client,
             currency: job.quoteId?.currency,
@@ -410,10 +411,12 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
             requestData.items = requestData.items.map((item: any) => {
                 if (item.itemDetails && Array.isArray(item.itemDetails)) {
                     item.itemDetails = item.itemDetails.map((detail: any) => {
-                        const normalizedDetail = {
+                        const normalizedDetail: any = {
                             ...detail,
                             ...normalizeLineProduct(detail)
                         };
+                        // The base unit cost starts as the cost the PR was created with.
+                        if (!(Number(detail.dealUnitCost) > 0) && Number(detail.unitCost) > 0) normalizedDetail.dealUnitCost = Number(detail.unitCost);
 
                         // Ensure unitSellingPrice is preserved from job if available
                         if (detail.unitSellingPrice !== undefined && detail.unitSellingPrice !== null && detail.unitSellingPrice !== '') {
@@ -3218,13 +3221,21 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
         }
 
         if (updateData.items && Array.isArray(updateData.items)) {
+            const savedLines = new Map<string, any>();
+            prLines(existingPurchaseRequest.items as any[]).forEach((l: any) => l?._id && savedLines.set(String(l._id), l));
             updateData.items = updateData.items.map((item: any) => {
                 if (item.itemDetails && Array.isArray(item.itemDetails)) {
                     item.itemDetails = item.itemDetails.map((detail: any) => {
-                        const normalizedDetail = {
+                        const normalizedDetail: any = {
                             ...detail,
                             ...normalizeLineProduct(detail)
                         };
+                        // The base unit cost is fixed once saved: awards, supplier price edits and resends never move it.
+                        const saved = detail?._id ? savedLines.get(String(detail._id)) : undefined;
+                        const base = Number(saved?.dealUnitCost) > 0 ? Number(saved.dealUnitCost)
+                            : Number(detail.dealUnitCost) > 0 ? Number(detail.dealUnitCost)
+                            : Number(saved?.unitCost) > 0 ? Number(saved.unitCost) : Number(detail.unitCost) > 0 ? Number(detail.unitCost) : undefined;
+                        if (base !== undefined) normalizedDetail.dealUnitCost = base;
 
                         // Ensure unitSellingPrice is preserved from job if available
                         if (detail.unitSellingPrice !== undefined && detail.unitSellingPrice !== null && detail.unitSellingPrice !== '') {
@@ -3685,6 +3696,10 @@ export const awardPurchaseLines = async (req: Request, res: Response, next: Next
         }
         const awards: LineAward[] = Array.isArray(req.body?.awards) ? req.body.awards : [];
         if (!awards.length) return res.status(400).json({ success: false, message: "Nothing to award." });
+        // Fix the base unit cost before any award can touch the line.
+        for (const line of prLines(purchase.items)) {
+            if (!(Number((line as any).dealUnitCost) > 0) && Number((line as any).unitCost) > 0) (line as any).dealUnitCost = Number((line as any).unitCost);
+        }
         const usage = await poLineUsage(purchase._id, purchase.items as any[]);
         const priceKey = (lineKey: any, supplierId: any) => `${lineKey}|${supplierId}`;
         const pricesBefore = new Map<string, number>();

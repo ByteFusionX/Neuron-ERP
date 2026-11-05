@@ -349,19 +349,7 @@
                 </div>
                 <div *ngIf="usesScopeCost(i, j, k)" class="relative min-w-0">
                   <app-sf-number [formControl]="scopeCostControl(i, j, k)" [placeholder]="defaultHint(i, j, k, 'unitCost')" [stepper]="false" [min]="0"></app-sf-number>
-                  <p *ngIf="isPurchase && !previousQuote(i, j, k) && !lastPrice(i, j, k) && unitCostDiff(i, j, k) as ud" class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums" [ngClass]="ud < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">{{ ud > 0 ? '+' : '-' }}{{ (ud < 0 ? -ud : ud) | number: '1.2-2' }}</p>
-                  <ng-container *ngIf="previousQuote(i, j, k) as pq">
-                    <p class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
-                      {{ pq.awarded ? 'Awarded ' + (pq.awardedAt | date: 'dd MMM yyyy') : 'Quoted ' + (pq.quotedAt | date: 'dd MMM yyyy') }} · {{ pq.unitPrice | number: '1.2-2' }} {{ pq.currency }} · {{ pq.rfqNo }}
-                      <span *ngIf="previousQuoteOver(i, j, k) as over" class="text-amber-600 dark:text-amber-400">· {{ over }}</span>
-                      <span *ngIf="isPurchase && unitCostDiff(i, j, k) as ud" [ngClass]="ud < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'" title="Against the deal cost">· {{ ud > 0 ? '+' : '-' }}{{ (ud < 0 ? -ud : ud) | number: '1.2-2' }}</span>
-                    </p>
-                  </ng-container>
-                  <p *ngIf="!previousQuote(i, j, k) && lastPrice(i, j, k) as lp" class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
-                    Last {{ lp.last.source }} {{ lp.last.lastPrice | number: '1.2-2' }}<ng-container *ngIf="lp.last.sourceNo"> · {{ lp.last.sourceNo }}</ng-container>
-                    <span *ngIf="lp.diff != null" [ngClass]="lp.diff > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">{{ lp.diff > 0 ? '▲' : '▼' }} {{ (lp.diff < 0 ? -lp.diff : lp.diff) | number: '1.1-1' }}%</span>
-                    <span *ngIf="isPurchase && unitCostDiff(i, j, k) as ud" [ngClass]="ud < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'" title="Against the deal cost">· {{ ud > 0 ? '+' : '-' }}{{ (ud < 0 ? -ud : ud) | number: '1.2-2' }}</span>
-                  </p>
+                  <p *ngIf="isPurchase && unitCostDiff(i, j, k) as ud" class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums" [ngClass]="ud < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">{{ ud > 0 ? '+' : '-' }}{{ (ud < 0 ? -ud : ud) | number: '1.2-2' }}</p>
                 </div>
                 <div *ngIf="isPurchase && quoteLayout" class="ie-x relative min-w-0">
                   <app-sf-number [ngModel]="marginShown(i, j, k)" [ngModelOptions]="{ standalone: true }"

@@ -272,8 +272,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   private isResolvedLine(detail: any): boolean {
     // A line marked short goes for approval with whatever is awarded (the server gate skips it too).
     if (detail?.short) return true;
-    const anyWon = (detail?.comparisons || []).some((c: any) => c.selected);
-    return anyWon ? this.isAwardedLine(detail) : !!detail?.supplierId && Number(detail?.unitCost) > 0;
+    // A default deal-sheet supplier does not count: the line must be awarded in Compare & award.
+    return this.isAwardedLine(detail);
   }
 
   /** Each supplier's last price per product (last PO, else last comparison), in the request's currency. */
@@ -1052,6 +1052,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     }
     if (!this.allAwarded) {
       this.toaster.error('Award every product in Compare & award before sending for approval');
+      this.goToStep(3);
       return;
     }
     this.statusBeforeSubmit = this.purchaseForm.get('status')?.value;

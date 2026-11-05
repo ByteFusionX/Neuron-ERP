@@ -889,7 +889,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   private computePurchaseDiscount(): number | null {
     if (!this.isPurchase) return null;
     // A supplier tab always has a figure: the supplier's PR discount, else the deal's, else 0. Without an award it is the deal's, untouched.
-    if (this.supplierScope) return this.awardedSupplierIds().has(this.supplierScope) ? this.discountFor(this.supplierScope) : this.dealDiscountBaseline();
+    if (this.supplierScope) return this.discountFor(this.supplierScope);
     if (!this.supplierDiscounts?.length && !this.dealSupplierDiscounts?.length && !this.discountEdits.size) return null;
     const all = new Set([...(this.supplierDiscounts ?? []).map(this.discountSupplierId),
       ...(this.dealSupplierDiscounts ?? []).map(this.discountSupplierId), ...this.discountEdits.keys()]);
@@ -970,8 +970,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     if (!ctrl || value === null) return;
     // No discount yet stays empty so the "Discount" placeholder shows instead of 0.
     if (Number(ctrl.value) !== value) ctrl.setValue(value === 0 ? null : value, { emitEvent: false });
-    // Editable only on the tab of a supplier that was awarded something.
-    const editable = !!this.supplierScope && this.awardedSupplierIds().has(this.supplierScope);
+    // Editable on any supplier tab (awarded or not); only awarded suppliers count toward the Items total.
+    const editable = !!this.supplierScope;
     if (editable && ctrl.disabled) ctrl.enable({ emitEvent: false });
     else if (!editable && ctrl.enabled) ctrl.disable({ emitEvent: false });
   }
@@ -2548,6 +2548,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   prTotalCost(): number {
     // Sum of every item's total cost less the discount.
     // In a supplier tab this covers only that tab's lines and its discount.
+    // totalCost() already moves by the PR's discount edit (discount less the deal's), so only the deal's own discount is taken off here;
+    // taking off the full discount counted a typed discount twice.
+    if (this.isPurchase) return this.totalCost() - this.dealDiscountBaseline();
     return this.totalCost() - this.discount();
   }
 
