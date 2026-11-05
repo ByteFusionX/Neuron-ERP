@@ -8,7 +8,6 @@ import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid
 import { DataGridBreadcrumb, DataGridColumn, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailMetaComponent } from 'src/app/shared/components/detail-panel/detail-meta.component';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
-import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailMetaItem, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
@@ -23,7 +22,7 @@ import { StockAdjustDrawerComponent } from '../stock-adjust-drawer/stock-adjust-
 @Component({
   selector: 'app-stock-overview',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailMetaComponent, DetailOverviewComponent, DetailTableComponent, DetailTimelineComponent, StockAdjustDrawerComponent],
+  imports: [CommonModule, DataGridComponent, DetailMetaComponent, DetailOverviewComponent,DetailTimelineComponent, StockAdjustDrawerComponent],
   templateUrl: './stock-overview.component.html',
   styleUrl: './stock-overview.component.css'
 })
@@ -74,13 +73,6 @@ export class StockOverviewComponent implements OnInit {
     { key: 'status', label: 'Status' },
     { key: 'reservedQty', label: 'Reserved', type: 'number', total: true },
     { key: 'reservedOn', label: 'Reserved on', type: 'date' },
-  ];
-  readonly reservationColumns: DetailTableColumn[] = [
-    { key: 'heldFor', label: 'Held for' },
-    { key: 'customer', label: 'Customer' },
-    { key: 'source', label: 'Source' },
-    { key: 'quantity', label: 'Quantity', type: 'number', total: true },
-    { key: 'until', label: 'Until', type: 'date' },
   ];
 
   rowActions: DataGridRowAction<StockRow>[] = [
@@ -274,6 +266,20 @@ export class StockOverviewComponent implements OnInit {
         { type: 'field', label: 'Job', value: v(po['job']) },
       ] : [{ type: 'field', label: 'Last PO', value: 'No purchase order yet' }],
     });
+    const held = this.reservationRows();
+    sections.push({
+      title: 'Reservations',
+      columns: '2',
+      fields: held.length
+        ? held.flatMap((r) => [
+            { type: 'field' as const, label: 'Job no', value: r['heldFor'] },
+            { type: 'field' as const, label: 'Reserved qty', value: r['quantity'], numeric: true },
+            { type: 'field' as const, label: 'Sales person', value: r['salesPerson'] },
+            { type: 'field' as const, label: 'Customer', value: r['customer'] },
+            { type: 'field' as const, label: 'Until', value: date(r['until']) },
+          ])
+        : [{ type: 'field' as const, label: 'Reserved', value: 'Nothing is reserved for this item.' }],
+    });
     return sections;
   }
 
@@ -306,8 +312,10 @@ export class StockOverviewComponent implements OnInit {
   }
 
   reservationRows(): Record<string, any>[] {
+    const fullName = (p?: { firstName?: string; lastName?: string } | null) => [p?.firstName, p?.lastName].filter(Boolean).join(' ');
     return this.reservations().map((r) => ({
-      heldFor: r.job?.jobId ? `Job ${r.job.jobId}` : r.quote?.quoteId ? `Quote ${r.quote.quoteId}` : 'Manual',
+      heldFor: r.job?.jobId ? r.job.jobId : r.quote?.quoteId ? `Quote ${r.quote.quoteId}` : 'Manual',
+      salesPerson: fullName(r.job?.quoteId?.createdBy) || fullName(r.quote?.createdBy) || fullName(r.createdBy) || '-',
       customer: r.customer?.companyName || '-',
       source: r.sourceType === 'Quotation' ? 'Won quote hold' : r.sourceType === 'Deal' ? 'Approved deal' : r.sourceType,
       quantity: r.quantity,

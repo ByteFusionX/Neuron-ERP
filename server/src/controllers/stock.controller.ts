@@ -137,26 +137,37 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
             Warehouse.find({}).select('wareHouseName').lean(),
             getLastReceiptCosts([...byProduct.keys()]),
         ]);
-        // Items with no usable receipt cost (e.g. everything still in quarantine) are valued at their last PO price.
-        const uncosted = [...byProduct.keys()].filter((id) => !costs.get(id)?.unitCost);
-        const poCosts = new Map<string, number>();
-        if (uncosted.length) {
-            const poRows: any[] = await PurchaseOrder.find({ 'items.partNo': { $in: uncosted }, poStatus: { $nin: ['Cancelled', 'Rejected', 'Draft'] } })
-                .select('items.partNo items.unitCost poDate').sort({ poDate: -1, createdAt: -1 }).lean();
-            for (const po of poRows) {
-                for (const line of po.items || []) {
-                    const pid = String(line.partNo);
-                    if (uncosted.includes(pid) && !poCosts.has(pid) && Number(line.unitCost) > 0) poCosts.set(pid, Number(line.unitCost));
-                }
+        // Stock is valued at the last PO price, or at the unit cost entered on a later stock adjustment (whichever is newer).
+        const productKeys = [...byProduct.keys()];
+        const poCosts = new Map<string, { cost: number; date: number }>();
+        const poRows: any[] = await PurchaseOrder.find({ 'items.partNo': { $in: productKeys }, poStatus: { $nin: ['Cancelled', 'Rejected', 'Draft'] } })
+            .select('items.partNo items.unitCost poDate createdAt').sort({ poDate: -1, createdAt: -1 }).lean();
+        for (const po of poRows) {
+            const date = new Date(po.poDate || po.createdAt || 0).getTime();
+            for (const line of po.items || []) {
+                const pid = String(line.partNo);
+                if (!poCosts.has(pid) && Number(line.unitCost) > 0) poCosts.set(pid, { cost: Number(line.unitCost), date });
             }
         }
+        const adjustRows: any[] = await StockMovement.aggregate([
+            { $match: { ...notDeleted, product: { $in: productKeys.map(asObjectId) }, movementType: 'Adjustment', quantityIn: { $gt: 0 }, unitCost: { $gt: 0 }, reversalOf: { $exists: false } } },
+            { $sort: { movementDate: -1, createdDate: -1 } },
+            { $group: { _id: '$product', unitCost: { $first: '$unitCost' }, date: { $first: '$movementDate' } } },
+        ]);
+        const adjustCosts = new Map<string, { cost: number; date: number }>(adjustRows.map((r) => [String(r._id), { cost: Number(r.unitCost), date: new Date(r.date || 0).getTime() }]));
+        const costFor = (id: string): number => {
+            const po = poCosts.get(id);
+            const adj = adjustCosts.get(id);
+            if (po && adj) return adj.date >= po.date ? adj.cost : po.cost;
+            return adj?.cost || po?.cost || costs.get(id)?.unitCost || 0;
+        };
         const warehouseName = new Map<string, string>(warehouses.map((w: any) => [String(w._id), w.wareHouseName]));
         const quarantineRefs = await quarantineRefsByProduct(products.filter((p: any) => (byProduct.get(String(p._id))?.quarantined || 0) > 0).map((p: any) => String(p._id)));
 
         let rows = products.map((product: any) => {
             const id = String(product._id);
             const entry = byProduct.get(id)!;
-            const unitCost = costs.get(id)?.unitCost || poCosts.get(id) || 0;
+            const unitCost = costFor(id);
             const totalQuantity = entry.onHand + entry.quarantined;
             return {
                 productId: id,
@@ -276,7 +287,7 @@ export const getStockAvailability = async (req: Request, res: Response, next: Ne
     }
 };
 
-const ADD_ONLY = new Set(['Opening stock', 'Found']);
+const ADD_ONLY = new Set(['Opening stock']);
 const REMOVE_ONLY = new Set(['Damaged', 'Lost / missing']);
 
 /** A manual stock correction. A reason is always required; Other also needs remarks. */
@@ -553,9 +564,14 @@ export const getStockReservations = async (req: Request, res: Response, next: Ne
         if (product && ObjectId.isValid(String(product))) filter.product = asObjectId(product);
         const reservations = await StockReservation.find(filter)
             .populate('product', 'partNo itemCode productDescription')
-            .populate('quote', 'quoteId')
-            .populate('job', 'jobId')
+            .populate({ path: 'quote', select: 'quoteId createdBy', populate: { path: 'createdBy', select: 'firstName lastName' } })
+            .populate({
+                path: 'job',
+                select: 'jobId quoteId',
+                populate: { path: 'quoteId', select: 'quoteId createdBy', populate: { path: 'createdBy', select: 'firstName lastName' } },
+            })
             .populate('customer', 'companyName')
+            .populate('createdBy', 'firstName lastName')
             .sort({ createdDate: -1 })
             .limit(200)
             .lean();

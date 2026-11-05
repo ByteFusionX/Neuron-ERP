@@ -146,9 +146,10 @@ export interface StockReturnPayload {
 export interface StockReservationRow {
   _id: string;
   product: { partNo?: string; itemCode?: string; productDescription?: string } | null;
-  quote?: { quoteId?: string } | null;
-  job?: { jobId?: string } | null;
+  quote?: { quoteId?: string; createdBy?: { firstName?: string; lastName?: string } | null } | null;
+  job?: { jobId?: string; quoteId?: { quoteId?: string; createdBy?: { firstName?: string; lastName?: string } | null } | null } | null;
   customer?: { companyName?: string } | null;
+  createdBy?: { firstName?: string; lastName?: string } | null;
   sourceType: string;
   quantity: number;
   expiresAt?: string;
@@ -162,12 +163,12 @@ export interface StockItemDetails {
   jobs: { jobId: string; status: string; customer: string; reservedQty: number; reservedOn: string }[];
 }
 
-export const ADJUSTMENT_REASONS = ['Opening stock', 'Count correction', 'Damaged', 'Lost / missing', 'Found', 'Other'] as const;
+export const ADJUSTMENT_REASONS = ['Opening stock', 'Count correction', 'Damaged', 'Lost / missing', 'Other'] as const;
 
 /**
  * Reasons that only make sense in one direction. The server enforces the same rules.
  */
-export const ADD_ONLY_REASONS: readonly string[] = ['Opening stock', 'Found'];
+export const ADD_ONLY_REASONS: readonly string[] = ['Opening stock'];
 export const REMOVE_ONLY_REASONS: readonly string[] = ['Damaged', 'Lost / missing'];
 
 @Injectable({ providedIn: 'root' })
