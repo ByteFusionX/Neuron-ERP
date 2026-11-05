@@ -198,9 +198,9 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
         valueGetter: (item) => item.job?.jobId || 'N/A'
       },
       {
-        key: 'products',
-        label: 'Products',
-        valueGetter: (item: any) => (item.items || []).map((i: any) => i.description || i.partNo).filter(Boolean).join(', ') || '-'
+        key: 'subject',
+        label: 'Subject',
+        valueGetter: (item: any) => item.quote?.subject || item.subject || '-'
       },
       {
         key: 'clientName',
