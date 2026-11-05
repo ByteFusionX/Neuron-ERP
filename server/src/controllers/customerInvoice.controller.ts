@@ -29,7 +29,7 @@ const dnInvoiceLines = (dn: any, itemIndexes?: any) => {
         .map((item: any, index: number) => {
             const quantity = Math.max(0, Number(item.currentDeliveryQty || 0) - Number(item.rejectedQty || 0));
             const unitCost = Number(item.unitSellingPrice || 0);
-            return { index, itemId: item.itemId ? String(item.itemId) : undefined, description: item.description, quantity, unitCost, totalCost: Math.round(quantity * unitCost * 100) / 100 };
+            return { index, itemId: item.itemId ? String(item.itemId) : undefined, itemCode: item.itemCode, partNo: item.partNo, description: item.description, quantity, unitCost, totalCost: Math.round(quantity * unitCost * 100) / 100 };
         })
         .filter((item: any) => item.quantity > 0 && (!chosen || chosen.has(item.index)))
         .map(({ index, ...line }: any) => line);
@@ -149,7 +149,7 @@ export const createCustomerInvoice = async (req: Request, res: Response) => {
         const invoiceDate = new Date(req.body.invoiceDate);
         const paymentMethod = clean(req.body.paymentMethod);
         if (!clientName || !req.body.invoiceDate || isNaN(invoiceDate.getTime())) return res.status(400).json({ message: 'Client and a valid invoice date are required' });
-        if (!(CUSTOMER_PAYMENT_METHODS as readonly string[]).includes(paymentMethod)) return res.status(400).json({ message: 'Select a valid payment method' });
+        if (paymentMethod && !(CUSTOMER_PAYMENT_METHODS as readonly string[]).includes(paymentMethod)) return res.status(400).json({ message: 'Select a valid payment method' });
 
         let source: Record<string, any>;
         let label: string;
@@ -163,7 +163,7 @@ export const createCustomerInvoice = async (req: Request, res: Response) => {
             const receivedDate = new Date(req.body.receivedDate);
             if (!Number.isFinite(receivedAmount) || receivedAmount < 0) return res.status(400).json({ message: 'Enter the received value' });
             if (!req.body.receivedDate || isNaN(receivedDate.getTime())) return res.status(400).json({ message: 'Enter the received date' });
-            const items = (pi.items || []).map((item: any) => ({ description: item.description, quantity: item.quantity, unitCost: item.unitPrice, totalCost: item.amount }));
+            const items = (pi.items || []).map((item: any) => ({ itemCode: item.itemCode, partNo: item.partNo, description: item.description, quantity: item.quantity, unitCost: item.unitPrice, totalCost: item.amount }));
             source = {
                 proformaInvoice: pi._id, piNo: pi.piNo, job: pi.job, jobNo: pi.jobId, currency: pi.currency || 'QAR',
                 amount: pi.amount, discount: Number(pi.summary?.customerDiscount || 0), items, receivedAmount, receivedDate,
@@ -186,7 +186,7 @@ export const createCustomerInvoice = async (req: Request, res: Response) => {
                 .populate({ path: 'purchaseId', select: 'jobId', populate: { path: 'jobId', select: 'jobId' } }).lean();
             if (!po) return res.status(404).json({ message: 'Purchase order not found' });
             if (!['Approved', 'Placed', 'Closed'].includes(po.poStatus)) return res.status(400).json({ message: 'Only approved purchase orders can be invoiced' });
-            const items = po.items.map((item: any) => ({ description: item.detail, quantity: item.quantity, unitCost: item.unitCost, totalCost: item.totalCost }));
+            const items = po.items.map((item: any) => ({ itemCode: item.itemCode, partNo: item.productPartNo, description: item.detail, quantity: item.quantity, unitCost: item.unitCost, totalCost: item.totalCost }));
             const job = po.jobId || po.purchaseId?.jobId;
             const amount = Math.round((items.reduce((sum: number, item: any) => sum + Number(item.totalCost || 0), 0) - Number(po.discount || 0)) * 100) / 100;
             source = {
@@ -200,7 +200,7 @@ export const createCustomerInvoice = async (req: Request, res: Response) => {
         const invoice = await CustomerInvoice.create({
             ...source,
             client: { name: clientName, customerId: Types.ObjectId.isValid(req.body.client?.customerId) ? req.body.client.customerId : undefined },
-            invoiceNo, invoiceDate, paymentMethod,
+            invoiceNo, invoiceDate, paymentMethod: paymentMethod || undefined,
             ...(paymentMethod === 'PDC' ? { pdcStatus: 'Pending', pdcHistory: [{ status: 'Pending', changedBy: access.employee._id, changedAt: new Date() }] } : {}),
             ...Object.fromEntries(['attention', 'lpoRef', 'subject', 'paymentTerms'].map(key => [key, clean(req.body[key])])),
             status: 'Pending', createdBy: access.employee._id,
@@ -227,7 +227,7 @@ export const updateCustomerInvoice = async (req: Request, res: Response) => {
         const invoiceDate = new Date(req.body.invoiceDate);
         const paymentMethod = clean(req.body.paymentMethod);
         if (!req.body.invoiceDate || isNaN(invoiceDate.getTime())) return res.status(400).json({ message: 'A valid invoice date is required' });
-        if (!(CUSTOMER_PAYMENT_METHODS as readonly string[]).includes(paymentMethod)) return res.status(400).json({ message: 'Select a valid payment method' });
+        if (paymentMethod && !(CUSTOMER_PAYMENT_METHODS as readonly string[]).includes(paymentMethod)) return res.status(400).json({ message: 'Select a valid payment method' });
         const invoice: any = await CustomerInvoice.findOne({ _id: req.params.id, ...access.filter });
         if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
         if (invoice.status !== 'Pending') return res.status(409).json({ message: 'Only a pending invoice can be edited' });
@@ -245,7 +245,7 @@ export const updateCustomerInvoice = async (req: Request, res: Response) => {
         }
         for (const key of ['attention', 'lpoRef', 'subject', 'paymentTerms']) invoice[key] = clean(req.body[key]);
         invoice.invoiceDate = invoiceDate;
-        if (paymentMethod !== invoice.paymentMethod) {
+        if ((paymentMethod || undefined) !== (invoice.paymentMethod || undefined)) {
             if (paymentMethod === 'PDC') {
                 invoice.pdcStatus = 'Pending';
                 invoice.pdcHistory = [{ status: 'Pending', changedBy: access.employee._id, changedAt: new Date() }];
@@ -253,7 +253,7 @@ export const updateCustomerInvoice = async (req: Request, res: Response) => {
                 invoice.pdcStatus = undefined;
                 invoice.pdcHistory = [];
             }
-            invoice.paymentMethod = paymentMethod;
+            invoice.paymentMethod = paymentMethod || undefined;
         }
         await invoice.save();
         await logAudit(req, { entityType: 'customerInvoice', entityId: invoice._id, entityLabel: invoice.invoiceNo, action: 'updated', summary: `Customer invoice ${invoice.invoiceNo} edited` });

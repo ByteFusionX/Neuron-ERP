@@ -28,14 +28,14 @@ const schema = new Schema({
     job: { type: Schema.Types.ObjectId, ref: 'Job' },
     jobNo: String,
     status: { type: String, enum: CUSTOMER_INVOICE_STATUSES, default: 'Pending', required: true },
-    paymentMethod: { type: String, enum: CUSTOMER_PAYMENT_METHODS, required: true },
+    paymentMethod: { type: String, enum: CUSTOMER_PAYMENT_METHODS },
     pdcStatus: { type: String, enum: PDC_STATUSES },
     pdcHistory: [{ status: { type: String, enum: PDC_STATUSES }, changedBy: { type: Schema.Types.ObjectId, ref: 'Employee' }, changedAt: Date }],
     currency: { type: String, default: 'QAR' },
     amount: { type: Number, required: true },
     // The DN's share of the job's customer discount; amount stays the gross total.
     discount: { type: Number, default: 0 },
-    items: [{ itemId: String, description: String, quantity: Number, unitCost: Number, totalCost: Number }],
+    items: [{ itemId: String, itemCode: String, partNo: String, description: String, quantity: Number, unitCost: Number, totalCost: Number }],
     createdBy: { type: Schema.Types.ObjectId, ref: 'Employee', required: true },
 }, { timestamps: true });
 schema.index({ status: 1, createdAt: -1 });

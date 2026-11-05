@@ -56,12 +56,11 @@ const PI_STATUS_CLASSES: Record<string, string> = {
   Rejected: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
 };
 
-/** Jobs listed for invoicing: those still pending or on hold. */
-const WON_STATUSES = [allocateStatus.Pending, allocateStatus.OnHold];
-/** In Process: jobs with a PI that is not yet received, while the job is still open. */
+/** Jobs listed for invoicing: only those on hold for an advance payment (see tabFilter). */
+/** In Progress: jobs with a PI that is not yet received, while the job is still open. */
 const IN_PROCESS_STATUSES = [allocateStatus.Pending, allocateStatus.OpenToWork, allocateStatus.WorkInProgress, allocateStatus.OnHold];
-/** New Jobs: pending jobs with no PI yet, plus jobs held for an advance payment (see tabFilter). */
-const NEW_JOB_STATUSES = [allocateStatus.Pending, allocateStatus.OnHold];
+/** New Jobs: jobs on hold for an advance payment that have no PI yet (see tabFilter). */
+const NEW_JOB_STATUSES = [allocateStatus.OnHold];
 
 const formatDateTime = (value?: string | Date | null) =>
   value ? new Date(value).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
@@ -124,7 +123,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
   viewId = 'all';
 
   readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Finance' }, { label: 'Invoice' }];
-  views: DataGridView<any>[] = [{ id: 'all', label: 'All' }, { id: 'newjob', label: 'New Jobs' }, { id: 'inprocess', label: 'In Process' }, { id: 'received', label: 'Received' }, { id: 'completed', label: 'Completed' }];
+  views: DataGridView<any>[] = [{ id: 'all', label: 'All' }, { id: 'newjob', label: 'New Jobs' }, { id: 'inprocess', label: 'In Progress' }, { id: 'received', label: 'Received' }, { id: 'completed', label: 'Completed' }];
 
   columns: DataGridColumn<any>[] = this.allColumns();
   private columnsView = '';
@@ -158,7 +157,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
       case 'inprocess': return { statuses: IN_PROCESS_STATUSES, piState: 'inProcess' };
       case 'received': return { piState: 'received' };
       case 'completed': return { piState: 'completed' };
-      default: return { statuses: WON_STATUSES };
+      default: return {};
     }
   }
 
@@ -181,7 +180,9 @@ export class InvoicesComponent implements OnInit, OnDestroy {
   }
 
   readonly itemColumns: DetailTableColumn[] = [
+    { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
     { key: 'description', label: 'Description', truncate: true },
+    { key: 'partNo', label: 'Part No', hiddenByDefault: true },
     { key: 'quantity', label: 'Qty', type: 'number', align: 'right' },
     { key: 'unitPrice', label: 'Unit price', type: 'currency', align: 'right' },
     { key: 'amount', label: 'Total', type: 'currency', align: 'right' },
@@ -539,7 +540,8 @@ export class InvoicesComponent implements OnInit, OnDestroy {
     this.customerInvoiceService.get(id).subscribe({
       next: (res) => {
         const inv = res?.data ?? res;
-        const invoice = { ...inv, currency: inv?.currency || pi.currency || 'QAR', lpoRef: inv?.lpoRef || pi.lpoNo, subject: inv?.subject || pi.subject };
+        const customer = inv?.customer && typeof inv.customer === 'object' && inv.customer.companyName ? inv.customer : { ...(typeof inv?.customer === 'object' ? inv.customer : {}), companyName: pi.client?.name };
+        const invoice = { ...inv, customer, date: inv?.createdAt || inv?.date, shipTo: inv?.shipTo || pi.shipTo, paymentTerms: inv?.paymentTerms || pi.paymentTerms, jobId: inv?.jobId?.jobId ? inv.jobId : { jobId: pi.jobId }, currency: inv?.currency || pi.currency || 'QAR', lpoRef: inv?.lpoRef || pi.lpoNo, subject: inv?.subject || pi.subject };
         this.invoiceService.generateInvoicePDF(invoice, download)
           .then((pdf) => download
             ? pdf.download(`${String(invoice.invoiceNo || pi.piNo).replace(/\//g, '-')}.pdf`)

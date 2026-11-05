@@ -2136,7 +2136,8 @@ export const getJobProcurement = async (req: Request, res: Response, next: NextF
             PurchaseOrder.find({ jobId: id }).populate('supplierId', 'supplierName').lean(),
             GRN.find({ jobId: id, isDeleted: { $ne: true } }).lean(),
             DeliveryNote.find({ jobId: id }).lean(),
-            CustomerInvoice.find({ job: id }).lean(),
+            // Only invoices raised from a delivery note; advance-payment invoices have none and are left out.
+            CustomerInvoice.find({ job: id, deliveryNote: { $exists: true, $ne: null } }).lean(),
         ]);
 
         const key = (s: unknown) => String(s ?? '').trim().toLowerCase();
