@@ -6,6 +6,7 @@ import { environment } from 'src/environments/environment';
 
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
+import { applyArabicFont, ARABIC_FONT } from './arabic-pdf';
 import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
 import { QuotationTemplateSettings, SystemSettingService } from '../system-setting.service';
 
@@ -232,6 +233,12 @@ export class QuotationService {
         normal: `${window.location.origin}/assets/font/EBGaramond-Regular.ttf`,
         bold: `${window.location.origin}/assets/font/EBGaramond-Bold.ttf`,
         italics: `${window.location.origin}/assets/font/EBGaramond-Italic.ttf`,
+      },
+      [ARABIC_FONT]: {
+        normal: `${window.location.origin}/assets/font/NotoNaskhArabic-Regular.ttf`,
+        bold: `${window.location.origin}/assets/font/NotoNaskhArabic-Regular.ttf`,
+        italics: `${window.location.origin}/assets/font/NotoNaskhArabic-Regular.ttf`,
+        bolditalics: `${window.location.origin}/assets/font/NotoNaskhArabic-Regular.ttf`,
       }
     };
     
@@ -662,6 +669,7 @@ export class QuotationService {
 
 
     // pdfmake can't resolve a page count inside a table cell, so lay the document out once to count pages, then render with the real number.
+    applyArabicFont(documentDefinition.content);
     const { footer, ...rest } = documentDefinition;
     const countDefinition = { ...structuredClone(rest), footer };
     await new Promise<void>(resolve => pdfMake.createPdf(countDefinition).getBuffer(() => resolve()));
