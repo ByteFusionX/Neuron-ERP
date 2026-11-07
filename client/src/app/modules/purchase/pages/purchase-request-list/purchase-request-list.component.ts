@@ -692,6 +692,11 @@ export class PurchaseRequestListComponent {
 
   openFullPurchase(row: any, event?: Event): void {
     event?.stopPropagation();
+    // A New row is an allocated job with no PR yet, so "Job view" opens the job, not a purchase.
+    if (row.status === 'New' && !this.hasItems(row) && this.jobIdOf(row)) {
+      this.router.navigate(['/job-sheet/view', this.jobIdOf(row)], { state: { returnUrl: this.router.url } });
+      return;
+    }
     this.router.navigate(['/purchase/view-purchase', row._id]);
   }
 
