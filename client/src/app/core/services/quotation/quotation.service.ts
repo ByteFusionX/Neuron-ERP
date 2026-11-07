@@ -6,6 +6,7 @@ import { environment } from 'src/environments/environment';
 
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
+import { applyArabicFont, ARABIC_FONT } from './arabic-pdf';
 import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
 import { QuotationTemplateSettings, SystemSettingService } from '../system-setting.service';
 
@@ -232,6 +233,12 @@ export class QuotationService {
         normal: `${window.location.origin}/assets/font/EBGaramond-Regular.ttf`,
         bold: `${window.location.origin}/assets/font/EBGaramond-Bold.ttf`,
         italics: `${window.location.origin}/assets/font/EBGaramond-Italic.ttf`,
+      },
+      [ARABIC_FONT]: {
+        normal: `${window.location.origin}/assets/font/NotoNaskhArabic-Regular.ttf`,
+        bold: `${window.location.origin}/assets/font/NotoNaskhArabic-Regular.ttf`,
+        italics: `${window.location.origin}/assets/font/NotoNaskhArabic-Regular.ttf`,
+        bolditalics: `${window.location.origin}/assets/font/NotoNaskhArabic-Regular.ttf`,
       }
     };
     
@@ -299,29 +306,28 @@ export class QuotationService {
           }
 
           const segments = detail.detail;
-          const result = [];
-          const regex = /(\*\*\{[^}]+\}\*\*)|(\*\*[^{]*\*\*)|(\{[^}]*\})|([^{*}]+)/g;
-          let match;
-
-          while ((match = regex.exec(segments)) !== null) {
-            const [fullMatch] = match;
-
-            if (fullMatch.startsWith('**')) {
-              if (fullMatch.includes('{') && fullMatch.includes('}')) {
-                const text = fullMatch.slice(3, -3).trim();
-                result.push({ text, bold: true, color: 'orange' });
-              } else {
-                const text = fullMatch.slice(2, -2);
-                result.push({ text, bold: true });
-              }
-            } else if (fullMatch.startsWith('{') && fullMatch.endsWith('}')) {
-              const text = fullMatch.slice(1, -1).trim();
-              result.push({ text, color: 'orange' });
-            } else {
-              const text = fullMatch;
-              if (text) result.push({ text });
-            }
+          const result: any[] = [];
+          // Same rules as the editor preview: `**` toggles bold, `{ }` toggles highlight, and they nest in any order.
+          const src = segments || '';
+          let bold = false, hl = false, buf = '';
+          const flush = () => {
+            if (!buf) return;
+            const run: any = { text: buf };
+            if (bold) run.bold = true;
+            if (hl) run.color = 'orange';
+            result.push(run);
+            buf = '';
+          };
+          for (let c = 0; c < src.length; c++) {
+            if (src.startsWith('**', c) && (bold || src.indexOf('**', c + 2) > -1)) {
+              flush(); bold = !bold; c++;
+            } else if (src[c] === '{' && !hl && src.indexOf('}', c) > -1) {
+              flush(); hl = true;
+            } else if (src[c] === '}' && hl) {
+              flush(); hl = false;
+            } else buf += src[c];
           }
+          flush();
 
           let itemImage: string | null = null;
           if (detail.image?.fileName) {
@@ -662,6 +668,7 @@ export class QuotationService {
 
 
     // pdfmake can't resolve a page count inside a table cell, so lay the document out once to count pages, then render with the real number.
+    applyArabicFont(documentDefinition.content);
     const { footer, ...rest } = documentDefinition;
     const countDefinition = { ...structuredClone(rest), footer };
     await new Promise<void>(resolve => pdfMake.createPdf(countDefinition).getBuffer(() => resolve()));
