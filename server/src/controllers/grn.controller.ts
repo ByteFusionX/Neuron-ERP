@@ -427,7 +427,10 @@ export const createGRN = async (req: Request, res: Response) => {
               const descriptionMatch = lpoItem.detail && grnItem.itemDescription && 
                 lpoItem.detail.trim().toLowerCase() === grnItem.itemDescription.trim().toLowerCase();
               
-              if (partNoMatch || descriptionMatch) {
+              const codeMatch = !!String(lpoItem.itemCode || '').trim() && !!String(grnItem.itemCode || '').trim()
+                && String(lpoItem.itemCode).trim().toLowerCase() === String(grnItem.itemCode).trim().toLowerCase();
+
+              if (partNoMatch || descriptionMatch || codeMatch) {
                 if (!grn.inspectionResult || ['Passed', 'Partial'].includes(grn.inspectionResult)) {
                   totalAcceptedQty += Number(grnItem.acceptedQty) || 0;
                 }

@@ -31,6 +31,11 @@ const logDnAudit = (req: any, dn: any, action: string, summary: string, changes?
  */
 export const resolveDeliveryProduct = async (item: any): Promise<any> => {
     let product: any = null;
+    const code = String(item.itemCode || '').trim();
+    if (code) {
+        product = await Product.findOne({ itemCode: new RegExp(`^${code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'), isDeleted: { $ne: true } }).select('_id partNo');
+        if (product) return product;
+    }
     if (item.itemId) {
         const po: any = await PurchaseOrder.findOne({ 'items.prLineKey': String(item.itemId), 'items.partNo': { $ne: null } }).select('items').lean();
         const linked = po?.items?.find((l: any) => String(l.prLineKey) === String(item.itemId) && l.partNo);
@@ -1473,7 +1478,8 @@ export const getPendingDeliveriesSummary = async (req: Request, res: Response) =
                                 from: 'grns',
                                 let: {
                                     poId: '$_id',
-                                    poItemDetail: { $toLower: { $trim: { input: '$items.detail' } } }
+                                    poItemDetail: { $toLower: { $trim: { input: '$items.detail' } } },
+                                    poItemCode: { $toLower: { $trim: { input: { $ifNull: ['$items.itemCode', ''] } } } }
                                 },
                                 pipeline: [
                                     {
@@ -1486,9 +1492,13 @@ export const getPendingDeliveriesSummary = async (req: Request, res: Response) =
                                     {
                                         $match: {
                                             $expr: {
-                                                $eq: [
-                                                    { $toLower: { $trim: { input: '$items.itemDescription' } } },
-                                                    '$$poItemDetail'
+                                                $cond: [
+                                                    { $and: [
+                                                        { $ne: ['$$poItemCode', ''] },
+                                                        { $ne: [{ $trim: { input: { $ifNull: ['$items.itemCode', ''] } } }, ''] }
+                                                    ] },
+                                                    { $eq: [{ $toLower: { $trim: { input: '$items.itemCode' } } }, '$$poItemCode'] },
+                                                    { $eq: [{ $toLower: { $trim: { input: '$items.itemDescription' } } }, '$$poItemDetail'] }
                                                 ]
                                             }
                                         }
@@ -1843,8 +1853,14 @@ export const getDnItemsForJob = async (req: Request, res: Response) => {
             const linkedPoIds = new Set([...(item.purchaseOrderIds || []), ...(item.allPurchaseOrderIds || [])].map((id: any) => id.toString()));
             const partNo = normalize(item.partNo?.partNo);
             const detail = normalize(item.detail);
-            const sameItem = (grnItem: any) => (partNo && normalize(grnItem.partNo) === partNo)
-                || (detail && normalize(grnItem.itemDescription) === detail);
+            const itemCode = normalize(item.itemCode) || normalize(item.partNo?.itemCode);
+            // Item code first; part no and description only for GRN lines that carry no code.
+            const sameItem = (grnItem: any) => {
+                const grnCode = normalize(grnItem.itemCode);
+                if (itemCode && grnCode) return grnCode === itemCode;
+                return (partNo && normalize(grnItem.partNo) === partNo)
+                    || (detail && normalize(grnItem.itemDescription) === detail);
+            };
 
             let deliverableQty = 0;
             let heldQty = 0;

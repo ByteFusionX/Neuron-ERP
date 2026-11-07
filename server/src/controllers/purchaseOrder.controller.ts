@@ -973,7 +973,9 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
             const partNoMatch = poPartNoId && grnItem.partNo && String(grnItem.partNo) === String(poItem.partNo?.partNo);
             const descriptionMatch = poItem.detail && grnItem.itemDescription &&
               poItem.detail.trim().toLowerCase() === grnItem.itemDescription.trim().toLowerCase();
-            if (partNoMatch || descriptionMatch) {
+            const codeMatch = String(poItem.itemCode || '').trim() && String(grnItem.itemCode || '').trim()
+              && String(poItem.itemCode).trim().toLowerCase() === String(grnItem.itemCode).trim().toLowerCase();
+            if (partNoMatch || descriptionMatch || codeMatch) {
               issuedQty += Number(grnItem.acceptedQty) || 0;
             }
           }
