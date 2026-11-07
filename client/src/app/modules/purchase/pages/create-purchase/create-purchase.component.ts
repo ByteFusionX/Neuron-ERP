@@ -392,6 +392,16 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     this.recomputeLiveTotal();
   }
 
+  /** The deal sheet named a supplier that has no master record, so the line can only show its name. */
+  lineUnregisteredSupplier = (i: number, j: number, k: number): string | null => {
+    const o = this.originalAt(i, j, k);
+    const name = String(o?.supplierName || '').trim();
+    if (!name || this.lineSupplierId(o)) return null;
+    const entry = this.entryItems.at(i)?.get('items') as FormArray | null;
+    const ctl = ((entry?.at(j)?.get('itemDetails') as FormArray | null)?.at(k))?.get('supplierId');
+    return ctl?.value ? null : name;
+  };
+
   lineBadge = (i: number, j: number, k: number): string | null =>
     this.originalAt(i, j, k)?.fromMrRequest ? 'MR' : null;
 
@@ -1277,6 +1287,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       const itemsWithComparisons = this.patchComparisonsData(updatedItems, job.quotation?.dealData);
       this.itemsList.set(itemsWithComparisons);
       this.patchItemsValuesWithPartNoIds(itemsWithComparisons);
+      // The deal sheet's suppliers (their fixed tabs and default supplier per line) come from here.
+      this.refreshDealQty();
       this.loadLastPrices();
       this.prCosts = null;
 
@@ -1287,9 +1299,17 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   patchComparisonsData(updatedItems: any[], dealData: any): any[] {
+    // Older deal sheets stored only the supplier's name; everything downstream keys on the id.
+    const idByName = (name: any): string => {
+      const n = String(name || '').trim().toLowerCase();
+      return n ? (this.suppliersList().find((s) => String(s.supplierName || '').trim().toLowerCase() === n)?._id || '') : '';
+    };
     return (updatedItems || []).map(item => ({
       ...item,
-      itemDetails: (item.itemDetails || []).map((detail: any) => ({
+      itemDetails: (item.itemDetails || []).map((rawDetail: any) => {
+        const resolvedId = rawDetail.supplierDetails?._id || rawDetail.supplierId || idByName(rawDetail.supplierName);
+        const detail = resolvedId && !rawDetail.supplierId ? { ...rawDetail, supplierId: resolvedId } : rawDetail;
+        return {
         ...detail,
         unitSellingPrice: detail.unitSellingPrice !== undefined && detail.unitSellingPrice !== null 
           ? detail.unitSellingPrice 
@@ -1309,7 +1329,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             quantity: detail.quantity || 0
           }
         ] : [],
-      }))
+        };
+      })
     }));
   }
 

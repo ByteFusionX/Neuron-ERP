@@ -128,6 +128,7 @@ export class PrFormComponent implements OnDestroy {
   @Input() discountFloor: (supplierId: string) => number = () => 0;
   @Input() lineAwarded: (line: any) => boolean = () => true;
   @Input() lineBadge: (i: number, j: number, k: number) => string | null = () => null;
+  @Input() lineUnregisteredSupplier: (i: number, j: number, k: number) => string | null = () => null;
   @Input() linePills: ((line: any) => { id: string; name: string }[]) | null = null;
   @Output() pillPicked = new EventEmitter<{ lineKey: string; supplierId: string; price: number | null }>();
 

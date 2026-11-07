@@ -220,6 +220,20 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   @Input() lineMinQty: ((i: number, j: number, k: number) => number) | null = null;
   /** Purchase mode: a short badge shown beside a line's description. */
   @Input() lineBadge: ((i: number, j: number, k: number) => string | null) | null = null;
+  /** Name of a supplier the line names but that is not in the supplier master yet (shown as plain text with a warning). */
+  @Input() lineUnregisteredSupplier: ((i: number, j: number, k: number) => string | null) | null = null;
+  private unregOptCache: { name: string; src: SfOption[]; out: SfOption[] } | null = null;
+  /** The unmatched deal supplier as a selected entry, followed by the real suppliers. Cached so the list keeps its identity. */
+  unregisteredOptions(name: string): SfOption[] {
+    const c = this.unregOptCache;
+    if (c && c.name === name && c.src === this.resolvedSupplierOptions) return c.out;
+    const out = [{ label: name, value: '__unregistered__' } as SfOption, ...this.resolvedSupplierOptions];
+    this.unregOptCache = { name, src: this.resolvedSupplierOptions, out };
+    return out;
+  }
+  unregisteredSupplier(i: number, j: number, k: number): string | null {
+    return this.isPurchase && this.lineUnregisteredSupplier ? this.lineUnregisteredSupplier(i, j, k) : null;
+  }
   /** Purchase mode: the suppliers to show as pills under a line (its RFQ suppliers and the current one). */
   @Input() lineOffers: ((line: any) => LineSupplierOffer[]) | null = null;
   /** Purchase: the supplier tabs each line is listed under, shown as pills on the line. */

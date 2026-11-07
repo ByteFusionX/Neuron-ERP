@@ -373,7 +373,19 @@
                 <span class="ie-total ie-x">{{ lineTotal(i, j, k) | number: '1.2-2' }}</span>
                 <span *ngIf="isPurchase && supplierScope" class="ie-cell ie-x truncate" [matTooltip]="scopeSupplierLabel">{{ scopeSupplierLabel || '—' }}</span>
                 <div *ngIf="!(isPurchase && supplierScope)" class="min-w-0">
-                  <app-sf-combobox formControlName="supplierId" [options]="resolvedSupplierOptions" placeholder="Supplier"></app-sf-combobox>
+                  <ng-container *ngIf="unregisteredSupplier(i, j, k) as unregName; else supplierPick">
+                    <app-sf-combobox
+                      [ngModel]="'__unregistered__'"
+                      (ngModelChange)="detail.get('supplierId')?.setValue($event === '__unregistered__' ? '' : $event)"
+                      [ngModelOptions]="{ standalone: true }"
+                      [options]="unregisteredOptions(unregName)"
+                      placeholder="Supplier"
+                    ></app-sf-combobox>
+                    <p class="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">Supplier not created yet</p>
+                  </ng-container>
+                  <ng-template #supplierPick>
+                    <app-sf-combobox formControlName="supplierId" [options]="resolvedSupplierOptions" placeholder="Supplier"></app-sf-combobox>
+                  </ng-template>
                   <p *ngIf="isDeal && detail.get('supplierId')?.hasError('supplierRequired') && detail.get('supplierId')?.touched" class="mt-1 text-xs text-red-600 dark:text-red-400">Required</p>
                 </div>
                 <span *ngIf="isDeal && !dealAdded(detail) && !usesScopeQty(i, j, k)" class="ie-cell ie-x">{{ detail.get('availability')?.value || '—' }}</span>
