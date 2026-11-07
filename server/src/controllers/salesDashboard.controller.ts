@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from "express";
 import { Types } from "mongoose";
-import Job from "../models/job.model";
 import Quotation, { quoteStatus } from "../models/quotation.model";
 import Enquiry from "../models/enquiry.model";
 import Rfq, { RfqType, RfqSupplierStatus } from "../models/rfq.model";
@@ -281,16 +280,19 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
                 .forEach((e: any) => enquiryDate.set(String(e._id), new Date(e.date ?? e.createdDate)));
         }
 
-        // Won = a live job on the quote (main's rule), dated by the job's creation date.
-        const jobAt = new Map<string, Date>();
-        (await Job.find({ quoteId: { $in: quotes.map((q: any) => q._id) }, isDeleted: { $ne: true } }, 'quoteId createdDate').lean())
-            .forEach((j: any) => { const k = String(j.quoteId); const d = new Date(j.createdDate); if (!jobAt.has(k) || d > jobAt.get(k)!) jobAt.set(k, d); });
+        // Won = a deal sheet that is approved, dated by the deal's savedDate.
+        const dealWonAt = (q: any): Date | null => {
+            const d = q.dealData;
+            if (!d?.savedDate) return null;
+            if (d.status !== 'approved') return null;
+            return new Date(d.savedDate);
+        };
 
         const Q = quotes.map((q: any) => {
             const sent = sentAt(q);
             const enqDate = enquiryDate.get(idStr(q.enqId));
             const money = quoteMoney(q, usdToQar);
-            const won = jobAt.get(String(q._id)) ?? null;
+            const won = dealWonAt(q);
             return {
                 raw: q,
                 id: String(q._id),
