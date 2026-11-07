@@ -85,7 +85,7 @@ export interface Customer extends Document {
 const contactDetailSchema = new Schema({
   courtesyTitle: { type: String, required: true },
   firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
+  lastName: { type: String, default: '' },
   email: { type: String, required: true },
   phoneNo: { type: Number, required: true },
   department: { type: Schema.Types.ObjectId, ref: "Department", required: true },

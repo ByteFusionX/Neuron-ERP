@@ -173,7 +173,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
       _id: [null as string | null],
       courtesyTitle: ['', Validators.required],
       firstName: ['', Validators.required],
-      lastName: ['', Validators.required],
+      lastName: [''],
       email: ['', [Validators.required, Validators.email]],
       phoneNo: ['', Validators.required],
       department: [null as string | null, Validators.required],
