@@ -253,7 +253,7 @@
               <!-- Pointer-downs stop here so dragging the textarea's resize grip never starts a line reorder. -->
               <div *ngIf="!isDeal" class="relative" [ngClass]="compact ? 'min-[1400px]:w-[24%] min-[1400px]:shrink-0' : ''"
                 (mousedown)="$event.stopPropagation()" (touchstart)="$event.stopPropagation()">
-                <app-sf-textarea formControlName="detail" expandOnFocus [rows]="compact ? 1 : 2"
+                <app-sf-textarea formControlName="detail" expandOnFocus richText [rows]="compact ? 1 : 2"
                   placeholder="Description — **bold** and {highlight} are supported"
                   (input)="onDetailInput(i, j, k)" (keydown)="onSuggestionKeydown($event, i + '-' + j + '-' + k, i, j, k)"
                   (focusout)="closeSuggestions()"></app-sf-textarea>
@@ -264,8 +264,14 @@
                   <div class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark shadow-lg"
                     [class.pointer-events-none]="!suggestionsFor(i + '-' + j + '-' + k).length">
                     <ng-container *ngIf="suggestionsFor(i + '-' + j + '-' + k) as rows">
-                      <button *ngFor="let s of rows; let idx = index" type="button"
-                        class="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                      <div *ngFor="let s of rows; let idx = index" class="relative">
+                      <button *ngIf="allowEditProduct" type="button" aria-label="Edit product" title="Edit product"
+                        class="pointer-events-auto absolute right-1.5 top-1.5 z-10 grid h-6 w-6 place-content-center rounded-md text-gray-400 hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-950/40"
+                        (mousedown)="$event.preventDefault(); $event.stopPropagation(); requestEditProduct(i, j, k, s)">
+                        <ng-icon name="heroPencilSquare" class="h-3.5 w-3.5"></ng-icon>
+                      </button>
+                      <button type="button"
+                        class="block w-full px-3 py-2 pr-9 text-left text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
                         [class.bg-violet-50]="highlightedIndex === idx" [class.dark:bg-violet-950]="highlightedIndex === idx"
                         (mousedown)="$event.preventDefault(); applySuggestion(i, j, k, s)">
                         <span *ngIf="s.productName" class="block truncate font-medium text-gray-900 dark:text-gray-100">{{ s.productName }}</span>
@@ -280,6 +286,7 @@
                         <span *ngIf="warehouseSummary(s) as warehouses" class="mt-0.5 block truncate text-[10px] text-gray-500 dark:text-gray-500">{{ warehouses }}</span>
                         <span *ngIf="salesHistorySummary(s) as history" class="mt-0.5 block truncate text-[10px] text-sky-700 dark:text-sky-400">{{ history }}</span>
                       </button>
+                      </div>
                       <p *ngIf="!rows.length" class="px-3 py-2 text-xs text-gray-500 dark:text-gray-500">No matching products in the catalogue.</p>
                       <button *ngIf="createRowAvailable(i + '-' + j + '-' + k, k)" type="button"
                         class="pointer-events-auto block w-fit border-t border-gray-100 px-3 py-2 text-left text-xs font-medium text-violet-700 hover:bg-gray-50 dark:border-erp-border-dark dark:text-violet-400 dark:hover:bg-gray-800"
@@ -303,7 +310,7 @@
               </div>
 
               <div *ngIf="!isRfq" class="ie-strip"[class.min-w-0]="compact" [class.flex-1]="compact" [class.opacity-60]="isDeal && !detail.get('dealSelected')?.value" [class.ie-strip-purchase]="dropsMargin"
-                [class.ring-1]="!!detail.get('productId')?.value" [class.ring-emerald-400]="!!detail.get('productId')?.value">
+               >
                 <span *ngIf="isDeal" class="ie-cell ie-x">{{ detail.get('itemCode')?.value || '—' }}</span>
                 <span *ngIf="isDeal" class="ie-cell ie-x">{{ detail.get('partNo')?.value || '—' }}</span>
                 <app-sf-input *ngIf="!isDeal && !dropsMargin" class="ie-x" formControlName="itemCode" placeholder="Item code" (input)="queueCodeLookup(i, j, k, 'itemCode')" (focusout)="lookupByCode(i, j, k, 'itemCode')" (keydown.enter)="lookupByCode(i, j, k, 'itemCode')"></app-sf-input>
@@ -405,6 +412,8 @@
                   </label>
                 </ng-template>
                 <span class="text-[10px] text-gray-400">PNG, JPG or WebP · max 5 MB</span>
+                <app-sf-checkbox class="ml-2" label="Brand" [disabled]="brandDisabled(i, j, k)" [ngModel]="headerTick(i, j, k, 'brand')" (ngModelChange)="toggleHeader(i, j, k, 'brand', $event)" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
+                <app-sf-checkbox class="" label="Part no" [ngModel]="headerTick(i, j, k, 'partNo')" (ngModelChange)="toggleHeader(i, j, k, 'partNo', $event)" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
                 <span *ngIf="imageErrors[imageKey(i, j, k)]" class="text-[11px] text-red-600 dark:text-red-400">{{ imageErrors[imageKey(i, j, k)] }}</span>
               </div>
               <app-image-viewer *ngIf="isQuote && imagePreviews[imageKey(i, j, k)]" [src]="imagePreviews[imageKey(i, j, k)]" alt="Item image preview"

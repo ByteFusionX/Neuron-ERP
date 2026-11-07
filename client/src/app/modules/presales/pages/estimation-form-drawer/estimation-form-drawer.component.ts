@@ -8,6 +8,8 @@ import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
+import { toCatalogueSuggestion } from 'src/app/shared/components/item-entry/catalogue-suggestion.source';
+import { ProductService } from 'src/app/core/services/product/product.service';
 import { CatalogueSuggestionSource, CreateProductRequest, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryOptionValue, ItemEntryTotals } from 'src/app/shared/components/item-entry';
 
 /**
@@ -35,8 +37,30 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
   createProductPrefill: { productSegment?: string; productCategoryName?: string; productDescription?: string } | null = null;
 
   openCreateProduct({ itemName, detail, scopeIds }: CreateProductRequest): void {
+    this.editingProduct = null;
     this.createProductPrefill = { productSegment: scopeIds[0] || '', productCategoryName: itemName, productDescription: detail };
     this.createProductOpen = true;
+  }
+
+  private productService = inject(ProductService);
+  private toastr2 = inject(ToastrService);
+  editingProduct: any = null;
+
+  /** Pencil on a suggestion row: load the product and open the drawer in edit mode. */
+  openEditProduct(productId: string): void {
+    this.productService.getProductById(productId).subscribe({
+      next: (p) => {
+        this.editingProduct = p;
+        this.createProductPrefill = null;
+        this.createProductOpen = true;
+      },
+      error: () => this.toastr2.error('Could not load the product'),
+    });
+  }
+
+  onProductSaved(product: any): void {
+    if (!this.editingProduct || !product?._id) return;
+    this.itemEntry?.applyEditedProduct(toCatalogueSuggestion(product));
   }
 
   saving = false;

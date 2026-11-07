@@ -23,6 +23,8 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { PreviousJobsModalComponent } from 'src/app/shared/components/previous-jobs-modal/previous-jobs-modal.component';
 import { CatalogueSuggestionSource, CreateProductRequest, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryTotals } from 'src/app/shared/components/item-entry';
+import { toCatalogueSuggestion } from 'src/app/shared/components/item-entry/catalogue-suggestion.source';
+import { ProductService } from 'src/app/core/services/product/product.service';
 import { SupplierFormDrawerComponent } from 'src/app/modules/suppliers/pages/supplier-form-drawer/supplier-form-drawer.component';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 import { normalizeApiError } from 'src/app/core/errors/api-error';
@@ -104,6 +106,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   private profileService = inject(ProfileService);
   private confirmDialog = inject(ConfirmDialogService);
   private jobService = inject(JobService);
+  private productService = inject(ProductService);
   private customers$!: Observable<getCustomer[]>;
   private subscriptions = new Subscription();
 
@@ -482,11 +485,31 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   createProductPrefill: { productSegment?: string; productCategoryName?: string; productDescription?: string } | null = null;
 
   openCreateProduct({ itemName, detail, scopeIds }: CreateProductRequest): void {
+    this.editingProduct = null;
     this.createProductPrefill = { productSegment: scopeIds[0] || '', productCategoryName: itemName, productDescription: detail };
     this.createProductOpen = true;
   }
 
-  onProductCreated(_product: any): void {}
+  editingProduct: any = null;
+
+  /** Pencil on a suggestion row: load the product and open the drawer in edit mode. */
+  openEditProduct(productId: string): void {
+    this.subscriptions.add(
+      this.productService.getProductById(productId).subscribe({
+        next: (p) => {
+          this.editingProduct = p;
+          this.createProductPrefill = null;
+          this.createProductOpen = true;
+        },
+        error: () => this.toaster.error('Could not load the product'),
+      }),
+    );
+  }
+
+  onProductCreated(product: any): void {
+    if (!this.editingProduct || !product?._id) return;
+    this.itemEntry?.applyEditedProduct(toCatalogueSuggestion(product));
+  }
 
   onSupplierCreated(_supplier: any): void {
     this.createSupplierOpen = false;

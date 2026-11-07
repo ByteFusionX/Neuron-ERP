@@ -70,6 +70,9 @@ export interface LineSupplierOffer {
   last?: SupplierLastPrice;
 }
 
+/** Leading "Brand: x" / "Part No: x" lines added by the header ticks (optionally wrapped in ** or { }). */
+const HEADER_LINES = /^(?:[*{]*(?:Brand|Part No): [^\n]*(?:\n|$))+/;
+
 /** What one supplier won of a purchase line. */
 export interface LineShare {
   supplierId: string;
@@ -158,6 +161,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   @Input() allowOptionalItems = true;
   /** The "+ Create product" row under the suggestion dropdown; emits `createProductRequested`. */
   @Input() allowCreateProduct = true;
+  /** Shows a pencil on each suggestion row; emits `editProductRequested` so the host can open its product drawer. */
+  @Input() allowEditProduct = false;
+  @Output() editProductRequested = new EventEmitter<string>();
   /** The host renders Add item / Add optional item itself (e.g. in a drawer footer), so the toolbar omits them. */
   @Input() externalAddButtons = false;
   /** Plain list of lines: no item group header (name, category, collapse), the lines just stack. Bulk actions stay. */
@@ -1591,7 +1597,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     // Editing the description by hand means the line no longer describes the product that was
     // picked, so the link is dropped rather than left pointing at something else.
     detail?.get('productId')?.setValue(null, { emitEvent: false });
-    const term = (this.detailsAt(i, j)?.at(k)?.get('detail')?.value || '').toString().trim();
+    // The Brand / Part No header lines are inserted by the ticks, not typed, so they stay out of the lookup.
+    const term = (this.detailsAt(i, j)?.at(k)?.get('detail')?.value || '').toString().replace(HEADER_LINES, '').trim();
     // Not narrowed to the group name: the description is matched against the whole catalogue.
     this.queueSearch(`${i}-${j}-${k}`, term, '');
   }
@@ -1694,6 +1701,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       // The product link plus its snapshot identifiers always come from the picked row.
       // The link emits, so a parent watching the lines (e.g. last supplier prices) sees the product change.
       detail.get('productId')?.setValue(s._id);
+      if (s.brand) { this.brands.set(detail, s.brand); this.noBrand.delete(detail); } else this.noBrand.add(detail);
       this.fillIfEmpty(detail, 'itemCode', s.itemCode);
       this.fillIfEmpty(detail, 'partNo', s.partNo);
       this.keepUnit(s.uom);
@@ -1713,6 +1721,56 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       }
     }
     this.closeSuggestions();
+  }
+
+  private brands = new WeakMap<AbstractControl, string>();
+  private noBrand = new WeakSet<AbstractControl>();
+  private headerTicks = new WeakMap<AbstractControl, { brand: boolean; partNo: boolean }>();
+
+  /** Brand can be ticked only on a catalogue-linked line whose product has a brand. */
+  brandDisabled(i: number, j: number, k: number): boolean {
+    const d = this.detailsAt(i, j)?.at(k);
+    return !d || !d.get('productId')?.value || this.noBrand.has(d);
+  }
+
+  headerTick(i: number, j: number, k: number, what: 'brand' | 'partNo'): boolean {
+    const d = this.detailsAt(i, j)?.at(k);
+    return !!d && !!this.headerTicks.get(d)?.[what];
+  }
+
+  /** Ticks "Brand" / "Part no": the value becomes the first description line. A line without that value (or not in products) is left as it is, no error. */
+  toggleHeader(i: number, j: number, k: number, what: 'brand' | 'partNo', on: boolean): void {
+    const d = this.detailsAt(i, j)?.at(k) as FormGroup | undefined;
+    if (!d) return;
+    const ticks = this.headerTicks.get(d) ?? { brand: false, partNo: false };
+    ticks[what] = on;
+    this.headerTicks.set(d, ticks);
+    if (what === 'brand' && on && !this.brands.has(d) && d.get('productId')?.value && this.source) {
+      const id = d.get('productId')!.value;
+      const code = (d.get('partNo')?.value || d.get('itemCode')?.value || '').toString().trim();
+      if (code.length >= 2) {
+        this.subs.add(this.source.search({ search: code, category: '', scopeIds: this.scopeIds, skip: 0, limit: 10 }).subscribe((rows) => {
+          const hit = (rows || []).find((r) => r._id === id);
+          if (hit?.brand) this.brands.set(d, hit.brand);
+          else { this.noBrand.add(d); ticks.brand = false; }
+          this.applyHeader(d);
+        }));
+        return;
+      }
+    }
+    this.applyHeader(d);
+  }
+
+  private applyHeader(d: FormGroup): void {
+    const ticks = this.headerTicks.get(d);
+    const lines: string[] = [];
+    const brand = this.brands.get(d);
+    const partNo = (d.get('partNo')?.value || '').toString().trim();
+    if (ticks?.brand && brand) lines.push(`Brand: ${brand}`);
+    if (ticks?.partNo && partNo) lines.push(`Part No: ${partNo}`);
+    const body = (d.get('detail')?.value || '').toString().replace(HEADER_LINES, '');
+    d.get('detail')?.setValue(lines.length ? `${lines.join('\n')}\n${body}` : body);
+    d.get('detail')?.markAsDirty();
   }
 
   /** Suggestions must never overwrite something the user already typed on the line. */
@@ -1920,6 +1978,26 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   /** The line a create-product request came from, so the new product can be put on it. */
   private createTarget: { i: number; j: number; k: number } | null = null;
+
+  requestEditProduct(i: number, j: number, k: number, s: ItemSuggestion): void {
+    this.createTarget = { i, j, k };
+    this.closeSuggestions();
+    this.editProductRequested.emit(s._id);
+  }
+
+  /** Puts an edited product's new details on the line that asked for the edit, replacing what the line held. */
+  applyEditedProduct(s: ItemSuggestion): void {
+    const t = this.createTarget;
+    this.createTarget = null;
+    const line = t ? (this.detailsAt(t.i, t.j)?.at(t.k) as FormGroup | undefined) : undefined;
+    if (!t || !line) return;
+    line.get('itemCode')?.setValue(s.itemCode ?? '', { emitEvent: false });
+    line.get('partNo')?.setValue(s.partNo ?? '', { emitEvent: false });
+    line.get('uom')?.setValue(s.uom ?? '', { emitEvent: false });
+    line.get('detail')?.setValue(s.description, { emitEvent: false });
+    this.applySuggestion(t.i, t.j, t.k, s);
+    this.emitTotals();
+  }
 
   /** Puts a product the host just created on the line that asked for it. */
   applyCreatedProduct(s: ItemSuggestion): void {

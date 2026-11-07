@@ -19,6 +19,8 @@ export interface ItemSuggestion {
   source: 'catalogue' | 'inventory';
   itemCode?: string;
   partNo?: string;
+  /** Product brand; offered as the first description line by the "Brand" tick. */
+  brand?: string;
   uom?: string;
   unitCost?: number;
   unitSellingPrice?: number;

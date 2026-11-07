@@ -114,7 +114,7 @@
                 [seedOptionalItems]="seedOptionalItems" [suggestionScopeIds]="[]" [currency]="quoteForm.controls.currency.value || 'QAR'"
                 [previousJobItemsCount]="previousJobItemsCount"
                 (totals)="onItemTotals($event)" (previousJobsClicked)="openPreviousJobsModal()"
-                (createProductRequested)="openCreateProduct($event)"></app-item-entry>
+                (createProductRequested)="openCreateProduct($event)" [allowEditProduct]="true" (editProductRequested)="openEditProduct($event)"></app-item-entry>
         </div>
 
         <!-- Step 3 — notes & terms --------------------------------------------------------- -->
@@ -156,7 +156,7 @@
             <app-action-button variant="secondary" (click)="createSupplierOpen = true">
                 <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Create supplier
             </app-action-button>
-            <app-action-button variant="secondary" (click)="createProductPrefill = null; createProductOpen = true">
+            <app-action-button variant="secondary" (click)="createProductPrefill = null; editingProduct = null; createProductOpen = true">
                 <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Create product
             </app-action-button>
             <ng-container *ngIf="step === 2">
@@ -189,4 +189,4 @@
 
 <app-supplier-form-drawer [open]="createSupplierOpen" mode="create" (saved)="onSupplierCreated($event)" (closed)="createSupplierOpen = false"></app-supplier-form-drawer>
 
-<app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>
+<app-product-form-drawer [open]="createProductOpen" [mode]="editingProduct ? 'edit' : 'create'" [product]="editingProduct" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false; editingProduct = null"></app-product-form-drawer>

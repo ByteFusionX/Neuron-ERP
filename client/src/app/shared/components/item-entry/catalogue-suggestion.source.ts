@@ -20,6 +20,7 @@ export const toCatalogueSuggestion = (p: any): ItemSuggestion => ({
   source: 'catalogue',
   itemCode: p.itemCode || '',
   partNo: p.partNo || '',
+  brand: (typeof p.brand === 'object' ? p.brand?.name : p.brand) || '',
   uom: p.unitOfMeasure || '',
   unitCost: p.estimatedCost ?? undefined,
   unitSellingPrice: p.defaultSellingPrice ?? undefined,

@@ -3492,7 +3492,7 @@ export const getProductSuggestions = async (req: Request, res: Response, next: N
         const skipValue = Math.max(parseInt(skip as string, 10) || 0, 0);
 
         const suggestions = await Product.find(filter)
-            .select('productCategory productName productDescription partNo itemCode unitOfMeasure type defaultSellingPrice estimatedCost defaultVendor leadTimeDays')
+            .select('productCategory productName productDescription partNo brand itemCode unitOfMeasure type defaultSellingPrice estimatedCost defaultVendor leadTimeDays')
             .populate('productCategory', 'categoryName')
             .sort({ _id: -1 })
             .skip(skipValue)
