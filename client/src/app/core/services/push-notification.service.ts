@@ -12,6 +12,10 @@ export class PushNotificationService {
     subscribedSubject = new BehaviorSubject<boolean>(false);
     subscribed$ = this.subscribedSubject.asObservable();
 
+    /** Last subscribe failure (null when the last attempt worked); a UI can show it. */
+    errorSubject = new BehaviorSubject<string | null>(null);
+    error$ = this.errorSubject.asObservable();
+
     get isSupported(): boolean {
         return 'serviceWorker' in navigator && 'PushManager' in window && !!environment.vapidPublicKey;
     }
@@ -71,6 +75,7 @@ export class PushNotificationService {
             keys: subscriptionJson.keys,
             userAgent: navigator.userAgent,
         }, { withCredentials: true }));
+        this.errorSubject.next(null);
         this.subscribedSubject.next(true);
     }
 
@@ -85,7 +90,9 @@ export class PushNotificationService {
         if (!this.isSupported) return;
         try {
             await this.registerAndSubscribe();
-        } catch {
+        } catch (error) {
+            console.error('Push notification setup failed:', error);
+            this.errorSubject.next(error instanceof Error ? error.message : 'Push notification setup failed');
             this.subscribedSubject.next(false);
         }
         if (Notification.permission !== 'default' || this.gestureRetryArmed) return;

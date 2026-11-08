@@ -1,10 +1,12 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, filter, Observable, Subject, switchMap, take } from 'rxjs';
+import { BehaviorSubject, filter, Observable, Subject, Subscription, switchMap, take } from 'rxjs';
+import { PushNotificationService } from './push-notification.service';
 import { Socket } from 'ngx-socket-io';
 import { environment } from 'src/environments/environment';
 import { HttpClient } from '@angular/common/http';
 import { TextNotification } from 'src/app/shared/interfaces/notification.interface';
 import { EmployeeService } from './employee/employee.service';
+import { setAccessToken } from '../auth/token-store';
 import { Router, NavigationExtras } from '@angular/router';
 import { SameRouteNavigationService } from './same-route-navigation.service';
 
@@ -34,7 +36,8 @@ export class NotificationService {
         private socket: Socket,
         private employeeService: EmployeeService,
         private router: Router,
-        private sameRouteNavigation: SameRouteNavigationService
+        private sameRouteNavigation: SameRouteNavigationService,
+        private pushNotificationService: PushNotificationService
     ) { }
 
     private loadMarkedUnreadIds(): Set<string> {
@@ -296,9 +299,69 @@ export class NotificationService {
         }
     }
 
+    private liveSub?: Subscription;
+    private reconnectSub?: Subscription;
+    private authErrorSub?: Subscription;
+    private recovering = false;
+    private pushClickBound = false;
+
+    private recoverSocketAuth(): void {
+        if (this.recovering || !this.employeeService.getToken()) return;
+        this.recovering = true;
+        this.employeeService.refreshAccessToken().subscribe({
+            next: ({ token }) => {
+                this.recovering = false;
+                setAccessToken(token);
+                this.socket.disconnect();
+                this.socket.connect(); // 'connect' handler re-auths with the fresh token
+                this.getEmployeeTextNotifications(); // catch up on anything missed while offline
+            },
+            error: () => { this.recovering = false; },
+        });
+    }
+
+    /** Starts (or restarts) notifications for the signed-in user: socket auth, list, live feed, push. */
+    startSession(): void {
+        // A click on a push notification (handled by the service worker) asks the open tab to go to its page.
+        if (!this.pushClickBound && 'serviceWorker' in navigator) {
+            this.pushClickBound = true;
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                const data = event.data;
+                if (data?.type === 'PUSH_NOTIFICATION_CLICK' && data.routePath) {
+                    this.navigateToNotification({ routePath: data.routePath, routeData: data.routeData } as any);
+                }
+            });
+        }
+        this.socket.connect();
+        this.authSocketIo(this.employeeService.getToken());
+        // A reconnect creates a fresh server socket with no room; re-auth with the current (refreshed) token.
+        this.reconnectSub?.unsubscribe();
+        this.reconnectSub = this.socket.fromEvent('connect').subscribe(() => this.authSocketIo(this.employeeService.getToken()));
+        // The server rejects an expired access token and drops the socket (no auto-reconnect after a
+        // server-initiated disconnect). Renew the token with the refresh cookie, then reconnect once.
+        this.authErrorSub?.unsubscribe();
+        this.authErrorSub = this.socket.fromEvent('auth_error').subscribe(() => this.recoverSocketAuth());
+        this.getEmployeeTextNotifications();
+        this.initializeNotifications();
+        this.pushNotificationService.ensurePermissionPrompt();
+    }
+
+    /** Ends notifications for the current user on sign-out / session expiry. */
+    endSession(): void {
+        this.liveSub?.unsubscribe();
+        this.liveSub = undefined;
+        this.reconnectSub?.unsubscribe();
+        this.reconnectSub = undefined;
+        this.authErrorSub?.unsubscribe();
+        this.authErrorSub = undefined;
+        this.textNotificationsSubject.next({ viewed: [], unviewed: [] });
+        this.markedUnreadIdsSubject.next(new Set());
+        this.socket.disconnect();
+    }
+
     initializeNotifications() {
-        console.log('initializeNotifications');
-        this.socket.fromEvent('recieveNotifications').subscribe(
+        this.liveSub?.unsubscribe();
+        this.liveSub = this.socket.fromEvent('recieveNotifications').subscribe(
             {
                 next: (notification) => {
                     console.log('notification', notification);
@@ -308,9 +371,9 @@ export class NotificationService {
                         routePath: routeInfo.routePath,
                         routeData: routeInfo.routeData
                     };
-                    const notifications = this.textNotificationsSubject.value
-                    notifications.unviewed.unshift(notificationWithRoute)
-                    this.textNotificationsSubject.next(notifications)
+                    const current = this.textNotificationsSubject.value
+                    if (current.unviewed.some(n => n._id && n._id === notificationWithRoute._id)) return;
+                    this.textNotificationsSubject.next({ ...current, unviewed: [notificationWithRoute, ...current.unviewed] })
                 },
                 error: (error) => {
                     console.error('Error receiving notifications:', error);
@@ -335,7 +398,8 @@ export class NotificationService {
         return this.http.put(`${this.api}/notification/preferences`, preferences);
     }
 
-    authSocketIo(token: string) {
+    authSocketIo(token: string | null | undefined) {
+        if (!token) return;
         this.socket.emit('auth', token);
     }
 

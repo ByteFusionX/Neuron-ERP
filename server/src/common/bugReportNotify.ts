@@ -1,6 +1,5 @@
 import { Server } from "socket.io";
 import { createNotification } from "../controllers/notification.controller";
-import { connectedSockets } from "../services/socket-io.service";
 import { sendWebPushToEmployees } from "../services/webPush.service";
 
 export async function notifyEmployee(
@@ -15,7 +14,7 @@ export async function notifyEmployee(
         });
 
         const socket = global.io as Server | undefined;
-        if (notification && socket && connectedSockets[recipientId]) {
+        if (notification && socket) {
             socket.to(recipientId).emit("recieveNotifications", notification);
         }
 

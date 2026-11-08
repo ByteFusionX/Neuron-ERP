@@ -5,7 +5,6 @@ import Category, { Privileges } from "../models/category.model";
 import jwt from 'jsonwebtoken';
 import { getEmployeeData } from "../common/utils/util";
 import { Server } from "socket.io";
-import { connectedSockets } from "../services/socket-io.service";
 import { ObjectId } from "mongodb";
 import { sendWebPushToEmployees } from "../services/webPush.service";
 import NotificationPreference from "../models/notificationPreference.model";
@@ -683,9 +682,9 @@ export const createNotificationWithPrivileges = async (
         if (notification && socket) {
             notification.recipients.forEach((recipient: any) => {
                 const recipientId = recipient.objectId._id?.toString() || recipient.objectId.toString();
-                if (connectedSockets[recipientId]) {
-                    socket.to(recipientId).emit("recieveNotifications", notification);
-                }
+                // Always emit to the room: connectedSockets tracks one socket per user, so it is wrong
+                // once a user has several tabs (closing one deletes the entry while others still listen).
+                socket.to(recipientId).emit("recieveNotifications", notification);
             });
         }
 
