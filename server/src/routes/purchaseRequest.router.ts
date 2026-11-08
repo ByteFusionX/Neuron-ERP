@@ -22,7 +22,7 @@ import {
     awardPurchaseLines,
     getSupplierPrices
 } from '../controllers/purchaseRequest.controller'
-import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 
 const purchaseRequestRouter = Router()
 
@@ -38,14 +38,14 @@ purchaseRequestRouter.get('/purchase-request/generate-purchase-no', generatePurc
 purchaseRequestRouter.get('/purchase-request/convertible-jobs', getConvertibleJobs)
 purchaseRequestRouter.get('/supplier-prices', getSupplierPrices)
 purchaseRequestRouter.get('/purchase-request/:id',getPurchaseRequestById)
-purchaseRequestRouter.patch('/purchase-request/award/:id', awardPurchaseLines)
-purchaseRequestRouter.put('/purchase-update/:id', updatePurchaseRequest)
+purchaseRequestRouter.patch('/purchase-request/award/:id', requireUnlessDenied("purchase", "award"), awardPurchaseLines)
+purchaseRequestRouter.put('/purchase-update/:id', requireUnlessDenied("purchase", "edit"), updatePurchaseRequest)
 purchaseRequestRouter.patch('/purchase-request/status/:id', requirePrivilege("purchase", "canApprovePR"), updatePurchaseRequestStatus)
 purchaseRequestRouter.post('/purchase-request/revoke/:id', requirePrivilege("purchase", "canApprovePR"), revokePurchaseRequest)
-purchaseRequestRouter.post('/purchase-request/reset-workflow/:id', resetPurchaseWorkflow)
-purchaseRequestRouter.patch('/purchase-request/items/:id', updatePurchaseItems)
-purchaseRequestRouter.patch('/purchase-request/supplier-offers/:id', updatePurchaseSupplierOffers)
-purchaseRequestRouter.patch('/purchase-request/mr-request/:id', updatePurchaseMrRequest)
+purchaseRequestRouter.post('/purchase-request/reset-workflow/:id', requireUnlessDenied("purchase", "resetWorkflow"), resetPurchaseWorkflow)
+purchaseRequestRouter.patch('/purchase-request/items/:id', requireUnlessDenied("purchase", "edit"), updatePurchaseItems)
+purchaseRequestRouter.patch('/purchase-request/supplier-offers/:id', requireUnlessDenied("purchase", "edit"), updatePurchaseSupplierOffers)
+purchaseRequestRouter.patch('/purchase-request/mr-request/:id', requireUnlessDenied("purchase", "edit"), updatePurchaseMrRequest)
 // merging PR items into a deal sheet is gated by the dealSheet flag too, on
 // top of base purchase-module access.
 purchaseRequestRouter.patch('/purchase-request/merge-items/:id', requirePrivilege("dealSheet"), mergeItemsToDealSheet)

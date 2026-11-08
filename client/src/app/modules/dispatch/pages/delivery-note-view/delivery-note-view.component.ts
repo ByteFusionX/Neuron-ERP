@@ -136,7 +136,7 @@ export class DeliveryNoteViewComponent {
 
   constructor() {
     this.employeeService.employeeData$.pipe(takeUntilDestroyed()).subscribe(emp => {
-      this.canInvoice = !!emp?.category?.privileges?.invoice?.createInvoice;
+      this.canInvoice = (/^(superadmin|admin)$/i.test(emp?.category?.role ?? '') || !!(emp?.category?.privileges?.dispatch?.createInvoice ?? emp?.category?.privileges?.invoice?.createInvoice));
     });
     this.loadDeliveryNote();
   }

@@ -23,7 +23,7 @@ import {
   getPurchaseOrderCancellable,
   cancelPurchaseOrder
 } from "../controllers/purchaseOrder.controller";
-import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 const upload = require("../common/multer.storage")
 
 const router = Router();
@@ -31,9 +31,9 @@ const router = Router();
 router.use(requirePrivilege("purchaseOrder"));
 
 router.post("/", requirePrivilege("purchaseOrder", "canInitiateLPO"), createPurchaseOrder);
-router.put("/:id", updatePurchaseOrder);
+router.put("/:id", requireUnlessDenied("purchaseOrder", "edit"), updatePurchaseOrder);
 router.put("/:id/reissue", requirePrivilege("purchaseOrder", "canReissueAndRevoke"), reissuePurchaseOrder);
-router.patch("/:id/status", updatePurchaseOrderStatus);
+router.patch("/:id/status", requireUnlessDenied("purchaseOrder", "edit"), updatePurchaseOrderStatus);
 router.patch("/:id/approve", requirePrivilege("purchaseOrder", "canApprovePOs"), approvePurchaseOrder);
 router.patch("/:id/reject", requirePrivilege("purchaseOrder", "canApprovePOs"), rejectPurchaseOrder);
 router.patch("/:id/resend", requirePrivilege("purchaseOrder", "canInitiateLPO"), resendPurchaseOrder);
@@ -42,8 +42,8 @@ router.patch("/:id/documents", requirePrivilege("purchaseOrder", "canInitiateLPO
 router.delete("/:id/documents/:fileName", requirePrivilege("purchaseOrder", "canInitiateLPO"), removePurchaseOrderDocument);
 router.get("/:id/cancellable", getPurchaseOrderCancellable);
 router.post("/:id/cancel", requirePrivilege("purchaseOrder", "canCancel"), cancelPurchaseOrder);
-router.post("/:id/reset-workflow", resetPurchaseOrderWorkflow);
-router.patch("/:id/supplier-invoices",upload.array('files'), updateSupplierInvoices);
+router.post("/:id/reset-workflow", requireUnlessDenied("purchaseOrder", "resetWorkflow"), resetPurchaseOrderWorkflow);
+router.patch("/:id/supplier-invoices",requireUnlessDenied("purchaseOrder", "uploadInvoice"), upload.array('files'), updateSupplierInvoices);
 router.get("/generate-po-no", generateLpoNo);
 router.get("/suppliers/:purchaseId", getSuppliersForPurchaseRequest);
 router.get("/items/:purchaseId/:supplierId", getItemsForPurchaseRequest);

@@ -288,6 +288,10 @@ export interface Privileges {
     viewReport: string;
     create: boolean;
     canApprovePR: boolean;
+    // Undefined = allowed; explicit false denies.
+    edit?: boolean;
+    award?: boolean;
+    resetWorkflow?: boolean;
   };
   purchaseOrder: {
     viewReport: string;
@@ -295,10 +299,15 @@ export interface Privileges {
     canApprovePOs: boolean;
     canReissueAndRevoke: boolean;
     canCancel?: boolean;
+    edit?: boolean;
+    resetWorkflow?: boolean;
+    uploadInvoice?: boolean;
   };
   grn: {
     viewReport: string;
     canUploadInvoice: boolean;
+    create?: boolean;
+    edit?: boolean;
   };
   technical: {
     canViewOpenToWorkAndAssign: boolean;
@@ -317,23 +326,35 @@ export interface Privileges {
     stockEntries: {
       viewReport: string;
     };
+    // Split out of stockEntries; undefined on roles saved before the split.
+    stockBalance?: {
+      viewReport: string;
+    };
+    stockMovements?: {
+      viewReport: string;
+    };
   };
   dispatch: {
     viewReport: string;
     createDeliveryNote: boolean;
-    viewPendingDelivery: boolean;
-    viewInvoiceLinking: boolean;
-    viewInventoryDeduction: boolean;
+    // Undefined = falls back to invoice.createInvoice (roles saved before the split).
+    createInvoice?: boolean;
+    editDeliveryNote?: boolean;
+    cancelDeliveryNote?: boolean;
+    dispatchDeliveryNote?: boolean;
+    uploadPod?: boolean;
+    rejectDeliveryItems?: boolean;
   };
   invoice: {
     viewReport: string;
     createInvoice: boolean;
-    viewInvoicesVsDn: boolean;
-    viewCancelledAdjusted: boolean;
-    viewReissued: boolean;
     piCreateEdit?: boolean;
     piApprove?: boolean;
     pdcApprove?: boolean;
+    editInvoice?: boolean;
+    cancelInvoice?: boolean;
+    rejectInvoice?: boolean;
+    reissueInvoice?: boolean;
   };
   claims: {
     viewReport: string;

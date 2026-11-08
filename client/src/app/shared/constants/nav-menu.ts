@@ -15,7 +15,7 @@ export interface MenuItem {
   /** Boolean privilege flags that also grant access, even when `privilegeValue` itself is not met. */
   anyOfFlags?: string[];
   children?: SubMenuItem[];
-  inventorySubKey?: 'products' | 'stockEntries';
+  inventorySubKey?: 'products' | 'stockEntries' | 'stockBalance' | 'stockMovements';
 }
 
 export interface SubMenuItem {
@@ -248,7 +248,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         route: '/stock/overview',
         privilegeKey: 'inventory',
         privilegeValue: 'none',
-        inventorySubKey: 'stockEntries',
+        inventorySubKey: 'stockBalance',
       },
       {
         id: 'stockLedger',
@@ -257,7 +257,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         route: '/stock/ledger',
         privilegeKey: 'inventory',
         privilegeValue: 'none',
-        inventorySubKey: 'stockEntries',
+        inventorySubKey: 'stockMovements',
       },
     ],
   },
@@ -501,7 +501,8 @@ export function hasMenuAccess(privileges: Privileges | undefined, item: MenuItem
     // Products / Stocks are now separate top-level tabs, each gated on
     // its own nested viewReport instead of the combined inventory check.
     if ('inventorySubKey' in item && item.inventorySubKey) {
-      const subPrivilege = inventoryPrivilege[item.inventorySubKey];
+      // Roles saved before the balance/movements split only have stockEntries: fall back to it.
+      const subPrivilege = inventoryPrivilege[item.inventorySubKey] ?? inventoryPrivilege.stockEntries;
       return item.privilegeValue === 'none'
         ? subPrivilege?.viewReport !== 'none'
         : subPrivilege?.viewReport === item.privilegeValue;

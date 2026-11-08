@@ -49,7 +49,7 @@ const MODULE_CATEGORY_OF: Record<string, string> = {
   customer: 'Sales', enquiry: 'Sales', assignedJob: 'Sales', quotation: 'Sales',
   dealSheet: 'Sales', jobSheet: 'Sales',
   supplier: 'Operations', purchase: 'Operations', purchaseOrder: 'Operations', grn: 'Operations',
-  inventory: 'Operations', dispatch: 'Operations', invoice: 'Operations',
+  inventory: 'Operations', dispatch: 'Operations', invoice: 'Finance',
   technical: 'Projects',
   claims: 'Finance', sensitiveData: 'Finance',
   home: 'Main', dashboard: 'Main', employee: 'Administration', departments: 'Administration',
@@ -221,7 +221,13 @@ export class RoleFormDrawerComponent implements OnChanges {
     {
       key: 'purchase', label: 'Purchase', abbr: 'PR', description: 'Purchase requisitions', master: 'purchaseChecked', group: 'purchase',
       scopes: [scope('purchase.viewReport')],
-      flags: [{ path: 'purchase.create', label: 'Create purchases' }, { path: 'purchase.canApprovePR', label: 'Approve purchase requisitions' }],
+      flags: [
+        { path: 'purchase.create', label: 'Create purchases' },
+        { path: 'purchase.canApprovePR', label: 'Approve purchase requisitions' },
+        { path: 'purchase.edit', label: 'Edit purchase requests / items / supplier offers / MR request' },
+        { path: 'purchase.award', label: 'Award purchase lines' },
+        { path: 'purchase.resetWorkflow', label: 'Reset purchase workflow' },
+      ],
     },
     {
       key: 'purchaseOrder', label: 'Purchase Orders', abbr: 'PO', description: 'LPOs and purchase orders', master: 'purchaseOrderChecked', group: 'purchaseOrder',
@@ -231,33 +237,44 @@ export class RoleFormDrawerComponent implements OnChanges {
         { path: 'purchaseOrder.canApprovePOs', label: 'Approve purchase orders' },
         { path: 'purchaseOrder.canReissueAndRevoke', label: 'Re-issue and revoke POs' },
         { path: 'purchaseOrder.canCancel', label: 'Cancel POs and replace the supplier' },
+        { path: 'purchaseOrder.edit', label: 'Edit purchase orders / update status' },
+        { path: 'purchaseOrder.resetWorkflow', label: 'Reset PO workflow' },
+        { path: 'purchaseOrder.uploadInvoice', label: 'Upload supplier invoices on PO' },
       ],
     },
     {
       key: 'grn', label: 'GRN', abbr: 'GR', description: 'Goods received notes', master: 'grnChecked', group: 'grn',
-      scopes: [], flags: [{ path: 'grn.canUploadInvoice', label: 'Upload supplier invoice' }],
+      scopes: [scope('grn.viewReport', 'GRN visibility')], flags: [
+        { path: 'grn.canUploadInvoice', label: 'Upload supplier invoice' },
+        { path: 'grn.create', label: 'Create GRN' },
+        { path: 'grn.edit', label: 'Edit GRN' },
+      ],
     },
     {
       key: 'dispatch', label: 'Dispatch', abbr: 'DN', description: 'Delivery notes', master: 'dispatchChecked', group: 'dispatch',
       scopes: [scope('dispatch.viewReport')],
       flags: [
         { path: 'dispatch.createDeliveryNote', label: 'Create delivery note' },
-        { path: 'dispatch.viewPendingDelivery', label: 'View pending delivery' },
-        { path: 'dispatch.viewInvoiceLinking', label: 'View invoice linking' },
-        { path: 'dispatch.viewInventoryDeduction', label: 'View inventory deduction' },
+        { path: 'dispatch.createInvoice', label: 'Create / edit invoice from delivery note' },
+        { path: 'dispatch.editDeliveryNote', label: 'Edit delivery note' },
+        { path: 'dispatch.cancelDeliveryNote', label: 'Cancel delivery note' },
+        { path: 'dispatch.dispatchDeliveryNote', label: 'Dispatch delivery note' },
+        { path: 'dispatch.uploadPod', label: 'Upload proof of delivery' },
+        { path: 'dispatch.rejectDeliveryItems', label: 'Reject delivery items' },
       ],
     },
     {
-      key: 'invoice', label: 'Invoice', abbr: 'IN', description: 'Customer invoices', master: 'invoiceChecked', group: 'invoice',
+      key: 'invoice', label: 'Invoice', abbr: 'IN', description: 'Finance invoices: proforma, PDC and supplier bills', master: 'invoiceChecked', group: 'invoice',
       scopes: [scope('invoice.viewReport')],
       flags: [
-        { path: 'invoice.createInvoice', label: 'Create invoice' },
-        { path: 'invoice.viewInvoicesVsDn', label: 'View invoices vs DN' },
-        { path: 'invoice.viewCancelledAdjusted', label: 'View cancelled / adjusted' },
-        { path: 'invoice.viewReissued', label: 'View reissued' },
+        { path: 'invoice.createInvoice', label: 'Create invoice (finance)' },
         { path: 'invoice.piCreateEdit', label: 'Proforma invoice: create / edit' },
         { path: 'invoice.piApprove', label: 'Proforma invoice: update status' },
         { path: 'invoice.pdcApprove', label: 'PDC: approve, reject and revoke' },
+        { path: 'invoice.editInvoice', label: 'Edit invoice' },
+        { path: 'invoice.cancelInvoice', label: 'Cancel invoice' },
+        { path: 'invoice.rejectInvoice', label: 'Reject invoice' },
+        { path: 'invoice.reissueInvoice', label: 'Cancel and reissue invoice' },
       ],
     },
     {
@@ -275,7 +292,7 @@ export class RoleFormDrawerComponent implements OnChanges {
     },
     {
       key: 'inventory', label: 'Inventory', abbr: 'IV', description: 'Products and stock entries', master: 'inventoryChecked', group: 'inventory',
-      scopes: [scope('inventory.products.viewReport', 'Products visibility'), scope('inventory.stockEntries.viewReport', 'Stock entries visibility')],
+      scopes: [scope('inventory.products.viewReport', 'Products visibility'), scope('inventory.stockBalance.viewReport', 'Stock balance visibility'), scope('inventory.stockMovements.viewReport', 'Stock movements visibility')],
       flags: [],
     },
     {
@@ -469,6 +486,10 @@ export class RoleFormDrawerComponent implements OnChanges {
         viewReport: 'none',
         create: [false],
         canApprovePR: [false],
+        // Default true: gates on previously ungated actions (undefined = allowed).
+        edit: [true],
+        award: [true],
+        resetWorkflow: [true],
       }),
       purchaseOrder: this._fb.group({
         viewReport: 'none',
@@ -476,10 +497,15 @@ export class RoleFormDrawerComponent implements OnChanges {
         canApprovePOs: [false],
         canReissueAndRevoke: [false],
         canCancel: [false],
+        edit: [true],
+        resetWorkflow: [true],
+        uploadInvoice: [true],
       }),
       grn: this._fb.group({
         viewReport: 'none',
         canUploadInvoice: [false],
+        create: [true],
+        edit: [true],
       }),
       technical: this._fb.group({
         canViewOpenToWorkAndAssign: [false],
@@ -498,23 +524,33 @@ export class RoleFormDrawerComponent implements OnChanges {
         stockEntries: this._fb.group({
           viewReport: 'none',
         }),
+        stockBalance: this._fb.group({
+          viewReport: 'none',
+        }),
+        stockMovements: this._fb.group({
+          viewReport: 'none',
+        }),
       }),
       dispatch: this._fb.group({
         viewReport: 'none',
         createDeliveryNote: [false],
-        viewPendingDelivery: [false],
-        viewInvoiceLinking: [false],
-        viewInventoryDeduction: [false],
+        createInvoice: [false],
+        editDeliveryNote: [true],
+        cancelDeliveryNote: [true],
+        dispatchDeliveryNote: [true],
+        uploadPod: [true],
+        rejectDeliveryItems: [true],
       }),
       invoice: this._fb.group({
         viewReport: 'none',
         createInvoice: [false],
-        viewInvoicesVsDn: [false],
-        viewCancelledAdjusted: [false],
-        viewReissued: [false],
         piCreateEdit: [false],
         piApprove: [false],
         pdcApprove: [false],
+        editInvoice: [true],
+        cancelInvoice: [true],
+        rejectInvoice: [true],
+        reissueInvoice: [true],
       }),
       claims: this._fb.group({
         viewReport: 'none',
@@ -690,20 +726,15 @@ export class RoleFormDrawerComponent implements OnChanges {
          privileges.technical.canTransferToEngineer || privileges.technical.canApproveMRRequests) : false,
       this.supplierChecked = privileges.supplier?.viewReport !== 'none',
       this.inventoryChecked = privileges.inventory ? 
-        (privileges.inventory.products?.viewReport !== 'none' || privileges.inventory.stockEntries?.viewReport !== 'none') : false,
+        (privileges.inventory.products?.viewReport !== 'none' || privileges.inventory.stockEntries?.viewReport !== 'none' ||
+         (privileges.inventory.stockBalance?.viewReport ?? 'none') !== 'none' || (privileges.inventory.stockMovements?.viewReport ?? 'none') !== 'none') : false,
       this.dispatchChecked = privileges.dispatch
         ? privileges.dispatch.viewReport !== 'none' ||
-          !!privileges.dispatch.createDeliveryNote ||
-          !!privileges.dispatch.viewPendingDelivery ||
-          !!privileges.dispatch.viewInvoiceLinking ||
-          !!privileges.dispatch.viewInventoryDeduction
+          !!privileges.dispatch.createDeliveryNote || !!privileges.dispatch.createInvoice
         : false,
       this.invoiceChecked = privileges.invoice
         ? privileges.invoice.viewReport !== 'none' ||
           !!privileges.invoice.createInvoice ||
-          !!privileges.invoice.viewInvoicesVsDn ||
-          !!privileges.invoice.viewCancelledAdjusted ||
-          !!privileges.invoice.viewReissued ||
           !!privileges.invoice.piCreateEdit ||
           !!privileges.invoice.piApprove || !!privileges.invoice.pdcApprove
         : false,
@@ -861,9 +892,9 @@ export class RoleFormDrawerComponent implements OnChanges {
       }
     } else if (formControlName === 'inventory') {
       if (checked) {
-        this.categoryForm.patchValue({ privileges: { [formControlName]: { products: { viewReport: 'all' }, stockEntries: { viewReport: 'all' } } } });
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { products: { viewReport: 'all' }, stockEntries: { viewReport: 'all' }, stockBalance: { viewReport: 'all' }, stockMovements: { viewReport: 'all' } } } });
       } else {
-        this.categoryForm.patchValue({ privileges: { [formControlName]: { products: { viewReport: 'none' }, stockEntries: { viewReport: 'none' } } } });
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { products: { viewReport: 'none' }, stockEntries: { viewReport: 'none' }, stockBalance: { viewReport: 'none' }, stockMovements: { viewReport: 'none' } } } });
       }
     } else if (formControlName === 'dispatch') {
       if (checked) {
@@ -872,9 +903,7 @@ export class RoleFormDrawerComponent implements OnChanges {
             dispatch: {
               viewReport: 'all',
               createDeliveryNote: false,
-              viewPendingDelivery: false,
-              viewInvoiceLinking: false,
-              viewInventoryDeduction: false,
+              createInvoice: false,
             },
           },
         });
@@ -884,9 +913,7 @@ export class RoleFormDrawerComponent implements OnChanges {
             dispatch: {
               viewReport: 'none',
               createDeliveryNote: false,
-              viewPendingDelivery: false,
-              viewInvoiceLinking: false,
-              viewInventoryDeduction: false,
+              createInvoice: false,
             },
           },
         });
@@ -898,9 +925,6 @@ export class RoleFormDrawerComponent implements OnChanges {
             invoice: {
               viewReport: 'all',
               createInvoice: false,
-              viewInvoicesVsDn: false,
-              viewCancelledAdjusted: false,
-              viewReissued: false,
               piCreateEdit: false,
               piApprove: false,
               pdcApprove: false,
@@ -913,9 +937,6 @@ export class RoleFormDrawerComponent implements OnChanges {
             invoice: {
               viewReport: 'none',
               createInvoice: false,
-              viewInvoicesVsDn: false,
-              viewCancelledAdjusted: false,
-              viewReissued: false,
               piCreateEdit: false,
               piApprove: false,
               pdcApprove: false,

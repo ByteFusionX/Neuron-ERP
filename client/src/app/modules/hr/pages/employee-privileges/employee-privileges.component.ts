@@ -91,15 +91,10 @@ const PRIVILEGE_MODULES: PrivilegeModule[] = [
   ]},
   { key: 'dispatch', label: 'Dispatch', flags: [
     { path: 'dispatch.createDeliveryNote', label: 'Create delivery note' },
-    { path: 'dispatch.viewPendingDelivery', label: 'View pending delivery' },
-    { path: 'dispatch.viewInvoiceLinking', label: 'View invoice linking' },
-    { path: 'dispatch.viewInventoryDeduction', label: 'View inventory deduction' },
+    { path: 'dispatch.createInvoice', label: 'Create / edit invoice from delivery note' },
   ]},
   { key: 'invoice', label: 'Invoice', flags: [
-    { path: 'invoice.createInvoice', label: 'Create invoice' },
-    { path: 'invoice.viewInvoicesVsDn', label: 'View invoices vs DN' },
-    { path: 'invoice.viewCancelledAdjusted', label: 'View cancelled / adjusted' },
-    { path: 'invoice.viewReissued', label: 'View reissued' },
+    { path: 'invoice.createInvoice', label: 'Create invoice (finance)' },
     { path: 'invoice.piCreateEdit', label: 'Proforma invoice: create / edit' },
     { path: 'invoice.piApprove', label: 'Proforma invoice: update status' },
         { path: 'invoice.pdcApprove', label: 'PDC: approve, reject and revoke' },

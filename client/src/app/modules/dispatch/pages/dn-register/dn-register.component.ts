@@ -135,7 +135,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.subscriptions.add(
       this.employeeService.employeeData$.subscribe(emp => {
-        this.canInvoice = !!emp?.category?.privileges?.invoice?.createInvoice;
+        this.canInvoice = (/^(superadmin|admin)$/i.test(emp?.category?.role ?? '') || !!(emp?.category?.privileges?.dispatch?.createInvoice ?? emp?.category?.privileges?.invoice?.createInvoice));
         const privileges = emp?.category?.privileges?.dispatch;
         if (privileges?.createDeliveryNote) {
           this.canCreateDn.set(true);

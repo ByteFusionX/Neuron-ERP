@@ -91,7 +91,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
   /** Proformas on the current page that already have an invoice. */
   private invoicedPis = new Map<string, string>();
   private readonly canInvoice = (row: any): boolean =>
-    this.canCreate && row.proforma?.status === 'Received' && !this.invoicedPis.has(String(row.proforma._id));
+    this.canCreateInvoice && row.proforma?.status === 'Received' && !this.invoicedPis.has(String(row.proforma._id));
   private readonly canConfirmPayment = (row: any): boolean =>
     this.canApprove && this.hasInvoice(row) && (
       (row.proforma?.status === 'Received' && !row.proforma?.paymentConfirmedAt)
@@ -347,6 +347,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
   private loadSub?: Subscription;
   private privSub?: Subscription;
   canCreate = false;
+  canCreateInvoice = false;
   canApprove = false;
 
   private updateStatus(pi: ProformaInvoice): void {
@@ -415,6 +416,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
       const elevated = /^(superadmin|admin)$/i.test(String(employee?.category?.role ?? ''));
       const invoice = employee?.category?.privileges?.invoice;
       this.canCreate = elevated || !!invoice?.piCreateEdit;
+      this.canCreateInvoice = elevated || !!invoice?.createInvoice;
       this.canApprove = elevated || !!invoice?.piApprove;
     });
     this.load();
