@@ -8,6 +8,9 @@ import categoryModel, { Privileges } from "../models/category.model";
 import { Filters } from "../interface/dashboard.interface";
 import enquiryModel from "../models/enquiry.model";
 
+// Job-based revenue is dated by the deal's saved date, not the job's createdDate
+const DEAL_DATE_FIELD = 'quotation.dealData.savedDate';
+
 
 export const getDashboardMetrics = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -144,7 +147,7 @@ const getRevenueAchieved = async (access: string, userId: string, filters: Filte
                 $unwind: "$department"
             },
             {
-                $match: buildDashboardFilters(filters, accessFilter)
+                $match: buildDashboardFilters(filters, accessFilter, DEAL_DATE_FIELD)
             },
             {
                 $addFields: {
@@ -229,7 +232,7 @@ const getRevenueAchieved = async (access: string, userId: string, filters: Filte
                     lastWeekSellingPrice: {
                         $sum: {
                             '$cond': [
-                                { $gte: ['$createdDate', sevenDaysAgo] },
+                                { $gte: ['$quotation.dealData.savedDate', sevenDaysAgo] },
                                 '$totalSellingPrice',
                                 0
                             ]
@@ -238,7 +241,7 @@ const getRevenueAchieved = async (access: string, userId: string, filters: Filte
                     lastWeekCostPrice: {
                         $sum: {
                             '$cond': [
-                                { $gte: ['$createdDate', sevenDaysAgo] },
+                                { $gte: ['$quotation.dealData.savedDate', sevenDaysAgo] },
                                 '$totalCostPrice',
                                 0
                             ]
@@ -248,7 +251,7 @@ const getRevenueAchieved = async (access: string, userId: string, filters: Filte
                     lastWeekJobAwarded: {
                         $sum: {
                             '$cond': [
-                                { $gte: ['$createdDate', sevenDaysAgo] },
+                                { $gte: ['$quotation.dealData.savedDate', sevenDaysAgo] },
                                 1,
                                 0
                             ]
@@ -322,7 +325,7 @@ const getInvoicedData = async (access: string, userId: string, filters: Filters)
         // Add status filter for 'Invoiced' jobs
         const statusFilter = { 'status': 'Invoiced' };
         // Combine with other filters
-        const combinedFilter = { ...buildDashboardFilters(filters, accessFilter), ...statusFilter };
+        const combinedFilter = { ...buildDashboardFilters(filters, accessFilter, DEAL_DATE_FIELD), ...statusFilter };
 
         const invoicedJobTotal = await jobModel.aggregate([
             {
@@ -757,7 +760,7 @@ const getAssignedJobs = async (access: string, userId: string, filters: Filters)
                 $unwind: "$department"
             },
             {
-                $match: { ...accessFilterForAwarded, ...buildDashboardFilters(filters, accessFilter) }
+                $match: { ...accessFilterForAwarded, ...buildDashboardFilters(filters, accessFilter, DEAL_DATE_FIELD) }
             },
             {
                 $addFields: {
@@ -784,7 +787,7 @@ const getAssignedJobs = async (access: string, userId: string, filters: Filters)
                     lastWeekJobAwarded: {
                         $sum: {
                             '$cond': [
-                                { $gte: ['$createdDate', oneWeekAgo] },
+                                { $gte: ['$quotation.dealData.savedDate', oneWeekAgo] },
                                 1,
                                 0
                             ]
@@ -794,7 +797,7 @@ const getAssignedJobs = async (access: string, userId: string, filters: Filters)
                     lastWeekRevenue: {
                         $sum: {
                             '$cond': [
-                                { $gte: ['$createdDate', oneWeekAgo] },
+                                { $gte: ['$quotation.dealData.savedDate', oneWeekAgo] },
                                 '$totalSellingPrice',
                                 0
                             ]
@@ -884,7 +887,7 @@ export const getRevenuePerSalesperson = async (req: Request, res: Response, next
                     $unwind: "$department"
                 },
                 {
-                    $match: buildDashboardFilters(filters, accessFilter)
+                    $match: buildDashboardFilters(filters, accessFilter, DEAL_DATE_FIELD)
                 },
                 {
                     $group: {
@@ -1025,8 +1028,8 @@ export const getGrossProfitForLastSevenMonths = async (req: Request, res: Respon
                     {
                         $match: {
                             ...accessFilter,
-                            ...buildDashboardFilters(filters, accessFilter),
-                            createdDate: { $gte: dateRange.gte, $lte: dateRange.lte }
+                            ...buildDashboardFilters(filters, accessFilter, DEAL_DATE_FIELD),
+                            [DEAL_DATE_FIELD]: { $gte: dateRange.gte, $lte: dateRange.lte }
                         }
                     },
                     {
@@ -1064,8 +1067,8 @@ export const getGrossProfitForLastSevenMonths = async (req: Request, res: Respon
                     {
                         $group: {
                             _id: {
-                                year: { $year: '$createdDate' },
-                                month: { $month: '$createdDate' }
+                                year: { $year: '$quotation.dealData.savedDate' },
+                                month: { $month: '$quotation.dealData.savedDate' }
                             },
                             totalSellingPrice: { $sum: '$totalSellingPrice' },
                             totalCost: { $sum: '$totalCostPrice' }
@@ -1195,6 +1198,12 @@ export const getEnquirySalesConversion = async (req: Request, res: Response, nex
                         from: "jobs",
                         localField: "_id",
                         foreignField: "quoteId",
+                        // A revoked+re-approved deal can leave older soft-deleted jobs: only the latest live job counts.
+                        pipeline: [
+                            { $match: { isDeleted: { $ne: true } } },
+                            { $sort: { createdDate: -1 } },
+                            { $limit: 1 },
+                        ],
                         as: "job"
                     }
                 },
@@ -1320,6 +1329,12 @@ export const getPresaleJobSalesConversion = async (req: Request, res: Response, 
                         from: "jobs",
                         localField: "_id",
                         foreignField: "quoteId",
+                        // A revoked+re-approved deal can leave older soft-deleted jobs: only the latest live job counts.
+                        pipeline: [
+                            { $match: { isDeleted: { $ne: true } } },
+                            { $sort: { createdDate: -1 } },
+                            { $limit: 1 },
+                        ],
                         as: "job"
                     }
                 },
@@ -1447,6 +1462,12 @@ export const getReAssignedPresaleJobSalesConversion = async (req: Request, res: 
                         from: "jobs",
                         localField: "_id",
                         foreignField: "quoteId",
+                        // A revoked+re-approved deal can leave older soft-deleted jobs: only the latest live job counts.
+                        pipeline: [
+                            { $match: { isDeleted: { $ne: true } } },
+                            { $sort: { createdDate: -1 } },
+                            { $limit: 1 },
+                        ],
                         as: "job"
                     }
                 },
