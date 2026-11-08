@@ -20,7 +20,8 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { StatusChangeModalComponent, StatusChangeResult } from 'src/app/shared/components/status-change-modal/status-change-modal.component';
 import { quoteStatusModalData } from '../status-update-modal/quote-status-modal.config';
-import { QuotationService, QuoteStockHold } from 'src/app/core/services/quotation/quotation.service';
+import { QuotationService, QuoteStockHold, QuoteViewer } from 'src/app/core/services/quotation/quotation.service';
+import { AuditLogEntry, AuditLogService } from 'src/app/core/services/audit-log.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
@@ -162,11 +163,9 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   isNoteOwner = false;
   isSuperAdmin = false;
   private employeeId = '';
-  /** The History tab is for super admins and the quotation's owner. */
+  /** The History tab is shown to everyone who can open the quotation. */
   get canSeeHistory(): boolean {
-    const owner = this.quoteData?.createdBy as any;
-    const ownerId = typeof owner === 'string' ? owner : owner?._id;
-    return this.isSuperAdmin || (!!ownerId && ownerId === this.employeeId);
+    return true;
   }
   editOpen = false;
   /** Nudged after an edit so the page refetches the quote the same way the route does. */
@@ -256,6 +255,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     private _enquiryService: EnquiryService,
     private modal: ModalService,
     private _profileService: ProfileService,
+    private _auditLog: AuditLogService,
   ) {}
 
   ngOnInit(): void {
@@ -1066,6 +1066,54 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Who can open this quote; shown at the top of the History tab. */
+  viewers: QuoteViewer[] = [];
+  private globalLoadedFor = '';
+
+  /**
+   * The History tab combines the quote's own edit history with the global audit log (deal submitted, stage
+   * approved, workflow reset…). Deal approve/reject/revoke are already in editHistory, so they're not repeated.
+   */
+  private loadGlobalHistory(q: getQuotatation): void {
+    const id = (q as any)._id as string | undefined;
+    if (!id || !this.canSeeHistory) return;
+    const editLog = this.historyLog;
+    this._auditLog.getHistory('quotation', id).subscribe({
+      next: (rows) => {
+        if (this.quoteData !== q) return;
+        const extra = (rows || []).filter((r) => !['deal-approved', 'deal-rejected', 'deal-revoked'].includes(r.action)).map((r) => this.auditToHistory(r));
+        this.historyLog = [...editLog, ...extra].sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
+      },
+    });
+    if (this.globalLoadedFor !== id) {
+      this.globalLoadedFor = id;
+      this.quotationService.getQuoteViewers(id).subscribe({ next: (v) => (this.viewers = v), error: () => (this.globalLoadedFor = '') });
+    }
+  }
+
+  private auditToHistory(r: AuditLogEntry): QvHistoryEntry {
+    const key = r.action.replace(/^deal-/, '');
+    const tone: DetailTone = /rejected|revoked/.test(key) ? 'bad' : /approved/.test(key) ? 'good' : /reset/.test(key) ? 'warn' : 'info';
+    const label = r.action.split('-').map((w, i) => (i ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
+    const who = r.actorName || 'System';
+    return {
+      action: label,
+      kind: r.action,
+      tone,
+      who,
+      initials: this.initials(who) || '?',
+      when: formatDate(r.at, 'dd MMM yyyy, h:mm a', 'en-US'),
+      ago: this.timeAgo(r.at),
+      at: r.at,
+      day: this.historyDay(r.at),
+      summary: r.summary,
+      status: null,
+      reason: '',
+      revision: null,
+      changes: (r.changes || []).map((c) => ({ label: c.label, from: c.from ?? '—', to: c.to ?? '—', fromUnknown: !c.from, toUnknown: !c.to })),
+    };
+  }
+
   /** The log split into date headings, newest first. Cached per log so *ngFor keeps its DOM between passes. */
   get historyGroups(): { day: string; entries: QvHistoryEntry[] }[] {
     if (this.historyCache.log !== this.historyLog) {
@@ -1383,6 +1431,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     this.buildDocuments(q);
     this.events = (q.events || []) as Events[];
     this.historyLog = this.buildHistory(q);
+    this.loadGlobalHistory(q);
     const num = (v: number) => this.numberFormatter.transform(v);
     const currency = q.currency ? ` (${q.currency})` : '';
 

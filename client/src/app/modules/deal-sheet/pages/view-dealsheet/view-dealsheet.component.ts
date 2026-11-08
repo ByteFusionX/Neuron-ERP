@@ -781,16 +781,18 @@ export class ViewDealsheetComponent implements OnInit {
       this.toast.error('Deal cannot be revoked once the job has started allocation (Open to Work or later)');
       return;
     }
-    const { confirmed } = await this.confirm.open({
+    const { confirmed, reason } = await this.confirm.open({
       tone: 'warning',
       title: 'Revoke this deal?',
-      message: 'This will permanently delete the created job and the deal status will change back to pending.',
-      consequence: 'This cannot be undone.',
+      message: 'The deal goes back to pending and its job is put on hold with this reason. If the re-submitted deal is rejected, the job returns to the status it had.',
+      reason: true,
+      reasonLabel: 'Reason for revoking',
+      reasonMaxLength: 500,
       confirmLabel: 'Revoke',
     });
-    if (!confirmed) return;
+    if (!confirmed || !reason) return;
     this.isRevoking = true;
-    this._quoteService.revokeDeal(this.data.quoteData._id, this.userId).subscribe({
+    this._quoteService.revokeDeal(this.data.quoteData._id, this.userId, reason).subscribe({
       next: () => {
         this.isRevoking = false;
         this.toast.success('Deal revoked');

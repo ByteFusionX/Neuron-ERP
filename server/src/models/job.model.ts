@@ -21,6 +21,9 @@ interface Job extends Document {
     lostReason?: string;
     lostAt?: Date;
     lostBy?: Types.ObjectId;
+    // Set when a deal revoke puts the job on hold: where the job was, so a rejected re-submission can put it back.
+    preRevokeStatus?: string;
+    preRevokeAllocateStatus?: string;
 }
 
 export enum jobStatus {
@@ -106,6 +109,8 @@ const jobSchema = new Schema<Job>({
     lostReason: { type: String },
     lostAt: { type: Date },
     lostBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+    preRevokeStatus: { type: String },
+    preRevokeAllocateStatus: { type: String },
 });
 
 export default model<Job>("Job", jobSchema);

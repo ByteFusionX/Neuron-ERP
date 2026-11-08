@@ -124,6 +124,10 @@
                         (download)="onLpoDownloadDoc(row, $event)"
                         (remove)="onLpoRemoveDoc(row, $event)"></app-detail-documents>
                 </ng-container>
+                <ng-container *ngSwitchCase="'history'">
+                    <app-detail-timeline *ngIf="canSeeHistory(row); else noHistoryAccess" [entries]="(historyFor(row) | async) ?? []" emptyMessage="No history recorded yet."></app-detail-timeline>
+                    <ng-template #noHistoryAccess><p class="text-[13px] text-gray-500 dark:text-gray-400">History is only visible to super admins and the quotation's owner.</p></ng-template>
+                </ng-container>
             </ng-container>
         </ng-template>
     </app-data-grid>

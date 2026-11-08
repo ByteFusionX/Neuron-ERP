@@ -97,6 +97,17 @@
 
       <!-- history (shown in the side panel, super admins and the owner) -->
       <ng-template #historyTpl><div>
+        <!-- who is allowed to open this quotation -->
+        <section *ngIf="viewers.length" class="mb-5 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-erp-border-dark dark:bg-white/[0.03]">
+          <h4 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Who can view this quotation ({{ viewers.length }})</h4>
+          <ul class="space-y-1.5">
+            <li *ngFor="let v of viewers" class="flex flex-wrap items-baseline justify-between gap-x-3 text-[13px]">
+              <span class="font-medium text-gray-900 dark:text-gray-100">{{ v.name }}<span *ngIf="v.designation" class="font-normal text-gray-500 dark:text-gray-400"> · {{ v.designation }}</span></span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">{{ v.via }}</span>
+            </li>
+          </ul>
+        </section>
+
         <!-- the log itself, newest first, bucketed by day -->
         <div *ngFor="let g of historyGroups" class="mb-5 last:mb-0">
           <div class="mb-2 flex items-center gap-3">

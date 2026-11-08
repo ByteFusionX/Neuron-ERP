@@ -14,6 +14,17 @@ import { QuotationTemplateSettings, SystemSettingService } from '../system-setti
 // show their own error toast on failure, so requests opt out of the interceptor's global toast.
 const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
+/** A person who is allowed to open a quotation, and why. */
+export interface QuoteViewer {
+  _id: string;
+  employeeId?: string;
+  name: string;
+  designation?: string;
+  role?: string;
+  access: string;
+  via: string;
+}
+
 export interface QuoteStockHold {
   lines: { productId: string; partNo: string; detail: string; uom: string; requested: number; available: number; held: number }[];
   /** When the hold lapses if no job has been created; null when nothing is held. */
@@ -62,6 +73,11 @@ export class QuotationService {
 
   getQuotationById(id: string, access?: string, userId?: string): Observable<Quotatation> {
     return this.http.post<Quotatation>(`${this.api}/quotation/get/${id}`, { access, userId }, { context: context() })
+  }
+
+  /** Everyone with the privilege to view this quote (super admins and the owner only). */
+  getQuoteViewers(quoteId: string): Observable<QuoteViewer[]> {
+    return this.http.get<QuoteViewer[]>(`${this.api}/quotation/viewers/${quoteId}`, { context: context() })
   }
 
   getQuotationReport(filterData: ReportFilter): Observable<ReportDetails> {
@@ -162,8 +178,8 @@ export class QuotationService {
     return this.http.post<{ success: true }>(`${this.api}/quotation/deal/reject`, { quoteId, comment })
   }
 
-  revokeDeal(quoteId: string | undefined, userId: string | undefined): Observable<{ success: true }> {
-    return this.http.post<{ success: true }>(`${this.api}/quotation/deal/revoke`, { quoteId, userId }, { context: context() })
+  revokeDeal(quoteId: string | undefined, userId: string | undefined, reason: string): Observable<{ success: true }> {
+    return this.http.post<{ success: true }>(`${this.api}/quotation/deal/revoke`, { quoteId, userId, reason }, { context: context() })
   }
 
   /** Super Admin restarts a pending deal's approval route; `stepRoleIds` are the stages that get another chance. */
