@@ -164,7 +164,7 @@ export class EmployeeService {
   }
 
   getToken(): string | null {
-    return <string | null>localStorage.getItem('employeeToken')
+    return getAccessToken()
   }
 
   employeeToken(): any {
@@ -255,6 +255,8 @@ export class EmployeeService {
     throw new Error('No user token found');
   }
 }
+
+import { getAccessToken } from '../../auth/token-store';
 
 export interface EmployeeSession {
   id: string;

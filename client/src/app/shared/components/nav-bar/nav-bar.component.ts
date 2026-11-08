@@ -140,6 +140,7 @@ export class NavBarComponent {
     const account = this.msalService.instance.getActiveAccount() ?? this.msalService.instance.getAllAccounts()[0];
     // Ends the server session and clears the refresh cookie; local sign-out proceeds even if this fails.
     this._employeeService.logout().subscribe({ error: () => {} });
+    this._notificationService.endSession();
     clearSessionStorage();
     this._employeeService.employeeSubject.next(undefined);
     this._router.navigate(['/login'])

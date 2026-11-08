@@ -70,6 +70,8 @@ import searchRouter from './routes/search.router';
 import contextRouter from './routes/context.router';
 
 const app = express();
+// Behind Nginx/Docker: use the real client IP (shown in the sessions list) from X-Forwarded-For.
+app.set('trust proxy', 1);
 app.set('etag', false); // API responses are dynamic per request; conditional 304s were silently breaking notification/celebration polling
 const server = http.createServer(app);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });

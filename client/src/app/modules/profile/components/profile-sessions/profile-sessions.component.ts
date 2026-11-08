@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { MsalService } from '@azure/msal-angular';
 import { ToastrService } from 'ngx-toastr';
 import { EmployeeService, EmployeeSession } from 'src/app/core/services/employee/employee.service';
+import { NotificationService } from 'src/app/core/services/notification.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog/confirm-dialog.service';
 import { clearSessionStorage } from 'src/app/shared/utils/clear-session.util';
 
@@ -19,6 +20,7 @@ export class ProfileSessionsComponent implements OnInit {
   private toastr = inject(ToastrService)
   private router = inject(Router)
   private msal = inject(MsalService)
+  private notifications = inject(NotificationService)
 
   sessions: EmployeeSession[] = []
   loading = true
@@ -77,6 +79,7 @@ export class ProfileSessionsComponent implements OnInit {
   // Same local clean-up as the nav-bar sign-out; the server session is already revoked.
   private endLocalSession() {
     const account = this.msal.instance.getActiveAccount() ?? this.msal.instance.getAllAccounts()[0]
+    this.notifications.endSession()
     clearSessionStorage()
     this.employeeService.employeeSubject.next(undefined)
     this.router.navigate(['/login'])

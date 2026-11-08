@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { ActivatedRouteSnapshot, CanActivateFn, Router, RouterStateSnapshot } from '@angular/router';
 import { Location } from '@angular/common';
+import { getAccessToken } from '../../auth/token-store';
 
 // Azure AD login is temporarily disabled in favor of employeeId/password login.
 // Restore the MsalService-based check below to re-enable it.
@@ -18,7 +19,7 @@ import { Location } from '@angular/common';
 // };
 
 export const AuthGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: RouterStateSnapshot) => {
-  const token = <string>localStorage.getItem('employeeToken')
+  const token = getAccessToken()
   const router: Router = inject(Router);
   if (!token) {
     router.navigate(['/login'])

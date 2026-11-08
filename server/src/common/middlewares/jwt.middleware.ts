@@ -18,7 +18,7 @@ const EXEMPT_PATHS = ['/uploads', '/employee/login', '/employee/login-microsoft'
 const isPublicScanSessionRead = (req: any) => req.method === 'GET' && /^\/scan-session\/[^/]+$/.test(req.path);
 
 const PassportMiddleware = async (req: any, res: any, next: any) => {
-    if (EXEMPT_PATHS.some((path) => req.path.includes(path)) || isPublicScanSessionRead(req)) {
+    if (EXEMPT_PATHS.some((path) => req.path === path || req.path.startsWith(path + '/')) || isPublicScanSessionRead(req)) {
         return next();
     }
 
@@ -29,7 +29,7 @@ const PassportMiddleware = async (req: any, res: any, next: any) => {
 
     const token = authHeader.replace('Bearer ', '');
     try {
-        const decoded: any = jwt.verify(token, process.env.JWT_SECRET as string);
+        const decoded: any = jwt.verify(token, process.env.JWT_SECRET as string, { algorithms: ['HS256'] });
         // A blocked or deleted employee loses access immediately, not when the token expires.
         const active = await Employee.exists({ _id: decoded?.id, isDeleted: { $ne: true }, isBlocked: { $ne: true } });
         if (!active) {

@@ -1,4 +1,5 @@
-import { ApplicationConfig, ErrorHandler } from "@angular/core";
+import { APP_INITIALIZER, ApplicationConfig, ErrorHandler } from "@angular/core";
+import { restoreSession } from './core/auth/token-store';
 import { DiagnosticsErrorHandler } from './core/diagnostics/diagnostics-buffer.service';
 import { DiagnosticsInterceptor } from './core/interceptors/diagnostics-interceptor/diagnostics.interceptor';
 import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
@@ -85,6 +86,8 @@ export function MSALGuardConfigFactory(): MsalGuardConfiguration {
 
 export const appConfig: ApplicationConfig = {
     providers: [
+        // Restore the in-memory access token from the refresh cookie before routes/guards run.
+        { provide: APP_INITIALIZER, useFactory: () => restoreSession, multi: true },
         importProvidersFrom(BrowserModule, ToastrModule.forRoot({
             timeOut: 3000,
             positionClass: 'toast-top-right',

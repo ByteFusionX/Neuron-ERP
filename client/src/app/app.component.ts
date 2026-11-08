@@ -77,6 +77,7 @@ export class AppComponent implements OnDestroy, OnInit {
 
 
     this.idle.onTimeout.subscribe(() => {
+      this._notificationService.endSession();
       clearSessionStorage();
       this.router.navigate(['/login']);
     });
@@ -109,11 +110,8 @@ export class AppComponent implements OnDestroy, OnInit {
     const employeeToken = this._employeeService.getToken();
     if (employeeToken) {
       this.token = employeeToken;
-      this._notificationService.authSocketIo(employeeToken)
-      this._notificationService.getEmployeeTextNotifications()
-      this._notificationService.initializeNotifications()
-      // push is always on: subscribe on every load (asks for permission the first time, re-syncs the subscription after that)
-      this.pushNotificationService.ensurePermissionPrompt();
+      // socket auth, list, live feed and push (push re-syncs on every start)
+      this._notificationService.startSession();
       if (!this.isLoginRoute()) {
         this.isUserThere();
       }

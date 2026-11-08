@@ -910,6 +910,10 @@ export const login = async (
   res: Response,
   next: NextFunction,
 ) => {
+  // Login is Azure-only now: this route is disabled (code kept). Set ALLOW_PASSWORD_LOGIN=true to re-enable.
+  if (process.env.ALLOW_PASSWORD_LOGIN !== "true") {
+    return res.status(410).send({ message: "Password login is disabled. Sign in with Microsoft." });
+  }
   try {
     const { employeeId, password } = req.body;
 

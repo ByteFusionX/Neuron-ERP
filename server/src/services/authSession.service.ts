@@ -4,11 +4,15 @@ import { Request, Response } from "express";
 import Employee from "../models/employee.model";
 import RefreshToken from "../models/refreshToken.model";
 import PushSubscription from "../models/pushSubscription.model";
+import { disconnectUserSockets } from "./socket-io.service";
 
 // Session model: a short-lived access JWT {id, employeeId} (sent as Bearer, kept in localStorage as
 // `employeeToken`) plus a rotating refresh token held only in an httpOnly cookie and, hashed, in Mongo.
 export const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || "15m";
-const REFRESH_TTL_MS = Number(process.env.REFRESH_TOKEN_DAYS || 7) * 24 * 60 * 60 * 1000;
+// REFRESH_TOKEN_MINUTES (testing only) overrides REFRESH_TOKEN_DAYS so expiry can be exercised quickly.
+const REFRESH_TTL_MS = process.env.REFRESH_TOKEN_MINUTES
+  ? Number(process.env.REFRESH_TOKEN_MINUTES) * 60 * 1000
+  : Number(process.env.REFRESH_TOKEN_DAYS || 7) * 24 * 60 * 60 * 1000;
 // Two tabs refreshing at once both present the same cookie; the loser is not an attack.
 const REUSE_GRACE_MS = 10 * 1000;
 
@@ -123,6 +127,7 @@ export const endSession = async (req: Request, res: Response) => {
 /** End every session an employee has (sign out everywhere, block, delete). Their push subscriptions go with them. */
 export const revokeAllSessions = async (employeeId: any) => {
   await PushSubscription.deleteMany({ employee: employeeId });
+  disconnectUserSockets(employeeId);
   return RefreshToken.updateMany({ employee: employeeId, revokedAt: { $exists: false } }, { $set: { revokedAt: new Date() } });
 };
 

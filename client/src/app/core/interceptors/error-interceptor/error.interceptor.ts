@@ -1,4 +1,5 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Injector } from '@angular/core';
+import { NotificationService } from '../../services/notification.service';
 import { HttpRequest, HttpHandler, HttpEvent, HttpInterceptor, HttpErrorResponse, HttpContextToken } from '@angular/common/http';
 import { Observable, catchError, finalize, shareReplay, switchMap, throwError } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
@@ -6,6 +7,7 @@ import { clearSessionStorage } from 'src/app/shared/utils/clear-session.util';
 import { Router } from '@angular/router';
 import { MsalService } from '@azure/msal-angular';
 import { normalizeApiError } from '../../errors/api-error';
+import { setAccessToken } from '../../auth/token-store';
 import { EmployeeService } from '../../services/employee/employee.service';
 
 // Set this to `true` in a request's HttpContext when the caller already shows its own
@@ -18,7 +20,12 @@ export class ErrorInterceptor implements HttpInterceptor {
   // One refresh at a time: requests that 401 together share the same renewal, then each is retried.
   private refreshing$: Observable<{ token: string }> | null = null;
 
-  constructor(private toast: ToastrService, private router: Router, private msalService: MsalService, private employeeService: EmployeeService) { }
+  constructor(private toast: ToastrService, private router: Router, private msalService: MsalService, private employeeService: EmployeeService, private injector: Injector) { }
+
+  // Resolved lazily: NotificationService depends on HttpClient, which depends on this interceptor.
+  private stopNotifications(): void {
+    this.injector.get(NotificationService).endSession();
+  }
 
   private isAuthCall(url: string): boolean {
     return /\/employee\/(refresh|login|login-microsoft|logout)(\?|$)/.test(url);
@@ -26,6 +33,7 @@ export class ErrorInterceptor implements HttpInterceptor {
 
   private endSession(): void {
     this.toast.warning('Your session has ended, please sign in again.');
+    this.stopNotifications();
     clearSessionStorage();
     // Keep MSAL's notion of the signed-in account in sync with the app session, otherwise a re-click of
     // "Continue with Microsoft" silently reuses the now-invalid session instead of prompting.
@@ -47,7 +55,7 @@ export class ErrorInterceptor implements HttpInterceptor {
           );
           return this.refreshing$.pipe(
             switchMap(({ token }) => {
-              localStorage.setItem('employeeToken', token);
+              setAccessToken(token);
               return next.handle(request.clone({ setHeaders: { Authorization: `Bearer ${token}` } }));
             }),
             catchError((retryError: HttpErrorResponse) => {
@@ -65,6 +73,7 @@ export class ErrorInterceptor implements HttpInterceptor {
               break;
             case 401:
               this.toast.warning('Access Denied, Please sign in again.')
+              this.stopNotifications();
               clearSessionStorage();
               // Keep MSAL's notion of the signed-in account in sync with the
               // app JWT — otherwise a re-click of "Continue with Microsoft"

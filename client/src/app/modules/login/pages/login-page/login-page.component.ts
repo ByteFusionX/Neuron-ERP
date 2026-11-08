@@ -1,4 +1,5 @@
 import { NgIf } from '@angular/common';
+import { setAccessToken } from 'src/app/core/auth/token-store';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
 import {
@@ -141,9 +142,8 @@ export class LoginPageComponent implements OnInit, OnDestroy {
           return;
         }
 
-        localStorage.setItem('employeeToken', response.token);
-        this.notificationService.authSocketIo(response.token);
-        this.notificationService.initializeNotifications();
+        setAccessToken(response.token);
+        this.notificationService.startSession();
         this.router.navigateByUrl(response.employeeData.preferences?.defaultLandingPage || '/home');
       },
       error: (error) => this.handleMicrosoftLoginError(error),
