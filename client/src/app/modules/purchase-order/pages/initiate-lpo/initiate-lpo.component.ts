@@ -166,6 +166,7 @@ export class InitiateLpoComponent implements OnInit {
     if (this.step !== 1) return;
     this.activeKey = group.key;
     this.ensureLines(group);
+    this.poForm?.patchValue({ paymentTerms: group.paymentTerms || '' });
   }
 
   get tabs(): LpoSupplierTab[] {
@@ -366,6 +367,7 @@ export class InitiateLpoComponent implements OnInit {
     this.poForm = this.fb.group({
       subject: ['', [Validators.required]],
       shippingTerms: ['', [Validators.required]],
+      paymentTerms: [''],
       placeOfDelivery: ['', [Validators.required]],
       poDate: [new Date().toISOString().split('T')[0], [Validators.required]],
       termsAndCondition: ['', [Validators.required]],
@@ -477,7 +479,7 @@ export class InitiateLpoComponent implements OnInit {
       jobId: (this.purchase as any)?.jobId?._id,
       quoteId: (this.purchase as any)?.quoteId?._id,
       etaTerms: first.etaTerms || '',
-      paymentTerms: first.paymentTerms || '',
+      paymentTerms: String(form.paymentTerms ?? first.paymentTerms ?? '').trim(),
       shippingTerms: form.shippingTerms,
       deliveryTerms: first.etaTerms || first.paymentTerms || 'As per terms',
       placeOfDelivery: form.placeOfDelivery,
@@ -672,6 +674,7 @@ export class InitiateLpoComponent implements OnInit {
         this.poForm.patchValue({
           subject: po.subject || '',
           shippingTerms: po.shippingTerms || '',
+          paymentTerms: po.paymentTerms || '',
           placeOfDelivery: po.placeOfDelivery || '',
           poDate: po.poDate ? new Date(po.poDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           termsAndCondition: po.termsAndCondition || '',
@@ -707,6 +710,7 @@ export class InitiateLpoComponent implements OnInit {
         this.poForm.patchValue({
           subject: po.subject || '',
           shippingTerms: po.shippingTerms || '',
+          paymentTerms: po.paymentTerms || '',
           placeOfDelivery: po.placeOfDelivery || '',
           poDate: po.poDate ? new Date(po.poDate).toISOString().split('T')[0] : '',
           termsAndCondition: po.termsAndCondition || '',
@@ -846,6 +850,7 @@ export class InitiateLpoComponent implements OnInit {
     if (wanted && !this.activeKey) this.activeKey = wanted.key;
     if (!this.supplierGroups.some((g) => g.key === this.activeKey)) this.activeKey = this.supplierGroups[0]?.key ?? '';
     this.ensureLines(this.activeGroup);
+    if (!this.poForm?.value?.paymentTerms) this.poForm?.patchValue({ paymentTerms: this.activeGroup?.paymentTerms || '' });
     if (!wanted) this.selectFirstOpenSupplier();
   }
 
