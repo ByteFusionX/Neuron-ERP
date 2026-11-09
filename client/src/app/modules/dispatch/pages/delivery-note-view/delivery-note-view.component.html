@@ -1,148 +1,113 @@
-<div class="flex h-full flex-col bg-gray-50 p-6 dark:bg-erp-surface-dark-alt">
+<div class="flex h-full flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-detail-view-shell
     class="min-h-0 flex-1"
+    headerTone="contrast"
     [loading]="isLoading"
     [empty]="!isLoading && !deliveryNote"
     emptyTitle="Delivery note not found"
     emptyMessage="It may have been deleted, or you may not have access to it."
     [emptyLink]="['/dispatch']"
     emptyLinkLabel="Back to DN register"
-    [breadcrumbs]="breadcrumbs"
-    [avatarText]="dn.dnNo.slice(-2) || 'DN'"
-    [title]="dn.dnNo"
-    [subtitle]="deliveryNote ? (deliveryNote.clientName || 'Delivery note') : ''"
-    [badges]="badges"
-    [stats]="stats"
-    [tabs]="tabs"
-    [activeTab]="tab"
-    (activeTabChange)="onTabChange($event)"
+    customTitle
+    tabParam=""
+    bodyBare
+    [stats]="summaryStats"
+    statsLayout="fields"
+    statsTitle="Summary"
     [hasSidebar]="true"
-    *ngIf="deliveryNote as dn"
+    [(panelOpen)]="panelOpen"
+    sidebarBare
+    sectioned
   >
-    <ng-container footerRight>
-      <app-action-button variant="secondary" (click)="onBack()">Back</app-action-button>
-      <app-action-button variant="primary" (click)="onPreview()" icon="view">Preview</app-action-button>
-      <app-action-button *ngIf="dn.status === 'Draft'" variant="primary" (click)="onEdit()" icon="edit">Edit</app-action-button>
-      <app-action-button *ngIf="dn.status === 'Ready for Dispatch'" variant="primary" [disabled]="isDispatching" (click)="onDispatch()">
-        {{ isDispatching ? 'Dispatching...' : 'Dispatch' }}
-      </app-action-button>
-    </ng-container>
-
-    <ng-container sidebar>
-      <app-detail-section title="Job">
-        <app-detail-field label="Job ID">{{ dn.jobId?.jobId || '-' }}</app-detail-field>
-        <app-detail-field label="Project">{{ dn.jobId?.projectName || dn.subject || '-' }}</app-detail-field>
-        <app-detail-field label="Customer PO">{{ dn.customerLpoNumber || '-' }}</app-detail-field>
-      </app-detail-section>
-
-      <app-detail-section title="Closed Purchase Orders">
-        <ng-container *ngIf="closedPurchaseOrders(dn) as purchaseOrders">
-          <ng-container *ngIf="purchaseOrders.length; else noPo">
-          <div *ngFor="let po of purchaseOrders" class="border-b border-gray-100 py-2 last:border-0 dark:border-white/5">
-            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ po.poNo || '-' }}</p>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ po.supplierId?.supplierName || 'Supplier not set' }}</p>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ po.poDate | date:'dd MMM yyyy' }}</p>
-          </div>
-          </ng-container>
-        </ng-container>
-        <ng-template #noPo><p class="text-sm text-gray-500 dark:text-gray-400">No closed purchase orders.</p></ng-template>
-      </app-detail-section>
-
-      <app-detail-section title="Passed GRNs">
-        <ng-container *ngIf="passedGrns(dn) as grns">
-          <ng-container *ngIf="grns.length; else noGrn">
-          <div *ngFor="let grn of grns" class="border-b border-gray-100 py-2 last:border-0 dark:border-white/5">
-            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ grn.grnNo || '-' }}</p>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ grn.grnDate | date:'dd MMM yyyy' }}</p>
-          </div>
-          </ng-container>
-        </ng-container>
-        <ng-template #noGrn><p class="text-sm text-gray-500 dark:text-gray-400">No passed GRNs.</p></ng-template>
-      </app-detail-section>
-    </ng-container>
-
-    <div tabBody [ngSwitch]="tab">
-      <div *ngSwitchCase="'details'" class="space-y-6">
-      <app-detail-section title="Delivery Note">
-        <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-          <app-detail-field label="DN No" stacked>{{ dn.dnNo }}</app-detail-field>
-          <app-detail-field label="DN Date" stacked>{{ dn.dnDate | date:'dd/MM/yyyy' }}</app-detail-field>
-          <app-detail-field label="Job ID" stacked>{{ dn.jobId?.jobId || 'N/A' }}</app-detail-field>
-          <app-detail-field label="Customer" stacked>{{ dn.clientName || 'N/A' }}</app-detail-field>
-          <app-detail-field label="LPO Number" stacked>{{ dn.customerLpoNumber || '-' }}</app-detail-field>
-          <app-detail-field label="Subject" stacked>{{ dn.subject || '-' }}</app-detail-field>
-        </div>
-      </app-detail-section>
-
-      <app-detail-section title="Delivery Details">
-        <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-          <app-detail-field label="Delivery Type" stacked>{{ dn.deliveryType || 'Customer Delivery' }}</app-detail-field>
-          <app-detail-field label="Ship To" stacked>{{ dn.shipToName || dn.clientName || '-' }}</app-detail-field>
-          <app-detail-field label="Contact Person" stacked>{{ dn.contactPerson || '-' }}</app-detail-field>
-          <app-detail-field label="Contact No" stacked>{{ dn.contactNo || '-' }}</app-detail-field>
-          <app-detail-field label="Address" stacked>{{ dn.shipToAddress || '-' }}</app-detail-field>
-          <app-detail-field label="Instructions" stacked>{{ dn.deliveryInstructions || '-' }}</app-detail-field>
-        </div>
-      </app-detail-section>
-
-      <app-detail-section title="Proof of Delivery">
-        <div *ngIf="dn.pod?.receivedBy; else podFormBlock" class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-          <app-detail-field label="Received By" stacked>{{ dn.pod!.receivedBy }}</app-detail-field>
-          <app-detail-field label="Contact No" stacked>{{ dn.pod!.receivedContactNo || '-' }}</app-detail-field>
-          <app-detail-field label="Received Date" stacked>{{ dn.pod!.receivedDate ? (dn.pod!.receivedDate | date:'dd/MM/yyyy') : '-' }}</app-detail-field>
-          <app-detail-field label="Signature Name" stacked>{{ dn.pod!.signatureName || '-' }}</app-detail-field>
-          <app-detail-field label="Remarks" stacked>{{ dn.pod!.remarks || '-' }}</app-detail-field>
-        </div>
-
-        <ng-template #podFormBlock>
-          <form *ngIf="canCompletePod(); else noPodAction" [formGroup]="podForm" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <app-sf-field label="Received By" [control]="podForm.controls.receivedBy">
-              <app-sf-input formControlName="receivedBy" placeholder="Receiver name"></app-sf-input>
-            </app-sf-field>
-            <app-sf-field label="Contact No" [control]="podForm.controls.receivedContactNo">
-              <app-sf-input formControlName="receivedContactNo" placeholder="Receiver phone"></app-sf-input>
-            </app-sf-field>
-            <app-sf-field label="Received Date" [control]="podForm.controls.receivedDate">
-              <app-sf-date formControlName="receivedDate" displayFormat="dd/MM/yy"></app-sf-date>
-            </app-sf-field>
-            <app-sf-field label="Signature Name" [control]="podForm.controls.signatureName">
-              <app-sf-input formControlName="signatureName" placeholder="Name on signature"></app-sf-input>
-            </app-sf-field>
-            <app-sf-field full label="Remarks" optional [control]="podForm.controls.remarks">
-              <app-sf-textarea formControlName="remarks" [rows]="2" placeholder="POD remarks"></app-sf-textarea>
-            </app-sf-field>
-            <div class="sm:col-span-2 xl:col-span-3">
-              <app-action-button variant="primary" [disabled]="isSavingPod" (click)="onCompletePod()">
-                {{ isSavingPod ? 'Saving...' : 'Capture POD' }}
-              </app-action-button>
-            </div>
-          </form>
-          <ng-template #noPodAction>
-            <p class="text-sm text-gray-500 dark:text-gray-400">POD can be captured after the delivery is dispatched.</p>
-          </ng-template>
-        </ng-template>
-      </app-detail-section>
-
-      <app-detail-section title="Record" *ngIf="dn.createdBy">
-        <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-          <app-detail-field label="Created By" stacked>{{ dn.createdBy.firstName }} {{ dn.createdBy.lastName }}</app-detail-field>
-          <app-detail-field label="Created Date" stacked>{{ dn.createdDate | date:'dd/MM/yyyy HH:mm' }}</app-detail-field>
-          <app-detail-field label="Last Updated" stacked>{{ dn.updatedDate ? (dn.updatedDate | date:'dd/MM/yyyy HH:mm') : '-' }}</app-detail-field>
-        </div>
-      </app-detail-section>
+    <div headerTitle class="flex min-w-0 flex-col gap-0.5" *ngIf="deliveryNote as dn">
+      <!-- line 1: identity + status; line 2: who it goes to -->
+      <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+        <h1 class="dvs-strong truncate text-lg font-semibold text-gray-900 dark:text-gray-50">{{ dn.dnNo || 'Delivery Note' }}</h1>
       </div>
-
-      <div *ngSwitchCase="'items'">
-        <app-detail-table [columns]="itemCols" [rows]="itemRows" numbered large spread emptyMessage="No items in this delivery note."></app-detail-table>
-      </div>
-
-      <div *ngSwitchCase="'documents'">
-        <app-detail-documents [documents]="documents" [downloadable]="false" [viewable]="false" emptyMessage="No proof-of-delivery documents attached."></app-detail-documents>
-      </div>
-
-      <div *ngSwitchCase="'history'">
-        <app-detail-timeline [entries]="history" emptyMessage="No delivery note history available."></app-detail-timeline>
+      <div *ngIf="subtitle" class="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] font-normal text-gray-900 dark:text-gray-100">
+        <span class="truncate">{{ subtitle }}</span>
       </div>
     </div>
+
+    <!-- overview facts, left of the quantities -->
+    <app-detail-section beforeStats title="Details" class="lg:col-span-2 lg:border-r lg:border-gray-200 lg:pr-8 dark:lg:border-gray-800">
+      <app-detail-fields-menu sectionActions [items]="detailItems" storageKey="dn-details" (hiddenChange)="hiddenDetail = $event" (orderChange)="detailOrder = $event"></app-detail-fields-menu>
+      <div class="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
+        <app-detail-field *ngFor="let f of visibleDetail; trackBy: trackFact" [label]="f.label" stacked>
+          <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
+        </app-detail-field>
+      </div>
+    </app-detail-section>
+
+    <ng-container headerActions *ngIf="deliveryNote as dn">
+      <app-action-button variant="outline" (click)="onBack()">Back</app-action-button>
+      <app-action-button *ngIf="canEditInvoice()" variant="outline" icon="edit" [disabled]="openingInvoice" (click)="openEditInvoice()">Edit Invoice</app-action-button>
+      <app-action-button *ngIf="dn.status === 'Draft' || dn.status === 'Ready to Deliver'" variant="outline" icon="edit" (click)="onEdit()">Edit DN</app-action-button>
+      <app-action-menu label="Delivery note" [items]="dnPdfItems" (selected)="onPdfMenu($event)"></app-action-menu>
+      <app-action-menu *ngIf="hasInvoice" label="Invoice" [items]="invoicePdfItems" (selected)="onPdfMenu($event)"></app-action-menu>
+      <app-action-button *ngIf="canCreateInvoice()" variant="outline" [disabled]="openingInvoice" (click)="openCreateInvoice()">Create Invoice</app-action-button>
+      <app-action-button *ngIf="dn.status === 'Ready to Deliver'" variant="primary" icon="send" [disabled]="isDispatching" (click)="onDispatch()">
+        {{ isDispatching ? 'Placing order…' : 'Place Order' }}
+      </app-action-button>
+      <app-action-button *ngIf="canCompletePod()" variant="primary" (click)="openPod()">Delivered</app-action-button>
+    </ng-container>
+
+    <!-- right panel: same tab strip look as the PR view's side panel -->
+    <div sidebar class="flex min-h-0 flex-1 flex-col">
+      <nav role="tablist"
+        class="dv-tabs sticky top-0 z-10 flex h-11 shrink-0 flex-nowrap items-center gap-x-4 overflow-x-auto overflow-y-hidden border-b border-gray-300 bg-white px-5 dark:border-neutral-700 dark:bg-[#111111]">
+        <button *ngFor="let t of panelTabs" type="button" role="tab" (click)="panelTab = t.id"
+          [attr.aria-selected]="panelTab === t.id"
+          class="-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 py-2.5 text-sm transition-colors"
+          [ngClass]="panelTab === t.id ? 'border-violet-600 dark:border-gray-100 text-gray-900 dark:text-gray-100 font-medium' : 'border-transparent text-gray-500 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'">
+          {{ t.label }}
+        </button>
+      </nav>
+
+      <div class="dv-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel" [ngSwitch]="panelTab">
+        <ng-container *ngSwitchCase="'pricing'">
+          <app-detail-section *ngFor="let g of priceGroups; let i = index" [title]="g.title" [ngClass]="i ? 'block border-t border-gray-200 pt-5 dark:border-erp-border-dark' : ''">
+            <app-detail-field *ngFor="let r of g.rows" [label]="r.label">{{ r.value }}</app-detail-field>
+          </app-detail-section>
+        </ng-container>
+
+        <app-detail-documents *ngSwitchCase="'documents'"
+          [documents]="documents"
+          [downloadable]="false"
+          [viewable]="false"
+          emptyMessage="No proof-of-delivery documents attached."></app-detail-documents>
+
+        <app-detail-timeline *ngSwitchCase="'history'" [entries]="history" emptyMessage="No delivery note history available."></app-detail-timeline>
+      </div>
+    </div>
+
+    <div tabBody class="h-full">
+      <app-detail-table class="block h-full"
+        [columns]="itemColumns"
+        [rows]="itemRows"
+        [footRows]="itemFootRows"
+        numbered
+        [striped]="false"
+        spread
+        bare
+        tools
+        storageKey="dn-items-v2"
+        searchKey="detail"
+        emptyMessage="No items in this delivery note."></app-detail-table>
+    </div>
   </app-detail-view-shell>
+
+  <app-create-dn *ngIf="deliveryNote" [drawerMode]="true" [open]="editOpen" [editId]="deliveryNote._id"
+    (saved)="onEditSaved()" (closed)="editOpen = false"></app-create-dn>
+
+  <app-customer-invoice-form *ngIf="invoiceDn" [dn]="invoiceDn" [invoice]="editingInvoice" (closed)="onInvoiceClosed()" (saved)="onInvoiceSaved($event)"></app-customer-invoice-form>
 </div>
+
+<ng-template #factValue let-f>
+  <span *ngIf="f.state" class="inline-flex items-center gap-1.5">
+    <span class="h-1.5 w-1.5 rounded-full" [ngClass]="f.state.dot"></span>
+    <span class="font-medium" [ngClass]="f.state.text">{{ f.value }}</span>
+  </span>
+  <a *ngIf="f.link" [routerLink]="f.link" class="font-medium text-violet-600 hover:underline dark:text-violet-400">{{ f.value }}</a>
+  <ng-container *ngIf="!f.state && !f.link">{{ f.value }}</ng-container>
+</ng-template>

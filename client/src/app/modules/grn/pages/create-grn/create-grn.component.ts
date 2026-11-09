@@ -86,6 +86,8 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
   /** True after a failed attempt to leave or submit the current step; reset once the step changes. */
   stepAttempted = false;
 
+  readonly stepLabels = ['LPO & Documents', 'Items', 'Receiving'];
+  readonly stepDone = (n: number): boolean => this.isStepValid(n as 1 | 2 | 3);
   readonly steps = [
     { n: 1 as const, label: 'LPO & Documents', hint: 'Purchase order and supplier paperwork' },
     { n: 2 as const, label: 'Items', hint: 'Quantities received, accepted and rejected' },
@@ -163,7 +165,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
 
   grnForm: FormGroup = this.fb.group({
     selectedLpo: [''],
-    grnNo: [{ value: 'Assigned on save', disabled: true }],
+    grnNo: ['Assigned on save'],
     grnDate: [new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), [Validators.required]],
     supplierName: ['', [Validators.required]],
     supplierInvoiceNo: [''],
@@ -190,6 +192,12 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
     this.loadWarehouses();
     this.loadEmployees();
     this.setDefaultReceivedBy();
+    // Shown for reference only; the real number is taken on save.
+    if (!this.grnId) {
+      this.grnService.generateGRNNumber().subscribe({
+        next: (res) => { if (res?.grn) this.grnForm.get('grnNo')?.setValue(res.grn, { emitEvent: false }); },
+      });
+    }
     this.grnForm.get('selectedLpo')?.valueChanges.subscribe((value) => {
       if (value && value !== this.lpoId) this.onLpoSelected(value);
     });
@@ -550,15 +558,8 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
         'All quantities have been fully received. No new GRN can be created.',
       );
     } else {
+      // supplier, linked LPO, job and GRN number stay enabled; the template renders them readonly
       this.grnForm.enable();
-      const grnNoControl = this.grnForm.get('grnNo');
-      const supplierNameControl = this.grnForm.get('supplierName');
-      const linkedLpoNoControl = this.grnForm.get('linkedLpoNo');
-      const jobIdControl = this.grnForm.get('jobId');
-      if (grnNoControl) grnNoControl.disable();
-      if (supplierNameControl) supplierNameControl.disable();
-      if (linkedLpoNoControl) linkedLpoNoControl.disable();
-      if (jobIdControl) jobIdControl.disable();
     }
   }
 
@@ -583,7 +584,8 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
       const orderedQty = item.quantity || 0;
       const itemGroup = this.fb.group({
         slNo: [index + 1],
-        partNo: [this.formatPartNumber(item.partNo) || ''],
+        itemCode: [item.itemCode || item.partNo?.itemCode || ''],
+        partNo: [item.productPartNo || this.formatPartNumber(item.partNo) || ''],
         itemDescription: [item.detail || ''],
         uom: [''],
         orderedQty: [orderedQty],
@@ -661,25 +663,17 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
         ? `${rejectedQty} unit(s) rejected`
         : '';
     discrepancyTypeControl?.setValue(discrepancyType, { emitEvent: false });
-    rejectionReasonControl?.setValue(rejectionReason, { emitEvent: false });
+    // A reason the user typed is theirs; only fill the generated one while the field is untouched.
+    if (!rejectionReasonControl?.dirty) rejectionReasonControl?.setValue(rejectionReason, { emitEvent: false });
   }
 
   onReceivedQtyChanged(itemGroup: FormGroup): void {
-    const receivedQty = itemGroup.get('receivedQty')?.value || 0;
-    const rejectedQty = Math.min(itemGroup.get('rejectedQty')?.value || 0, receivedQty);
-    itemGroup.get('rejectedQty')?.setValue(rejectedQty, { emitEvent: false });
     this.validateReceivedQty(itemGroup);
     this.validateRejectedQty(itemGroup);
     this.calculateAcceptedQty(itemGroup);
   }
 
   onRejectedQtyChanged(itemGroup: FormGroup): void {
-    const receivedQty = itemGroup.get('receivedQty')?.value || 0;
-    const rejectedQty = itemGroup.get('rejectedQty')?.value || 0;
-    if (rejectedQty > receivedQty) {
-      itemGroup.get('rejectedQty')?.setValue(receivedQty, { emitEvent: false });
-      this.toastr.warning(`Rejected can't be more than received (${receivedQty}), so it was set to ${receivedQty}.`);
-    }
     this.validateReceivedQty(itemGroup);
     this.validateRejectedQty(itemGroup);
     this.calculateAcceptedQty(itemGroup);
@@ -699,9 +693,10 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
   createItemGroup(item: any, index: number): FormGroup {
     const itemGroup = this.fb.group({
       slNo: [index + 1],
+      itemCode: [item.itemCode || item.partNo?.itemCode || ''],
       partNo: [this.formatPartNumber(item.partNo) || item.partNo || ''],
       itemDescription: [item.itemDescription || item.detail || ''],
-      uom: [item.uom || '', [Validators.required]],
+      uom: [item.uom || ''],
       orderedQty: [item.orderedQty || item.quantity || 0],
       receivedQty: [
         item.receivedQty || 0,
@@ -915,7 +910,8 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
       inspectionNotes: formValue.inspectionNotes || undefined,
       inspectedBy: formValue.inspectedBy || undefined,
       items: formValue.items.map((item: any) => ({
-        partNo: item.partNo !== '-' ? item.partNo : undefined,
+        itemCode: item.itemCode || undefined,
+        partNo: item.partNo && item.partNo !== '-' ? item.partNo : undefined,
         itemDescription: item.itemDescription,
         uom: item.uom || undefined,
         orderedQty: item.orderedQty,
@@ -962,6 +958,11 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
       next: (response: any) => {
         if (response.success) {
           this.toastr.success(response.data?.grnNo ? `${response.data.grnNo} saved` : 'GRN saved successfully');
+          if (response.stockNotes && response.stockNotes.length > 0) {
+            response.stockNotes.forEach((note: string) => {
+              this.toastr.success(note, '', { timeOut: 5000 });
+            });
+          }
           if (response.warnings && response.warnings.length > 0) {
             response.warnings.forEach((warning: string) => {
               this.toastr.warning(warning, '', { timeOut: 5000 });

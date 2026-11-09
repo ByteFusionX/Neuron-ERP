@@ -3,12 +3,15 @@ import { Component, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { ProductCategoryService } from 'src/app/core/services/product-category/product-category.service';
-import { StockOverviewParams, StockReservationRow, StockRow, StockService } from 'src/app/core/services/stock/stock.service';
+import { StockItemDetails, StockOverviewParams, StockReservationRow, StockRow, StockService } from 'src/app/core/services/stock/stock.service';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { DataGridBreadcrumb, DataGridColumn, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
+import { DetailMetaComponent } from 'src/app/shared/components/detail-panel/detail-meta.component';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
-import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailMetaItem, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/form-prompt.service';
 import { StockAdjustDrawerComponent } from '../stock-adjust-drawer/stock-adjust-drawer.component';
 
@@ -19,7 +22,7 @@ import { StockAdjustDrawerComponent } from '../stock-adjust-drawer/stock-adjust-
 @Component({
   selector: 'app-stock-overview',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, StockAdjustDrawerComponent],
+  imports: [CommonModule, DataGridComponent, DetailMetaComponent, DetailOverviewComponent,DetailTimelineComponent, StockAdjustDrawerComponent],
   templateUrl: './stock-overview.component.html',
   styleUrl: './stock-overview.component.css'
 })
@@ -31,41 +34,45 @@ export class StockOverviewComponent implements OnInit {
   private router = inject(Router);
   private productCategoryService = inject(ProductCategoryService);
   private formPrompt = inject(FormPromptService);
+  private auditLog = inject(AuditLogService);
 
-  readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Inventory' }, { label: 'Stock Overview' }];
+  readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Inventory' }, { label: 'Stock Balance' }];
 
   tableData = signal<StockRow[]>([]);
   columns: DataGridColumn<StockRow>[] = [];
   isLoading = signal<boolean>(false);
   totalItems = signal<number>(0);
-  summary = signal({ totalItems: 0, exceptionCount: 0, quarantineCount: 0 });
+  summary = signal({ totalItems: 0, availableCount: 0, reservedCount: 0, quarantineCount: 0 });
   reservations = signal<StockReservationRow[]>([]);
+  details = signal<StockItemDetails | null>(null);
+  historyEntries = signal<DetailTimelineEntry[]>([]);
 
   adjustOpen = false;
   adjustProductId = '';
+  adjustWarehouseId = '';
 
   views: DataGridView<StockRow>[] = [
     { id: 'all', label: 'All' },
-    { id: 'exceptions', label: 'Low / short' },
+    { id: 'available', label: 'Available' },
+    { id: 'reserved', label: 'Reserved' },
     { id: 'quarantine', label: 'Quarantine' },
   ];
 
   readonly detailTabs = [
-    { id: 'overview', label: 'Stock', icon: 'info' },
-    { id: 'warehouses', label: 'Warehouses', icon: 'card' },
-    { id: 'reservations', label: 'Reserved for', icon: 'files' },
+    { id: 'details', label: 'Details', icon: 'info' },
+    { id: 'history', label: 'History', icon: 'files' },
   ];
   readonly warehouseColumns: DetailTableColumn[] = [
     { key: 'warehouseName', label: 'Warehouse' },
     { key: 'quantity', label: 'On hand', type: 'number', total: true },
     { key: 'quarantined', label: 'Quarantine', type: 'number', total: true },
   ];
-  readonly reservationColumns: DetailTableColumn[] = [
-    { key: 'heldFor', label: 'Held for' },
+  readonly jobColumns: DetailTableColumn[] = [
+    { key: 'jobId', label: 'Job' },
     { key: 'customer', label: 'Customer' },
-    { key: 'source', label: 'Source' },
-    { key: 'quantity', label: 'Quantity', type: 'number', total: true },
-    { key: 'until', label: 'Until', type: 'date' },
+    { key: 'status', label: 'Status' },
+    { key: 'reservedQty', label: 'Reserved', type: 'number', total: true },
+    { key: 'reservedOn', label: 'Reserved on', type: 'date' },
   ];
 
   rowActions: DataGridRowAction<StockRow>[] = [
@@ -82,8 +89,8 @@ export class StockOverviewComponent implements OnInit {
   private activeViewId: StockOverviewParams['view'] = 'all';
   private appliedFilters: Record<string, any> = {};
 
-  detailTitle = (r: StockRow) => r.partNo || r.itemCode;
-  detailSubtitle = (r: StockRow) => r.productDescription;
+  detailTitle = (r: StockRow) => r.itemCode || r.partNo;
+  detailSubtitle = () => '';
 
   ngOnInit(): void {
     this.setupColumns();
@@ -93,8 +100,8 @@ export class StockOverviewComponent implements OnInit {
 
   setupColumns(): void {
     this.columns = [
+      { key: 'lastMovementDate', label: 'Date', type: 'date', sortable: true },
       { key: 'itemCode', label: 'Item Code', sortable: true },
-      { key: 'partNo', label: 'Part No', sortable: true },
       { key: 'productDescription', label: 'Description', sortable: true },
       { key: 'productCategory', label: 'Category', sortable: true },
       { key: 'uom', label: 'UOM', sortable: true },
@@ -106,7 +113,7 @@ export class StockOverviewComponent implements OnInit {
         cellClass: (r) => (r.availableQuantity > 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold')
       },
       { key: 'quarantinedQuantity', label: 'Quarantine', type: 'number', sortable: true, cellClass: (r) => (r.quarantinedQuantity > 0 ? 'text-red-600 font-semibold' : '') },
-      { key: 'stockValue', label: 'Value', type: 'currency', sortable: true, visible: false },
+      { key: 'stockValue', label: 'Value', type: 'currency', sortable: true },
     ];
   }
 
@@ -137,6 +144,9 @@ export class StockOverviewComponent implements OnInit {
         const startIndex = (pagination.page - 1) * pagination.limit;
         this.tableData.set(response.data.overview.map((item, index) => ({ ...item, rowNo: startIndex + index + 1 })));
         this.summary.set(response.data.summary);
+        // On hand adds nothing when it equals available on every row, so the column is dropped.
+        const onHandRedundant = this.tableData().length > 0 && this.tableData().every((r) => r.onHandQuantity === r.availableQuantity);
+        this.columns = this.columns.map((c) => (c.key === 'onHandQuantity' ? { ...c, visible: !onHandRedundant } : c));
         this.totalItems.set(pagination.total);
         this.page = pagination.page;
         this.row = pagination.limit;
@@ -169,9 +179,19 @@ export class StockOverviewComponent implements OnInit {
 
   onRowOpen(row: StockRow): void {
     this.reservations.set([]);
+    this.details.set(null);
+    this.historyEntries.set([]);
+    this.stockService.getItemDetails(row.productId).subscribe({
+      next: (res) => this.details.set(res.data),
+      error: () => this.details.set(null),
+    });
     this.stockService.getReservations(row.productId).subscribe({
       next: (res) => this.reservations.set(res.data),
       error: () => this.reservations.set([]),
+    });
+    this.auditLog.getHistory('stock', row.productId).subscribe({
+      next: (entries) => this.historyEntries.set(toTimelineEntries(entries || [])),
+      error: () => this.historyEntries.set([]),
     });
   }
 
@@ -179,7 +199,8 @@ export class StockOverviewComponent implements OnInit {
     const { action, row } = event;
     switch (action.id) {
       case 'adjust':
-        this.openAdjust(row.productId);
+        // preselect the warehouse only when the stock sits in a single one
+        this.openAdjust(row.productId, row.warehouses?.length === 1 ? row.warehouses[0].warehouseId : '');
         break;
       case 'ledger':
         this.router.navigate(['/stock/ledger'], { queryParams: { product: row.productId, label: row.partNo || row.itemCode } });
@@ -190,13 +211,76 @@ export class StockOverviewComponent implements OnInit {
     }
   }
 
-  openAdjust(productId = ''): void {
+  openAdjust(productId = '', warehouseId = ''): void {
     this.adjustProductId = productId;
+    this.adjustWarehouseId = warehouseId;
     this.adjustOpen = true;
   }
 
   closeAdjust(): void {
     this.adjustOpen = false;
+  }
+
+  metaFor(row: StockRow): DetailMetaItem[] {
+    return [
+      { label: 'On hand', value: row.onHandQuantity },
+      { label: 'Reserved', value: row.reservedQuantity, tone: row.reservedQuantity > 0 ? 'warn' : undefined },
+      { label: 'Available', value: row.availableQuantity, tone: row.availableQuantity > 0 ? 'good' : 'bad' },
+      { label: 'Stock value', value: row.stockValue, format: 'currency' },
+    ];
+  }
+
+  detailSections(): DetailOverviewSection[] {
+    const d = this.details();
+    if (!d) return [];
+    const v = (x: any) => (x === undefined || x === null || x === '' ? '-' : x);
+    const money = (x: any, cur?: string) => (x === undefined || x === null ? '-' : `${cur ? cur + ' ' : ''}${Number(x).toFixed(2)}`);
+    const date = (x: any) => (x ? new Date(x).toLocaleDateString('en-GB') : '-');
+    const sections: DetailOverviewSection[] = [
+      {
+        title: 'Item details',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Description', value: v(d.item['description']), fullRow: true },
+          { type: 'field', label: 'Item code', value: v(d.item['itemCode']) },
+          { type: 'field', label: 'Part no', value: v(d.item['partNo']) },
+          { type: 'field', label: 'Brand', value: v(d.item['brand']) },
+          { type: 'field', label: 'Category', value: v(d.item['category']) },
+          { type: 'field', label: 'UOM', value: v(d.item['uom']) },
+          { type: 'field', label: 'Type', value: v(d.item['type']) },
+        ],
+      },
+    ];
+    const po = d.lastPo;
+    sections.push({
+      title: 'Price & supplier (last PO)',
+      columns: '2',
+      fields: po ? [
+        { type: 'field', label: 'PO no', value: v(po['poNo']) },
+        { type: 'field', label: 'PO date', value: date(po['poDate']) },
+        { type: 'field', label: 'Supplier', value: v(po['supplier']) },
+        { type: 'field', label: 'PO status', value: v(po['status']) },
+        { type: 'field', label: 'Unit price', value: money(po['unitCost'], po['currency']), numeric: true },
+        { type: 'field', label: 'Quantity', value: v(po['quantity']), numeric: true },
+        { type: 'field', label: 'Total', value: money(po['totalCost'], po['currency']), numeric: true },
+        { type: 'field', label: 'Job', value: v(po['job']) },
+      ] : [{ type: 'field', label: 'Last PO', value: 'No purchase order yet' }],
+    });
+    const held = this.reservationRows();
+    sections.push({
+      title: 'Reservations',
+      columns: '2',
+      fields: held.length
+        ? held.flatMap((r) => [
+            { type: 'field' as const, label: 'Job no', value: r['heldFor'] },
+            { type: 'field' as const, label: 'Reserved qty', value: r['quantity'], numeric: true },
+            { type: 'field' as const, label: 'Sales person', value: r['salesPerson'] },
+            { type: 'field' as const, label: 'Customer', value: r['customer'] },
+            { type: 'field' as const, label: 'Until', value: date(r['until']) },
+          ])
+        : [{ type: 'field' as const, label: 'Reserved', value: 'Nothing is reserved for this item.' }],
+    });
+    return sections;
   }
 
   overviewSections(row: StockRow): DetailOverviewSection[] {
@@ -228,8 +312,10 @@ export class StockOverviewComponent implements OnInit {
   }
 
   reservationRows(): Record<string, any>[] {
+    const fullName = (p?: { firstName?: string; lastName?: string } | null) => [p?.firstName, p?.lastName].filter(Boolean).join(' ');
     return this.reservations().map((r) => ({
-      heldFor: r.job?.jobId ? `Job ${r.job.jobId}` : r.quote?.quoteId ? `Quote ${r.quote.quoteId}` : 'Manual',
+      heldFor: r.job?.jobId ? r.job.jobId : r.quote?.quoteId ? `Quote ${r.quote.quoteId}` : 'Manual',
+      salesPerson: fullName(r.job?.quoteId?.createdBy) || fullName(r.quote?.createdBy) || fullName(r.createdBy) || '-',
       customer: r.customer?.companyName || '-',
       source: r.sourceType === 'Quotation' ? 'Won quote hold' : r.sourceType === 'Deal' ? 'Approved deal' : r.sourceType,
       quantity: r.quantity,
@@ -277,7 +363,7 @@ export class StockOverviewComponent implements OnInit {
     const s = this.summary();
     this.views = this.views.map((v) => ({
       ...v,
-      count: v.id === 'all' ? s.totalItems : v.id === 'exceptions' ? s.exceptionCount : s.quarantineCount,
+      count: v.id === 'all' ? s.totalItems : v.id === 'available' ? s.availableCount : v.id === 'reserved' ? s.reservedCount : s.quarantineCount,
     }));
   }
 }

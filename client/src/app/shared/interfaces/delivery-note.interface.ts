@@ -36,6 +36,7 @@ export interface DeliveryNote {
         isInventoryItem: boolean;
         rejectedQty?: number;
         rejectionReason?: string;
+        unitSellingPrice?: number;
     }[];
     status: string;
     rejectedHistory?: {
@@ -78,7 +79,7 @@ export interface GetDeliveryNoteResponse {
 
 export const DnStatus = {
     DRAFT: 'Draft',
-    READY_FOR_DISPATCH: 'Ready for Dispatch',
+    READY_TO_DELIVER: 'Ready to Deliver',
     DISPATCHED: 'Dispatched',
     DELIVERED: 'Delivered',
     CANCELLED: 'Cancelled',

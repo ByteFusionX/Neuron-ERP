@@ -1,9 +1,22 @@
-import { InitiateLpoComponent } from 'src/app/modules/purchase-order/pages/initiate-lpo/initiate-lpo.component';
+import { HttpEventType } from '@angular/common/http';
+import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
+import { EventsService } from 'src/app/core/services/events/events.service';
+import { Events } from 'src/app/shared/interfaces/evets.interface';
+import { DetailTaskItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailTaskListComponent } from 'src/app/shared/components/detail-panel/detail-task-list.component';
+import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/event-create-modal.component';
+import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/follow-up-create-modal.component';
+import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/follow-up-panel/follow-up-panel.component';
+import { FollowUpViewModel, followUpCellClass, followUpViewer } from 'src/app/shared/utils/follow-up.util';
+import { dealSheetPriceDetails } from 'src/app/shared/utils/deal-pricing.util';
 import { Component, ViewChild, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
@@ -21,23 +34,38 @@ import {
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailFootRow, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { CreatePurchaseComponent } from '../create-purchase/create-purchase.component';
 import { ModalService } from 'src/app/shared/components/modal';
 import { ResetWorkflowComponent, ResetWorkflowModalData } from 'src/app/modules/presales/pages/reset-workflow/reset-workflow.component';
 import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
+import { JobStatus } from 'src/app/shared/interfaces/job.interface';
+import { STATUS_TONE_CLASSES, StatusTone } from 'src/app/shared/components/status-indicator/status-tone';
 
 type SourceType = 'job' | 'manual';
 
-const ALL_STATUSES = ['New', 'In Progress', 'Pending', 'Rejected', 'Approved'];
+const ALL_STATUSES = ['New', 'In Progress', 'Pending', 'Rejected', 'Revoked', 'Approved'];
 const PENDING_STATUSES = ['Pending'];
 const APPROVED_STATUSES = ['Approved'];
 // A job allocated to a buyer is New (open to work) until the PR is sent for approval: then Pending, then Approved.
 const NEW_STATUSES = ['New', 'In Progress'];
 const IN_PROGRESS_STATUSES = ['In Progress'];
 const REJECTED_STATUSES = ['Rejected'];
+const REVOKED_STATUSES = ['Revoked'];
+
+/** Same tones as the Job Sheet list's Job Status badge. */
+const JOB_STATUS_TONES: Record<string, StatusTone> = {
+  [JobStatus.WorkInProgress]: 'progress',
+  [JobStatus.Delivered]: 'info',
+  [JobStatus.partiallyDelivered]: 'warning',
+  [JobStatus.partiallyInvoiced]: 'warning',
+  [JobStatus.invoiced]: 'info',
+  [JobStatus.completed]: 'success',
+  [JobStatus.onHold]: 'warning',
+  [JobStatus.cancelled]: 'danger',
+};
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
@@ -45,13 +73,14 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
   New: 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900 dark:border-sky-900',
   'In Progress': 'bg-violet-50 text-violet-700 ring-violet-200 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900 dark:border-violet-900',
   Rejected: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
+  Revoked: 'bg-orange-50 text-orange-700 ring-orange-200 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-900 dark:border-orange-900',
 };
 
-const PR_VIEW_IDS = ['new', 'inProgress', 'rejected', 'all', 'pending', 'readyToPo', 'remainingPo', 'completed'];
+const PR_VIEW_IDS = ['followUp', 'new', 'inProgress', 'rejected', 'revoked', 'all', 'pending', 'readyToPo', 'remainingPo', 'completed'];
 
 @Component({
   selector: 'app-purchase-request-list',
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, ApprovalJourneyComponent, ActionButtonComponent, InitiateLpoComponent, CreatePurchaseComponent],
+  imports: [FollowUpPanelComponent, DetailTaskListComponent, CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailTimelineComponent, ApprovalJourneyComponent, ActionButtonComponent, CreatePurchaseComponent],
   providers: [DatePipe],
   templateUrl: './purchase-request-list.component.html',
   styleUrl: './purchase-request-list.component.css',
@@ -59,6 +88,9 @@ const PR_VIEW_IDS = ['new', 'inProgress', 'rejected', 'all', 'pending', 'readyTo
 export class PurchaseRequestListComponent {
   @ViewChild('grid') grid!: DataGridComponent<any>;
 
+  private readonly _eventsService = inject(EventsService);
+  private readonly _enquiryService = inject(EnquiryService);
+  private eventsCache = new Map<string, BehaviorSubject<Events[]>>();
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private purchaseService = inject(PurchaseService);
@@ -68,21 +100,46 @@ export class PurchaseRequestListComponent {
   private confirmDialog = inject(ConfirmDialogService);
   private modal = inject(ModalService);
   private workflowService = inject(WorkflowService);
+  private auditLog = inject(AuditLogService);
   private prWorkflowSteps: { id: string; label: string }[] = [];
   private subscriptions = new Subscription();
 
   detailLoading = false;
-  detailTabs: DataGridDetailTab[] = [
+  private readonly allDetailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
+    { id: 'followups', label: 'Follow-ups', icon: 'chat' },
+    { id: 'events', label: 'Events', icon: 'calendar' },
     { id: 'approval', label: 'Approval', icon: 'activity' },
+    { id: 'history', label: 'History', icon: 'clock' },
   ];
 
+  get detailTabs(): DataGridDetailTab[] {
+    return this.activeViewId === 'new' ? this.jobDetailTabs : this.allDetailTabs;
+  }
+  private readonly jobDetailTabs = this.allDetailTabs.filter((tab) => !['followups', 'events'].includes(tab.id));
+
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+
+  /** Audit-log events for a PR; approvals are left out (rejections are kept) because the Approval tab already shows them. */
+  historyFor(row: any): Observable<DetailTimelineEntry[]> {
+    let subject = this.historyCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(row._id, subject);
+      this.auditLog.getHistory(row.sourceType === 'manual' ? 'generalPurchaseRequest' : 'purchaseRequest', row._id).subscribe({
+        next: (entries) => subject!.next(toTimelineEntries((entries || []).filter((e) => e.action !== 'approved'))),
+        error: () => this.historyCache.delete(row._id),
+      });
+    }
+    return subject.asObservable();
+  }
+
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'item', label: 'Item', truncate: true },
-    { key: 'award', label: 'Award', type: 'badge', badgeTones: { Awarded: 'good', 'Not awarded': 'neutral' } },
+    { key: 'item', label: 'Item', type: 'html', truncate: true },
     { key: 'qty', label: 'Qty', type: 'number' },
-    { key: 'price', label: 'Price', type: 'currency' },
+    { key: 'unitPrice', label: 'Unit Price', type: 'currency' },
+    { key: 'price', label: 'Unit Cost', type: 'currency' },
     { key: 'amount', label: 'Amount', type: 'currency', total: true },
   ];
 
@@ -95,12 +152,14 @@ export class PurchaseRequestListComponent {
   private readonly newView: DataGridView<any> = { id: 'new', label: 'New' };
   private baseViews: DataGridView<any>[] = [
     { id: 'all', label: 'All', hidePill: true },
+    { id: 'followUp', label: 'Follow Up' },
     { id: 'inProgress', label: 'In Progress' },
     { id: 'pending', label: 'Pending' },
     { id: 'readyToPo', label: 'Ready to PO' },
     { id: 'remainingPo', label: 'Remaining PO' },
     { id: 'completed', label: 'Completed' },
     { id: 'rejected', label: 'Rejected' },
+    { id: 'revoked', label: 'Revoked' },
   ];
   views: DataGridView<any>[] = [this.newView, ...this.baseViews];
   isSuperAdmin = false;
@@ -172,10 +231,37 @@ export class PurchaseRequestListComponent {
   }
 
   private buildColumns(): void {
+    // New-tab rows are allocated jobs, so they show the Job Sheet list's columns.
+    if (this.activeViewId === 'new') {
+      const jobStatusLabel = (v: unknown): string => (v === JobStatus.WorkInProgress ? 'In Progress' : v ? String(v) : '—');
+      this.columns = [
+        { key: 'date', label: 'Last Updated', type: 'date', sortable: true, width: '120px', valueGetter: (r) => r.jobId?.updatedDate ?? r.createdAt },
+        { key: 'jobId', label: 'Job Id', sortable: true, valueGetter: (r) => r.jobId?.jobId },
+        {
+          key: 'jobStatus', label: 'Job Status', type: 'badge', valueGetter: (r) => r.jobStatus ?? r.jobId?.status ?? '',
+          badgeClasses: Object.fromEntries(Object.entries(JOB_STATUS_TONES).map(([s, tone]) => [s, STATUS_TONE_CLASSES[tone].pill + ' border'])),
+          badgeLabel: jobStatusLabel,
+        },
+        { key: 'customerName', label: 'Customer', sortable: true, valueGetter: (r) => r.customerId?.companyName },
+        { key: 'description', label: 'Subject', valueGetter: (r) => r.description ?? r.jobId?.quoteId?.subject },
+        { key: 'lpoValue', label: 'LPO Value (QAR)', type: 'currency', currencyCode: 'QAR', valueGetter: (r) => r.lpoValue ?? 0 },
+        { key: 'salesPerson', label: 'Sales Person', valueGetter: (r) => r.salesPerson },
+        { key: 'department', label: 'Department', valueGetter: (r) => r.department },
+        {
+          key: 'procurementPerson', label: 'Assigned To',
+          valueGetter: (r) => r.procurementPerson?.firstName ? `${r.procurementPerson.firstName} ${r.procurementPerson.lastName}` : '-',
+        },
+        { key: 'allocatedBy', label: 'Allocated By', valueGetter: (r) => r.allocatedBy?.firstName ? `${r.allocatedBy.firstName} ${r.allocatedBy.lastName}` : '-' },
+        { key: 'quoteId', label: 'Quote Id', valueGetter: (r) => r.quoteNo ?? r.jobId?.quoteId?.quoteId },
+        { key: 'dealId', label: 'Deal Id', valueGetter: (r) => r.dealNo ?? r.jobId?.quoteId?.dealData?.dealId },
+      ];
+      return;
+    }
     this.columns = [
       { key: 'date', label: 'Date', type: 'date', sortable: true, width: '120px', valueGetter: (r) => r.approvedDate || r.createdAt },
       { key: 'customerName', label: 'Customer Name', sortable: true, valueGetter: (r) => r.customerId?.companyName },
       { key: 'purchaseNo', label: 'PR NO', sortable: true },
+      { key: 'nextFollowUpDate', label: 'Next Follow-up', type: 'date', sortable: true, valueGetter: (r) => r.followUp?.nextFollowUpDate, cellClass: (r) => followUpCellClass(r.followUp?.nextFollowUpDate, false) },
       { key: 'jobId', label: 'Job ID', sortable: true, valueGetter: (r) => r.jobId?.jobId },
       {
         key: 'totalLpo', label: 'LPO Value', sortable: true,
@@ -185,12 +271,8 @@ export class PurchaseRequestListComponent {
           return r.currency ? `${formatted} ${r.currency}` : formatted;
         },
       },
-      { key: 'selectedPrQuantity', label: 'Awarded Qty', align: 'right', width: '120px', valueGetter: (r) => r.selectedPrQuantity ?? '-' },
-      { key: 'issuedPoQuantity', label: 'PO Qty', align: 'right', width: '90px', valueGetter: (r) => r.issuedPoQuantity ?? '-' },
-      { key: 'remainingPoQuantity', label: 'Remaining', align: 'right', width: '110px', valueGetter: (r) => r.remainingPoQuantity ?? '-' },
-      { key: 'awarded', label: 'Awarded', align: 'right', valueGetter: (r) => { const a = this.awardStats(r); return a.total ? `${a.awarded}/${a.total}` : '-'; } },
+      { key: 'awarded', label: 'Awarded', align: 'right', valueGetter: (r) => { const a = this.awardStats(r, true); return a.total ? `${a.awarded}/${a.total}` : '-'; } },
       { key: 'createdBy', label: 'Created By', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '-' },
-      { key: 'supplier', label: 'Supplier', valueGetter: (r) => this.supplierLabel(r) },
       {
         key: 'procurementPerson', label: 'Assigned To',
         valueGetter: (r) => r.procurementPerson?.firstName ? `${r.procurementPerson.firstName} ${r.procurementPerson.lastName}` : '-',
@@ -199,7 +281,7 @@ export class PurchaseRequestListComponent {
       {
         key: 'status', label: 'Status', type: 'badge', sortable: true,
         valueGetter: (r) => {
-          if (r.status === 'New' || r.status === 'In Progress' || r.status === 'Rejected') return r.status;
+          if (r.status === 'New' || r.status === 'In Progress' || r.status === 'Rejected' || r.status === 'Revoked') return r.status;
           const v = String(r.overallStatus || r.status || 'Pending');
           return v.charAt(0).toUpperCase() + v.slice(1).toLowerCase();
         },
@@ -219,7 +301,7 @@ export class PurchaseRequestListComponent {
 
   /** Drafts and rejected requests go back to be fixed. */
   canEdit(r: any): boolean {
-    return r.status === 'Rejected' || r.status === 'In Progress' || (r.status === 'New' && this.hasItems(r));
+    return r.status === 'Rejected' || r.status === 'Revoked' || r.status === 'In Progress' || (r.status === 'New' && this.hasItems(r));
   }
 
   /** Every product line has an awarded supplier offer (done in Compare & award). */
@@ -232,7 +314,7 @@ export class PurchaseRequestListComponent {
   private isAllocated(d: any): boolean {
     if (d.short && String(d.shortReason || '').trim()) return true;
     const won = (d.comparisons ?? []).filter((c: any) => c.selected);
-    if (!won.length) return !!d.supplierId && Number(d.unitCost) > 0;
+    if (!won.length) return false;
     if (won.some((c: any) => !c.supplierId || !(Number(c.unitPrice) > 0))) return false;
     if (!won.some((c: any) => c.awardedQty)) return true;
     return won.reduce((sum: number, c: any) => sum + (Number(c.awardedQty) || Number(d.quantity) || 0), 0) + 0.0001 >= Number(d.quantity);
@@ -249,9 +331,10 @@ export class PurchaseRequestListComponent {
     return list.length <= 2 ? list.join(', ') : `${list[0]} +${list.length - 1} more`;
   }
 
-  awardStats(r: any): { awarded: number; total: number } {
+  /** `explicitOnly` leaves out lines that only have the deal supplier as default, so the grid counts real awards. */
+  awardStats(r: any, explicitOnly = false): { awarded: number; total: number } {
     const lines = (r.items ?? []).flatMap((item: any) => item.itemDetails ?? []).filter((d: any) => Number(d.quantity) > 0);
-    return { awarded: lines.filter((d: any) => d.supplierId || (d.comparisons ?? []).some((c: any) => c.selected)).length, total: lines.length };
+    return { awarded: lines.filter((d: any) => (d.comparisons ?? []).some((c: any) => c.selected)).length, total: lines.length };
   }
 
   /** The one thing this request is waiting on, shown in the grid and the details panel. */
@@ -265,7 +348,7 @@ export class PurchaseRequestListComponent {
       const offersIn = (r.items ?? []).some((item: any) => (item.itemDetails ?? []).some((d: any) => (d.comparisons ?? []).length));
       return offersIn ? 'Compare & award' : 'Pick supplier or send RFQ';
     }
-    if (r.status === 'Rejected') return 'Fix and resubmit';
+    if (r.status === 'Rejected' || r.status === 'Revoked') return 'Fix and resubmit';
     if (r.status === 'Pending') return 'Awaiting approval';
     if (this.isFullyApproved(r)) return (r.remainingPoQuantity ?? 1) > 0 ? 'Initiate LPO' : 'Done';
     return '-';
@@ -274,7 +357,7 @@ export class PurchaseRequestListComponent {
   /** Progress strip for the details panel. */
   flowSteps(r: any): { label: string; done: boolean }[] {
     const { awarded, total } = this.awardStats(r);
-    const submitted = !['New', 'In Progress', 'Rejected'].includes(r.status);
+    const submitted = !['New', 'In Progress', 'Rejected', 'Revoked'].includes(r.status);
     const offersIn = (r.items ?? []).some((item: any) => (item.itemDetails ?? []).some((d: any) => (d.comparisons ?? []).length));
     return [
       { label: 'Created', done: total > 0 },
@@ -301,24 +384,25 @@ export class PurchaseRequestListComponent {
   // Each action shows only where it applies, so a row never lists buttons it cannot use.
   private buildRowActions(): void {
     this.rowActions = [
+      { id: 'followUp', label: 'Follow-ups', icon: 'chat', hidden: () => this.activeViewId === 'new' },
+      { id: 'view', label: 'View PR', icon: 'eye', quick: true, hidden: () => this.activeViewId === 'new' },
+      { id: 'viewJob', label: 'View Job', icon: 'eye', quick: true, hidden: (r) => this.activeViewId !== 'new' || !this.jobIdOf(r) },
       { id: 'edit', label: 'Edit', icon: 'pencil', quick: true, hidden: (r) => !this.canEdit(r) },
       { id: 'createPr', label: 'Create PR', icon: 'plus', quick: true, hidden: (r) => !this.canCreateFromJob(r) },
+      { id: 'viewDetails', label: 'View details', icon: 'files', quick: true, hidden: (r) => r.status !== 'Pending' },
       { id: 'sendApproval', label: 'Send for approval', icon: 'send', quick: true, hidden: (r) => !['New', 'In Progress'].includes(r.status) || !this.hasItems(r) || !this.allAwarded(r) },
-      {
-        id: 'initiateLpo', label: 'Initiate LPO', icon: 'send', quick: true,
-        hidden: (r) => !this.isFullyApproved(r) || (r.remainingPoQuantity ?? 1) <= 0,
-      },
       // The PR drawer's POs step: one card per awarded supplier with Create PO / Place order.
-      { id: 'pos', label: 'POs', icon: 'eye', quick: true, hidden: (r) => !this.isFullyApproved(r) },
+      { id: 'pos', label: 'POs', icon: 'files', quick: true, hidden: (r) => !this.isFullyApproved(r) },
       {
         id: 'approve', label: 'Approve', icon: 'check', quick: true,
         hidden: (r) => !this.canDecide(r),
       },
       {
-        id: 'reject', label: 'Reject', icon: 'close',
+        id: 'reject', label: 'Reject', icon: 'close', quick: true,
         hidden: (r) => !this.canDecide(r),
       },
-      { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', quick: true, hidden: (r) => r.status !== 'Pending' || !this.isSuperAdmin },
+      { id: 'revoke', label: 'Revoke', icon: 'close', quick: true, variant: 'danger', hidden: (r) => r.status !== 'Approved' || !this.canApprovePR },
+      { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', hidden: (r) => r.status !== 'Pending' || !this.isSuperAdmin },
     ];
   }
 
@@ -327,6 +411,7 @@ export class PurchaseRequestListComponent {
       case 'new': return NEW_STATUSES;
       case 'inProgress': return IN_PROGRESS_STATUSES;
       case 'rejected': return REJECTED_STATUSES;
+      case 'revoked': return REVOKED_STATUSES;
       case 'pending': return PENDING_STATUSES;
       case 'readyToPo':
       case 'remainingPo':
@@ -377,12 +462,14 @@ export class PurchaseRequestListComponent {
       sourceType: this.sourceTypeForView(this.activeViewId),
       poProgress: this.poProgressForView(this.activeViewId),
       allocation: this.allocationForView(this.activeViewId),
+      followUpView: this.activeViewId === 'followUp' ? 'followUp' : undefined,
     };
 
     this.subscriptions.add(
       this.purchaseService.getPurchases(filterParams).subscribe({
         next: (response) => {
           this.rows = response.purchase.data;
+          this.historyCache.clear();
           this.total = response.purchase.total ?? 0;
           this.isLoading = false;
         },
@@ -409,6 +496,7 @@ export class PurchaseRequestListComponent {
           sourceType: this.sourceTypeForView(view.id),
           poProgress: this.poProgressForView(view.id),
           allocation: this.allocationForView(view.id),
+          followUpView: view.id === 'followUp' ? 'followUp' : undefined,
         })),
       }).subscribe({
         next: ({ counts }) => {
@@ -451,14 +539,24 @@ export class PurchaseRequestListComponent {
   onRowAction(event: DataGridRowActionEvent<any>): void {
     const { action, row } = event;
     switch (action.id) {
-      case 'initiateLpo':
-        this.openInitiateLpo(row._id);
+      case 'followUp':
+        this.grid.activeTab = 'followups';
+        this.grid.openRow(row);
+        break;
+      case 'view':
+        this.openFullPurchase(row);
+        break;
+      case 'viewJob':
+        this.router.navigate(['/job-sheet/view', this.jobIdOf(row)], { state: { returnUrl: this.router.url } });
         break;
       case 'edit':
         this.onEditPr(row);
         break;
       case 'pos':
         this.onEditPr(row);
+        break;
+      case 'viewDetails':
+        this.onEditPr(row, undefined, true);
         break;
       case 'sendApproval':
         void this.sendForApproval(row);
@@ -474,6 +572,9 @@ export class PurchaseRequestListComponent {
         break;
       case 'resetWorkflow':
         this.resetWorkflow(row);
+        break;
+      case 'revoke':
+        void this.revoke(row);
         break;
     }
   }
@@ -557,6 +658,33 @@ export class PurchaseRequestListComponent {
     );
   }
 
+  /** Takes an approved PR back out of approval so it can be edited and sent again. */
+  async revoke(row: any): Promise<void> {
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'reject',
+      title: 'Revoke purchase request',
+      message: 'This approved purchase request goes back to its creator to be edited and sent for approval again. Products already on a purchase order keep their quantity and ordered suppliers; the rest can change.',
+      details: [{ label: 'PR No', value: row.purchaseNo || '-' }],
+      confirmLabel: 'Revoke',
+      reason: true,
+      reasonLabel: 'Revoke reason',
+    });
+    if (!confirmed) return;
+    if (!reason?.trim()) {
+      this.notificationService.error('Revoke reason is required');
+      return;
+    }
+    this.subscriptions.add(
+      this.purchaseService.revokePurchase(row._id, reason.trim()).subscribe({
+        next: () => {
+          this.notificationService.success('Purchase request revoked');
+          this.getPurchases();
+        },
+        error: (error) => this.notificationService.error(error?.error?.message || 'Failed to revoke purchase request'),
+      })
+    );
+  }
+
   onRowOpen(): void {
     this.detailLoading = true;
     setTimeout(() => (this.detailLoading = false), 250);
@@ -564,6 +692,11 @@ export class PurchaseRequestListComponent {
 
   openFullPurchase(row: any, event?: Event): void {
     event?.stopPropagation();
+    // A New row is an allocated job with no PR yet, so "Job view" opens the job, not a purchase.
+    if (row.status === 'New' && !this.hasItems(row) && this.jobIdOf(row)) {
+      this.router.navigate(['/job-sheet/view', this.jobIdOf(row)], { state: { returnUrl: this.router.url } });
+      return;
+    }
     this.router.navigate(['/purchase/view-purchase', row._id]);
   }
 
@@ -587,13 +720,27 @@ export class PurchaseRequestListComponent {
     return rows;
   }
 
+  /** Footer under the items: total, the PR's supplier discount, then net total. */
+  itemFootRows(row: any): DetailFootRow[] {
+    const total = this.itemRows(row).reduce((s, r) => s + (Number(r['amount']) || 0), 0);
+    const discount = Number(row?.supplierDiscounts?.totalDiscount) || 0;
+    const cell = (value: number) => ({ amount: { value, format: 'currency' as const } });
+    return [
+      { label: 'Total', cells: cell(total) },
+      { label: 'Discount', cells: cell(discount) },
+      { label: 'Net Total', cells: cell(Math.max(total - discount, 0)), emphasis: true },
+    ];
+  }
+
   private buildItemRows(row: any): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
     const source = row.items?.length ? row.items : row.dealItems ?? [];
     source.forEach((item: any) => {
       (item.itemDetails ?? []).forEach((d: any) => {
         const won = (d.comparisons ?? []).find((c: any) => c.selected);
-        rows.push({ item: d.detail, award: won ? 'Awarded' : 'Not awarded', qty: d.quantity, price: d.unitCost, amount: (d.quantity ?? 0) * (d.unitCost ?? 0) });
+        // The base unit cost, never the awarded supplier's price.
+        const base = Number(d.dealUnitCost) > 0 ? Number(d.dealUnitCost) : d.unitCost;
+        rows.push({ item: String(d.detail ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'), award: won ? 'Awarded' : 'Not awarded', qty: d.quantity, unitPrice: d.unitSellingPrice ?? 0, price: base, amount: (d.quantity ?? 0) * (base ?? 0) });
       });
     });
     return rows;
@@ -642,30 +789,82 @@ export class PurchaseRequestListComponent {
     return stages;
   }
 
+  /** Same figures as the Summary on the PR view page. */
+  private prSummaryFields(row: any, money: (v: number) => string): DetailOverviewSection['fields'] {
+    const num = (v: any) => Number(v) || 0;
+    const deal = row.jobId?.quoteId?.dealData;
+    const price = dealSheetPriceDetails(deal?.updatedItems, deal?.additionalCosts, deal?.totalDiscount);
+    const sumOf = (type: string) => (deal?.additionalCosts || []).filter((c: any) => c.type === type).reduce((s: number, c: any) => s + num(c.value), 0);
+    const customerDiscount = num(deal?.totalDiscount) + sumOf('Customer Discount');
+    const jobCostDiscount = sumOf('Supplier Discount');
+    let grossCost = 0;
+    const suppliers = new Set<string>();
+    const idOf = (ref: any): string => String(ref && typeof ref === 'object' ? ref._id : ref ?? '');
+    for (const item of row.items || []) {
+      for (const d of item.itemDetails || []) {
+        const won = (d.comparisons || []).filter((c: any) => c.selected);
+        for (const c of won) { grossCost += num(c.unitPrice) * num(c.quantity); suppliers.add(idOf(c.supplierId)); }
+        if (!won.length) suppliers.add(idOf(d.supplierId));
+      }
+    }
+    const extras = Array.isArray(row.additionalCosts)
+      ? row.additionalCosts
+      : (deal?.additionalCosts || []).filter((c: any) => (c.type || 'Additional Cost') === 'Additional Cost');
+    const prExtra = extras.reduce((s: number, c: any) => s + num(c.value), 0);
+    const saved: any[] = row.supplierDiscounts?.suppliers || [];
+    const discRows = saved.length ? saved : (deal?.additionalCosts || []).filter((c: any) => c.type === 'Supplier Discount' && c.supplierId).map((c: any) => ({ supplierId: c.supplierId, discount: c.value }));
+    const prDiscount = discRows.filter((d: any) => suppliers.has(idOf(d.supplierId))).reduce((s: number, d: any) => s + num(d.discount), 0);
+    const f = (label: string, v: number) => ({ type: 'field' as const, label, value: money(v), numeric: true, noHover: true });
+    return [
+      f('Total Price', price.totalSellingPrice + customerDiscount),
+      f('Discount', customerDiscount),
+      f('Net Total Price', price.totalSellingPrice),
+      f('Total Cost', price.totalCost + jobCostDiscount),
+      f('Cost Discount', jobCostDiscount),
+      f('Net Total Cost', price.totalCost),
+      f('Total PR Cost', grossCost + prExtra),
+      f('PR Cost Discount', prDiscount),
+      f('Net PR Total Cost', grossCost + prExtra - prDiscount),
+    ];
+  }
+
   overviewSections(row: any): DetailOverviewSection[] {
     const isNewJob = row.status === 'New' && !this.hasItems(row);
-    const rows = this.itemRows(row);
     const money = (v: number) => `${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency ?? ''}`.trim();
-    const estimated = rows.reduce((s, r) => s + (r['amount'] || 0), 0);
-    const awarded = rows.filter((r) => r['award'] === 'Awarded').reduce((s, r) => s + (r['amount'] || 0), 0);
-    const totalQty = rows.reduce((s, r) => s + (Number(r['qty']) || 0), 0);
-    const lpo = Number(row.totalLpo) || 0;
-    const financials: DetailOverviewSection['fields'] = [
-      { type: 'field', label: 'Line Items', value: rows.length, numeric: true, noHover: true },
-      { type: 'field', label: 'Total Quantity', value: totalQty, numeric: true, noHover: true },
-    ];
-    if (!isNewJob) {
-      financials.push({ type: 'field', label: 'Quoted Value', value: money(estimated), numeric: true, noHover: true });
-    }
+    const person = (p: any) => p?.firstName ? `${p.firstName} ${p.lastName ?? ''}`.trim() : '-';
     if (isNewJob) {
-      // No PR yet, so the LPO value is the job's deal value (deal sheet lines × unit cost).
-      financials.push({ type: 'field', label: 'LPO Value', value: money(estimated), numeric: true, noHover: true });
-    } else {
-      financials.push(
-        { type: 'field', label: 'Awarded Value', value: money(awarded), numeric: true, noHover: true },
-        { type: 'field', label: 'Pending Award', value: money(estimated - awarded), numeric: true, noHover: true },
-        { type: 'field', label: 'LPO Value', value: money(lpo), numeric: true, noHover: true },
-      );
+      const d = row.dealSummary ?? {};
+      const sum = (key: string) => ({ type: 'field' as const, label: '', value: money(Number(d[key]) || 0), numeric: true, noHover: true });
+      const line = (label: string, key: string) => ({ ...sum(key), label });
+      return [
+        {
+          title: 'General',
+          columns: '2',
+          fields: [
+            { type: 'field', label: 'PR No', value: row.purchaseNo, numeric: true },
+            { type: 'dg', key: 'status' },
+            { type: 'field', label: 'Customer', value: row.customerId?.companyName },
+            { type: 'field', label: 'Job ID', value: row.jobId?.jobId },
+            { type: 'field', label: 'Date', value: this.datePipe.transform(row.approvedDate || row.createdAt, 'dd MMM yyyy') },
+            { type: 'field', label: 'Sales Person', value: row.salesPerson || '-' },
+            { type: 'field', label: 'Allocated By', value: person(row.allocatedBy) },
+            { type: 'field', label: 'Procurement Person', value: person(row.procurementPerson) },
+          ],
+        },
+        {
+          title: 'Summary',
+          columns: '2',
+          fields: [
+            line('Total Price', 'totalPrice'),
+            line('Discount', 'discount'),
+            line('Net Total Price', 'netTotalPrice'),
+            line('Total Cost', 'totalCost'),
+            line('Additional Cost', 'additionalCost'),
+            line('Supplier Discount', 'supplierDiscount'),
+            line('Net Total Cost', 'netTotalCost'),
+          ],
+        },
+      ];
     }
     return [
       {
@@ -680,16 +879,245 @@ export class PurchaseRequestListComponent {
           { type: 'field', label: 'Date', value: this.datePipe.transform(row.approvedDate || row.createdAt, 'dd MMM yyyy') },
           { type: 'field', label: 'Created By', value: row.createdBy ? `${row.createdBy.firstName} ${row.createdBy.lastName}` : '-' },
           { type: 'field', label: 'Procurement Person', value: row.procurementPerson?.firstName ? `${row.procurementPerson.firstName} ${row.procurementPerson.lastName}` : '-' },
-          { type: 'field', label: 'Remaining PO Qty', value: row.remainingPoQuantity ?? 0, numeric: true, noHover: true },
+          ...(row.status === 'Rejected' && row.rejectedReason?.length
+            ? [{ type: 'field' as const, label: 'Rejection Note', value: row.rejectedReason[row.rejectedReason.length - 1]?.comment || '-' }]
+            : []),
         ],
       },
       {
-        title: 'Overview',
+        title: 'Summary',
         columns: '2',
-        fields: financials,
+        fields: this.prSummaryFields(row, money),
       },
     ];
   }
+
+
+  private readonly followUpViewFor = followUpViewer();
+
+  followUpView(row: any): FollowUpViewModel {
+    return this.followUpViewFor(row, row.followUp, false);
+  }
+
+  onScheduleFollowUp(row: any): void {
+    const open = this.followUpView(row).open;
+    this.modal.open<FollowUpModalResult>(FollowUpCreateModalComponent, {
+      width: '520px',
+      data: { context: row.purchaseNo || row._id, mode: 'schedule', dueDate: open?.dueIso || null },
+    }).afterClosed().subscribe((result) => {
+      if (result?.mode === 'schedule') this.saveFollowUp(row, this.purchaseService.schedulePurchaseFollowUp(row._id as string, { dueDate: result.dueDate, note: result.note }), 'Follow-up scheduled');
+    });
+  }
+
+  onLogFollowUp(row: any): void {
+    const open = this.followUpView(row).open;
+    this.modal.open<FollowUpModalResult>(FollowUpCreateModalComponent, {
+      width: '520px',
+      data: { context: row.purchaseNo || row._id, mode: 'complete', plannedFor: open?.due || null },
+    }).afterClosed().subscribe((result) => {
+      if (result?.mode === 'schedule') this.saveFollowUp(row, this.purchaseService.schedulePurchaseFollowUp(row._id as string, { dueDate: result.dueDate, note: result.note }), 'Follow-up scheduled');
+      else if (result?.mode === 'complete') {
+        this.saveFollowUp(row, this.purchaseService.completePurchaseFollowUp(row._id as string, {
+          date: result.date, outcome: result.outcome, note: result.note, nextFollowUpDate: result.nextFollowUpDate,
+        }), 'Follow-up logged');
+      }
+    });
+  }
+
+  async onCancelFollowUp(row: any): Promise<void> {
+    const open = this.followUpView(row).open;
+    if (!open) return;
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'warning',
+      title: 'Cancel Follow-up',
+      message: 'Close this follow-up without logging an outcome?',
+      details: [{ label: 'Planned for', value: open.due }],
+      reason: 'optional',
+      confirmLabel: 'Cancel follow-up',
+      cancelLabel: 'Keep',
+    });
+    if (!confirmed) return;
+    this.saveFollowUp(row, this.purchaseService.cancelPurchaseFollowUp(row._id as string, reason), 'Follow-up cancelled');
+  }
+
+  private followUpSaving = false;
+
+  private saveFollowUp(row: any, request: Observable<{ success: boolean; followUp: any }>, successMessage: string): void {
+    if (this.followUpSaving) return;
+    this.followUpSaving = true;
+    request.subscribe({
+      next: (response) => {
+        row.followUp = response.followUp;
+        this.followUpSaving = false;
+        this.notificationService.success(successMessage);
+        // The Follow Up view depends on the new date, so reload it.
+        if (this.activeViewId === 'followUp') this.getPurchases();
+        else { this.rows = [...this.rows]; this.loadViewCounts(); }
+      },
+      error: (err) => {
+        this.followUpSaving = false;
+        this.notificationService.error(err?.error?.message || 'Failed to save follow-up');
+      },
+    });
+  }
+
+
+  eventsFor(row: any): Observable<Events[]> {
+    let subject = this.eventsCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<Events[]>([]);
+      this.eventsCache.set(row._id, subject);
+      this._eventsService.fetchEvents(row._id).subscribe((events: Events[]) => subject!.next(events || []));
+    }
+    return subject.asObservable();
+  }
+
+
+  eventItems(events: Events[]): DetailTaskItem[] {
+    return (events || []).map((event) => ({
+      id: event._id,
+      title: event.event,
+      kind: 'event' as const,
+      date: event.date as any,
+      done: event.status === 'completed' || event.status === 'success',
+      eventStatus: (event.status || 'pending') as DetailTaskItem['eventStatus'],
+      outcomeable: true,
+      assignee: event.employee ? `Assigned to ${[event.employee.firstName, event.employee.lastName].filter(Boolean).join(' ') || event.employee.fullName || ''}`.trim() : undefined,
+      description: event.summary,
+      deletable: this.isEventCreator(event.createdBy),
+      attachments: (event.eventFiles || []).map((file) => ({ id: file.fileName, name: file.originalname })),
+    }));
+  }
+
+  private isEventCreator(createdBy: any): boolean {
+    const employeeId = this.myId;
+    if (!employeeId || !createdBy) return false;
+    const creatorId = typeof createdBy === 'string' ? createdBy : createdBy._id || createdBy;
+    return employeeId == creatorId;
+  }
+
+  onAddEvent(row: any): void {
+    this.modal.open<EventModalResult>(EventCreateModalComponent, {
+      width: '560px',
+      data: {
+        context: row.purchaseNo || row._id,
+        requireSummary: true,
+        outlookSync: true,
+      },
+    }).afterClosed().subscribe((event) => {
+      if (!event) return;
+      const formData = new FormData();
+      formData.append('eventData', JSON.stringify({
+        from: 'Purchase',
+        collectionId: row._id,
+        event: event.title,
+        date: event.date,
+        endDate: event.endDate,
+        summary: event.description,
+        location: event.location,
+        syncToOutlook: event.syncToOutlook,
+        onlineMeeting: event.onlineMeeting,
+        attendees: event.attendees,
+      }));
+      this._eventsService.newEvent(formData, !!event.syncToOutlook).subscribe({
+        next: (response) => {
+          if (response?.outlookWarning) this.notificationService.warning(response.outlookWarning);
+          if (response?.event) {
+            this.notificationService.success(response.message || 'Event created successfully');
+            this.eventsCache.delete(row._id);
+            this.eventsFor(row);
+            this.historyCache.delete(row._id);
+          }
+        },
+        error: () => this.notificationService.error('Failed to create event'),
+      });
+    });
+  }
+
+  onToggleEvent(row: any, item: DetailTaskItem): void {
+    if (item.done) return;
+    this._eventsService.eventStatus(item.id, 'completed').subscribe((response: any) => {
+      if (response.success === true) {
+        this.notificationService.success('Event completion updated');
+        const subject = this.eventsCache.get(row._id);
+        subject?.next(subject.value.map((event) => event._id === item.id ? { ...event, status: 'completed' } : event));
+      }
+    });
+  }
+
+  async onEventOutcome(row: any, item: DetailTaskItem, status: 'success' | 'cancelled'): Promise<void> {
+    const success = status === 'success';
+    const { confirmed } = await this.confirmDialog.open({
+      tone: success ? 'approve' : 'reject',
+      title: success ? 'Mark Event Successful' : 'Cancel Event',
+      message: success ? 'Mark this event as successful?' : 'Mark this event as cancelled?',
+      details: [{ label: 'Event', value: item.title }],
+      confirmLabel: success ? 'Mark successful' : 'Cancel event',
+      cancelLabel: 'Keep as is',
+    });
+    if (!confirmed) return;
+    this._eventsService.eventStatus(item.id, status).subscribe((response: any) => {
+      if (response.success === true) {
+        this.notificationService.success(success ? 'Event marked successful' : 'Event cancelled');
+        const subject = this.eventsCache.get(row._id);
+        subject?.next(subject.value.map((event) => event._id === item.id ? { ...event, status } : event));
+      }
+    });
+  }
+
+  async onDeleteEvent(row: any, item: DetailTaskItem): Promise<void> {
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'reject',
+      title: 'Delete Event',
+      message: 'Are you sure you want to delete this event?',
+      details: [{ label: 'Event', value: item.title }],
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep',
+    });
+    if (!confirmed) { return; }
+    this._eventsService.eventDelete(item.id).subscribe((response: any) => {
+      if (response.success) {
+        this.notificationService.success('Event Deleted');
+        const subject = this.eventsCache.get(row._id);
+        subject?.next(subject.value.filter((event) => event._id !== item.id));
+      }
+    });
+  }
+
+  onPreviewEventFile(file: { id: string; name: string }): void {
+    this._enquiryService.downloadFile(file.id).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.Response) {
+          const fileContent = new Blob([event.body], { type: event.body.type || 'application/octet-stream' });
+          const fileUrl = URL.createObjectURL(fileContent);
+          window.open(fileUrl, '_blank');
+          setTimeout(() => URL.revokeObjectURL(fileUrl), 10000);
+        }
+      },
+      error: () => this.notificationService.error('An error occurred while trying to preview the file.'),
+    });
+  }
+
+  async onDeleteEventFile(row: any, item: DetailTaskItem, file: { id: string; name: string }): Promise<void> {
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'reject',
+      title: 'Delete file',
+      message: 'Are you sure you want to delete this file?',
+      details: [{ label: 'File', value: file.name }],
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
+    this._eventsService.eventFileDelete(item.id, file.id).subscribe((response: any) => {
+      if (response.success) {
+        this.notificationService.success('File Deleted');
+        const subject = this.eventsCache.get(row._id);
+        subject?.next(subject.value.map((event) => event._id === item.id
+          ? { ...event, eventFiles: (event.eventFiles || []).filter((eventFile) => eventFile.fileName !== file.id) }
+          : event));
+      }
+    });
+  }
+
 
   // --- Create PR drawer ---------------------------------------------------------
 
@@ -719,10 +1147,13 @@ export class PurchaseRequestListComponent {
   /** Mounted only while open, so each opening starts from a fresh load of that PR. */
   editDrawerOpen = false;
   editDrawerPurchaseId: string | null = null;
+  /** Opened from "View details" on a PR sent for approval: read-only, Close only. */
+  editDrawerViewOnly = false;
 
-  onEditPr(row: any, event?: Event): void {
+  onEditPr(row: any, event?: Event, viewOnly = false): void {
     event?.stopPropagation();
     this.editDrawerPurchaseId = row._id;
+    this.editDrawerViewOnly = viewOnly;
     this.editDrawerOpen = true;
   }
 
@@ -739,20 +1170,6 @@ export class PurchaseRequestListComponent {
   onEditDrawerClosed(): void {
     this.editDrawerOpen = false;
     this.editDrawerPurchaseId = null;
-  }
-  /** Initiate LPO opens as a slide-over on top of the list. */
-  initiateLpoPurchaseId: string | null = null;
-
-  openInitiateLpo(purchaseId: string): void {
-    this.initiateLpoPurchaseId = purchaseId;
-  }
-
-  onInitiateLpoClosed(): void {
-    this.initiateLpoPurchaseId = null;
-  }
-
-  /** An LPO went out, so the PR may have moved to Remaining PO or Completed. */
-  onInitiateLpoIssued(): void {
-    this.getPurchases();
+    this.editDrawerViewOnly = false;
   }
 }

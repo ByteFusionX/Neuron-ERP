@@ -23,6 +23,8 @@ export interface CreateCreditNoteInput {
     customer?: string;
     items: {
         itemId?: string;
+        itemCode?: string;
+        partNo?: string;
         description?: string;
         rejectedQty: number;
         unitPrice: number;

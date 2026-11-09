@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getJobSalesPerson, jobList, totalJob, updateJobStatus, deleteJob, jobSheets, oneJobSheet, updateAllocateType, markJobLost, getDropdownListForTechnical, getUnassignedProjectAndAMCJobs, transferProcurementPerson, getJobHistory, jobSheetsWithCompletedPO, jobSheetsWithApprovedPR, jobSheetsWithApprovedPOAndNoGRN, getPreviousJobItemsByClient } from "../controllers/job.controller";
+import { getJobSalesPerson, jobList, totalJob, updateJobStatus, deleteJob, jobSheets, oneJobSheet, updateAllocateType, markJobLost, getDropdownListForTechnical, getUnassignedProjectAndAMCJobs, transferProcurementPerson, getJobHistory, jobSheetsWithCompletedPO, jobSheetsWithApprovedPR, jobSheetsWithApprovedPOAndNoGRN, getPreviousJobItemsByClient, getJobProcurement } from "../controllers/job.controller";
 import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 const jobRouter = Router()
 
@@ -26,5 +26,6 @@ jobRouter.get('/technical', getDropdownListForTechnical)
 jobRouter.post('/unassignedToTechnical', getUnassignedProjectAndAMCJobs)
 jobRouter.post('/transferProcurementPerson', requirePrivilege("jobSheet", "transferProcurementPerson"), transferProcurementPerson)
 jobRouter.get('/history/:jobId', getJobHistory)
+jobRouter.get('/procurement/:jobId', getJobProcurement)
 
 export default jobRouter

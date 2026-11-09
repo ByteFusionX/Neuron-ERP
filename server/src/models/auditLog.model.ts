@@ -6,6 +6,12 @@ export interface AuditLogChange {
   to?: string;
 }
 
+export interface AuditLogRelated {
+  entityType: string;
+  entityId: Types.ObjectId;
+  entityLabel?: string;
+}
+
 export interface AuditLog {
   /** Module the record belongs to, e.g. "enquiry". */
   entityType: string;
@@ -17,6 +23,8 @@ export interface AuditLog {
   changes?: AuditLogChange[];
   actor?: Types.ObjectId;
   actorName?: string;
+  /** Another module's record this event involves (e.g. the invoice behind a delivery note event). */
+  related?: AuditLogRelated;
   at: Date;
 }
 
@@ -29,6 +37,7 @@ const auditLogSchema = new Schema<AuditLog>({
   changes: { type: Schema.Types.Mixed },
   actor: { type: Schema.Types.ObjectId, ref: "Employee" },
   actorName: { type: String },
+  related: { type: new Schema({ entityType: String, entityId: Schema.Types.ObjectId, entityLabel: String }, { _id: false }) },
   at: { type: Date, default: Date.now },
 });
 

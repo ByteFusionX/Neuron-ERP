@@ -61,6 +61,8 @@ import stockRouter from './routes/stock.router';
 import grnRouter from './routes/grn.router';
 import deliveryNoteRouter from './routes/deliveryNote.router';
 import invoiceRouter from './routes/invoice.router';
+import proformaInvoiceRouter from './routes/proformaInvoice.router';
+import customerInvoiceRouter from './routes/customerInvoice.router';
 import scanSessionRouter from './routes/scanSession.router';
 import bugReportRouter from './routes/bugReport.router';
 import stockHoldRouter from './routes/stockHold.router';
@@ -68,6 +70,8 @@ import searchRouter from './routes/search.router';
 import contextRouter from './routes/context.router';
 
 const app = express();
+// Behind Nginx/Docker: use the real client IP (shown in the sessions list) from X-Forwarded-For.
+app.set('trust proxy', 1);
 app.set('etag', false); // API responses are dynamic per request; conditional 304s were silently breaking notification/celebration polling
 const server = http.createServer(app);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -105,8 +109,8 @@ app.use((_req, res, next) => {
     next();
 });
 app.use(morgan("dev"));
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
 
@@ -169,6 +173,8 @@ app.use('/stock', stockRouter);
 app.use('/grn', grnRouter);
 app.use('/delivery-note', deliveryNoteRouter);
 app.use('/invoice', invoiceRouter);
+app.use('/proforma-invoice', proformaInvoiceRouter);
+app.use('/customer-invoice', customerInvoiceRouter);
 app.use('/scan-session', scanSessionRouter);
 app.use('/bug-reports', bugReportRouter);
 app.use('/stock-hold', stockHoldRouter);

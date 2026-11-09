@@ -6,7 +6,7 @@ import { ToastrService } from 'ngx-toastr';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { NgIcon } from '@ng-icons/core';
 import { forkJoin, of } from 'rxjs';
-import { catchError, map, switchMap } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -17,6 +17,7 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { piSummaryFromJob } from 'src/app/modules/finance/pages/pi-shared/pi-form-drawer/pi-form-drawer.component';
 import { DnItemEntryComponent } from '../../components/dn-item-entry/dn-item-entry.component';
 
 @Component({
@@ -59,6 +60,11 @@ export class CreateDnComponent implements OnInit, OnChanges {
   draftLoaded = signal<boolean>(false);
   loadedDraftNo = signal<string | null>(null);
   selectedJob: any = null;
+
+  /** The job's deal figures; the discount given on the whole job is split over the DN's lines. */
+  get jobSummary() {
+    return this.selectedJob ? piSummaryFromJob(this.selectedJob) : { customerDiscount: 0, itemsPrice: 0, totalCost: 0 };
+  }
   previousDns: any[] = [];
   isEditMode: boolean = false;
   draftDnId: string | null = null;
@@ -87,6 +93,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
     contactPerson: [''],
     contactNo: [''],
     deliveryInstructions: [''],
+    paymentTerms: [''],
     items: this.fb.array([])
   });
 
@@ -97,6 +104,8 @@ export class CreateDnComponent implements OnInit, OnChanges {
     { n: 1 as const, label: 'Delivery details' },
     { n: 2 as const, label: 'Items' },
   ];
+  readonly stepLabels = this.steps.map(s => s.label);
+  readonly stepDone = (): boolean => this.isDetailsValid();
   private readonly detailControls = ['jobId', 'clientName', 'customerLpoNumber', 'dnNo', 'dnDate', 'subject', 'deliveryType',
     'shipToName', 'shipToAddress', 'contactPerson', 'contactNo', 'deliveryInstructions'];
 
@@ -184,7 +193,8 @@ export class CreateDnComponent implements OnInit, OnChanges {
       shipToAddress: '',
       contactPerson: '',
       contactNo: '',
-      deliveryInstructions: ''
+      deliveryInstructions: '',
+      paymentTerms: ''
     });
   }
 
@@ -192,9 +202,9 @@ export class CreateDnComponent implements OnInit, OnChanges {
     this.isLoading.set(true);
     this.deliveryNoteService.getDnById(dnId).subscribe({
       next: (dn) => {
-        if (dn.status !== 'Draft') {
-          this.toastr.error('Only draft DNs can be edited');
-          this.router.navigate(['/dispatch']);
+        if (!['Draft', 'Ready to Deliver'].includes(dn.status)) {
+          this.toastr.error('Only draft or ready-to-deliver DNs can be edited');
+          if (this.drawerMode) this.closed.emit(); else this.router.navigate(['/dispatch']);
           this.isLoading.set(false);
           return;
         }
@@ -215,6 +225,9 @@ export class CreateDnComponent implements OnInit, OnChanges {
   setDraftLoaded(dn: any): void {
     this.draftLoaded.set(true);
     this.loadedDraftNo.set(dn?.dnNo || null);
+    if (dn?.status && dn.status !== 'Draft') {
+      return;
+    }
     if (dn?.dnNo) {
       this.toastr.info(`Draft loaded - ${dn.dnNo}`);
     } else {
@@ -240,7 +253,8 @@ export class CreateDnComponent implements OnInit, OnChanges {
       shipToAddress: dn.shipToAddress || '',
       contactPerson: dn.contactPerson || '',
       contactNo: dn.contactNo || '',
-      deliveryInstructions: dn.deliveryInstructions || ''
+      deliveryInstructions: dn.deliveryInstructions || '',
+      paymentTerms: dn.paymentTerms || ''
     });
 
     if (dn.jobId) {
@@ -294,11 +308,13 @@ export class CreateDnComponent implements OnInit, OnChanges {
 
       const group = this.fb.group({
         slNo: [index + 1],
-            partNo: [item.partNo?.partNo || item.partNo || ''],
+            itemCode: [item.itemCode || ''],
+            partNo: [typeof item.partNo === 'string' ? item.partNo : (item.partNo?.partNo || item.itemPartNo || '')],
             description: [item.detail || ''],
             totalQuantity: [item.totalQuantity || 0],
             orderedQty: [item.orderedQty || 0],
         deliveredQty: [prevDelivered],
+            rejectedQty: [this.getRejectedQty(item._id)],
             currentDeliveryQty: [{ value: currentDeliveryQty, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
             serialNos: [this.formatSerialNos(serialNos)],
             status: [initialStatus],
@@ -411,6 +427,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
           // the quotation's attention contact is who receives the goods unless the user says otherwise
           contactPerson: [job.attention?.firstName, job.attention?.lastName].map((n: string) => n?.trim()).filter(Boolean).join(' '),
           contactNo: job.attention?.phoneNo ? String(job.attention.phoneNo) : '',
+          paymentTerms: job.quotation?.dealData?.paymentTerms || job.quotation?.paymentTerms || '',
         });
 
         if (!this.dnForm.get('dnNo')?.value) {
@@ -462,11 +479,13 @@ export class CreateDnComponent implements OnInit, OnChanges {
 
       const group = this.fb.group({
         slNo: [index + 1],
-            partNo: [item.partNo?.partNo || item.partNo || ''],
+            itemCode: [item.itemCode || ''],
+            partNo: [typeof item.partNo === 'string' ? item.partNo : (item.partNo?.partNo || item.itemPartNo || '')],
             description: [item.detail || ''],
             totalQuantity: [item.totalQuantity || 0],
             orderedQty: [item.orderedQty || 0],
         deliveredQty: [prevDelivered],
+            rejectedQty: [this.getRejectedQty(item._id)],
             currentDeliveryQty: [{ value: 0, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
             serialNos: [this.formatSerialNos(item.receivedSerialNos || [])],
             status: [initialStatus],
@@ -493,6 +512,16 @@ export class CreateDnComponent implements OnInit, OnChanges {
       if (matchedItem) {
         total += matchedItem.currentDeliveryQty || 0;
       }
+    });
+    return total;
+  }
+
+  getRejectedQty(itemId: string): number {
+    let total = 0;
+    this.previousDns.forEach(dn => {
+      if (dn.status === 'Cancelled' || dn.status === 'Draft') return;
+      const matchedItem = dn.items?.find((i: any) => i.itemId === itemId);
+      if (matchedItem) total += matchedItem.rejectedQty || 0;
     });
     return total;
   }
@@ -613,7 +642,7 @@ export class CreateDnComponent implements OnInit, OnChanges {
       ...formValue,
       items: selectedItemsData,
       jobId: this.selectedJob ? { jobId: this.selectedJob.jobId } : { jobId: formValue.jobId || '' },
-      paymentTerms: this.selectedJob?.quotation?.paymentTerms ?? ''
+      paymentTerms: formValue.paymentTerms || ''
     };
 
     try {
@@ -706,28 +735,26 @@ export class CreateDnComponent implements OnInit, OnChanges {
     const payload = {
       ...formValue,
       items: selectedItemsData,
-      status: 'Ready for Dispatch'
+      status: 'Ready to Deliver'
     };
 
     console.log('DN Payload:', JSON.stringify(payload, null, 2));
 
     this.isSubmitting.set(true);
 
-    // Marking ready also sends the DN out, so it lands in Out for Delivery; delivery is confirmed from there.
+    // The DN waits at Ready to Deliver; Place Order on the DN dispatches it and Deliver confirms receipt.
     const save$ = this.isEditMode && this.draftDnId
-      ? this.deliveryNoteService.updateDn(this.draftDnId, payload).pipe(map(res => res?.data?._id || res?._id || this.draftDnId))
-      : this.deliveryNoteService.createDn(payload).pipe(map(res => res?.data?._id || res?._id));
+      ? this.deliveryNoteService.updateDn(this.draftDnId, payload)
+      : this.deliveryNoteService.createDn(payload);
 
-    save$.pipe(switchMap(id => this.deliveryNoteService.dispatchDn(id))).subscribe({
+    save$.subscribe({
       next: () => {
-        this.toastr.success('DN is out for delivery');
+        this.toastr.success('DN is ready to deliver');
         this.afterSaved();
       },
       error: (err) => {
-        this.toastr.error(err.error?.message || 'Failed to mark DN ready');
+        this.toastr.error(err.error?.message || 'Failed to create DN');
         this.isSubmitting.set(false);
-        // The DN may already be saved as ready; refresh so it still shows up in the list.
-        this.saved.emit();
       }
     });
   }

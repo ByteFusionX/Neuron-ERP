@@ -13,6 +13,7 @@ export interface IDeliveryNote extends Document {
     contactPerson?: string;
     contactNo?: string;
     deliveryInstructions?: string;
+    paymentTerms?: string;
     pod?: {
         receivedBy?: string;
         receivedContactNo?: string;
@@ -24,6 +25,7 @@ export interface IDeliveryNote extends Document {
     };
     items: {
         slNo: number;
+        itemCode?: string;
         partNo: string;
         description: string;
         orderedQty: number;
@@ -61,6 +63,7 @@ const DeliveryNoteSchema: Schema = new Schema({
     contactPerson: { type: String },
     contactNo: { type: String },
     deliveryInstructions: { type: String },
+    paymentTerms: { type: String },
     pod: {
         receivedBy: String,
         receivedContactNo: String,
@@ -73,6 +76,7 @@ const DeliveryNoteSchema: Schema = new Schema({
     },
     items: [{
         slNo: Number,
+        itemCode: String,
         partNo: String,
         description: String,
         orderedQty: Number,
@@ -88,7 +92,7 @@ const DeliveryNoteSchema: Schema = new Schema({
     }],
     status: {
         type: String,
-        enum: ['Draft', 'Ready for Dispatch', 'Dispatched', 'Delivered', 'Cancelled', 'Rejected', 'Partially Rejected'],
+        enum: ['Draft', 'Ready to Deliver', 'Dispatched', 'Delivered', 'Cancelled', 'Rejected', 'Partially Rejected'],
         default: 'Draft'
     },
     rejectedHistory: [{

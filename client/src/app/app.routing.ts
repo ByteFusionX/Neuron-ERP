@@ -45,10 +45,7 @@ import { AllProductsComponent } from './modules/products/all-products.component'
 import { StockOverviewComponent } from './modules/stocks/pages/stock-overview/stock-overview.component';
 import { StockLedgerComponent } from './modules/stocks/pages/stock-ledger/stock-ledger.component';
 import { DnRegisterComponent } from './modules/dispatch/pages/dn-register/dn-register.component';
-import { CreateDnComponent } from './modules/dispatch/pages/create-dn/create-dn.component';
-import { PendingDeliveryComponent } from './modules/dispatch/pages/pending-delivery/pending-delivery.component';
 import { DeliveryNoteViewComponent } from './modules/dispatch/pages/delivery-note-view/delivery-note-view.component';
-import { CreateInvoiceComponent } from './modules/invoice/pages/create-invoice/create-invoice.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -90,7 +87,6 @@ export const routes: Routes = [
       },
       { path: 'employees', canActivate: [RoleGuard], component: EmployeesComponent },
       { path: 'employees/view/:employeeId', canActivate: [RoleGuard], component: ViewEmployeeComponent },
-      { path: 'employees/category/create', canActivate: [RoleGuard], loadComponent: () => import('./modules/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent) },
     ],
   },
   { path: 'employees', redirectTo: 'hr/employees', pathMatch: 'full' },
@@ -120,7 +116,6 @@ export const routes: Routes = [
     children: [
       { path: '', component: PresalesListComponent },
       { path: 'report', loadComponent: () => import('./modules/presales/pages/presale-report/presale-report.component').then((c) => c.PresaleReportComponent) },
-      { path: 'upload-estimations', component: UploadEstimationComponent },
       { path: 'edit-estimations', component: UploadEstimationComponent },
       { path: 'completed', redirectTo: () => inject(Router).parseUrl('/presales?tab=completed') },
       { path: 'reassigned', redirectTo: () => inject(Router).parseUrl('/presales?tab=assigned') }
@@ -148,7 +143,8 @@ export const routes: Routes = [
       { path: 'dealsheets', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'all' } },
       { path: 'pendings', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'pending' } },
       { path: 'approved', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'approved' } },
-      { path: 'rejecteds', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'rejected' } },
+      { path: 'rejected', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'rejected' } },
+      { path: 'rejecteds', redirectTo: 'rejected', pathMatch: 'full' },
       { path: 'revokeds', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'revoked' } },
       { path: 'view/:id', canActivate: [RoleGuard], component: ViewDealsheetComponent },
     ]
@@ -160,6 +156,7 @@ export const routes: Routes = [
     children: [
       { path: '', canActivate: [RoleGuard], component: JobListComponent },
       { path: 'report', canActivate: [RoleGuard], loadComponent: () => import('./modules/job-sheet/pages/job-report/job-report.component').then((c) => c.JobReportComponent) },
+      { path: 'view/:id', canActivate: [RoleGuard], loadComponent: () => import('./modules/job-sheet/pages/view-job/view-job.component').then((c) => c.ViewJobComponent) },
     ]
   },
   {
@@ -264,21 +261,8 @@ export const routes: Routes = [
     children: [
       { path: '', redirectTo: 'receivables', pathMatch: 'full' },
       { path: 'receivables', loadComponent: () => import('./modules/finance/pages/receivables/receivables.component').then((c) => c.ReceivablesComponent) },
+      { path: 'invoices', loadComponent: () => import('./modules/finance/pages/invoices/invoices.component').then((c) => c.InvoicesComponent) },
       { path: 'vendor-bills', loadComponent: () => import('./modules/finance/pages/vendor-bills/vendor-bills.component').then((c) => c.VendorBillsComponent) },
-      {
-        path: 'payables',
-        loadComponent: () => import('./modules/finance/pages/payables/payables.component').then((c) => c.PayablesComponent),
-        children: [
-          { path: 'invoice-register', redirectTo: '', pathMatch: 'full' },
-          { path: 'invoice-register/create', canActivate: [RoleGuard], component: CreateInvoiceComponent },
-          { path: 'invoice-register/edit/:id', canActivate: [RoleGuard], component: CreateInvoiceComponent },
-          { path: 'invoice-register/reissue/:id', canActivate: [RoleGuard], component: CreateInvoiceComponent },
-          { path: 'invoice-register/view/:id', canActivate: [RoleGuard], loadComponent: () => import('./modules/invoice/pages/invoice-view/invoice-view.component').then(m => m.InvoiceViewComponent) },
-          { path: 'invoice-dn-linking', redirectTo: '', pathMatch: 'full' },
-          { path: 'cancelled-invoices', redirectTo: '', pathMatch: 'full' },
-          { path: 'reissued', redirectTo: '', pathMatch: 'full' },
-        ],
-      },
     ]
   },
   {
@@ -342,7 +326,6 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/grn/grn.component').then((c) => c.GrnComponent),
     children: [
       { path: '', redirectTo: 'grn-list', pathMatch: 'full' },
-      { path: 'create-grn', component: CreateGrnComponent },
       { path: 'create-grn/:lpoId', component: CreateGrnComponent },
       { path: 'view-grn/:id', component: ViewGrnComponent },
       { path: 'grn-list', component: GrnListComponent },
@@ -360,7 +343,6 @@ export const routes: Routes = [
       { path: 'project-page', component: TechnicalProjectComponent },
       { path: 'materials', pathMatch: 'full', redirectTo: () => inject(Router).parseUrl('/technical/project-page?view=materials') },
       { path: 'amc', pathMatch: 'full', redirectTo: () => inject(Router).parseUrl('/technical/project-page?view=pendingAmc') },
-      { path: 'project/add', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
       { path: 'project/edit/:id', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
       { path: 'project/activity-plan/:id', component: ActivityPlanComponent },
       { path: 'project/material-request/:id', component: MaterialRequestModalComponent },
@@ -419,24 +401,7 @@ export const routes: Routes = [
     children: [
       { path: '', component: DnRegisterComponent, pathMatch: 'full' },
       { path: 'delivery-note-register', redirectTo: '', pathMatch: 'full' },
-      { path: 'create', component: CreateDnComponent },
       { path: 'view/:id', component: DeliveryNoteViewComponent },
-      { path: 'pending-delivery-reports', component: PendingDeliveryComponent },
-    ]
-  },
-  {
-    path: 'invoice',
-    canActivate: [AuthGuard, RoleGuard],
-    children: [
-      { path: '', redirectTo: '/finance/payables', pathMatch: 'full' },
-      { path: 'invoice-register', redirectTo: '/finance/payables', pathMatch: 'full' },
-      { path: 'invoice-register/create', redirectTo: '/finance/payables/invoice-register/create', pathMatch: 'full' },
-      { path: 'invoice-register/edit/:id', redirectTo: '/finance/payables/invoice-register/edit/:id', pathMatch: 'full' },
-      { path: 'invoice-register/reissue/:id', redirectTo: '/finance/payables/invoice-register/reissue/:id', pathMatch: 'full' },
-      { path: 'invoice-register/view/:id', redirectTo: '/finance/payables/invoice-register/view/:id', pathMatch: 'full' },
-      { path: 'invoice-dn-linking', redirectTo: '/finance/payables', pathMatch: 'full' },
-      { path: 'cancelled-invoices', redirectTo: '/finance/payables', pathMatch: 'full' },
-      { path: 'reissued', redirectTo: '/finance/payables', pathMatch: 'full' },
     ]
   },
   {

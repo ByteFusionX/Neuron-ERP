@@ -1,0 +1,69 @@
+<app-sf-drawer title="Material Request" subtitle="Items needed for this project" [width]="step === 1 ? 'min(1400px, 96vw)' : '720px'"
+    [open]="open" [dirty]="form.dirty" (closed)="onDrawerClosed($event)">
+
+    <app-sf-stepper [labels]="stepLabels" [current]="step" (stepClick)="goToStep($any($event))"></app-sf-stepper>
+
+    <form id="material-request-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        @if (loading) {
+            <p class="py-8 text-center text-sm text-gray-500">Loading material requests…</p>
+        }
+        <div [hidden]="loading">
+            <div [style.display]="step === 1 ? 'block' : 'none'">
+            <app-sf-section title="Items" columns="1">
+                <app-item-entry mode="rfq" [flat]="true" [allowOptions]="false" [allowCreateProduct]="false" [showTotalsBar]="false" [externalAddButtons]="true"
+                    [paletteTargetLabel]="open ? 'Material request' : null" [optionalItems]="optionalItems"
+                    [seedOptionalItems]="seedOptionalItems" [suggestionScopeIds]="[]" [lineStripTemplate]="lineStrip"
+                    [lineStripLabels]="['Est. cost', 'Required on *', 'Remarks']"></app-item-entry>
+                <div class="sticky bottom-0 z-20 flex flex-wrap items-end justify-end gap-6 rounded-xl border border-gray-200 bg-gray-50/95 px-4 py-3 backdrop-blur dark:border-erp-border-dark dark:bg-gray-900/85">
+                    <div>
+                        <p class="text-[11px] uppercase tracking-wide text-gray-500">Items</p>
+                        <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ itemCount }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[11px] uppercase tracking-wide text-gray-500">Estimated total</p>
+                        <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ grandTotal | number: '1.2-2' }}</p>
+                    </div>
+                </div>
+            </app-sf-section>
+            </div>
+
+            <app-sf-section *ngIf="step === 2" title="Attachments" columns="1">
+                @if (existingAttachments.length) {
+                    <ul class="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-erp-border-dark dark:border-erp-border-dark">
+                        @for (a of existingAttachments; track a.fileName; let i = $index) {
+                            <li class="flex items-center gap-3 px-3 py-2 text-[13px]">
+                                <span class="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100" [title]="a.originalname">{{ a.originalname }}</span>
+                                <button type="button" class="rounded-full px-2 py-0.5 text-xs font-medium" [class]="statusClass(a.status)"
+                                    [style.cursor]="a.statusHistory?.length ? 'pointer' : 'default'" (click)="showHistory(a.statusHistory, 'File Status History')">
+                                    {{ a.status || 'pending' | titlecase }}
+                                </button>
+                                <button type="button" class="rounded px-1.5 text-gray-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                    [disabled]="a.status === 'approved'" [attr.aria-label]="'Remove ' + a.originalname" (click)="removeExistingAttachment(i)">&times;</button>
+                            </li>
+                        }
+                    </ul>
+                }
+                <app-sf-file formControlName="files"></app-sf-file>
+            </app-sf-section>
+        </div>
+    </form>
+
+    <!-- Same one-line strip as code / part no / qty / UoM; the description sits above it. -->
+    <ng-template #lineStrip let-detail>
+        <app-sf-number [formControl]="$any(detail.get('unitCost'))" [min]="0" [stepper]="false" [decimals]="2" placeholder="Est. cost"></app-sf-number>
+        <app-sf-date [formControl]="dateControl(detail)"></app-sf-date>
+        <app-sf-input [formControl]="$any(detail.get('remarks'))" placeholder="Remarks"></app-sf-input>
+    </ng-template>
+
+    <ng-container sfDrawerFooter>
+        <app-action-button variant="secondary" class="mr-auto" [disabled]="!hasPurchaseRequests" (click)="openPurchaseRequests()">
+            {{ hasPurchaseRequests ? 'View Request from Purchase' : 'No Requests from Purchase' }}
+        </app-action-button>
+        <app-action-button *ngIf="step === 1" variant="secondary" [disabled]="saving" (click)="cancel()">Cancel</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="secondary" [disabled]="saving" (click)="step = 1">Back</app-action-button>
+        <app-action-button *ngIf="step === 1" variant="primary" [disabled]="loading" (click)="next()">Next</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="material-request-form" [disabled]="saving || loading">
+            {{ saving ? 'Saving…' : 'Save Material Request' }}
+        </app-action-button>
+    </ng-container>
+</app-sf-drawer>

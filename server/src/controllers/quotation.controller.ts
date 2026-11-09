@@ -2,7 +2,7 @@ import { NextFunction, Response, Request } from "express";
 import crypto from 'crypto';
 import Quotation, { quoteStatus } from '../models/quotation.model';
 import { canTransitionQuoteStatus, isKnownQuoteStatus, quoteStatusRequiresReason } from '../common/quote-status-transitions';
-import Job, { allocateStatus } from '../models/job.model';
+import Job, { allocateStatus, jobStatus } from '../models/job.model';
 import Department from '../models/department.model';
 import Employee from '../models/employee.model'
 import Category from '../models/category.model'
@@ -229,6 +229,7 @@ const quotePayloadProblem = (quoteData: any, isCreate: boolean): string | null =
                 if (!(Number(detail?.quantity ?? 0) >= 0)) return 'Quantity cannot be negative';
                 if (!(Number(detail?.unitCost ?? 0) >= 0)) return 'Unit cost cannot be negative';
                 if (!(Number(detail?.unitSellingPrice ?? 0) >= 0)) return 'Unit price cannot be negative';
+                if (!(Number(detail?.profit ?? 0) >= 0)) return 'Margin cannot be negative';
             }
             const discount = Number(option?.totalDiscount ?? 0);
             if (!(discount >= 0)) return 'Discount cannot be negative';
@@ -312,6 +313,10 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
             action: 'Created',
             toStatus: quoteData.status,
         }];
+
+        delete quoteData.exchangeRate;
+        delete quoteData.exchangeRateAt;
+        Object.assign(quoteData, await currentRateFields());
 
         const quote = new Quotation(quoteData)
 
@@ -743,6 +748,83 @@ export const getQuotationById = async (req: Request, res: Response, next: NextFu
         next(error)
     }
 }
+
+/**
+ * Who is allowed to open a quotation: mirrors the access scoping in getQuotationById / the list, so the
+ * History tab can show the people behind "who can see this". Super admins and the quote's owner only.
+ */
+export const getQuoteViewers = async (req: any, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId } = req.params;
+        if (!ObjectId.isValid(quoteId)) return res.status(400).json({ message: 'Invalid quotation id' });
+
+        const quotation = await Quotation.findOne({ _id: quoteId, isDeleted: { $ne: true } }, 'createdBy').lean();
+        if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
+
+        const ownerId = quotation.createdBy?.toString();
+
+        const employees: any[] = await Employee.find({ isDeleted: { $ne: true }, isBlocked: { $ne: true } })
+            .populate('category', 'role name privileges')
+            .select('employeeId firstName lastName designation category reportingTo extraPrivileges extraPrivilegesExpiresAt')
+            .lean();
+
+        // Everyone above the owner in the reportingTo chain can see it under "reported" scopes.
+        const managerOf = new Map<string, string | undefined>(employees.map((e) => [e._id.toString(), e.reportingTo?.toString()]));
+        const ancestors = new Set<string>();
+        for (let cur = managerOf.get(ownerId), hops = 0; cur && !ancestors.has(cur) && hops < 50; cur = managerOf.get(cur), hops++) {
+            ancestors.add(cur);
+        }
+        const owner = employees.find((e) => e._id.toString() === ownerId);
+        const ownerIsAdminAuthored = ['admin', 'superadmin'].includes(String(owner?.category?.role ?? '').toLowerCase());
+
+        const rank: Record<string, number> = { none: 0, created: 1, reported: 2, createdAndReported: 3, all: 4 };
+        const scopeOf = (value: any): string => {
+            const v = typeof value === 'boolean' ? (value ? 'all' : 'none') : value?.viewReport;
+            return v in rank ? v : 'none';
+        };
+
+        const viewers: any[] = [];
+        for (const emp of employees) {
+            const id = emp._id.toString();
+            const role = String(emp.category?.role ?? '').toLowerCase();
+            let scope: string;
+            if (role === 'superadmin' || role === 'admin') {
+                scope = 'all';
+            } else {
+                const expired = !!emp.extraPrivilegesExpiresAt && new Date(emp.extraPrivilegesExpiresAt).getTime() <= Date.now();
+                const roleScope = scopeOf(emp.category?.privileges?.quotation);
+                const extraScope = expired ? 'none' : scopeOf(emp.extraPrivileges?.quotation);
+                scope = rank[extraScope] > rank[roleScope] ? extraScope : roleScope;
+            }
+            if (scope === 'none') continue;
+
+            let via: string | null = null;
+            if (scope === 'all') via = 'Full access to every quotation';
+            else if (id === ownerId && (scope === 'created' || scope === 'createdAndReported')) via = 'Owner of this quotation';
+            else if ((scope === 'reported' || scope === 'createdAndReported') && (ancestors.has(id) || ownerIsAdminAuthored)) {
+                via = ancestors.has(id) ? 'Reports-to manager of the owner' : 'Team access (admin-created quotation)';
+            }
+            if (!via) continue;
+
+            viewers.push({
+                _id: id,
+                employeeId: emp.employeeId,
+                name: `${emp.firstName ?? ''} ${emp.lastName ?? ''}`.trim(),
+                designation: emp.designation,
+                role: emp.category?.name ?? emp.category?.role,
+                access: scope,
+                via,
+            });
+        }
+
+        const order: Record<string, number> = { 'Owner of this quotation': 0, 'Reports-to manager of the owner': 1 };
+        viewers.sort((a, b) => (order[a.via] ?? 2) - (order[b.via] ?? 2) || a.name.localeCompare(b.name));
+        return res.status(200).json(viewers);
+    } catch (error) {
+        console.log(error);
+        next(error);
+    }
+};
 
 /**
  * Search box filter for the deal sheet grids. Runs after the client/employee lookups, so it can match
@@ -1270,6 +1352,12 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
                     from: 'jobs',
                     localField: '_id',
                     foreignField: 'quoteId',
+                    // A revoked+re-approved deal can leave older soft-deleted jobs: only the latest live job counts.
+                    pipeline: [
+                        { $match: { isDeleted: { $ne: true } } },
+                        { $sort: { createdDate: -1 } },
+                        { $limit: 1 },
+                    ],
                     as: 'job'
                 }
             },
@@ -1659,7 +1747,17 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
 
 /** Statuses before the quote has gone to the customer: edits there don't create revisions. */
 const UNSENT_QUOTE_STATUSES: string[] = [quoteStatus.Draft, quoteStatus.WorkInProgress, quoteStatus.ReadyForSubmission];
-const REVISION_FIELDS = ['optionalItems', 'customerNote', 'termsAndCondition', 'paymentTerms', 'deliveryTerms', 'deliveryLocation', 'validityDate', 'currency'];
+// The live USD→QAR rate to store on a quote; a failed lookup leaves the quote without one rather than blocking the save.
+const currentRateFields = async (): Promise<{ exchangeRate?: number; exchangeRateAt?: Date }> => {
+    try {
+        const rate = Number(await getUSDRated());
+        return rate > 0 ? { exchangeRate: rate, exchangeRateAt: new Date() } : {};
+    } catch {
+        return {};
+    }
+};
+
+const REVISION_FIELDS =['optionalItems', 'customerNote', 'termsAndCondition', 'paymentTerms', 'deliveryTerms', 'deliveryLocation', 'validityDate', 'currency'];
 
 const selectedDealLines = (items: any[]): any[] => (Array.isArray(items) ? items : [])
     .flatMap((item: any) => Array.isArray(item?.itemDetails) ? item.itemDetails : [])
@@ -1706,7 +1804,9 @@ const dealHandoffReadinessIssues = (quote: any): string[] => {
         if (!isNonNegativeNumber(line?.unitSellingPrice)) {
             issues.push(`line ${label} selling price`);
         }
-        if (!hasReferenceValue(line?.supplierId) && !String(line?.supplierName ?? '').trim()) {
+        // A line split into parts is bought through the parts' suppliers.
+        const hasParts = Array.isArray(line?.components) && line.components.length > 0;
+        if (!hasParts && !hasReferenceValue(line?.supplierId) && !String(line?.supplierName ?? '').trim()) {
             issues.push(`line ${label} supplier`);
         }
     });
@@ -1936,6 +2036,8 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         delete quoteData.editHistory;
         delete quoteData.revision;
         delete quoteData.revisions;
+        delete quoteData.exchangeRate;
+        delete quoteData.exchangeRateAt;
         // The created date never changes after the quote is saved.
         delete quoteData.date;
         delete quoteData.createdBy;
@@ -2017,6 +2119,8 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
 
         const push: any = { editHistory: historyEntry };
         const set: any = { ...quoteData };
+        // Quotes saved before the rate was stored pick it up on their first edit; later edits keep the saved rate.
+        if (existingQuote && !existingQuote.exchangeRate) Object.assign(set, await currentRateFields());
         if (createsRevision && existingQuote) {
             historyEntry.revision = nextRevision;
             set.revision = nextRevision;
@@ -2350,6 +2454,12 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         }
         parsedDealData = normalizeTaxForCustomer(parsedDealData, customerGuard.customer);
         const { paymentTerms, items, removedFiles, existingFiles, costs } = parsedDealData;
+        // Unselected lines come back from the form with supplierId '' which can't cast to an ObjectId.
+        for (const item of Array.isArray(items) ? items : []) {
+            for (const line of Array.isArray(item?.itemDetails) ? item.itemDetails : []) {
+                if (line && (line.supplierId === '' || line.supplierId === null)) delete line.supplierId;
+            }
+        }
         // The deal is built from the quote's first option and the discount isn't editable here, so the quote is the
         // source of truth: it is never dropped or tampered with by the payload.
         const totalDiscount = Number(quote.optionalItems?.[0]?.totalDiscount) || 0;
@@ -2375,6 +2485,16 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         }
         if ((Array.isArray(costs) ? costs : []).some((c: any) => !(Number(c?.value) >= 0))) {
             return res.status(400).json({ message: "Additional costs and discounts cannot be negative" });
+        }
+        // Components only split a line's cost; they are inside unitCost, so they can never add up to more than it.
+        const badComponents = selectedDealLines(items).find((l: any) => {
+            const parts = Array.isArray(l?.components) ? l.components : [];
+            if (parts.some((p: any) => !String(p?.description ?? '').trim() || !(Number(p?.quantity) > 0) || !(Number(p?.unitCost) >= 0))) return true;
+            const total = parts.reduce((s: number, p: any) => s + Number(p.quantity) * Number(p.unitCost), 0);
+            return total > Number(l.unitCost) + 0.005;
+        });
+        if (badComponents) {
+            return res.status(400).json({ message: `Cost breakdown of "${badComponents.detail}" needs a description, a quantity above 0, and cannot add up to more than the line's cost` });
         }
         {
             const gross = sumSelectedDealSelling(selectedDealLines(items));
@@ -2600,7 +2720,9 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
             });
         }
         const existingJob = await Job.findOne({ quoteId: req.body.quoteId, isDeleted: { $ne: true } });
-        if (existingJob) {
+        // A deal that was revoked keeps its job; approving it again reuses that job instead of creating a second one.
+        const reusedJob = existingJob && quote.dealData.revokedDate ? existingJob : null;
+        if (existingJob && !reusedJob) {
             return res.status(409).json({ message: "A job already exists for this quotation" });
         }
         if (quote.enqId) {
@@ -2629,17 +2751,26 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
             });
         }
 
-        const jobId = await generateJobId()
+        const jobId = reusedJob ? reusedJob.jobId : await generateJobId()
         const jobData = {
             quoteId: req.body.quoteId,
             jobId: jobId,
             comment: req.body.comment
         }
 
-        const job = new Job(jobData);
-        const saveJob = await job.save()
-        if (saveJob) {
+        let saveJob: any;
+        if (reusedJob) {
+            saveJob = reusedJob;
+            // Still held by the revoke: the approval returns it to where it was.
+            const restored = await restoreRevokedJob(req, reusedJob, 'Deal re-approved');
+            if (!restored) {
+                await logAudit(req, { entityType: 'job', entityId: reusedJob._id, entityLabel: jobId, action: 'updated', summary: `Job ${jobId} kept for the re-approved deal sheet` });
+            }
+        } else {
+            saveJob = await new Job(jobData).save();
             await logAudit(req, { entityType: 'job', entityId: saveJob._id, entityLabel: jobId, action: 'created', summary: `Job ${jobId} created from approved deal sheet`, changes: String(req.body.comment ?? '').trim() ? [{ label: 'Comment', to: String(req.body.comment).trim() }] : undefined });
+        }
+        if (saveJob) {
             const quoteUpdate = await Quotation.updateOne(
                 { _id: jobData.quoteId },
                 {
@@ -2662,10 +2793,11 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
                 // The job's own reservation below takes over from any hold placed when the quote was won.
                 await releaseQuoteStockHolds(quote._id, `Taken over by job ${jobId}`, approverData?._id, 'Converted');
                 const selectedLines = selectedDealLines(quote.dealData.updatedItems)
-                    .filter((line: any) => hasReferenceValue(line?.partNo) && isPositiveNumber(line?.quantity));
+                    .filter((line: any) => hasReferenceValue(line?.productId) && isPositiveNumber(line?.quantity));
                 // A job's reservation has no expiry: it holds the stock until a delivery takes it, or the job is lost or revoked.
-                for (const line of selectedLines) {
-                    const productId = typeof line.partNo === 'object' ? line.partNo._id : line.partNo;
+                // A reused job still holds its original reservations.
+                for (const line of reusedJob ? [] : selectedLines) {
+                    const productId = typeof line.productId === 'object' ? line.productId._id : line.productId;
                     try {
                         await reserveStock({
                             product: productId,
@@ -2759,6 +2891,9 @@ export const rejectDeal = async (req: Request, res: Response, next: NextFunction
         } as any);
         backfillEditHistoryEditor(deal, userData?._id ?? (req.user as any)?.id);
         const savedDeal = await deal.save();
+        // A rejected re-submission after a revoke puts the held job back where it was before the revoke.
+        const heldJob = await Job.findOne({ quoteId, isDeleted: { $ne: true }, preRevokeStatus: { $exists: true } });
+        if (heldJob) await restoreRevokedJob(req, heldJob, `Deal re-submission rejected — ${comment}`);
         await logAudit(req, {
             entityType: 'quotation',
             entityId: savedDeal._id,
@@ -2800,6 +2935,27 @@ export const rejectDeal = async (req: Request, res: Response, next: NextFunction
     }
 }
 
+/** Puts a job that a deal revoke held back to the status it was in just before the revoke. */
+async function restoreRevokedJob(req: Request, job: any, why: string): Promise<boolean> {
+    if (!job?.preRevokeStatus) return false;
+    const status = job.preRevokeStatus;
+    const alloc = job.preRevokeAllocateStatus || allocateStatus.Pending;
+    await Job.updateOne({ _id: job._id }, {
+        $set: { status, allocateStatus: alloc, updatedDate: new Date() },
+        $unset: { holdReason: '', holdType: '', preRevokeStatus: '', preRevokeAllocateStatus: '' },
+    });
+    await logAudit(req, {
+        entityType: 'job', entityId: job._id, entityLabel: job.jobId, action: 'status-changed',
+        summary: `Status changed back to ${status} — ${why}`,
+        changes: [
+            { label: 'Status', from: String(job.status), to: String(status) },
+            { label: 'Allocation status', from: String(job.allocateStatus), to: String(alloc) },
+            { label: 'Reason', to: why },
+        ],
+    });
+    return true;
+}
+
 export const revokeDeal = async (req: Request, res: Response, next: NextFunction) => {
     try {
 
@@ -2823,6 +2979,13 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
             const firstApproval = (deal.editHistory || []).find((h: any) => h.action === 'DealApproved');
             deal.dealData.approvedDate = firstApproval?.editedAt;
         }
+        const revokeReason = String(req.body.reason ?? '').trim();
+        if (!revokeReason) {
+            return res.status(400).json({ message: 'A reason is required to revoke a deal' });
+        }
+        if (revokeReason.length > 500) {
+            return res.status(400).json({ message: 'The reason must be 500 characters or fewer' });
+        }
         deal.dealData.revokedDate = new Date();
         deal.dealData.revokeResubmittedDate = undefined;
         deal.dealData.reapprovedDate = undefined;
@@ -2841,6 +3004,7 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
             editedBy: revokerData?._id,
             editedAt: new Date(),
             action: 'DealRevoked',
+            reason: revokeReason,
         } as any);
         backfillEditHistoryEditor(deal, revokerData?._id ?? (req.user as any)?.id);
         await deal.save();
@@ -2852,17 +3016,37 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
             summary: `Deal sheet ${deal.dealData?.dealId || deal.quoteId} revoked`,
             changes: [
                 { label: 'Deal status', from: 'approved', to: 'pending' },
-                ...(job?.jobId ? [{ label: 'Removed job', from: job.jobId }] : []),
+                { label: 'Reason', to: revokeReason },
+                ...(job?.jobId ? [{ label: 'Job put on hold', from: job.jobId }] : []),
             ],
         });
-        // Soft delete: the job record is kept for history, but every job query filters isDeleted.
-        const jobDelete = await Job.updateOne({ quoteId: quoteId, isDeleted: { $ne: true } }, { $set: { isDeleted: true, updatedDate: new Date() } });
+        // The job is kept and put on hold, whatever status it was in. Its stock reservations stay, since the job
+        // comes back if the re-submitted deal is rejected. The status it left is remembered for that.
         if (job) {
-            // The job's stock reservations die with it; leaving them Active would block that stock forever.
-            await releaseStock({ job: job._id }, 'Deal revoked', revokerData?._id);
+            const holdReason = `Deal revoked — ${revokeReason}`;
+            await Job.updateOne({ _id: job._id }, {
+                $set: {
+                    status: jobStatus.OnHold,
+                    allocateStatus: allocateStatus.OnHold,
+                    holdReason,
+                    holdType: 'other',
+                    preRevokeStatus: job.status,
+                    preRevokeAllocateStatus: job.allocateStatus,
+                    updatedDate: new Date(),
+                },
+            });
+            await logAudit(req, {
+                entityType: 'job', entityId: job._id, entityLabel: job.jobId, action: 'status-changed',
+                summary: `Status changed to ${jobStatus.OnHold} — ${holdReason}`,
+                changes: [
+                    { label: 'Status', from: String(job.status), to: jobStatus.OnHold },
+                    { label: 'Allocation status', from: String(job.allocateStatus), to: allocateStatus.OnHold },
+                    { label: 'Reason', to: holdReason },
+                ],
+            });
         }
 
-        if (jobDelete.modifiedCount) {
+        if (job) {
             const socket = req.app.get('io') as Server;
             const userData = await getEmployeeData(req.user);
             await createNotificationWithPrivileges(

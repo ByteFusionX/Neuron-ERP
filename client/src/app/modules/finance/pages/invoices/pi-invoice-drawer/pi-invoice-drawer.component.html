@@ -1,0 +1,76 @@
+<app-sf-drawer
+    [title]="'Create Invoice'"
+    [subtitle]="pi ? 'For ' + pi.piNo : ''"
+    [width]="step === 2 ? 'min(1400px, 96vw)' : '720px'"
+    [open]="open"
+    [dirty]="form.dirty"
+    (closed)="cancel()">
+    <app-sf-stepper [labels]="stepLabels" [current]="step" (stepClick)="goToStep($event)"></app-sf-stepper>
+    <form id="pi-invoice-form" [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+
+        <ng-container *ngIf="step === 1">
+        <app-sf-section title="Invoice details" columns="2">
+            <app-sf-field label="PI No" [control]="f.piNo">
+                <app-sf-input formControlName="piNo" readonly></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Job" [control]="f.jobId">
+                <app-sf-input formControlName="jobId" readonly></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Client" [control]="f.clientName">
+                <app-sf-input formControlName="clientName" readonly></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Attention" optional [control]="f.attention">
+                <app-sf-input formControlName="attention" placeholder="Contact person"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Payment Terms" optional [control]="f.paymentTerms">
+                <app-sf-input formControlName="paymentTerms" placeholder="e.g. 100% Advance"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Ship To" optional [control]="f.shipTo">
+                <app-sf-input formControlName="shipTo" readonly></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="LPO No" optional [control]="f.lpoRef">
+                <app-sf-input formControlName="lpoRef" placeholder="Customer PO number"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Subject" optional [control]="f.subject">
+                <app-sf-input formControlName="subject" placeholder="Subject"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Invoice Date" [control]="f.invoiceDate">
+                <app-sf-date formControlName="invoiceDate" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section title="PI details" columns="2">
+            <app-sf-field label="Expected Value" [control]="f.expectedAmount">
+                <app-sf-number formControlName="expectedAmount" [stepper]="false" [decimals]="2" [suffix]="currency" readonly></app-sf-number>
+            </app-sf-field>
+            <app-sf-field label="Expected Date" [control]="f.expectedDate">
+                <app-sf-date formControlName="expectedDate" displayFormat="dd/MM/yyyy" readonly></app-sf-date>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section title="Payment received" columns="2">
+            <app-sf-field label="Received Amount" [control]="f.receivedAmount">
+                <app-sf-number formControlName="receivedAmount" [stepper]="false" [decimals]="2" [min]="0" [suffix]="currency"></app-sf-number>
+            </app-sf-field>
+            <app-sf-field label="Received Date" [control]="f.receivedDate">
+                <app-sf-date formControlName="receivedDate" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
+            </app-sf-field>
+            <app-sf-field label="Payment Method" [control]="f.paymentMethod">
+                <app-sf-select formControlName="paymentMethod" [options]="methodOptions" placeholder="Select payment method"></app-sf-select>
+            </app-sf-field>
+        </app-sf-section>
+        </ng-container>
+        <ng-container *ngIf="step === 2">
+        <app-invoice-item-entry [items]="lines" [currency]="currency" title="Items to bill" [footerStats]="summaryStats()"></app-invoice-item-entry>
+        </ng-container>
+    </form>
+
+    <ng-container sfDrawerFooter>
+        <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="secondary" (click)="step = 1" [disabled]="saving()">Back</app-action-button>
+        <app-action-button *ngIf="step === 1" variant="primary" (click)="next()">Next</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="pi-invoice-form" [disabled]="saving()">
+            {{ saving() ? 'Saving...' : 'Create Invoice' }}
+        </app-action-button>
+    </ng-container>
+</app-sf-drawer>

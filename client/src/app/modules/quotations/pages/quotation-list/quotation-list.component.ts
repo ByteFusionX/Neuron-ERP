@@ -56,6 +56,10 @@ import { QuoteFormDrawerComponent } from '../quote-form-drawer/quote-form-drawer
 import { getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { RevisionHistoryModalComponent, RevisionHistoryModalData } from 'src/app/shared/components/revision-history-modal/revision-history-modal.component';
 
+import { AuditLogEntry, AuditLogService } from 'src/app/core/services/audit-log.service';
+import { formatAuditDate, toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 /** Statuses that offer Download PDF: from Ready For Submission onward, everything except Lost. */
 const PDF_STATUSES: QuoteStatus[] = [
@@ -72,7 +76,7 @@ const PDF_STATUSES: QuoteStatus[] = [
     templateUrl: './quotation-list.component.html',
     styleUrls: ['./quotation-list.component.css'],
     providers: [NumberFormatterPipe, DatePipe],
-    imports: [ViewToggleComponent, NgIf, NgClass, NgSwitch, NgSwitchCase, DatePipe, AsyncPipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent, FollowUpPanelComponent]
+    imports: [ViewToggleComponent, NgIf, NgClass, NgSwitch, NgSwitchCase, DatePipe, AsyncPipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent, FollowUpPanelComponent, DetailTimelineComponent]
 })
 export class QuotationListComponent implements AfterViewInit {
   @ViewChild('grid') grid!: DataGridComponent<Quotatation>;
@@ -129,12 +133,13 @@ export class QuotationListComponent implements AfterViewInit {
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'followups', label: 'Follow-ups', icon: 'chat' },
     { id: 'events', label: 'Events', icon: 'calendar' },
-    { id: 'lpo', label: 'Documents', icon: 'eye' },
+    { id: 'documents', label: 'Documents', icon: 'files' },
     { id: 'deal', label: 'Deal Sheet', icon: 'wallet' },
+    { id: 'history', label: 'History', icon: 'clock' },
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'item', label: 'Item', type: 'html', wrap: true, clamp: true, tooltipKey: 'itemTooltip', width: '22rem' },
+    { key: 'item', label: 'Item', type: 'html', truncate: true, width: '22rem' },
     { key: 'qty', label: 'Qty', type: 'number' },
     { key: 'price', label: 'Price', type: 'currency' },
     { key: 'amount', label: 'Amount', type: 'currency', total: true },
@@ -145,7 +150,7 @@ export class QuotationListComponent implements AfterViewInit {
     (row.optionalItems ?? []).forEach((opt) => {
       (opt.items ?? []).forEach((item) => {
         (item.itemDetails ?? []).forEach((d) => {
-          rows.push({ item: d.detail, itemTooltip: d.detail, qty: d.quantity, price: d.unitSellingPrice, amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0) });
+          rows.push({ item: String(d.detail ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'), qty: d.quantity, price: d.unitSellingPrice, amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0) });
         });
       });
     });
@@ -185,6 +190,7 @@ export class QuotationListComponent implements AfterViewInit {
   selectedDealStatus: string | null = null;
 
   private confirm = inject(ConfirmDialogService);
+  private auditLog = inject(AuditLogService);
   private excelExport = inject(ExcelExportService);
 
   private subscriptions = new Subscription();
@@ -512,7 +518,7 @@ export class QuotationListComponent implements AfterViewInit {
         this.startLpoUpload(row);
         break;
       case 'viewLpo':
-        this.openDetailTab(row, 'lpo');
+        this.openDetailTab(row, 'documents');
         break;
       case 'viewDeal':
         this.openDealSheet(row);
@@ -542,7 +548,7 @@ export class QuotationListComponent implements AfterViewInit {
     }
   }
 
-  private openDetailTab(row: Quotatation, tab: 'events' | 'lpo' | 'followups'): void {
+  private openDetailTab(row: Quotatation, tab: 'events' | 'documents' | 'followups'): void {
     if (this.isCreatorOnlyView(row)) return;
     this.grid.activeTab = tab;
     this.grid.openRow(row);
@@ -1207,6 +1213,58 @@ export class QuotationListComponent implements AfterViewInit {
       const count = v.id === this.activeViewId ? this.total : this.viewCounts[v.id];
       return { ...v, count, hideCount: count === undefined };
     });
+  }
+
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+  private readonly historyLabels: Record<string, string> = {
+    Created: 'Created', Updated: 'Edited', StatusChanged: 'Status changed', QuoteSent: 'Quote sent', FollowUpUpdated: 'Follow-up updated',
+    CustomerAccepted: 'Customer accepted', CustomerRejected: 'Customer rejected', CustomerNoResponse: 'No response',
+    OptionalItemsDecided: 'Optional items decided', DealApproved: 'Deal approved', DealRejected: 'Deal rejected', DealRevoked: 'Approval revoked',
+  };
+
+  /** The History tab is shown to everyone who can open the quotation. */
+  canSeeHistory(_row: Quotatation): boolean {
+    return true;
+  }
+
+  /** Quote edit log (editHistory) merged with the global audit log, newest first. */
+  historyFor(row: Quotatation): Observable<DetailTimelineEntry[]> {
+    const id = row._id;
+    if (!id || !this.canSeeHistory(row)) return of<DetailTimelineEntry[]>([]);
+    let subject = this.historyCache.get(id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(id, subject);
+      forkJoin({
+        quote: this._quoteService.getQuotationById(id).pipe(catchError(() => of(null))),
+        audit: this.auditLog.getHistory('quotation', id).pipe(catchError(() => of([] as AuditLogEntry[]))),
+      }).subscribe({
+        next: ({ quote, audit }) => {
+          const stamped: { at: number; entry: DetailTimelineEntry }[] = [];
+          for (const e of ((quote as any)?.editHistory || []) as any[]) {
+            const who = [e.editedBy?.firstName, e.editedBy?.lastName].filter(Boolean).join(' ');
+            const at = e.editedAt ? new Date(e.editedAt) : null;
+            const label = this.historyLabels[e.action] || 'Updated';
+            const move = e.fromStatus || e.toStatus ? ` (${e.fromStatus || '—'} → ${e.toStatus || '—'})` : '';
+            stamped.push({
+              at: at?.getTime() || 0,
+              entry: {
+                text: `${label}${move}${e.reason ? ` — ${e.reason}` : ''}`,
+                meta: [who, at ? formatAuditDate(at.toISOString()) : ''].filter(Boolean).join(' · '),
+                tone: e.action === 'DealRejected' || e.action === 'CustomerRejected' ? 'bad' : e.action === 'DealApproved' || e.action === 'CustomerAccepted' || e.action === 'Created' ? 'good' : e.action === 'DealRevoked' ? 'warn' : 'info',
+                changes: (e.changes || []).map((c: any) => ({ label: String(c.field ?? c.label ?? ''), from: String(c.oldValue ?? c.from ?? '—'), to: String(c.newValue ?? c.to ?? '—') })),
+              },
+            });
+          }
+          // Deal approve/reject/revoke already come from editHistory.
+          const global = (audit || []).filter((r) => !['deal-approved', 'deal-rejected', 'deal-revoked'].includes(r.action));
+          global.forEach((r) => stamped.push({ at: Date.parse(r.at) || 0, entry: toTimelineEntries([r])[0] }));
+          subject!.next(stamped.sort((a, b) => b.at - a.at).map((s) => s.entry));
+        },
+        error: () => this.historyCache.delete(id),
+      });
+    }
+    return subject.asObservable();
   }
 
   checkPermission() {

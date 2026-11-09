@@ -46,6 +46,7 @@ export class StockReturnDrawerComponent implements OnChanges {
 
   form = this.fb.group({
     quantities: this.fb.array([] as FormControl<number | null>[]),
+    lineRemarks: this.fb.array([] as FormControl<string | null>[]),
     reason: ['', Validators.required],
     condition: ['good'],
     resolution: [''],
@@ -56,7 +57,12 @@ export class StockReturnDrawerComponent implements OnChanges {
     return this.form.controls.quantities;
   }
 
+  get lineRemarks(): FormArray<FormControl<string | null>> {
+    return this.form.controls.lineRemarks;
+  }
+
   get isCustomer(): boolean { return this.kind === 'customer'; }
+
 
   get title(): string { return this.isCustomer ? 'Customer Return' : 'Return to Supplier'; }
 
@@ -84,7 +90,16 @@ export class StockReturnDrawerComponent implements OnChanges {
         this.loading = false;
         this.number = res.data.number;
         this.lines = res.data.lines;
-        this.lines.forEach((line) => this.quantities.push(new FormControl<number | null>(null, [Validators.min(0), Validators.max(line.maxQuantity)])));
+        // Supplier returns start from the GRN: return what was rejected (capped at what is still in quarantine).
+        this.lines.forEach((line) => this.lineRemarks.push(new FormControl<string | null>(this.isCustomer ? '' : line.rejectionReason || '')));
+        this.lines.forEach((line) => {
+          const prefill = this.isCustomer ? 0 : Math.min(Number(line.rejectedQty) || 0, line.maxQuantity);
+          this.quantities.push(new FormControl<number | null>(prefill > 0 ? prefill : null, [Validators.min(0), Validators.max(line.maxQuantity)]));
+        });
+        if (!this.isCustomer) {
+          const reasons = this.lines.map((l) => l.rejectionReason || '').join(' ').toLowerCase();
+          this.form.patchValue({ reason: /wrong|incorrect/.test(reasons) ? 'Wrong item' : 'Quality issue' });
+        }
         if (!this.isCustomer) this.form.controls.resolution.setValidators(Validators.required);
         else this.form.controls.resolution.clearValidators();
         this.form.controls.resolution.updateValueAndValidity({ emitEvent: false });
@@ -114,12 +129,12 @@ export class StockReturnDrawerComponent implements OnChanges {
     this.stockService.createReturn({
       kind: this.kind,
       sourceId: this.sourceId,
-      reason: v.reason as string,
+      reason: (v.reason || '').trim(),
       remarks: v.remarks?.trim() || undefined,
       toQuarantine: this.isCustomer && v.condition === 'quarantine',
-      resolution: this.isCustomer ? undefined : v.resolution as 'Replacement' | 'Credit Note',
+      resolution: this.isCustomer ? undefined : (v.resolution || '').trim(),
       lines: this.lines
-        .map((line, i) => ({ product: line.product, quantity: Number(this.quantities.at(i).value) || 0 }))
+        .map((line, i) => ({ product: line.product, quantity: Number(this.quantities.at(i).value) || 0, remarks: this.lineRemarks.at(i).value?.trim() || undefined }))
         .filter((line) => line.quantity > 0),
     }).subscribe({
       next: (res) => {
@@ -140,6 +155,7 @@ export class StockReturnDrawerComponent implements OnChanges {
     this.lines = [];
     this.number = '';
     this.quantities.clear();
+    this.lineRemarks.clear();
     this.form.reset({ reason: '', condition: 'good', resolution: '', remarks: '' });
   }
 }

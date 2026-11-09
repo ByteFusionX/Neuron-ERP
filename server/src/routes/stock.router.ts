@@ -9,20 +9,26 @@ import {
     createStockReturn,
     resolveSupplierReturn,
     getStockReservations,
+    getStockItemDetails,
     releaseStockReservation
 } from "../controllers/stock.controller";
-import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+import { requirePrivilege, requireAnyPrivilege } from "../common/middlewares/privilege.middleware";
 
 const stockRouter = Router();
 
 // Read-only availability is for every module (sales, operations, procurement), so it has no inventory gate.
 stockRouter.get('/availability', getStockAvailability);
 
-stockRouter.use(requirePrivilege("inventory.stockEntries"));
+// Balance and movements have their own view privileges; roles saved before the split only have stockEntries.
+const stockView = (sub: "stockBalance" | "stockMovements") => (req: any, res: any, next: any) =>
+  requirePrivilege(req.employee?.category?.privileges?.inventory?.[sub] !== undefined ? `inventory.${sub}` : "inventory.stockEntries")(req, res, next);
 
-stockRouter.get('/overview', getStockOverview);
-stockRouter.get('/ledger', getStockLedger);
+stockRouter.use(requireAnyPrivilege("inventory.stockEntries", "inventory.stockBalance", "inventory.stockMovements"));
+
+stockRouter.get('/overview', stockView("stockBalance"), getStockOverview);
+stockRouter.get('/ledger', stockView("stockMovements"), getStockLedger);
 stockRouter.get('/reservations', getStockReservations);
+stockRouter.get('/item-details', getStockItemDetails);
 stockRouter.get('/returns/:kind/:id', getReturnSource);
 stockRouter.post('/adjust', adjustStock);
 stockRouter.post('/quarantine', releaseQuarantine);

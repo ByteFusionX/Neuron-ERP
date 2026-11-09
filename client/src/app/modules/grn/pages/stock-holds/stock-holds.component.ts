@@ -49,6 +49,7 @@ export class GrnStockHoldsComponent implements OnInit {
   private datePipe = inject(DatePipe);
   canInitiateHold = signal<boolean>(false);
   pendingRows: ReturnRecord[] = [];
+  dnPendingRows: ReturnRecord[] = [];
   returnRows: ReturnRecord[] = [];
   combinedRows: ReturnRecord[] = [];
   pendingLoading = false;
@@ -61,12 +62,13 @@ export class GrnStockHoldsComponent implements OnInit {
   views: DataGridView<ReturnRecord>[] = [
     { id: 'all', label: 'All' },
     { id: 'pending', label: 'Pending', predicate: (r) => r.recordType === 'pending' },
+    { id: 'customer', label: 'Customer Rejections', predicate: (r) => r.source === 'DN' },
     { id: 'awaiting', label: 'In Return', predicate: (r) => ['AwaitingReturn', 'AwaitingReplacement'].includes(r.status) },
     { id: 'disputed', label: 'Disputed', predicate: (r) => r.disputeStatus === 'SupplierDisputed' },
     { id: 'resolved', label: 'Resolved', predicate: (r) => ['Resolved', 'Disposed'].includes(r.status) },
   ];
   detailTabs: DataGridDetailTab[] = [
-    { id: 'overview', label: 'Overview', icon: 'info' },
+    { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'logistics', label: 'Logistics', icon: 'transfer' },
     { id: 'resolution', label: 'Resolution', icon: 'wallet' },
@@ -76,7 +78,7 @@ export class GrnStockHoldsComponent implements OnInit {
 
   readonly itemColumns: DetailTableColumn[] = [
     { key: 'partNo', label: 'Part No.' },
-    { key: 'description', label: 'Description', wrap: true },
+    { key: 'description', label: 'Description', truncate: true },
     { key: 'returnQty', label: 'Return Qty', type: 'number', total: true },
     { key: 'resolvedQty', label: 'Resolved', type: 'number', total: true },
     { key: 'unresolvedQty', label: 'Open', type: 'number', total: true },
@@ -104,7 +106,26 @@ export class GrnStockHoldsComponent implements OnInit {
     this.buildReturnColumns();
     this.buildActions();
     this.getRejections();
+    this.getDnRejections();
     this.loadStockHolds();
+  }
+
+  getDnRejections(): void {
+    this.stockHoldService.getDnRejections().subscribe({
+      next: (response) => {
+        this.dnPendingRows = response.success ? (response.data || []).map((r: any) => ({
+          ...r,
+          recordType: 'pending',
+          source: 'DN',
+          status: 'PendingReturn',
+          disputeStatus: 'None',
+          registerKey: `pending-dn-${r.dnId}-${r.dnItemId}`,
+          rejectionReason: r.rejectionReason || '-',
+        })) : [];
+        this.mergeReturnRows();
+      },
+      error: () => this.notificationService.error('Failed to load customer rejections'),
+    });
   }
 
   private checkPrivileges(): void {
@@ -118,7 +139,9 @@ export class GrnStockHoldsComponent implements OnInit {
   private buildReturnColumns(): void {
     this.returnColumns = [
       { key: 'returnNo', label: 'Return No', sortable: true, valueGetter: (r) => r.recordType === 'pending' ? 'Pending' : (r.returnNo || this.displayReturnNo(r)) },
-      { key: 'grn', label: 'GRN', valueGetter: (r) => r?.grnNo || r?.grnId?.grnNo || 'N/A' },
+      { key: 'source', label: 'Source', valueGetter: (r) => r.source === 'DN' ? 'Customer (DN)' : 'Receipt (GRN)' },
+      { key: 'grn', label: 'GRN / DN', valueGetter: (r) => r.source === 'DN' ? (r?.dnNo || r?.dnId?.dnNo || 'N/A') : (r?.grnNo || r?.grnId?.grnNo || 'N/A') },
+      { key: 'job', label: 'Job', valueGetter: (r) => r?.jobNo || r?.jobId?.jobId || '-' },
       { key: 'supplier', label: 'Supplier', valueGetter: (r) => r?.supplierId?.supplierName || r?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
       { key: 'itemDescription', label: 'Item' },
       { key: 'rejectedQty', label: 'Return Qty', type: 'number', align: 'right' },
@@ -136,7 +159,7 @@ export class GrnStockHoldsComponent implements OnInit {
       { id: 'resolve', label: 'Resolve Return', icon: 'check', quick: true, panel: true, hidden: (r) => r.recordType === 'pending' || !this.canInitiateHold() || r?.unresolvedQty <= 0 || r?.disputeStatus === 'SupplierDisputed' },
       { id: 'dispute', label: 'Mark Supplier Dispute', icon: 'flag', quick: true, panel: true, hidden: (r) => r.recordType === 'pending' || !this.canInitiateHold() || r?.disputeStatus !== 'None' },
       { id: 'resolveDispute', label: 'Resolve Dispute', icon: 'check', quick: true, panel: true, hidden: (r) => r.recordType === 'pending' || !this.canInitiateHold() || r?.disputeStatus !== 'SupplierDisputed' },
-      { id: 'viewGrn', label: 'View GRN', icon: 'eye', panel: true },
+      { id: 'viewGrn', label: 'View GRN', icon: 'eye', panel: true, hidden: (r) => r.source === 'DN' },
       { id: 'viewLpo', label: 'View LPO', icon: 'wallet', hidden: (r) => !this.poNo(r) },
     ];
   }
@@ -200,20 +223,38 @@ export class GrnStockHoldsComponent implements OnInit {
   }
 
   openInitiateHoldModal(row: any): void {
-    this.dialog.open(CreateStockHoldComponent, {
-      width: '680px',
-      maxWidth: '95vw',
-      disableClose: true,
-      data: {
+    if (row.source === 'DN' && row.productLinked === false) {
+      this.notificationService.error('This delivery note item is not linked to a catalogue product, so a return cannot be raised');
+      return;
+    }
+    const data = row.source === 'DN'
+      ? {
+        source: 'DN',
+        dnId: row.dnId,
+        dnItemId: row.dnItemId,
+        dnNo: row.dnNo,
+        jobNo: row.jobNo,
+        suppliers: row.suppliers || [],
+        itemDescription: row.itemDescription,
+        rejectedQty: row.rejectedQty,
+        rejectionReason: row.rejectionReason === '-' ? '' : row.rejectionReason,
+      }
+      : {
         grnId: row.grnId,
         itemIndex: row.itemIndex,
         itemDescription: row.itemDescription,
         rejectedQty: row.rejectedQty,
         rejectionReason: row.rejectionReason,
-      }
+      };
+    this.dialog.open(CreateStockHoldComponent, {
+      width: '680px',
+      maxWidth: '95vw',
+      disableClose: true,
+      data
     }).afterClosed().subscribe((result) => {
       if (result) {
         this.getRejections();
+        this.getDnRejections();
         this.loadStockHolds();
       }
     });
@@ -258,8 +299,10 @@ export class GrnStockHoldsComponent implements OnInit {
     this.dialog.open(ViewPoDetailsModalComponent, { data: { poNo }, width: '1200px', maxWidth: '95vw', maxHeight: '90vh' });
   }
 
-  title = (row: ReturnRecord): string => row.recordType === 'pending' ? (row?.grnNo || 'Pending Rejection') : this.displayReturnNo(row);
-  subtitle = (row: ReturnRecord): string => row.recordType === 'pending'
+  title = (row: ReturnRecord): string => row.recordType === 'pending' ? ((row.source === 'DN' ? row?.dnNo : row?.grnNo) || 'Pending Rejection') : this.displayReturnNo(row);
+  subtitle = (row: ReturnRecord): string => row.source === 'DN'
+    ? [row?.supplierId?.supplierName, (row?.dnNo || row?.dnId?.dnNo) ? `DN ${row.dnNo || row.dnId.dnNo}` : '', (row?.jobNo || row?.jobId?.jobId) ? `Job ${row.jobNo || row.jobId.jobId}` : ''].filter(Boolean).join('  •  ')
+    : row.recordType === 'pending'
     ? [row?.purchaseOrderId?.supplierId?.supplierName, row?.purchaseOrderId?.poNo ? `LPO ${row.purchaseOrderId.poNo}` : ''].filter(Boolean).join('  •  ')
     : [row?.supplierId?.supplierName, row?.grnId?.grnNo ? `GRN ${row.grnId.grnNo}` : ''].filter(Boolean).join('  •  ');
   pendingTitle = (row: ReturnRecord): string => row?.grnNo || 'Pending Rejection';
@@ -273,7 +316,13 @@ export class GrnStockHoldsComponent implements OnInit {
         fields: [
           { type: 'field', label: 'Return No', value: this.displayReturnNo(row), numeric: true },
           { type: 'field', label: 'Status', value: this.statusLabel(row.status), pill: true, tone: this.statusTone(row.status) },
-          { type: 'field', label: 'GRN', value: row?.grnId?.grnNo || 'N/A' },
+          ...(row.source === 'DN'
+            ? [
+              { type: 'field' as const, label: 'Delivery Note', value: row?.dnId?.dnNo || 'N/A' },
+              { type: 'field' as const, label: 'Job', value: row?.jobId?.jobId || 'N/A' },
+              { type: 'field' as const, label: 'Reason Code', value: row?.reasonCode || 'N/A' },
+            ]
+            : [{ type: 'field' as const, label: 'GRN', value: row?.grnId?.grnNo || 'N/A' }]),
           { type: 'field', label: 'Supplier', value: row?.supplierId?.supplierName || 'N/A' },
           { type: 'field', label: 'Vendor Authorization', value: row?.vendorAuthorizationNo || 'N/A' },
           { type: 'field', label: 'Created', value: this.formatDate(row?.createdAt) },
@@ -347,7 +396,7 @@ export class GrnStockHoldsComponent implements OnInit {
         kind: this.fileKind(file.originalname || file.fileName),
         date: file.uploadedAt,
       })),
-      { id: 'grn', name: row?.grnId?.grnNo ? `GRN ${row.grnId.grnNo}` : 'Linked GRN', kind: 'GRN' },
+      ...(row.source === 'DN' ? [] : [{ id: 'grn', name: row?.grnId?.grnNo ? `GRN ${row.grnId.grnNo}` : 'Linked GRN', kind: 'GRN' }]),
       ...(this.poNo(row) ? [{ id: 'lpo', name: `LPO ${this.poNo(row)}`, kind: 'LPO' }] : []),
     ];
   }
@@ -375,6 +424,20 @@ export class GrnStockHoldsComponent implements OnInit {
   ];
 
   pendingOverviewSections(row: ReturnRecord): DetailOverviewSection[] {
+    if (row.source === 'DN') {
+      return [{
+        title: 'Customer-Rejected Delivery Item',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'DN No', value: row.dnNo, numeric: true },
+          { type: 'field', label: 'Job', value: row.jobNo || 'N/A' },
+          { type: 'field', label: 'Supplier(s) on Job', value: (row.suppliers || []).map((s: any) => s.supplierName).join(', ') || 'None found' },
+          { type: 'field', label: 'Item', value: row.itemDescription || 'N/A' },
+          { type: 'field', label: 'Open Rejected Qty', value: row.rejectedQty || 0, numeric: true, tone: 'warn' },
+          { type: 'field', label: 'Reason', value: row.rejectionReason || 'N/A' },
+        ],
+      }];
+    }
     return [{
       title: 'Rejected GRN Item',
       columns: '2',
@@ -447,7 +510,7 @@ export class GrnStockHoldsComponent implements OnInit {
   }
 
   private mergeReturnRows(): void {
-    this.combinedRows = [...this.pendingRows, ...this.returnRows];
+    this.combinedRows = [...this.pendingRows, ...this.dnPendingRows, ...this.returnRows];
     this.refreshViewCounts();
   }
 }

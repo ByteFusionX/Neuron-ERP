@@ -1,106 +1,129 @@
-<div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="flex h-full flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-detail-view-shell
     class="min-h-0 flex-1"
+    headerTone="contrast"
     [loading]="isLoading()"
     [empty]="!isLoading() && !grn"
     emptyTitle="GRN not found"
     emptyMessage="It may have been deleted, or you may not have access to it."
     [emptyLink]="['/grn']"
     emptyLinkLabel="Back to GRN"
-    [breadcrumbs]="[]"
-    [avatarText]="avatarText"
-    [title]="headerTitle"
-    [badges]="badges"
-    [subtitle]="headerSubtitle"
+    customTitle
     [stats]="stats"
-    [tabs]="tabs"
-    [activeTab]="tab"
-    (activeTabChange)="tab = $event"
+    statsLayout="fields"
+    statsTitle="Summary"
+    statsStorageKey="grn-summary-v2"
+    tabParam=""
+    bodyBare
     [hasSidebar]="true"
+    [(panelOpen)]="panelOpen"
+    sidebarBare
+    sectioned
   >
+    <div headerTitle class="flex min-w-0 flex-col gap-0.5" *ngIf="grn as g">
+      <!-- line 1: identity; line 2: who supplied it and who received it -->
+      <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+        <h1 class="dvs-strong truncate text-lg font-semibold text-gray-900 dark:text-gray-50">{{ g.grnNo || 'GRN' }}</h1>
+      </div>
+      <div class="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] font-normal text-gray-900 dark:text-gray-100">
+        <span *ngIf="subtitle" class="truncate">{{ subtitle }}</span>
+        <span *ngIf="subtitle && receiver" class="text-gray-300 dark:text-gray-600">·</span>
+        <span *ngIf="receiver">Received by {{ receiver }}</span>
+      </div>
+    </div>
+
+    <!-- overview facts, left of the quantities -->
+    <app-detail-section beforeStats title="Details" class="lg:col-span-2 lg:border-r lg:border-gray-200 lg:pr-8 dark:lg:border-gray-800">
+      <app-detail-fields-menu sectionActions [items]="detailItems" storageKey="grn-details" (hiddenChange)="hiddenDetail = $event" (orderChange)="detailOrder = $event"></app-detail-fields-menu>
+      <div class="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
+        <app-detail-field *ngFor="let f of visibleDetail; trackBy: trackFact" [label]="f.label" stacked>
+          <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
+        </app-detail-field>
+      </div>
+    </app-detail-section>
+
     <ng-container headerActions>
       <app-action-button variant="outline" (click)="onBack()">Back</app-action-button>
-      <app-action-button (click)="onViewReceipt()" [disabled]="isGenerating()">View receipt</app-action-button>
+      <app-action-button variant="outline" icon="view" (click)="onViewReceipt()" [disabled]="isGenerating()">{{ isGenerating() ? 'Loading…' : 'View receipt' }}</app-action-button>
     </ng-container>
 
-    <ng-container sidebar>
-      <app-detail-section title="Purchase order">
-        <app-detail-field *ngFor="let f of orderFacts" [label]="f.label">{{ f.value }}</app-detail-field>
-      </app-detail-section>
-      <app-detail-section title="Receipt">
-        <app-detail-field *ngFor="let f of receiptFacts" [label]="f.label">{{ f.value }}</app-detail-field>
-      </app-detail-section>
-    </ng-container>
+    <!-- right panel: same tab strip look as the PR view's side panel -->
+    <div sidebar class="flex min-h-0 flex-1 flex-col">
+      <nav role="tablist"
+        class="dv-tabs sticky top-0 z-10 flex h-11 shrink-0 flex-nowrap items-center gap-x-4 overflow-x-auto overflow-y-hidden border-b border-gray-300 bg-white px-5 dark:border-neutral-700 dark:bg-[#111111]">
+        <button *ngFor="let t of panelTabs" type="button" role="tab" (click)="panelTab = t.id"
+          [attr.aria-selected]="panelTab === t.id"
+          class="-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 py-2.5 text-sm transition-colors"
+          [ngClass]="panelTab === t.id ? 'border-violet-600 dark:border-gray-100 text-gray-900 dark:text-gray-100 font-medium' : 'border-transparent text-gray-500 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'">
+          {{ t.label }}
+        </button>
+      </nav>
 
-    <div tabBody *ngIf="grn" [ngSwitch]="tab">
-      <!-- overview -->
-      <div *ngSwitchCase="'overview'" class="grid gap-4 xl:grid-cols-2">
-        <section *ngFor="let sec of overviewSections; let first = first" class="rounded-lg border border-gray-200 p-4 dark:border-erp-border-dark" [class.xl:col-span-2]="first">
-          <h3 class="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{{ sec.title }}</h3>
-          <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2" [class.xl:grid-cols-3]="first">
-            <app-detail-field *ngFor="let f of sec.facts" [label]="f.label" [tone]="f.tone ?? null" stacked>{{ f.value }}</app-detail-field>
-          </div>
-        </section>
-      </div>
+      <div class="dv-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel" [ngSwitch]="panelTab">
 
-      <!-- items: a hand-built table because rows are selectable for the receipt -->
-      <div *ngSwitchCase="'items'" class="grn-view-table-wrap">
-        <table class="grn-view-table">
-          <thead>
-            <tr>
-              <th class="text-center">#</th>
-              <th>Part No.</th>
-              <th>Item Description</th>
-              <th class="text-center">UOM</th>
-              <th class="text-right">Ordered</th>
-              <th class="text-right">Received</th>
-              <th class="text-right">Accepted</th>
-              <th class="text-right">Rejected</th>
-              <th>Rejection Reason</th>
-              <th>Remarks</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let item of grn.items; let i = index">
-              <td class="text-center text-gray-400">{{ i + 1 }}</td>
-              <td>{{ formatPartNumber(item.partNo) }}</td>
-              <td class="whitespace-normal">{{ item.itemDescription || '-' }}</td>
-              <td class="text-center">{{ item.uom || '-' }}</td>
-              <td class="text-right tabular-nums">{{ item.orderedQty || 0 }}</td>
-              <td class="text-right tabular-nums">{{ item.receivedQty || 0 }}</td>
-              <td class="text-right tabular-nums">{{ item.acceptedQty || 0 }}</td>
-              <td class="text-right tabular-nums" [class.is-bad]="getRejectedQty(item) > 0">{{ getRejectedQty(item) }}</td>
-              <td>{{ item.rejectionReason || '-' }}</td>
-              <td>{{ item.remarks || '-' }}</td>
-              <td>{{ formatDate(item.date) }}</td>
-            </tr>
-            <tr *ngIf="!grn.items?.length">
-              <td colspan="11" class="py-6 text-center text-gray-500">No items recorded on this GRN</td>
-            </tr>
-          </tbody>
-          <tfoot *ngIf="grn.items?.length">
-            <tr>
-              <td colspan="4">Total</td>
-              <td class="text-right tabular-nums">{{ getTotalOrderedQty() }}</td>
-              <td class="text-right tabular-nums">{{ getTotalReceivedQty() }}</td>
-              <td class="text-right tabular-nums">{{ getTotalAcceptedQty() }}</td>
-              <td class="text-right tabular-nums" [class.is-bad]="getTotalRejectedQty() > 0">{{ getTotalRejectedQty() }}</td>
-              <td colspan="3"></td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+        <ng-container *ngSwitchCase="'poitems'">
+          <app-detail-table *ngIf="poItemRows.length; else noPoItems"
+            [columns]="poItemColumns"
+            [rows]="poItemRows"
+            [footRows]="poFootRows"
+            [currency]="grn?.purchaseOrderId?.currency || 'QAR'"
+            numbered
+            emptyMessage="No items on the POs"></app-detail-table>
+          <ng-template #noPoItems><p class="py-6 text-center text-sm text-gray-500">No items on the POs.</p></ng-template>
+        </ng-container>
 
-      <!-- documents -->
-      <div *ngSwitchCase="'documents'">
-        <app-detail-documents
+        <ng-container *ngSwitchCase="'pricing'">
+          <app-detail-section title="Summary">
+            <app-detail-field *ngFor="let f of pricingSummary" [label]="f.label">{{ f.value }}</app-detail-field>
+          </app-detail-section>
+        </ng-container>
+
+        <ng-container *ngSwitchCase="'inspection'">
+          <app-detail-section title="Inspection">
+            <app-detail-field *ngFor="let f of inspectionFacts" [label]="f.label">
+              <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
+            </app-detail-field>
+            <p *ngIf="inspectionNotes" class="mt-2 whitespace-pre-line text-[13px] text-gray-700 dark:text-gray-300">{{ inspectionNotes }}</p>
+          </app-detail-section>
+          <app-detail-section *ngIf="returnFacts.length" title="Return" class="block border-t border-gray-200 pt-5 dark:border-erp-border-dark">
+            <app-detail-field *ngFor="let f of returnFacts" [label]="f.label">
+              <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
+            </app-detail-field>
+          </app-detail-section>
+        </ng-container>
+
+        <app-detail-documents *ngSwitchCase="'documents'"
           [documents]="docList"
           [downloadable]="false"
           emptyMessage="No supplier invoices or delivery notes on this GRN."
-          (open)="openDocument($event)"
-        ></app-detail-documents>
+          (open)="openDocument($event)"></app-detail-documents>
+
+        <app-detail-timeline *ngSwitchCase="'history'" [entries]="auditEntries" emptyMessage="No history recorded yet."></app-detail-timeline>
       </div>
+    </div>
+
+    <div tabBody class="h-full">
+      <app-detail-table class="block h-full"
+        [columns]="itemColumns"
+        [rows]="itemRows"
+        [footRows]="itemFootRows"
+        numbered
+        [striped]="false"
+        spread
+        bare
+        tools
+        storageKey="grn-items-v3"
+        searchKey="detail"
+        emptyMessage="No items recorded on this GRN"></app-detail-table>
     </div>
   </app-detail-view-shell>
 </div>
+
+<ng-template #factValue let-f>
+  <span *ngIf="f.state" class="inline-flex items-center gap-1.5">
+    <span class="h-1.5 w-1.5 rounded-full" [ngClass]="f.state.dot"></span>
+    <span class="font-medium" [ngClass]="f.state.text">{{ f.value }}</span>
+  </span>
+  <a *ngIf="f.link" [routerLink]="f.link" class="font-medium text-violet-600 hover:underline dark:text-violet-400">{{ f.value }}</a>
+  <ng-container *ngIf="!f.state && !f.link">{{ f.value }}</ng-container>
+</ng-template>

@@ -1,3 +1,4 @@
+import { cancelInBlock, completeInBlock, followUpActor, followUpViewFilter, readCompleteBody, readScheduleBody, scheduleInBlock } from '../services/followUpTasks.service';
 import { NextFunction, Request, Response } from "express";
 import { PurchaseRequestStatus } from "../models/purchaseRequest.model";
 import PurchaseRequest from '../models/purchaseRequest.model'
@@ -9,28 +10,156 @@ import { getWorkflowSteps, updateApprovalStatus, rebuildPendingRoute } from "../
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { getNextSequence } from "../models/counter.model";
+import { issueDocNo, peekDocNo } from "../services/docNumber.service";
 import technicalModel from "../models/technical.model";
 import Employee from "../models/employee.model";
 import { recordPrices, findPrices } from "../services/supplierPrice.service";
 import { SupplierPriceSource } from "../models/supplierPrice.model";
 import { applyLineAward, LineAward } from "../services/purchaseAward.service";
+import { logAudit } from "../services/audit.service";
+import PurchaseOrder from "../models/purchaseOrder.model";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
+
+/** Records a PR event; a general (manual) PR is kept under its own entity type so the audit page can tell them apart. */
+/** What an edit changed on a PR's lines (quantity, cost, supplier prices and awards), as label / from / to rows. */
+const diffPrEdits = (before: any, after: any): { label: string; from?: string; to?: string }[] => {
+  const out: { label: string; from?: string; to?: string }[] = [];
+  const text = (v: any) => (v === undefined || v === null || v === '' ? '—' : String(v));
+  const lines = (pr: any) => new Map<string, any>((pr?.items || []).flatMap((i: any) => i.itemDetails || []).map((d: any) => [String(d._id), d]));
+  const oldLines = lines(before);
+  const newLines = lines(after);
+  const nameOf = (d: any) => String(d?.itemName ?? d?.description ?? d?.productName ?? d?.product?.name ?? 'Item').slice(0, 60);
+  newLines.forEach((n, id) => {
+    const o = oldLines.get(id);
+    if (!o) { out.push({ label: `${nameOf(n)} · added`, from: '—', to: `qty ${text(n.quantity)}` }); return; }
+    if (Number(o.quantity) !== Number(n.quantity)) out.push({ label: `${nameOf(n)} · quantity`, from: text(o.quantity), to: text(n.quantity) });
+    if (Number(o.unitCost) !== Number(n.unitCost)) out.push({ label: `${nameOf(n)} · unit cost`, from: text(o.unitCost), to: text(n.unitCost) });
+    const oc = new Map<string, any>((o.comparisons || []).map((c: any) => [String(c.supplierId?._id ?? c.supplierId), c]));
+    (n.comparisons || []).forEach((c: any) => {
+      const prev = oc.get(String(c.supplierId?._id ?? c.supplierId));
+      const who = String(c.supplierName ?? c.supplierId?.supplierName ?? 'Supplier');
+      if (!prev) { out.push({ label: `${nameOf(n)} · ${who} quote added`, from: '—', to: text(c.unitPrice) }); return; }
+      if (Number(prev.unitPrice) !== Number(c.unitPrice)) out.push({ label: `${nameOf(n)} · ${who} price`, from: text(prev.unitPrice), to: text(c.unitPrice) });
+      if (Boolean(prev.selected) !== Boolean(c.selected)) out.push({ label: `${nameOf(n)} · ${who} award`, from: prev.selected ? 'Awarded' : 'Not awarded', to: c.selected ? 'Awarded' : 'Not awarded' });
+      else if (c.selected && Number(prev.awardedQty ?? prev.quantity) !== Number(c.awardedQty ?? c.quantity)) out.push({ label: `${nameOf(n)} · ${who} awarded qty`, from: text(prev.awardedQty ?? prev.quantity), to: text(c.awardedQty ?? c.quantity) });
+    });
+  });
+  oldLines.forEach((o, id) => { if (!newLines.has(id)) out.push({ label: `${nameOf(o)} · removed`, from: `qty ${text(o.quantity)}`, to: '—' }); });
+  return out;
+};
+
+const logPrAudit = (req: Request, pr: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
+    logAudit(req, {
+        entityType: pr.sourceType === 'manual' ? 'generalPurchaseRequest' : 'purchaseRequest',
+        entityId: pr._id, entityLabel: pr.purchaseNo, action, summary, changes,
+    });
 
 const prLines = (items: any[]) => (items || []).flatMap((item: any) => item.itemDetails || []);
 
 /**
  * Lines that cannot go for approval: not fully allocated to chosen suppliers, or a chosen supplier without a price.
- * A line marked short (with a reason) goes as it is; a line nobody chose goes with its default supplier at its own cost.
+ * A line marked short (with a reason) goes as it is; a line must be awarded in Compare & award even when it has a default supplier.
  */
 const unallocatedLines = (lines: any[]) => lines.filter((detail: any) => {
     if (detail.short && String(detail.shortReason || '').trim()) return false;
     const won = (detail.comparisons || []).filter((c: any) => c.selected);
-    if (!won.length) return !detail.supplierId || !(Number(detail.unitCost) > 0);
+    if (!won.length) return true;
     if (won.some((c: any) => !c.supplierId || !(Number(c.unitPrice) > 0))) return true;
     if (!won.some((c: any) => c.awardedQty)) return false;
     return won.reduce((sum: number, c: any) => sum + (Number(c.awardedQty) || Number(detail.quantity) || 0), 0) + 0.0001 < Number(detail.quantity);
 });
+
+/**
+ * Request lines already on a live PO (anything but Rejected or Cancelled), keyed by line id.
+ * Such a line is fixed: the PO has to be rejected (pending) or cancelled (placed/approved) before it can change.
+ */
+interface PoLineUsage { ordered: number; po: string; suppliers: Record<string, number> }
+
+/**
+ * What the live POs (anything but Draft, Rejected or Cancelled) already took of each request line, by line id:
+ * the quantity ordered, the first PO holding it, and the quantity per supplier.
+ */
+const poLineUsage = async (purchaseId: any, items?: any[]): Promise<Map<string, PoLineUsage>> => {
+    const pos: any[] = await PurchaseOrder.find({ purchaseId, isDeleted: { $ne: true }, poStatus: { $nin: ['Draft', 'Rejected', 'Cancelled'] } })
+        .select('poNo poStatus supplierId items.prLineKey items.detail items.quantity').lean();
+    // A PO line whose key no longer matches a request line (the line was re-saved under a new id) is matched by its product text instead.
+    const lines = items ? prLines(items) : [];
+    const liveIds = new Set(lines.map((l: any) => String(l._id)));
+    const idByDetail = new Map<string, string | null>();
+    for (const l of lines as any[]) {
+        const text = String(l.detail || '').trim().toLowerCase();
+        idByDetail.set(text, idByDetail.has(text) ? null : String(l._id));
+    }
+    const usage = new Map<string, PoLineUsage>();
+    for (const po of pos) for (const item of po.items || []) {
+        const qty = Number(item.quantity) || 0;
+        if (!item.prLineKey || !(qty > 0)) continue;
+        let key = String(item.prLineKey);
+        if (lines.length && !liveIds.has(key)) key = idByDetail.get(String(item.detail || '').trim().toLowerCase()) || key;
+        const row = usage.get(key) || { ordered: 0, po: `${po.poNo} (${po.poStatus})`, suppliers: {} };
+        row.ordered += qty;
+        row.suppliers[String(po.supplierId)] = (row.suppliers[String(po.supplierId)] || 0) + qty;
+        usage.set(key, row);
+    }
+    return usage;
+};
+
+/** Discount already carried by the live POs of this request, per supplier id: a supplier's discount cannot go below it. */
+const poDiscountBySupplier = async (purchaseId: any): Promise<Record<string, number>> => {
+    const pos: any[] = await PurchaseOrder.find({ purchaseId, isDeleted: { $ne: true }, poStatus: { $nin: ['Draft', 'Rejected', 'Cancelled'] } })
+        .select('supplierId discount').lean();
+    const out: Record<string, number> = {};
+    for (const po of pos) {
+        const d = Number(po.discount) || 0;
+        if (d > 0) out[String(po.supplierId)] = (out[String(po.supplierId)] || 0) + d;
+    }
+    return out;
+};
+
+/** A line whose whole quantity is already ordered is fixed; one with quantity left can still take more suppliers. */
+const isFullyOrdered = (usage: PoLineUsage, line: any) => usage.ordered + 0.0001 >= (Number(line?.quantity) || 0);
+
+/** Request lines fully on live POs (line id -> PO): nothing on them can change until that PO is rejected or cancelled. */
+const poLockedLines = async (purchaseId: any, items: any[] | undefined): Promise<Map<string, string>> => {
+    const usage = await poLineUsage(purchaseId, items);
+    const locked = new Map<string, string>();
+    for (const line of prLines(items || [])) {
+        const u = usage.get(String((line as any)._id));
+        if (u && isFullyOrdered(u, line)) locked.set(String((line as any)._id), u.po);
+    }
+    return locked;
+};
+
+/**
+ * Checks an edit of a request line that already has live POs. Returns the reason it is refused, or null.
+ * The product, its quantity (the job's default) and every supplier that has ordered quantity stay as they are;
+ * only the quantity still to order can be moved to other suppliers.
+ */
+const poLineEditError = (existing: any, next: any, usage: PoLineUsage): string | null => {
+    const name = `"${existing.detail || 'A product'}"`;
+    if (!next) return `${name} is on ${usage.po} and cannot be removed. Reject that PO if it is pending, or cancel it if it is placed or approved, first.`;
+    const changed = (f: string) => next[f] !== undefined && lockedValue(existing[f]) !== lockedValue(next[f]);
+    if (['detail', 'uom', 'productId'].some(changed)) return `${name} is on ${usage.po}, so the product cannot change.`;
+    if (next.quantity !== undefined && Number(next.quantity) + 0.0001 < usage.ordered) return `${name} has ${usage.ordered} already on purchase orders (${usage.po}), so its quantity cannot go below ${usage.ordered}.`;
+    const comparisons: any[] = Array.isArray(next.comparisons) ? next.comparisons : [];
+    const before: any[] = existing.comparisons || [];
+    for (const [supplierId, ordered] of Object.entries(usage.suppliers)) {
+        if (!comparisons.length) {
+            if (changed('supplierId') || changed('unitCost')) return `${name} is on ${usage.po}, so its supplier and price cannot change.`;
+            continue;
+        }
+        const mine = comparisons.find((c) => c.selected && String(c.supplierId?._id ?? c.supplierId) === supplierId);
+        if (!mine) return `${name} is on ${usage.po}, so that supplier stays awarded.`;
+        const awarded = Number(mine.awardedQty) || Number(mine.quantity) || Number(existing.quantity) || 0;
+        if (awarded + 0.0001 < ordered) return `${name} has ${ordered} already ordered from that supplier, so its award cannot go below ${ordered}.`;
+        const was = before.find((c) => String(c.supplierId?._id ?? c.supplierId) === supplierId);
+        if (was && Number(was.unitPrice) !== Number(mine.unitPrice)) return `${name} is on ${usage.po}, so that supplier's price cannot change.`;
+    }
+    return null;
+};
+
+const lockedValue = (v: any) => (v && typeof v === 'object' ? String(v._id ?? v) : String(v ?? ''));
 
 const SUBMIT_GATE_MESSAGE = (open: number) =>
     `${open} product(s) are not fully allocated. Choose suppliers for the full quantity, each with a price, or mark the product short with a reason.`;
@@ -38,17 +167,24 @@ const SUBMIT_GATE_MESSAGE = (open: number) =>
 /** Every supplier price taken for comparison on the request, kept as that supplier's last PR price for the product. */
 const recordComparisonPrices = (purchase: any, employeeId: any) => recordPrices(
     prLines(purchase.items).flatMap((detail: any) => (detail.comparisons || []).map((c: any) => ({
-        supplierId: c.supplierId, productId: detail.partNo, price: Number(c.unitPrice),
+        supplierId: c.supplierId, productId: detail.productId, price: Number(c.unitPrice),
     }))),
     SupplierPriceSource.PR,
     { currency: purchase.currency, sourceNo: purchase.purchaseNo, sourceId: purchase._id, employeeId }
 );
 
-const normalizePartNumberValue = (value: any) => {
-    if (!value) return undefined;
-    const candidate = typeof value === 'object' && value !== null ? value._id || value.id || value.value : value;
-    if (!candidate || !ObjectId.isValid(candidate)) return undefined;
-    return new ObjectId(candidate);
+const HEX_ID = /^[a-f0-9]{24}$/i;
+const idOf = (value: any) => {
+    const candidate = value && typeof value === 'object' ? value._id || value.id || value.value : value;
+    return candidate && HEX_ID.test(String(candidate)) ? new ObjectId(String(candidate)) : undefined;
+};
+
+/** A line's catalogue link (productId) and part number text (partNo). An id in partNo is the older form of the link. */
+const normalizeLineProduct = (detail: any) => {
+    const productId = idOf(detail?.productId) ?? idOf(detail?.partNo);
+    const raw = detail?.partNo && typeof detail.partNo === 'object' ? detail.partNo.partNo : detail?.partNo;
+    const text = String(raw ?? '').trim();
+    return { productId, partNo: text && !HEX_ID.test(text) ? text : undefined };
 };
 
 
@@ -57,6 +193,7 @@ const PURCHASE_SORT_FIELDS: Record<string, string> = {
     date: 'sortDate',
     customerName: 'customerId.companyName',
     purchaseNo: 'purchaseNo',
+    nextFollowUpDate: 'followUp.nextFollowUpDate',
     jobId: 'jobId.jobId',
     totalLpo: 'totalLpo',
     selectedPrQuantity: 'selectedPrQuantity',
@@ -91,29 +228,78 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
     const withPr: any[] = await PurchaseRequest.distinct('jobId', { isDeleted: false, jobId: { $exists: true, $ne: null } });
     const jobs: any[] = await jobModel.find({
         isDeleted: { $ne: true },
-        productDistribution: true,
-        allocateStatus: allocateStatus.OpenToWork,
-        // A super admin oversees every buyer's allocated jobs; everyone else sees only their own.
-        ...(isSuperAdmin ? { procurementPerson: { $exists: true, $ne: null } } : { procurementPerson: new ObjectId(String(employeeId)) }),
+        // A super admin oversees every job allocated to any buyer, in any status; everyone else sees only their own open ones.
+        ...(isSuperAdmin
+            ? { procurementPerson: { $exists: true, $ne: null } }
+            : { productDistribution: true, allocateStatus: allocateStatus.OpenToWork, procurementPerson: new ObjectId(String(employeeId)) }),
         _id: { $nin: withPr },
-    }).populate({ path: 'quoteId', select: 'client currency dealData.updatedItems', populate: { path: 'client', select: 'companyName' } })
+    }).populate({
+        path: 'quoteId',
+        select: 'client currency quoteId subject department createdBy dealData.dealId dealData.totalDiscount dealData.additionalCosts dealData.updatedItems',
+        populate: [
+            { path: 'client', select: 'companyName' },
+            { path: 'department', select: 'departmentName' },
+            { path: 'createdBy', select: 'firstName lastName' },
+        ],
+    })
         .populate('procurementPerson', 'firstName lastName')
         .populate('allocatedBy', 'firstName lastName')
         .sort({ updatedDate: -1, _id: -1 })
         .lean();
 
+    const qatarUsdRate = await getUSDRated();
+    // Same LPO value the Job Sheet list shows: deal selling total less discount, in QAR.
+    const lpoValueOf = (quote: any): number => {
+        const lines = (quote?.dealData?.updatedItems ?? []).flatMap((item: any) => item.itemDetails ?? []);
+        const total = lines.reduce((sum: number, d: any) => sum + (Number(d.unitSellingPrice) || 0) * (Number(d.quantity) || 0), 0) - (Number(quote?.dealData?.totalDiscount) || 0);
+        return quote?.currency === 'USD' ? total * qatarUsdRate : total;
+    };
+    // Deal sheet money summary for the details panel: selling side, then cost side.
+    const dealSummaryOf = (quote: any) => {
+        const deal = quote?.dealData;
+        const lines = (deal?.updatedItems ?? []).flatMap((item: any) => item.itemDetails ?? []);
+        const totalPrice = lines.reduce((sum: number, d: any) => sum + (Number(d.unitSellingPrice) || 0) * (Number(d.quantity) || 0), 0);
+        const totalCost = lines.reduce((sum: number, d: any) => sum + (Number(d.unitCost) || 0) * (Number(d.quantity) || 0), 0);
+        const extras = deal?.additionalCosts ?? [];
+        const sumOf = (type: string) => extras.filter((c: any) => c.type === type).reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+        const discount = (Number(deal?.totalDiscount) || 0) + sumOf('Customer Discount');
+        const additionalCost = sumOf('Additional Cost');
+        const supplierDiscount = sumOf('Supplier Discount');
+        return { totalPrice, discount, netTotalPrice: totalPrice - discount, totalCost, additionalCost, supplierDiscount, netTotalCost: totalCost + additionalCost - supplierDiscount };
+    };
+    const fullName = (e: any) => e?.firstName ? `${e.firstName} ${e.lastName ?? ''}`.trim() : '';
+
     const needle = searchText.toLowerCase();
     const rows = jobs
         .map((job) => ({
             _id: job._id,
+            // Job Sheet list columns, so the New tab reads like the job list it comes from.
+            jobStatus: job.status,
+            description: job.quoteId?.subject,
+            lpoValue: lpoValueOf(job.quoteId),
+            salesPerson: fullName(job.quoteId?.createdBy),
+            dealSummary: dealSummaryOf(job.quoteId),
+            department: job.quoteId?.department?.departmentName ?? '',
+            quoteNo: job.quoteId?.quoteId,
+            dealNo: job.quoteId?.dealData?.dealId ?? '',
             status: 'New',
             overallStatus: 'new',
             items: [],
             // No PR lines exist yet, so the details panel shows the deal sheet's lines the buyer will work from.
             dealItems: (job.quoteId?.dealData?.updatedItems ?? []).map((item: any) => ({
                 itemName: item.itemName,
-                itemDetails: (item.itemDetails ?? []).map((d: any) => ({ detail: d.detail, quantity: d.quantity, unitCost: d.unitCost })),
-            })),
+                // A line with a cost breakdown is bought part by part, so list the parts (and what the parts leave).
+                // Quoted lines that are not part of the deal are left out.
+                itemDetails: (item.itemDetails ?? []).filter((d: any) => d.dealSelected).flatMap((d: any) => {
+                    const parts = (d.components ?? []).filter((c: any) => Number(c.quantity) > 0);
+                    if (!parts.length) return [{ detail: d.detail, quantity: d.quantity, unitCost: d.unitCost }];
+                    const rest = (Number(d.unitCost) || 0) - parts.reduce((s: number, c: any) => s + Number(c.quantity) * (Number(c.unitCost) || 0), 0);
+                    return [
+                        ...(rest > 0.005 ? [{ detail: d.detail, quantity: d.quantity, unitCost: rest }] : []),
+                        ...parts.map((c: any) => ({ detail: c.description, quantity: Number(c.quantity) * (Number(d.quantity) || 0), unitCost: c.unitCost })),
+                    ];
+                }),
+            })).filter((item: any) => item.itemDetails.length > 0),
             jobId: job,
             customerId: job.quoteId?.client,
             currency: job.quoteId?.currency,
@@ -146,7 +332,6 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
 
         const {
             jobId,
-            purchaseNo,
             dealSheetId,
             status,
             sourceType,
@@ -156,7 +341,7 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
         // New and In Progress are the unsubmitted states: New is the allocated job, In Progress a saved PR.
         const isDraft = status === PurchaseRequestStatus.New || status === PurchaseRequestStatus.InProgress;
 
-        if (!purchaseNo || !status || (!isManual && (!jobId || !dealSheetId))) {
+        if (!status || (!isManual && (!jobId || !dealSheetId))) {
             return res.status(400).json({
                 success: false,
                 message: "Missing required fields",
@@ -226,10 +411,12 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
             requestData.items = requestData.items.map((item: any) => {
                 if (item.itemDetails && Array.isArray(item.itemDetails)) {
                     item.itemDetails = item.itemDetails.map((detail: any) => {
-                        const normalizedDetail = {
+                        const normalizedDetail: any = {
                             ...detail,
-                            partNo: normalizePartNumberValue(detail.partNo)
+                            ...normalizeLineProduct(detail)
                         };
+                        // The base unit cost starts as the cost the PR was created with.
+                        if (!(Number(detail.dealUnitCost) > 0) && Number(detail.unitCost) > 0) normalizedDetail.dealUnitCost = Number(detail.unitCost);
 
                         // Ensure unitSellingPrice is preserved from job if available
                         if (detail.unitSellingPrice !== undefined && detail.unitSellingPrice !== null && detail.unitSellingPrice !== '') {
@@ -278,10 +465,15 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
             }
         }
 
+        // The number shown on the form is only a preview; it is taken now, so abandoned forms never use one up.
+        requestData.purchaseNo = await issueDocNo('PR');
         const newPurchaseRequest = new PurchaseRequest(requestData);
         const savedPurchaseRequest = await newPurchaseRequest.save();
 
         if (status && !isDraft) await recordComparisonPrices(savedPurchaseRequest, employee._id);
+
+        await logPrAudit(req, savedPurchaseRequest, 'created', `${isManual ? 'General purchase request' : 'Purchase request'} ${savedPurchaseRequest.purchaseNo} created`);
+        if (!isDraft) await logPrAudit(req, savedPurchaseRequest, 'submitted', `Sent for approval${savedPurchaseRequest.status === PurchaseRequestStatus.Approved ? ' (no approval needed)' : ''}`);
 
         if (!isManual) {
             // A job a user put On Hold stays there until they resume it.
@@ -551,7 +743,7 @@ const poProgressStages = (poProgress?: string): any[] => [
 
 export const getPurchaseRequests = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName, sourceType, poProgress, rfqStatus, allocation, search, sortKey, sortDir } = req.body;
+        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName, sourceType, poProgress, rfqStatus, allocation, search, sortKey, sortDir, followUpView } = req.body;
         const pageNumber = Math.max(1, Math.floor(Number(page)) || 1);
         const pageSize = Math.min(10000, Math.max(1, Math.floor(Number(row)) || 10));
         // The grid's search box sends `search`: it matches the PR number, supplier, customer or job id.
@@ -582,6 +774,7 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
         }
 
         const matchStage: any = {
+            ...followUpViewFilter('followUp.nextFollowUpDate', followUpView),
             isDeleted: false,
             ...accessFilter
         };
@@ -948,7 +1141,24 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
             // Rows without an approved date (new / pending PRs) fall back to their created date so they sort with
             // the rest instead of sinking to the last page; the grid's Date column shows the same value.
             { $addFields: { sortDate: { $ifNull: ['$approvedDate', '$createdAt'] } } },
-            { $sort: buildPurchaseSort(sortKey, sortDir, shouldSortByApprovedDate ? 'sortDate' : 'createdAt') },
+            // Follow-up tab: today and upcoming first (nearest date on top), then overdue (most recent first).
+            ...(followUpView === 'followUp' && !sortKey ? [
+                {
+                    $addFields: {
+                        fuRank: { $cond: [{ $gte: ['$followUp.nextFollowUpDate', new Date(new Date().setHours(0, 0, 0, 0))] }, 0, 1] },
+                        fuOrder: {
+                            $cond: [
+                                { $gte: ['$followUp.nextFollowUpDate', new Date(new Date().setHours(0, 0, 0, 0))] },
+                                { $toLong: '$followUp.nextFollowUpDate' },
+                                { $multiply: [{ $toLong: '$followUp.nextFollowUpDate' }, -1] }
+                            ]
+                        }
+                    }
+                },
+                { $sort: { fuRank: 1, fuOrder: 1, _id: -1 } }
+            ] : [
+                { $sort: buildPurchaseSort(sortKey, sortDir, shouldSortByApprovedDate ? 'sortDate' : 'createdAt') }
+            ]),
             {
                 $facet: {
                     metadata: [{ $count: 'total' }],
@@ -1002,7 +1212,7 @@ export const getPurchaseRequestCounts = async (req: Request, res: Response, next
                 return (await getNewTabJobs(employee._id, isSuperAdmin, searchText, 1, 1)).total;
             }
 
-            const matchStage: any = { isDeleted: false, ...accessFilter };
+            const matchStage: any = { isDeleted: false, ...accessFilter, ...followUpViewFilter('followUp.nextFollowUpDate', view.followUpView) };
             matchStage.status = Array.isArray(view.status) ? { $in: view.status } : view.status;
             if (view.sourceType === 'manual') matchStage.sourceType = 'manual';
             else if (view.sourceType === 'job') matchStage.sourceType = { $ne: 'manual' };
@@ -1208,7 +1418,7 @@ export const getPurchaseRequestsByStatus = async (req: Request, res: Response, n
                                                 $map: {
                                                     input: '$$this.itemDetails',
                                                     as: 'detail',
-                                                    in: '$$detail.partNo'
+                                                    in: { $ifNull: ['$$detail.productId', { $cond: [{ $eq: [{ $type: '$$detail.partNo' }, 'objectId'] }, '$$detail.partNo', null] }] }
                                                 }
                                             },
                                             as: 'id',
@@ -1275,7 +1485,7 @@ export const getPurchaseRequestsByStatus = async (req: Request, res: Response, n
                                                                                     $filter: {
                                                                                         input: '$partNumberProducts',
                                                                                         as: 'p',
-                                                                                        cond: { $eq: ['$$p._id', '$$detail.partNo'] }
+                                                                                        cond: { $eq: ['$$p._id', { $ifNull: ['$$detail.productId', { $cond: [{ $eq: [{ $type: '$$detail.partNo' }, 'objectId'] }, '$$detail.partNo', null] }] }] }
                                                                                     }
                                                                                 },
                                                                                 0
@@ -1285,12 +1495,8 @@ export const getPurchaseRequestsByStatus = async (req: Request, res: Response, n
                                                                     in: {
                                                                         $cond: [
                                                                             { $ifNull: ['$$product', false] },
-                                                                            {
-                                                                                _id: '$$product._id',
-                                                                                partNo: '$$product.partNo',
-                                                                                productDescription: '$$product.productDescription'
-                                                                            },
-                                                                            '$$detail.partNo'
+                                                                            { $cond: [{ $or: [{ $in: [{ $ifNull: ['$$detail.partNo', ''] }, ['']] }, { $eq: [{ $type: '$$detail.partNo' }, 'objectId'] }] }, '$$product.partNo', '$$detail.partNo'] },
+'$$detail.partNo'
                                                                         ]
                                                                     }
                                                                 }
@@ -1348,6 +1554,19 @@ export const updatePurchaseItems = async (req: Request, res: Response, next: Nex
             });
         }
 
+        // A line already on a live PO stays as the PO has it (same rule as the full update).
+        const usage = await poLineUsage(purchaseRequest._id, purchaseRequest.items as any[]);
+        if (usage.size) {
+            const incoming = new Map<string, any>();
+            prLines(items).forEach((d: any) => d?._id && incoming.set(String(d._id), d));
+            for (const existingLine of prLines(purchaseRequest.items as any[])) {
+                const lineUsage = usage.get(String((existingLine as any)._id));
+                if (!lineUsage) continue;
+                const problem = poLineEditError((existingLine as any).toObject?.() ?? existingLine, incoming.get(String((existingLine as any)._id)), lineUsage);
+                if (problem) return res.status(409).json({ success: false, message: problem, status: 409 });
+            }
+        }
+
         const normalizedItems = items.map((item: any) => {
             // Ensure itemName is set - use first detail if itemName is empty
             let itemName = item.itemName;
@@ -1361,11 +1580,12 @@ export const updatePurchaseItems = async (req: Request, res: Response, next: Nex
 
             if (item.itemDetails && Array.isArray(item.itemDetails)) {
                 normalizedItem.itemDetails = item.itemDetails.map((detail: any) => {
-                    // Remove temporary _id fields (those starting with 'temp-')
+                    // Temporary ids ('temp-…') are dropped; a real line id is kept, because POs point at their request line by that id.
                     const { _id, ...detailWithoutId } = detail;
                     const normalizedDetail: any = {
                         ...detailWithoutId,
-                        partNo: normalizePartNumberValue(detail.partNo)
+                        ...(_id && ObjectId.isValid(String(_id)) && /^[0-9a-fA-F]{24}$/.test(String(_id)) ? { _id } : {}),
+                        ...normalizeLineProduct(detail)
                     };
 
 
@@ -1470,7 +1690,7 @@ export const updatePurchaseSupplierOffers = async (req: Request, res: Response, 
                 item.itemDetails = item.itemDetails.map((detail: any) => {
                     const normalizedDetail = {
                         ...detail,
-                        partNo: normalizePartNumberValue(detail.partNo)
+                        ...normalizeLineProduct(detail)
                     };
 
                     if (detail.comparisons && Array.isArray(detail.comparisons)) {
@@ -2012,6 +2232,16 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
             },
             { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
             {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'allocatedBy',
+                    foreignField: '_id',
+                    as: 'allocatedBy',
+                    pipeline: [{ $project: { firstName: 1, lastName: 1 } }]
+                }
+            },
+            { $unwind: { path: '$allocatedBy', preserveNullAndEmptyArrays: true } },
+            {
                 $addFields: {
                     lpoValue: {
                         $cond: [
@@ -2199,7 +2429,7 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
                                                 $map: {
                                                     input: '$$this.itemDetails',
                                                     as: 'detail',
-                                                    in: '$$detail.partNo'
+                                                    in: { $ifNull: ['$$detail.productId', { $cond: [{ $eq: [{ $type: '$$detail.partNo' }, 'objectId'] }, '$$detail.partNo', null] }] }
                                                 }
                                             },
                                             as: 'id',
@@ -2266,7 +2496,7 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
                                                                                     $filter: {
                                                                                         input: '$partNumberProducts',
                                                                                         as: 'p',
-                                                                                        cond: { $eq: ['$$p._id', '$$detail.partNo'] }
+                                                                                        cond: { $eq: ['$$p._id', { $ifNull: ['$$detail.productId', { $cond: [{ $eq: [{ $type: '$$detail.partNo' }, 'objectId'] }, '$$detail.partNo', null] }] }] }
                                                                                     }
                                                                                 },
                                                                                 0
@@ -2276,12 +2506,8 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
                                                                     in: {
                                                                         $cond: [
                                                                             { $ifNull: ['$$product', false] },
-                                                                            {
-                                                                                _id: '$$product._id',
-                                                                                partNo: '$$product.partNo',
-                                                                                productDescription: '$$product.productDescription'
-                                                                            },
-                                                                            '$$detail.partNo'
+                                                                            { $cond: [{ $or: [{ $in: [{ $ifNull: ['$$detail.partNo', ''] }, ['']] }, { $eq: [{ $type: '$$detail.partNo' }, 'objectId'] }] }, '$$product.partNo', '$$detail.partNo'] },
+'$$detail.partNo'
                                                                         ]
                                                                     }
                                                                 }
@@ -2340,6 +2566,10 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
             }
         }
 
+        populatedPurchaseRequest.lockedLines = Object.fromEntries(await poLockedLines(populatedPurchaseRequest._id, populatedPurchaseRequest.items));
+        populatedPurchaseRequest.poUsage = Object.fromEntries(await poLineUsage(populatedPurchaseRequest._id, populatedPurchaseRequest.items));
+        populatedPurchaseRequest.poDiscounts = await poDiscountBySupplier(populatedPurchaseRequest._id);
+
         return res.status(200).json({
             success: true,
             message: "Purchase request fetched successfully",
@@ -2350,30 +2580,10 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
     }
 };
 
-const seedPurchaseNoSequence = async (): Promise<number> => {
-    const latestPR = await PurchaseRequest.findOne().sort({ purchaseNo: -1 });
-    if (latestPR) {
-        const parts = latestPR.purchaseNo.split('-');
-        const lastCounter = parseInt(parts[3]);
-        if (!isNaN(lastCounter)) {
-            return lastCounter;
-        }
-    }
-    return 0;
-};
-
 // Generate a new purchase number
 export const generatePurchaseNumber = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const now = new Date();
-        const year = now.getFullYear().toString().slice(-2);
-        const month = (now.getMonth() + 1).toString().padStart(2, '0');
-
-        const nextNumber = await getNextSequence('purchaseNo', seedPurchaseNoSequence);
-
-        const newPurchaseNumber = `NRN/PR-${year}-${month}-${nextNumber
-            .toString()
-            .padStart(4, '0')}`;
+        const newPurchaseNumber = await peekDocNo('PR');
 
         return res.status(200).json({
             success: true,
@@ -2498,6 +2708,10 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
         purchaseRequest.updatedAt = new Date();
 
         await purchaseRequest.save();
+
+        await logPrAudit(req, purchaseRequest, status === 'rejected' ? 'rejected' : 'approved',
+            `${status === 'rejected' ? 'Rejected' : isAllApproved ? 'Approved (final step)' : 'Approved (step)'}${comment ? ` — ${comment}` : ''}`,
+            [{ label: 'Status', from: PurchaseRequestStatus.Pending, to: String(purchaseRequest.status) }]);
 
         const updatedPurchaseRequest = await PurchaseRequest.findById(id)
             .populate('createdBy', '-password')
@@ -2934,7 +3148,33 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
         if (wasUnsubmitted && !isStatusChangingFromDraft) updateData.status = PurchaseRequestStatus.InProgress;
 
 
-        const isStatusChangingFromRejected = existingPurchaseRequest.status === PurchaseRequestStatus.Rejected && 
+        // A product already on a live PO is fixed (see poLineEditError); only quantity not yet ordered can move to other suppliers.
+        if (Array.isArray(updateData.items)) {
+            const usage = await poLineUsage(existingPurchaseRequest._id, existingPurchaseRequest.items as any[]);
+            if (usage.size) {
+                const incoming = new Map<string, any>();
+                prLines(updateData.items).forEach((d: any) => d?._id && incoming.set(String(d._id), d));
+                for (const existingLine of prLines(existingPurchaseRequest.items as any[])) {
+                    const lineUsage = usage.get(String((existingLine as any)._id));
+                    if (!lineUsage) continue;
+                    const problem = poLineEditError((existingLine as any).toObject?.() ?? existingLine, incoming.get(String((existingLine as any)._id)), lineUsage);
+                    if (problem) return res.status(409).json({ success: false, message: problem, status: 409 });
+                }
+            }
+        }
+
+        // A supplier's discount cannot drop below what its live POs already carry.
+        if (Array.isArray(updateData.supplierDiscounts?.suppliers)) {
+            const taken = await poDiscountBySupplier(existingPurchaseRequest._id);
+            for (const s of updateData.supplierDiscounts.suppliers) {
+                const floor = taken[String(s?.supplierId?._id ?? s?.supplierId)] || 0;
+                if (floor > 0 && (Number(s.discount) || 0) + 0.0001 < floor) {
+                    return res.status(409).json({ success: false, message: `That supplier's discount cannot go below ${floor}, which is already on purchase orders.`, status: 409 });
+                }
+            }
+        }
+
+        const isStatusChangingFromRejected = (existingPurchaseRequest.status === PurchaseRequestStatus.Rejected || existingPurchaseRequest.status === PurchaseRequestStatus.Revoked) &&
                                             updateData.status && 
                                             updateData.status === PurchaseRequestStatus.Pending;
 
@@ -2981,13 +3221,21 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
         }
 
         if (updateData.items && Array.isArray(updateData.items)) {
+            const savedLines = new Map<string, any>();
+            prLines(existingPurchaseRequest.items as any[]).forEach((l: any) => l?._id && savedLines.set(String(l._id), l));
             updateData.items = updateData.items.map((item: any) => {
                 if (item.itemDetails && Array.isArray(item.itemDetails)) {
                     item.itemDetails = item.itemDetails.map((detail: any) => {
-                        const normalizedDetail = {
+                        const normalizedDetail: any = {
                             ...detail,
-                            partNo: normalizePartNumberValue(detail.partNo)
+                            ...normalizeLineProduct(detail)
                         };
+                        // The base unit cost is fixed once saved: awards, supplier price edits and resends never move it.
+                        const saved = detail?._id ? savedLines.get(String(detail._id)) : undefined;
+                        const base = Number(saved?.dealUnitCost) > 0 ? Number(saved.dealUnitCost)
+                            : Number(detail.dealUnitCost) > 0 ? Number(detail.dealUnitCost)
+                            : Number(saved?.unitCost) > 0 ? Number(saved.unitCost) : Number(detail.unitCost) > 0 ? Number(detail.unitCost) : undefined;
+                        if (base !== undefined) normalizedDetail.dealUnitCost = base;
 
                         // Ensure unitSellingPrice is preserved from job if available
                         if (detail.unitSellingPrice !== undefined && detail.unitSellingPrice !== null && detail.unitSellingPrice !== '') {
@@ -3034,8 +3282,15 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
             });
         }
 
+        try {
+            const changes = diffPrEdits(existingPurchaseRequest.toObject(), updatedPurchaseRequest.toObject());
+            if (changes.length) await logPrAudit(req, updatedPurchaseRequest, 'edited', `Edited — ${changes.length} change${changes.length === 1 ? '' : 's'}`, changes.slice(0, 40));
+        } catch (e) { console.error('PR edit audit failed:', e); }
+
         if (isStatusChangingFromDraft || isStatusChangingFromRejected) {
             await recordComparisonPrices(updatedPurchaseRequest, employee._id);
+            await logPrAudit(req, updatedPurchaseRequest, isStatusChangingFromRejected ? 'resubmitted' : 'submitted',
+                `${isStatusChangingFromRejected ? 'Resubmitted' : 'Sent'} for approval${updatedPurchaseRequest.status === PurchaseRequestStatus.Approved ? ' (no approval needed)' : ''}`);
         }
 
         if (updateData.status === PurchaseRequestStatus.Pending) {
@@ -3391,13 +3646,41 @@ export const resetPurchaseWorkflow = async (req: Request, res: Response, next: N
         purchaseRequest.updatedBy = me._id;
         purchaseRequest.updatedAt = new Date();
         await purchaseRequest.save();
+        await logPrAudit(req, purchaseRequest, 'workflow-reset', 'Approval workflow reset');
         return res.status(200).json({ success: true, message: 'Purchase approval workflow reset' });
     } catch (error) {
         next(error);
     }
 };
 
-const EDITABLE_PR_STATUSES = [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress, PurchaseRequestStatus.Rejected] as string[];
+/** Takes an approved request back out of approval: it becomes Revoked, editable (except what live POs already took) and can be sent for approval again. */
+export const revokePurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const employee = await getEmployeeData(req.user);
+        if (!employee) return res.status(401).json({ success: false, message: 'Employee not found' });
+        const comment = String(req.body?.comment || '').trim();
+        if (!comment) return res.status(400).json({ success: false, message: 'Give a reason for revoking' });
+        const purchaseRequest = await PurchaseRequest.findById(req.params.id);
+        if (!purchaseRequest || purchaseRequest.isDeleted) {
+            return res.status(404).json({ success: false, message: 'Purchase request not found' });
+        }
+        if (purchaseRequest.status !== PurchaseRequestStatus.Approved) {
+            return res.status(400).json({ success: false, message: `Only an approved purchase request can be revoked (this one is ${purchaseRequest.status})` });
+        }
+        // POs already raised stay as they are; their products and ordered quantities are fixed while the request is edited (see poLineEditError).
+        purchaseRequest.status = PurchaseRequestStatus.Revoked;
+        purchaseRequest.rejectedReason.push({ rejectedBy: employee._id, comment, rejectedAt: new Date() } as any);
+        purchaseRequest.updatedBy = employee._id;
+        purchaseRequest.updatedAt = new Date();
+        await purchaseRequest.save();
+        await logPrAudit(req, purchaseRequest, 'revoked', `Revoked — ${comment}`);
+        return res.status(200).json({ success: true, message: 'Purchase request revoked' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const EDITABLE_PR_STATUSES = [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress, PurchaseRequestStatus.Rejected, PurchaseRequestStatus.Revoked] as string[];
 
 /**
  * Chooses suppliers for request lines, straight on the lines' comparisons.
@@ -3413,6 +3696,22 @@ export const awardPurchaseLines = async (req: Request, res: Response, next: Next
         }
         const awards: LineAward[] = Array.isArray(req.body?.awards) ? req.body.awards : [];
         if (!awards.length) return res.status(400).json({ success: false, message: "Nothing to award." });
+        // Fix the base unit cost before any award can touch the line.
+        for (const line of prLines(purchase.items)) {
+            if (!(Number((line as any).dealUnitCost) > 0) && Number((line as any).unitCost) > 0) (line as any).dealUnitCost = Number((line as any).unitCost);
+        }
+        const usage = await poLineUsage(purchase._id, purchase.items as any[]);
+        const priceKey = (lineKey: any, supplierId: any) => `${lineKey}|${supplierId}`;
+        const pricesBefore = new Map<string, number>();
+        const awardedKeys = new Set(awards.map((a: any) => String(a?.lineKey)));
+        for (const line of prLines(purchase.items)) {
+            const u = usage.get(String((line as any)._id));
+            if (!u || !awardedKeys.has(String((line as any)._id))) continue;
+            if (isFullyOrdered(u, line)) {
+                return res.status(409).json({ success: false, message: `"${(line as any).detail || 'That product'}" is fully on ${u.po}. Reject that PO if it is pending, or cancel it if it is placed or approved, to change the supplier.` });
+            }
+            ((line as any).comparisons || []).forEach((c: any) => pricesBefore.set(priceKey((line as any)._id, c.supplierId), Number(c.unitPrice)));
+        }
         for (const award of awards) {
             if (!award?.supplierId || !ObjectId.isValid(String(award.supplierId))) {
                 return res.status(400).json({ success: false, message: "Pick a supplier." });
@@ -3422,6 +3721,19 @@ export const awardPurchaseLines = async (req: Request, res: Response, next: Next
             }
             const error = applyLineAward(purchase, award, employee?._id);
             if (error) return res.status(400).json({ success: false, message: error });
+        }
+        // Awarding must not take quantity or price away from a supplier that already has ordered quantity (nothing is saved yet).
+        for (const line of prLines(purchase.items)) {
+            const u = usage.get(String((line as any)._id));
+            if (!u || !awardedKeys.has(String((line as any)._id))) continue;
+            for (const [supplierId, ordered] of Object.entries(u.suppliers)) {
+                const mine = ((line as any).comparisons || []).find((c: any) => c.selected && String(c.supplierId) === supplierId);
+                const awarded = mine ? (Number(mine.awardedQty) || Number(mine.quantity) || Number((line as any).quantity) || 0) : 0;
+                const priceMoved = mine && pricesBefore.has(priceKey((line as any)._id, supplierId)) && pricesBefore.get(priceKey((line as any)._id, supplierId)) !== Number(mine.unitPrice);
+                if (!mine || awarded + 0.0001 < ordered || priceMoved) {
+                    return res.status(409).json({ success: false, message: `"${(line as any).detail || 'That product'}" already has ${ordered} ordered on ${u.po} from that supplier, so its award and price stay. Only the quantity not yet ordered can go to another supplier.` });
+                }
+            }
         }
         purchase.totalLpo = prLines(purchase.items).reduce((sum: number, d: any) => sum + (Number(d.quantity) || 0) * (Number(d.unitCost) || 0), 0);
         if (employee) purchase.updatedBy = employee._id;
@@ -3443,4 +3755,31 @@ export const getSupplierPrices = async (req: Request, res: Response, next: NextF
     } catch (error) {
         next(error);
     }
+};
+
+/** Follow-ups use the same record visibility as the PR list. */
+export const changePurchaseFollowUp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        if (!ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid purchase request id' });
+        const employee = await getEmployeeData(req.user);
+        if (!employee) return res.status(401).json({ message: 'Employee not found' });
+        const scope = employee.category?.privileges?.purchase?.viewReport
+            ? await buildPrivilegeAccessFilter(employee._id, employee.category.privileges.purchase.viewReport, 'createdBy') : {};
+        const purchase = await PurchaseRequest.findOne({ _id: req.params.id, isDeleted: false, ...scope });
+        if (!purchase) return res.status(404).json({ message: 'Purchase request not found' });
+        let block: any;
+        if (req.params.action === 'schedule') {
+            const body = readScheduleBody(req, res); if (!body) return;
+            block = scheduleInBlock(purchase.followUp, body.dueDate, body.note, await followUpActor(req));
+        } else if (req.params.action === 'complete') {
+            const body = readCompleteBody(req, res); if (!body) return;
+            block = completeInBlock(purchase.followUp, body, await followUpActor(req));
+        } else if (req.params.action === 'cancel') {
+            block = cancelInBlock(purchase.followUp, String(req.body.reason ?? '').trim());
+            if (!block) return res.status(400).json({ message: 'No follow-up is scheduled.' });
+        } else return res.status(400).json({ message: 'Invalid follow-up action' });
+        purchase.followUp = block;
+        await purchase.save({ validateModifiedOnly: true });
+        return res.json({ success: true, followUp: purchase.followUp });
+    } catch (error) { next(error); }
 };

@@ -1,65 +1,138 @@
-<div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="flex h-full flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-detail-view-shell
     class="min-h-0 flex-1"
+    headerTone="contrast"
     [loading]="isLoading()"
     [empty]="!isLoading() && !lpo"
     emptyTitle="Purchase order not found"
     emptyMessage="It may have been deleted, or you may not have access to it."
     [emptyLink]="['/purchase/po']"
     emptyLinkLabel="Back to purchase orders"
-    [breadcrumbs]="breadcrumbs"
-    avatarText="PO"
-    [title]="lpo?.poNo || 'LPO details'"
-    [badges]="badges"
-    [subtitle]="subtitle"
+    customTitle
     [stats]="stats"
-    [tabs]="tabs"
-    [activeTab]="tab"
-    (activeTabChange)="tab = $event"
-    [sections]="sidebarSections"
+    statsLayout="fields"
+    statsTitle="Summary"
+    statsStorageKey="lpo-summary"
+    tabParam=""
+    bodyBare
+    [hasSidebar]="true"
+    [(panelOpen)]="panelOpen"
+    sidebarBare
+    sectioned
   >
-    <ng-container headerActions>
+    <div headerTitle class="flex min-w-0 flex-col gap-0.5" *ngIf="lpo as l">
+      <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+        <h1 class="dvs-strong truncate text-lg font-semibold text-gray-900 dark:text-gray-50">{{ l.poNo || 'Purchase order' }}</h1>
+      </div>
+      <div class="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] font-normal text-gray-900 dark:text-gray-100">
+        <span *ngIf="subtitle" class="truncate">{{ subtitle }}</span>
+      </div>
+    </div>
+
+    <!-- overview facts, left of the metrics -->
+    <app-detail-section beforeStats title="Details" class="lg:col-span-2 lg:border-r lg:border-gray-200 lg:pr-8 dark:lg:border-gray-800">
+      <app-detail-fields-menu sectionActions [items]="detailItems" storageKey="lpo-details" (hiddenChange)="hiddenDetail = $event" (orderChange)="detailOrder = $event"></app-detail-fields-menu>
+      <div class="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
+        <app-detail-field *ngFor="let f of visibleDetail; trackBy: trackFact" [label]="f.label" stacked>
+          <span *ngIf="f.state" class="inline-flex items-center gap-1.5">
+            <span class="h-1.5 w-1.5 rounded-full" [ngClass]="f.state.dot"></span>
+            <span class="font-medium" [ngClass]="f.state.text">{{ f.value }}</span>
+          </span>
+          <a *ngIf="f.link" [routerLink]="f.link" class="font-medium text-violet-600 hover:underline dark:text-violet-400">{{ f.value }}</a>
+          <ng-container *ngIf="!f.state && !f.link">{{ f.value }}</ng-container>
+        </app-detail-field>
+      </div>
+    </app-detail-section>
+
+    <ng-container headerActions *ngIf="lpo">
       <app-action-menu [items]="moreItems" (selected)="onMenu($event)"></app-action-menu>
-    </ng-container>
-
-    <ng-container footerRight>
       <ng-container *ngIf="canApproveOrReject()">
-        <app-action-button [disabled]="isApproving || isRejecting" (click)="onReject()">{{ isRejecting ? 'Rejecting…' : 'Reject' }}</app-action-button>
-        <app-action-button variant="primary" [disabled]="isApproving || isRejecting" (click)="onApprove()">{{ isApproving ? 'Approving…' : 'Approve' }}</app-action-button>
+        <app-action-button variant="outline" [disabled]="isApproving || isRejecting" (click)="onReject()"><ng-icon name="heroXMark" class="h-4 w-4"></ng-icon>{{ isRejecting ? 'Rejecting…' : 'Reject' }}</app-action-button>
+        <app-action-button variant="primary" [disabled]="isApproving || isRejecting" (click)="onApprove()"><ng-icon name="heroCheck" class="h-4 w-4"></ng-icon>{{ isApproving ? 'Approving…' : 'Approve' }}</app-action-button>
       </ng-container>
+      <app-action-button *ngIf="canResend()" variant="outline" (click)="editOpen = true"><ng-icon name="heroPencilSquare" class="h-4 w-4"></ng-icon>Edit</app-action-button>
+      <app-action-button *ngIf="canResend()" variant="primary" [disabled]="isResending" (click)="onResend()"><ng-icon name="heroArrowPath" class="h-4 w-4"></ng-icon>{{ isResending ? 'Resending…' : 'Resend' }}</app-action-button>
       <app-action-button *ngIf="canPlace()" variant="primary" [disabled]="isPlacing" (click)="onPlace()">{{ isPlacing ? 'Placing…' : 'Place order' }}</app-action-button>
-      <app-action-button variant="outline" (click)="onBack()">Back</app-action-button>
     </ng-container>
 
-    <div tabBody [ngSwitch]="tab">
-      <div *ngSwitchCase="'items'" class="space-y-6">
-        <p *ngIf="lpo?.poStatus === 'Pending for Approval' && (isSuperAdmin || canApprovePOs()) && (isSuperAdmin || !isOwnLpo()) && !isMyTurn()" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-          Waiting for the current approval stage — it is not your turn to decide yet.
-        </p>
-        <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows()" [currency]="currency()" numbered showTotals spread emptyMessage="No items"></app-detail-table>
-      </div>
+    <!-- right panel: same tab strip as the PR view -->
+    <div sidebar class="flex min-h-0 flex-1 flex-col">
+      <nav role="tablist"
+        class="dv-tabs sticky top-0 z-10 flex h-11 shrink-0 flex-nowrap items-center gap-x-4 overflow-x-auto overflow-y-hidden border-b border-gray-300 bg-white px-5 dark:border-neutral-700 dark:bg-[#111111]">
+        <button *ngFor="let t of panelTabs" type="button" role="tab" (click)="selectPanelTab(t.id)"
+          [attr.aria-selected]="panelTab === t.id"
+          class="-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 py-2.5 text-sm transition-colors"
+          [ngClass]="panelTab === t.id ? 'border-violet-600 dark:border-gray-100 text-gray-900 dark:text-gray-100 font-medium' : 'border-transparent text-gray-500 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'">
+          {{ t.label }}
+        </button>
+      </nav>
 
-      <div *ngSwitchCase="'summary'" class="space-y-6">
-        <app-detail-metrics [items]="summaryMetrics"></app-detail-metrics>
-        <div *ngIf="lpo?.termsAndCondition">
-          <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Terms and conditions</p>
-          <p class="whitespace-pre-line text-sm text-gray-800 dark:text-gray-200">{{ lpo.termsAndCondition }}</p>
-        </div>
-      </div>
+      <div class="dv-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel" [ngSwitch]="panelTab">
+        <ng-container *ngSwitchCase="'pricing'">
+          <app-detail-section title="Summary">
+            <dl class="text-[13px]">
+              <div *ngFor="let l of pricingLines" class="flex items-baseline justify-between gap-3 py-1">
+                <dt class="text-gray-600 dark:text-gray-400">{{ l.label }}</dt>
+                <dd class="tabular-nums text-gray-900 dark:text-gray-100">{{ currency() }} {{ l.value | number: '1.2-2' }}</dd>
+              </div>
+            </dl>
+          </app-detail-section>
+        </ng-container>
 
-      <app-detail-documents *ngSwitchCase="'documents'"
-        [documents]="documents"
-        [uploadable]="canManageDocuments() && !isUploadingFiles"
-        [removable]="canManageDocuments()"
-        [removeDetails]="documentRemoveDetails"
-        (upload)="startDocumentUpload()"
-        (open)="onDocumentOpen($event)"
-        (download)="onDocumentDownload($event)"
-        (remove)="onDocumentRemove($event)"></app-detail-documents>
+        <ng-container *ngSwitchCase="'grn'">
+          <p *ngIf="grnStatus === 'loading'" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Loading details&hellip;</p>
+          <p *ngIf="grnStatus === 'error'" class="py-6 text-center text-[13px] text-red-600 dark:text-red-400">Could not load GRNs. Reopen this tab to retry.</p>
+          <ng-container *ngIf="grnStatus === 'ready'">
+            <app-detail-table *ngIf="grnRows.length"
+              [columns]="grnColumns"
+              [rows]="grnRows"
+              [currency]="currency()"
+              numbered
+              [footRows]="grnFootRows"></app-detail-table>
+            <p *ngIf="!grnRows.length" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">No GRN has been created against this PO yet.</p>
+          </ng-container>
+        </ng-container>
 
-      <div *ngSwitchCase="'history'">
-        <app-detail-timeline [entries]="historyEntries" emptyMessage="No approval steps recorded for this LPO."></app-detail-timeline>
+        <app-detail-section *ngSwitchCase="'terms'" title="Terms">
+          <p class="whitespace-pre-line text-[13px] text-gray-800 dark:text-gray-200">{{ lpo.termsAndCondition }}</p>
+        </app-detail-section>
+
+        <app-detail-documents *ngSwitchCase="'documents'"
+          [documents]="documents"
+          [uploadable]="canManageDocuments() && !isUploadingFiles"
+          [removable]="canManageDocuments()"
+          [removeDetails]="documentRemoveDetails"
+          (upload)="startDocumentUpload()"
+          (open)="onDocumentOpen($event)"
+          (download)="onDocumentDownload($event)"
+          (remove)="onDocumentRemove($event)"></app-detail-documents>
+
+        <app-detail-timeline *ngSwitchCase="'approval'" [entries]="historyEntries" emptyMessage="No approval steps recorded for this LPO."></app-detail-timeline>
+        <app-detail-timeline *ngSwitchCase="'history'" [entries]="auditEntries" emptyMessage="No history recorded yet."></app-detail-timeline>
       </div>
+    </div>
+
+    <div tabBody class="flex h-full flex-col">
+      <p *ngIf="lpo?.poStatus === 'Pending for Approval' && (isSuperAdmin || canApprovePOs()) && (isSuperAdmin || !isOwnLpo()) && !isMyTurn()" class="m-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+        Waiting for the current approval stage — it is not your turn to decide yet.
+      </p>
+      <app-detail-table class="block min-h-0 flex-1"
+        [columns]="itemColumns"
+        [rows]="lineRows"
+        [footRows]="lineFootRows"
+        [currency]="currency()"
+        numbered
+        [striped]="false"
+        spread
+        bare
+        tools
+        storageKey="lpo-items-v3"
+        searchKey="detail"
+        searchTextKey="detailText"
+        emptyMessage="No items"></app-detail-table>
     </div>
   </app-detail-view-shell>
 </div>
+
+<app-initiate-lpo *ngIf="editOpen && editPurchaseId" [purchaseIdInput]="editPurchaseId" [initialSupplierId]="editSupplierId" [editPoId]="lpoId"
+  (issued)="onEditSaved()" (closed)="editOpen = false"></app-initiate-lpo>

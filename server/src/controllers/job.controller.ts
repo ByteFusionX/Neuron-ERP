@@ -9,6 +9,7 @@ import PurchaseRequest, { PurchaseRequestStatus } from '../models/purchaseReques
 import quotationModel, { quoteStatus } from '../models/quotation.model';
 import enquiryModel from '../models/enquiry.model';
 import { Invoice } from '../models/invoice.model';
+import { CustomerInvoice } from '../models/customerInvoice.model';
 import { releaseQuoteStockHolds } from './quoteStockHold.controller';
 import { cancelOpenFollowUp } from '../services/enquiryFollowUp.service';
 import { logEnquiryAudit } from '../services/enquiryAudit.service';
@@ -16,6 +17,7 @@ import Rfq, { RfqStage, RfqStatus } from '../models/rfq.model';
 import PurchaseOrder from '../models/purchaseOrder.model';
 import DeliveryNote from '../models/deliveryNote.model';
 import GRN from '../models/grn.model';
+import { ProformaInvoice } from '../models/proformaInvoice.model';
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { logAudit } from "../services/audit.service";
@@ -112,7 +114,7 @@ const buildJobGridQuery = (search: unknown, filters: unknown, sortKey: unknown, 
 };
 
 /** Lookups + LPO value shared by the page query and the totals query, so "of N" always matches the rows. */
-const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number, jobOwnMatch: Record<string, any> = {}): any[] => [
+export const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number, jobOwnMatch: Record<string, any> = {}): any[] => [
     // Conditions on the job's own fields run before the joins so they only join the jobs that can match.
     ...(Object.keys(jobOwnMatch).length ? [{ $match: jobOwnMatch }] : []),
     { $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' } },
@@ -160,7 +162,7 @@ const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number, jobOwnMatch
                     in: {
                         $reduce: {
                             input: { $ifNull: ['$quotation.dealData.additionalCosts', []] },
-                            initialValue: '$$baseLpoValue',
+                            initialValue: { $subtract: ['$$baseLpoValue', { $ifNull: ['$quotation.dealData.totalDiscount', 0] }] },
                             in: { $cond: [{ $eq: ['$$this.type', 'Customer Discount'] }, { $subtract: ['$$value', '$$this.value'] }, '$$value'] },
                         },
                     },
@@ -172,7 +174,7 @@ const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number, jobOwnMatch
 
 export const jobList = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, search, row, status, salesPerson, selectedMonth, selectedYear, access, userId, allocateStatus: allocateStatusFilter, filters: gridFilters, sortKey, sortDir, customer, department, fromDate, toDate } = req.body;
+        let { page, search, row, status, salesPerson, selectedMonth, selectedYear, access, userId, allocateStatus: allocateStatusFilter, allocateStatuses, filters: gridFilters, sortKey, sortDir, customer, department, fromDate, toDate } = req.body;
 
         page = Math.max(1, parseInt(page) || 1);
         row = Math.min(10000, Math.max(1, parseInt(row) || 15));
@@ -180,6 +182,13 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
 
         if (allocateStatusFilter && !JOB_ALLOCATE_STATUSES.includes(String(allocateStatusFilter))) {
             return res.status(400).json({ message: 'Invalid allocate status' });
+        }
+        // Several tabs at once (e.g. Customer Bills: Pending + On Hold); a single allocateStatus still wins.
+        if (!allocateStatusFilter && Array.isArray(allocateStatuses) && allocateStatuses.length) {
+            if (!allocateStatuses.every((s: unknown) => JOB_ALLOCATE_STATUSES.includes(String(s)))) {
+                return res.status(400).json({ message: 'Invalid allocate status' });
+            }
+            allocateStatusFilter = { $in: allocateStatuses.map(String) };
         }
 
         const matchFilters: any = {
@@ -191,6 +200,11 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
         const jobOwnClauses: any[] = [];
         if (status != null) { matchFilters.$and.push({ status }); jobOwnClauses.push({ status }); }
         if (allocateStatusFilter) matchFilters.allocateStatus = allocateStatusFilter;
+        // Held jobs of one type only (New Jobs lists just the ones waiting on an advance payment); other statuses pass through.
+        const onHoldType = ['advance-payment', 'other'].includes(String(req.body.onHoldType)) ? String(req.body.onHoldType) : null;
+        if (onHoldType && allocateStatusFilter?.$in?.includes(allocateStatus.OnHold)) {
+            matchFilters.$and.push({ $or: [{ allocateStatus: { $ne: allocateStatus.OnHold } }, { holdType: onHoldType }] });
+        }
         if (customer && ObjectId.isValid(String(customer))) matchFilters['quotation.client'] = new ObjectId(String(customer));
         if (department && ObjectId.isValid(String(department))) matchFilters['quotation.department'] = new ObjectId(String(department));
         // Created-date window (the report's From / To); both ends inclusive.
@@ -215,12 +229,13 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
 
         switch (access) {
             case 'created':
-                accessFilter = { 'salesPersonDetails._id': new ObjectId(userId) };
+                if (userId) accessFilter = { 'salesPersonDetails._id': new ObjectId(userId) };
                 break;
             case 'reported':
-                accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
+                if (userId) accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
                 break;
             case 'createdAndReported':
+                if (!userId) break;
                 reportedToUserIds.push(new ObjectId(userId));
                 accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
                 break;
@@ -236,6 +251,30 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
 
         const qatarUsdRate = await getUSDRated();
         const gridQuery = buildJobGridQuery(search, gridFilters, sortKey, sortDir);
+        // piState filters by the presence or status of the latest non-deleted proforma.
+        const piState: string | null = req.body.withoutPi === true ? 'none' : (['exists', 'none', 'inProcess', 'received', 'completed'].includes(req.body.piState) ? req.body.piState : null);
+        const piStateMatch: Record<string, any> = {
+            exists: { 'linkedPi.0': { $exists: true } },
+            none: { 'linkedPi.0': { $exists: false } },
+            inProcess: { 'linkedPi.0': { $exists: true }, 'linkedPi.0.status': { $nin: ['Received', 'Completed'] } },
+            received: { 'linkedPi.0.status': 'Received' },
+            completed: { 'linkedPi.0.status': 'Completed' },
+        };
+        const withoutPiStages: any[] = piState ? [
+            { $lookup: {
+                from: ProformaInvoice.collection.name,
+                let: { jobId: '$_id' },
+                pipeline: [
+                    { $match: { $expr: { $eq: ['$job', '$$jobId'] }, isDeleted: { $ne: true } } },
+                    { $sort: { createdAt: -1 } },
+                    { $limit: 1 },
+                    { $project: { _id: 1, status: 1 } },
+                ],
+                as: 'linkedPi',
+            } },
+            { $match: piStateMatch[piState] },
+            { $project: { linkedPi: 0 } },
+        ] : [];
         const ownMatch = (withAllocate: boolean) => ({
             isDeleted: { $ne: true },
             ...(jobOwnClauses.length ? { $and: jobOwnClauses } : {}),
@@ -243,6 +282,7 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
         });
         const baseStages = [
             ...jobBasePipeline(salesPerson, qatarUsdRate, ownMatch(true)),
+            ...withoutPiStages,
             { $match: { ...accessFilter, ...matchFilters } },
             { $match: gridQuery.filter },
         ];
@@ -251,6 +291,7 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
         const { allocateStatus: _ignored, ...matchWithoutStatus } = matchFilters;
         const statusCounts = jobModel.aggregate([
             ...jobBasePipeline(salesPerson, qatarUsdRate, ownMatch(false)),
+            ...withoutPiStages,
             { $match: { ...accessFilter, ...matchWithoutStatus } },
             { $group: { _id: '$allocateStatus', count: { $sum: 1 } } },
         ]);
@@ -289,7 +330,18 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                         },
                     },
                 },
-                { $project: { purchaseRequests: 0, costSupplierDetails: 0, salesPersonName: 0, departmentName: 0, procurementName: 0 } },
+                { $lookup: {
+                    from: ProformaInvoice.collection.name,
+                    let: { jobId: '$_id' },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ['$job', '$$jobId'] }, isDeleted: { $ne: true }, status: { $in: ['Received', 'Completed'] } } },
+                        { $limit: 1 },
+                        { $project: { _id: 1 } },
+                    ],
+                    as: 'paidPi',
+                } },
+                { $addFields: { advancePaid: { $gt: [{ $size: '$paidPi' }, 0] } } },
+                { $project: { paidPi: 0, purchaseRequests: 0, costSupplierDetails: 0, salesPersonName: 0, departmentName: 0, procurementName: 0 } },
             ]),
             jobModel.aggregate([
                 ...baseStages,
@@ -318,12 +370,13 @@ export const totalJob = async (req: Request, res: Response, next: NextFunction) 
 
         switch (access) {
             case 'created':
-                accessFilter = { 'salesPersonDetails._id': new ObjectId(userId) };
+                if (userId) accessFilter = { 'salesPersonDetails._id': new ObjectId(userId) };
                 break;
             case 'reported':
-                accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
+                if (userId) accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
                 break;
             case 'createdAndReported':
+                if (!userId) break;
                 reportedToUserIds.push(new ObjectId(userId));
                 accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
                 break;
@@ -413,15 +466,20 @@ export const updateJobStatus = async (req: Request, res: Response, next: NextFun
             return res.status(200).json({ success: true, status, allocateStatus: targetTab });
         }
 
-        await jobModel.updateOne({ _id: job._id }, { $set: { status, allocateStatus: targetTab, updatedDate: new Date() } });
+        const holdType = req.body.holdType === 'advance-payment' ? 'advance-payment' : 'other';
+        const holdNote = String(req.body.note ?? '').trim();
+        const holdReason = holdNote ? `${reason} — ${holdNote}` : reason;
+        await jobModel.updateOne({ _id: job._id }, status === jobStatus.OnHold
+            ? { $set: { status, allocateStatus: targetTab, holdReason, holdType, updatedDate: new Date() } }
+            : { $set: { status, allocateStatus: targetTab, updatedDate: new Date() }, $unset: { holdReason: '', holdType: '' } });
 
         await logAudit(req, {
             entityType: 'job', entityId: job._id, entityLabel: job.jobId, action: 'status-changed',
-            summary: `Status changed to ${status}${reason ? ` — ${reason}` : ''}`,
+            summary: `Status changed to ${status}${reason ? ` — ${status === jobStatus.OnHold ? holdReason : reason}` : ''}`,
             changes: [
                 { label: 'Status', from: String(job.status), to: String(status) },
                 ...(job.allocateStatus !== targetTab ? [{ label: 'Allocation status', from: String(job.allocateStatus), to: targetTab }] : []),
-                ...(reason ? [{ label: 'Reason', to: reason }] : []),
+                ...(reason ? [{ label: 'Reason', to: status === jobStatus.OnHold ? holdReason : reason }] : []),
             ],
         });
         return res.status(200).json({ success: true, status, allocateStatus: targetTab });
@@ -841,7 +899,7 @@ export const oneJobSheet = async (req: Request, res: Response, next: NextFunctio
                             in: {
                                 $reduce: {
                                     input: '$quotation.dealData.additionalCosts',
-                                    initialValue: '$$baseLpoValue',
+                                    initialValue: { $subtract: ['$$baseLpoValue', { $ifNull: ['$quotation.dealData.totalDiscount', 0] }] },
                                     in: {
                                         $cond: [
                                             { $eq: ['$$this.type', 'Customer Discount'] },
@@ -988,6 +1046,7 @@ export const markJobLost = async (req: Request, res: Response, next: NextFunctio
         const previous = String(job.allocateStatus);
         const updated = await jobModel.findByIdAndUpdate(id, {
             $set: { allocateStatus: allocateStatus.Lost, status: jobStatus.Cancelled, lostReason: reason, lostAt: now, lostBy: actor?._id, updatedDate: now },
+            $unset: { holdReason: '', holdType: '' },
         }, { new: true });
         if (!updated) return res.status(404).json({ success: false, message: 'Job not found' });
 
@@ -1014,9 +1073,9 @@ export const markJobLost = async (req: Request, res: Response, next: NextFunctio
         }
 
         // The job's stock goes back: its reservation is released, and a delivery note posted but not yet
-        // completed (Ready for Dispatch) returns what it took out.
+        // completed (Ready to Deliver) returns what it took out.
         await releaseStock({ job: job._id }, `Job ${job.jobId} marked lost`, actor?._id);
-        const postedDns = await DeliveryNote.find({ jobId: job._id, status: 'Ready for Dispatch' }).select('_id dnNo').lean();
+        const postedDns = await DeliveryNote.find({ jobId: job._id, status: 'Ready to Deliver' }).select('_id dnNo').lean();
         for (const dn of postedDns) {
             await reverseByReference('DeliveryNote', dn._id, actor?._id, `Job ${job.jobId} marked lost`);
         }
@@ -1032,7 +1091,7 @@ export const markJobLost = async (req: Request, res: Response, next: NextFunctio
         const [prs, pos, dns, invoices] = await Promise.all([
             PurchaseRequest.updateMany({ jobId: job._id, status: { $in: [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress, PurchaseRequestStatus.Pending, PurchaseRequestStatus.Approved] } }, { $set: { status: PurchaseRequestStatus.OnHoldCancelled } }),
             PurchaseOrder.updateMany({ jobId: job._id, poStatus: { $in: ['Draft', 'Pending for Approval', 'Approved'] } }, { $set: { poStatus: 'Rejected' } }),
-            DeliveryNote.updateMany({ jobId: job._id, status: { $in: ['Draft', 'Ready for Dispatch'] } }, { $set: { status: 'Cancelled' } }),
+            DeliveryNote.updateMany({ jobId: job._id, status: { $in: ['Draft', 'Ready to Deliver'] } }, { $set: { status: 'Cancelled' } }),
             Invoice.updateMany({ jobId: job._id, status: { $in: ['Pending to submit', 'PI Submitted', 'Partial invoicing', 'Hold'] } }, { $set: { status: 'Cancelled' } }),
         ]);
         const cascade = [
@@ -2028,6 +2087,21 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
             });
         }
 
+        const customerInvoices = await CustomerInvoice.find({ job: new ObjectId(jobId) }).populate('createdBy', 'firstName lastName').lean();
+        for (const inv of customerInvoices as any[]) {
+            timeline.push({
+                id: `invoice-created-${inv._id}`,
+                timestamp: inv.createdAt,
+                pipeline: 'invoice',
+                eventType: 'created',
+                title: `Invoice ${inv.invoiceNo} Created`,
+                description: `Customer invoice ${inv.invoiceNo} was created${inv.dnNo ? ` against ${inv.dnNo}` : ''}`,
+                performedBy: inv.createdBy ? { _id: inv.createdBy._id, firstName: inv.createdBy.firstName, lastName: inv.createdBy.lastName } : null,
+                metadata: { invoiceNo: inv.invoiceNo, dnNo: inv.dnNo, amount: inv.amount, paymentMethod: inv.paymentMethod, status: inv.status },
+                status: 'success'
+            });
+        }
+
         timeline.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
         return res.status(200).json({
@@ -2046,6 +2120,127 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
         });
     } catch (error) {
         console.error('Error fetching job history:', error);
+        next(error);
+    }
+};
+
+/** Per-stage line rows (PR, PO, GRN, DN) for the job sheet view's side panel. */
+export const getJobProcurement = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { jobId } = req.params;
+        if (!jobId || !ObjectId.isValid(jobId)) {
+            return res.status(400).json({ success: false, message: "Invalid job ID", status: 400 });
+        }
+        const id = new ObjectId(jobId);
+        const [prs, pos, grns, dns, invs]: any[][] = await Promise.all([
+            PurchaseRequest.find({ jobId: id, isDeleted: { $ne: true } }).lean(),
+            PurchaseOrder.find({ jobId: id }).populate('supplierId', 'supplierName').lean(),
+            GRN.find({ jobId: id, isDeleted: { $ne: true } }).lean(),
+            DeliveryNote.find({ jobId: id }).lean(),
+            // Only invoices raised from a delivery note; advance-payment invoices have none and are left out.
+            CustomerInvoice.find({ job: id, deliveryNote: { $exists: true, $ne: null } }).lean(),
+        ]);
+
+        const key = (s: unknown) => String(s ?? '').trim().toLowerCase();
+        const poById = new Map(pos.map((po) => [String(po._id), po]));
+        // Accepted/rejected totals per PO line, summed over that PO's GRNs.
+        const received = new Map<string, { accepted: number; rejected: number }>();
+        for (const grn of grns) {
+            for (const it of grn.items ?? []) {
+                const k = `${grn.purchaseOrderId}|${key(it.itemDescription)}`;
+                const sum = received.get(k) ?? { accepted: 0, rejected: 0 };
+                sum.accepted += Number(it.acceptedQty) || 0;
+                sum.rejected += Number(it.rejectedQty) || 0;
+                received.set(k, sum);
+            }
+        }
+
+        // A line's value uses the awarded supplier price(s); any qty not awarded yet stays at the deal unit cost.
+        // Qty already on POs, per supplier and item.
+        const poQty = new Map<string, number>();
+        for (const po of pos) {
+            for (const it of po.items ?? []) {
+                for (const who of [String(po.supplierId?._id ?? ''), key(po.supplierId?.supplierName)]) {
+                    if (!who) continue;
+                    const k = `${who}|${key(it.detail)}`;
+                    poQty.set(k, (poQty.get(k) ?? 0) + (Number(it.quantity) || 0));
+                }
+            }
+        }
+        const poQtyFor = (id: unknown, name: unknown, desc: unknown) =>
+            poQty.get(`${String(id ?? '')}|${key(desc)}`) ?? poQty.get(`${key(name)}|${key(desc)}`) ?? 0;
+
+        // One row per supplier a line is awarded to (at that supplier's price); qty not awarded yet stays on the line at the deal unit cost.
+        const pr = prs.flatMap((p) => (p.items ?? []).flatMap((item: any) => (item.itemDetails ?? []).flatMap((d: any) => {
+            const qty = Number(d.quantity) || 0;
+            const dealCost = Number(d.unitCost) || 0;
+            const base = { lineKey: `${p._id}|${d._id ?? key(d.detail)}`, docId: p._id, docNo: p.purchaseNo, description: d.detail, acceptedQty: null, rejectedQty: null, status: p.status, date: p.createdAt ?? p.createdDate };
+            const awarded = (d.comparisons ?? []).filter((c: any) => c.selected && Number(c.unitPrice) > 0);
+            const rows: any[] = awarded.map((c: any) => {
+                const q = Number(c.awardedQty) || Number(c.quantity) || 0;
+                return { ...base, totalQty: q, poQty: poQtyFor(c.supplierId, c.supplierName, d.detail), value: q * Number(c.unitPrice), party: c.supplierName ?? '' };
+            });
+            const left = qty - rows.reduce((s, r) => s + r.totalQty, 0);
+            if (!rows.length || left > 0) {
+                rows.push({ ...base, totalQty: rows.length ? left : qty, poQty: poQtyFor(d.supplierId, d.supplierName, d.detail), value: (rows.length ? left : qty) * dealCost, party: d.supplierName ?? '' });
+            }
+            return rows;
+        })));
+
+        const po = pos.flatMap((p) => (p.items ?? []).map((it: any) => {
+            const sum = received.get(`${p._id}|${key(it.detail)}`);
+            return {
+                docId: p._id, docNo: p.poNo, description: it.detail,
+                totalQty: Number(it.quantity) || 0,
+                // A PO rejected at approval never reaches a GRN, so its whole line counts as rejected.
+                acceptedQty: sum?.accepted ?? 0,
+                rejectedQty: p.poStatus === 'Rejected' ? Number(it.quantity) || 0 : sum?.rejected ?? 0,
+                // Qty counts as approved once the PO has cleared approval.
+                approvedQty: ['Approved', 'Placed', 'Closed'].includes(p.poStatus) ? Number(it.quantity) || 0 : 0,
+                value: Number(it.totalCost) || (Number(it.quantity) || 0) * (Number(it.unitCost) || 0),
+                party: p.supplierId?.supplierName ?? '', status: p.poStatus, date: p.createdAt,
+            };
+        }));
+
+        const grn = grns.flatMap((g) => {
+            const p: any = poById.get(String(g.purchaseOrderId));
+            return (g.items ?? []).map((it: any) => {
+                const line = p?.items?.find((x: any) => key(x.detail) === key(it.itemDescription));
+                return {
+                    docId: g._id, docNo: g.grnNo, description: it.itemDescription,
+                    totalQty: Number(it.receivedQty) || 0,
+                    acceptedQty: Number(it.acceptedQty) || 0, rejectedQty: Number(it.rejectedQty) || 0,
+                    value: (Number(it.acceptedQty) || 0) * (Number(line?.unitCost) || 0),
+                    party: p?.supplierId?.supplierName ?? '', status: g.outcomeStatus ?? g.inspectionResult, date: g.grnDate ?? g.createdAt,
+                };
+            });
+        });
+
+        const dn = dns.flatMap((d) => (d.items ?? []).map((it: any) => {
+            const qty = Number(it.currentDeliveryQty) || 0;
+            const rejected = Number(it.rejectedQty) || 0;
+            const delivered = ['Delivered', 'Rejected', 'Partially Rejected'].includes(d.status);
+            return {
+                docId: d._id, docNo: d.dnNo, description: it.description,
+                totalQty: qty, acceptedQty: delivered ? Math.max(qty - rejected, 0) : null, rejectedQty: rejected,
+                value: qty * (Number(it.unitSellingPrice) || 0),
+                party: d.clientName ?? '', status: d.status, date: d.dnDate ?? d.createdDate,
+            };
+        }));
+
+        // Customer invoices bill delivered qty; accepted/rejected don't apply, and a line without its own amount shows the invoice total.
+        const invoice = invs.flatMap((inv) => {
+            const lines: any[] = inv.items?.length ? inv.items : [{ description: '', quantity: 0, totalCost: inv.amount }];
+            return lines.map((it: any) => ({
+                docId: inv._id, docNo: inv.invoiceNo, description: it.description,
+                totalQty: Number(it.quantity) || 0, acceptedQty: null, rejectedQty: null,
+                value: Number(it.totalCost) || 0,
+                party: inv.client?.name ?? '', status: inv.status, date: inv.createdAt,
+            }));
+        });
+
+        res.status(200).json({ success: true, data: { pr, po, grn, dn, invoice } });
+    } catch (error) {
         next(error);
     }
 };

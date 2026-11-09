@@ -62,7 +62,7 @@ import { ModalService } from 'src/app/shared/components/modal';
 import { ResetWorkflowComponent, ResetWorkflowModalData } from 'src/app/modules/presales/pages/reset-workflow/reset-workflow.component';
 import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { ApprovalStep, WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
-import { UpdateDealsheetComponent, UpdateDealsheetData } from '../update-dealsheet/update-dealsheet.component';
+import { DealFormComponent, UpdateDealsheetData } from 'src/app/modules/quotations/pages/deal-form/deal-form.component';
 
 /** Matches the grid's default page size so the Rows selector is never blank. */
 const DEFAULT_PAGE_SIZE = 15;
@@ -79,7 +79,7 @@ const DEFAULT_PAGE_SIZE = 15;
   styleUrls: ['./deal-sheet-list.component.css'],
   providers: [NumberFormatterPipe, DatePipe],
   imports: [
-    UpdateDealsheetComponent,
+    DealFormComponent,
     NgIf,
     AsyncPipe,
     NgClass,
@@ -153,7 +153,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'item', label: 'Item', wrap: true, clamp: true, tooltipKey: 'item' },
+    { key: 'item', label: 'Item', type: 'html', truncate: true, tooltipKey: 'itemText' },
     { key: 'qty', label: 'Qty', type: 'number' },
     { key: 'price', label: 'Price', type: 'currency' },
     { key: 'sellingPrice', label: 'Selling Price', type: 'currency' },
@@ -287,7 +287,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       {
         key: 'description',
         sortable: true,
-        label: 'Description',
+        label: 'Subject',
         valueGetter: (r) => r.subject,
       },
       {
@@ -408,7 +408,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     all: 'dealsheets',
     pending: 'pendings',
     approved: 'approved',
-    rejected: 'rejecteds',
+    rejected: 'rejected',
     revoked: 'revokeds',
   };
 
@@ -631,17 +631,19 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       );
       return;
     }
-    const { confirmed } = await this.confirm.open({
+    const { confirmed, reason } = await this.confirm.open({
       tone: 'warning',
       title: 'Revoke this deal?',
       message:
-        'This will permanently delete the created job and the deal status will change back to pending.',
-      consequence: 'This cannot be undone.',
+        'The deal goes back to pending and its job is put on hold with this reason. If the re-submitted deal is rejected, the job returns to the status it had.',
+      reason: true,
+      reasonLabel: 'Reason for revoking',
+      reasonMaxLength: 500,
       confirmLabel: 'Revoke',
     });
-    if (!confirmed) return;
+    if (!confirmed || !reason) return;
 
-    this._quoteService.revokeDeal(row._id, this.userId).subscribe({
+    this._quoteService.revokeDeal(row._id, this.userId, reason).subscribe({
       next: () => {
         this.toaster.success('Deal revoked');
         this.getDeals(true);
@@ -651,7 +653,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** `UpdateDealsheetComponent` seeds its form from `quoteItems` (the deal's own updated items,
+  /** `DealFormComponent` (update mode) seeds its form from `quoteItems` (the deal's own updated items,
    *  same as what the old view-dealsheet page passed via router state). */
   updateOpen = false;
   updateRow: Quotatation | null = null;
@@ -691,15 +693,27 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
 
   itemRows(row: Quotatation): Record<string, any>[] {
     const rows: Record<string, any>[] = [];
+    const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     (row.dealData?.updatedItems ?? []).forEach((item) => {
       (item.itemDetails ?? []).forEach((d) => {
         if (!d.dealSelected) return;
         rows.push({
-          item: d.detail,
+          item: esc(d.detail),
+          itemText: d.detail,
           qty: d.quantity,
           price: d.unitCost,
           sellingPrice: d.unitSellingPrice,
           amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0),
+        });
+        // parts of the line render as 1.1, 1.2 ... sub rows (not part of the totals)
+        ((d as any).components ?? []).forEach((c: any) => {
+          rows.push({
+            _sub: true,
+            item: esc(c.description),
+            itemText: c.description,
+            qty: (Number(c.quantity) || 0) * (Number(d.quantity) || 0),
+            price: c.unitCost,
+          });
         });
       });
     });

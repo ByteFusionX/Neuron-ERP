@@ -7,17 +7,74 @@ import Quotation from "../models/quotation.model";
 import Rfq, { RfqType } from "../models/rfq.model";
 import jobModel from "../models/job.model";
 import mongoose from "mongoose";
+import Product from "../models/products.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { getNextSequence } from "../models/counter.model";
+import { issueDocNo, peekDocNo } from "../services/docNumber.service";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import Employee from "../models/employee.model";
 import { getWorkflowSteps, updateApprovalStatus, rebuildPendingRoute } from "../services/workflow.service";
 import { recordPrices } from "../services/supplierPrice.service";
-import { notifyByPrivilege } from "../services/notify.service";
+import { notify, notifyByPrivilege } from "../services/notify.service";
+import { recipientsExcluding, safely, viewersOf } from "../services/workflowNotify.service";
 import { SupplierPriceSource } from "../models/supplierPrice.model";
+import { logAudit } from "../services/audit.service";
+
+/** Copies each line's product item code and part no onto the line, so the PO (and the GRN built from it) carries them. */
+const stampItemCodes = async (items: any[]) => {
+  const ids = Array.from(new Set((items || []).map((i: any) => String(i?.partNo?._id ?? i?.partNo ?? '')).filter((id) => mongoose.Types.ObjectId.isValid(id))));
+  if (!ids.length) return items;
+  const products: any[] = await Product.find({ _id: { $in: ids } }, { itemCode: 1, partNo: 1 }).lean();
+  const byId = new Map(products.map((p) => [String(p._id), p]));
+  (items || []).forEach((item: any) => {
+    const product = byId.get(String(item?.partNo?._id ?? item?.partNo ?? ''));
+    if (!product) return;
+    item.itemCode = product.itemCode || item.itemCode || '';
+    item.productPartNo = product.partNo || item.productPartNo || '';
+  });
+  return items;
+};
+
+/** Stable key of a line: its catalogue product (PR productId, or the id a PO item keeps in partNo), else the description. */
+const lineItemKey = (entry: any): string => {
+  const candidate = entry?.productId ?? entry?.partNo;
+  const id = String((candidate && typeof candidate === "object" ? candidate._id ?? candidate : candidate) ?? "");
+  return /^[a-f0-9]{24}$/i.test(id) ? id : entry?.detail;
+};
+
+/** What an edit actually changed on a PO, as label / from / to rows for the history. */
+const diffPoEdits = (before: any, edits: any): { label: string; from?: string; to?: string }[] => {
+  const out: { label: string; from?: string; to?: string }[] = [];
+  const text = (v: any) => (v === undefined || v === null || v === '' ? '—' : String(v));
+  const labels: Record<string, string> = { placeOfDelivery: 'Place of delivery', shippingTerms: 'Shipping terms', subject: 'Subject', termsAndCondition: 'Terms and conditions', discount: 'Discount' };
+  Object.keys(labels).forEach((k) => {
+    if (edits[k] !== undefined && text(edits[k]) !== text(before?.[k])) out.push({ label: labels[k], from: text(before?.[k]), to: text(edits[k]) });
+  });
+  if (edits.poDate && new Date(edits.poDate).getTime() !== new Date(before?.poDate).getTime()) {
+    out.push({ label: 'PO date', from: text(before?.poDate && new Date(before.poDate).toISOString().slice(0, 10)), to: new Date(edits.poDate).toISOString().slice(0, 10) });
+  }
+  if (Array.isArray(edits.items)) {
+    const keyOf = (i: any) => String(i.prLineKey ?? i.detail);
+    const old = new Map<string, any>((before?.items || []).map((i: any) => [keyOf(i), i]));
+    const seen = new Set<string>();
+    edits.items.forEach((n: any) => {
+      const o = old.get(keyOf(n));
+      seen.add(keyOf(n));
+      const name = String(n.detail ?? 'Item').slice(0, 60);
+      if (!o) { out.push({ label: `${name} · added`, from: '—', to: `${n.quantity} × ${n.unitCost}` }); return; }
+      if (Number(o.quantity) !== Number(n.quantity)) out.push({ label: `${name} · quantity`, from: text(o.quantity), to: text(n.quantity) });
+      if (Number(o.unitCost) !== Number(n.unitCost)) out.push({ label: `${name} · unit price`, from: text(o.unitCost), to: text(n.unitCost) });
+    });
+    old.forEach((o, k) => { if (!seen.has(k)) out.push({ label: `${String(o.detail ?? 'Item').slice(0, 60)} · removed`, from: `${o.quantity} × ${o.unitCost}`, to: '—' }); });
+  }
+  return out;
+};
+
+const logPoAudit = (req: Request, po: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
+  logAudit(req, { entityType: 'purchaseOrder', entityId: po._id, entityLabel: po.poNo, action, summary, changes });
 
 // LPO approval runs on its own "poApproval" workflow (Settings > Workflow > PO Approval); the amount is the LPO total after discount.
 const PO_WORKFLOW = 'poApproval';
@@ -80,10 +137,39 @@ const lineSuppliers = (detail: any): { supplierId: any; quantity: number; unitPr
   return [{ supplierId: detail.supplierId, quantity: Number(detail.quantity) || 0, unitPrice: Number(detail.unitCost), comparison: own || {} }];
 };
 
+/**
+ * A price changed on the LPO is the price the supplier really charges, so the PR line follows it: the supplier's
+ * selected comparison (or the line cost when nobody was selected). Quantity is left alone: what the LPO does not
+ * take stays free on the PR for another LPO to this supplier, or for another award once the PR is revoked.
+ */
+const syncPrPrices = async (pr: any, supplierId: any, items: any[]) => {
+  if (!pr?._id) return;
+  for (const item of items || []) {
+    if (!item?.prLineKey) continue;
+    const price = Number(item.unitCost);
+    if (!(price >= 0)) continue;
+    const detail = (pr.items || []).flatMap((i: any) => i.itemDetails || []).find((d: any) => String(d._id) === String(item.prLineKey));
+    if (!detail) continue;
+    const hasWinner = (detail.comparisons || []).some((c: any) => c.selected === true && c.supplierId && String(c.supplierId) === String(supplierId));
+    if (hasWinner) {
+      await purchaseRequest.updateOne(
+        { _id: pr._id },
+        { $set: { 'items.$[].itemDetails.$[d].comparisons.$[c].unitPrice': price } },
+        { arrayFilters: [{ 'd._id': detail._id }, { 'c.supplierId': new mongoose.Types.ObjectId(String(supplierId)), 'c.selected': true }] }
+      );
+    } else {
+      await purchaseRequest.updateOne(
+        { _id: pr._id },
+        { $set: { 'items.$[].itemDetails.$[d].unitCost': price } },
+        { arrayFilters: [{ 'd._id': detail._id }] }
+      );
+    }
+  }
+};
+
 export const createPurchaseOrder = async (req: Request, res: Response) => {
   try {
     const {
-      poNo,
       items,
       supplierId,
       purchaseId,
@@ -121,10 +207,10 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     }
 
     // Validate required fields
-    if (!poNo || !supplierId || !purchaseId || !items || !Array.isArray(items) || items.length === 0) {
+    if (!supplierId || !purchaseId || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields: poNo, supplierId, purchaseId, and items are required",
+        message: "Missing required fields: supplierId, purchaseId, and items are required",
       });
     }
 
@@ -178,7 +264,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
 
     // Quantities are checked per PR line (prLineKey = PR itemDetail _id), so two lines with the same part stay apart.
     // An item without prLineKey (older payloads) falls back to the first awarded line with the same part/detail.
-    const itemKey = (entry: any) => (entry.partNo ? entry.partNo.toString() : entry.detail);
+    const itemKey = lineItemKey;
     const allowedByItem = new Map<string, number>();
     const lineByItemKey = new Map<string, string>();
     (existingPurchaseRequest.items || []).forEach((item: any) => {
@@ -240,7 +326,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
 
     // Create purchase order data with validated fields
     const purchaseOrderData: any = {
-      poNo,
+      poNo: "",
       items,
       supplierId,
       purchaseId,
@@ -302,14 +388,21 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     purchaseOrderData.approvalStatus = workflowSteps;
     if (workflowSteps.length === 0) purchaseOrderData.poStatus = 'Approved';
 
+    // The number shown on the form is only a preview; it is taken now, so abandoned forms never use one up.
+    purchaseOrderData.poNo = await issueDocNo('PO');
+    await stampItemCodes(items);
     const purchaseOrder = new PurchaseOrder(purchaseOrderData);
     await purchaseOrder.save();
+
+    try { await syncPrPrices(existingPurchaseRequest, supplierId, items); } catch (e) { console.error('PR price sync failed:', e); }
+    await logPoAudit(req, purchaseOrder, 'created', `Purchase order ${purchaseOrder.poNo} created`);
+    if (purchaseOrder.poStatus === 'Pending for Approval') await logPoAudit(req, purchaseOrder, 'submitted', 'Sent for approval');
 
     // The PO price becomes the supplier's last price for each product, ahead of any comparison price.
     await recordPrices(
       items.map((item: any) => ({ supplierId, productId: item.partNo, price: Number(item.unitCost) })),
       SupplierPriceSource.PO,
-      { currency: String(purchaseOrder.currency || existingPurchaseRequest.currency), sourceNo: poNo, sourceId: purchaseOrder._id, employeeId: employee._id }
+      { currency: String(purchaseOrder.currency || existingPurchaseRequest.currency), sourceNo: purchaseOrder.poNo, sourceId: purchaseOrder._id, employeeId: employee._id }
     );
 
     const socket = req.app.get('io') as Server;
@@ -428,6 +521,8 @@ export const reissuePurchaseOrder = async (req: Request, res: Response) => {
         message: "Purchase order not found",
       });
     }
+
+    await logPoAudit(req, updatedOrder, 'reissued', `Purchase order ${updatedOrder.poNo} re-issued`);
 
     // No issuedQuantity bookkeeping needed here: reissue updates this same
     // PO document's items in place, so the next derived-sum read (see
@@ -878,7 +973,9 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
             const partNoMatch = poPartNoId && grnItem.partNo && String(grnItem.partNo) === String(poItem.partNo?.partNo);
             const descriptionMatch = poItem.detail && grnItem.itemDescription &&
               poItem.detail.trim().toLowerCase() === grnItem.itemDescription.trim().toLowerCase();
-            if (partNoMatch || descriptionMatch) {
+            const codeMatch = String(poItem.itemCode || '').trim() && String(grnItem.itemCode || '').trim()
+              && String(poItem.itemCode).trim().toLowerCase() === String(grnItem.itemCode).trim().toLowerCase();
+            if (partNoMatch || descriptionMatch || codeMatch) {
               issuedQty += Number(grnItem.acceptedQty) || 0;
             }
           }
@@ -1017,7 +1114,7 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
         : [];
     const normalizedStatusFilters = statusFilters.map((value) => value.trim()).filter(Boolean);
 
-    // Vendor bills "Upcoming": placed orders that do not have any active GRN yet.
+    // Supplier bills "Upcoming": placed orders that do not have any active GRN yet.
     if (isVendorBillsView && normalizedStatusFilters.length === 1 && normalizedStatusFilters[0] === 'Placed') {
       finalMatchStage.poStatus = 'Placed';
       finalMatchStage['grns.0'] = { $exists: false };
@@ -1030,7 +1127,8 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
     }
 
     if (receiptStatus) {
-      finalMatchStage.receiptStatus = receiptStatus;
+      const receiptStatuses = String(receiptStatus).split(",").map((s) => s.trim()).filter(Boolean);
+      finalMatchStage.receiptStatus = receiptStatuses.length > 1 ? { $in: receiptStatuses } : receiptStatuses[0];
     }
 
     if (isVendorBillsView && readyToDeliver === 'true') {
@@ -1261,27 +1359,9 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
   }
 };
 
-const seedLpoSequence = (year: string) => async (): Promise<number> => {
-  const lastOrder = await PurchaseOrder.findOne(
-    { poNo: { $regex: `^NTP-LP-\\d{4}-${year}$` } }
-  ).sort({ poNo: -1 });
-
-  if (lastOrder && lastOrder.poNo) {
-    const parts = lastOrder.poNo.split("-");
-    if (parts.length >= 3 && !isNaN(parseInt(parts[2]))) {
-      return parseInt(parts[2]);
-    }
-  }
-  return 0;
-};
-
 export const generateLpoNo = async (req: Request, res: Response) => {
   try {
-    const now = new Date();
-    const year = now.getFullYear().toString().slice(-2);
-
-    const nextNumber = await getNextSequence(`poNo-${year}`, seedLpoSequence(year));
-    const poNo = `NTP-LP-${nextNumber.toString().padStart(4, "0")}-${year}`;
+    const poNo = await peekDocNo('PO');
 
     return res.status(200).json({
       success: true,
@@ -1352,6 +1432,8 @@ export const updatePurchaseOrderStatus = async (req: Request, res: Response) => 
       });
     }
 
+    if (updatedPurchaseOrder.poStatus === 'Pending for Approval') await logPoAudit(req, updatedPurchaseOrder, 'submitted', 'Sent for approval');
+
     if (updatedPurchaseOrder.poStatus === 'Pending for Approval' && updatedPurchaseOrder.approvalStatus?.length) {
       const employee = await getEmployeeData(req.user);
       await notifyLpoApprovers(updatedPurchaseOrder, employee?._id, req.app.get('io') as Server);
@@ -1415,13 +1497,14 @@ export const placePurchaseOrder = async (req: Request, res: Response) => {
         message: exists ? "Only an approved LPO can be placed" : "Purchase order not found",
       });
     }
+    await logPoAudit(req, placed, 'placed', `Placed with the supplier, delivery expected ${expected.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}${note ? ` — ${note}` : ''}`);
     // The receiving team hears now, and again on the expected day.
     const supplierName = (placed.supplierId as any)?.supplierName || 'the supplier';
     const dateText = expected.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const grnFilter = { privilegeKey: 'grn' as any, checkFunction: (p: any) => !!p.grn?.viewReport && p.grn.viewReport !== 'none' };
     const base = { referenceModel: 'PurchaseOrder', sentBy: employee._id, referenceId: placed._id, additionalData: { purchaseOrderId: placed._id.toString() } };
     await notifyByPrivilege({ ...base, type: 'LpoPlaced', title: 'LPO arriving', message: `${placed.poNo} from ${supplierName} is expected on ${dateText}` }, grnFilter);
-    // Finance sees the commitment early in Vendor Bills > Upcoming.
+    // Finance sees the commitment early in Supplier Bills > Upcoming.
     const billFilter = { privilegeKey: 'invoice' as any, checkFunction: (p: any) => !!p.invoice?.viewReport && p.invoice.viewReport !== 'none' };
     await notifyByPrivilege({ ...base, type: 'LpoPlacedBilling', title: 'LPO placed', message: `${placed.poNo} to ${supplierName} was placed, delivery expected ${dateText}` }, billFilter);
     const dueAt = new Date(expected);
@@ -1576,12 +1659,34 @@ export const cancelPurchaseOrder = async (req: Request, res: Response) => {
       cancelled.push({ prLineKey: item.prLineKey, detail: item.detail, qty });
     }
 
+    const wasPlaced = po.poStatus === 'Placed';
     po.cancelHistory.push({ cancelledBy: employee._id, reason, date: new Date(), lines: cancelled });
     const ordered = (po.items || []).reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
     if (ordered <= 0) po.poStatus = 'Cancelled';
     else if (po.poStatus === 'Placed' && lines.every((l: any) => Number(po.items[l.index].quantity) <= l.receivedQty + 0.0001)) po.poStatus = 'Closed';
     po.markModified('items');
     await po.save();
+
+    await logPoAudit(req, po, po.poStatus === 'Cancelled' ? 'cancelled' : 'partly-cancelled',
+      `${po.poStatus === 'Cancelled' ? 'Cancelled' : 'Partly cancelled'} — ${reason}`,
+      cancelled.map((c) => ({ label: c.detail, to: `${c.qty} cancelled` })));
+
+    // The buyer hears about it, and so does the receiving team when they were expecting the delivery.
+    await safely('LpoCancelled', async () => {
+      const whole = po.poStatus === 'Cancelled';
+      const lineText = cancelled.map((c) => `${c.qty} x ${c.detail}`).join(', ');
+      await notify({
+        type: 'LpoCancelled',
+        referenceModel: 'PurchaseOrder',
+        title: whole ? 'LPO cancelled' : 'LPO partly cancelled',
+        message: whole ? `${po.poNo} was cancelled: ${reason}` : `${po.poNo} was partly cancelled (${lineText}): ${reason}`,
+        sentBy: employee._id?.toString(),
+        recipients: recipientsExcluding([po.createdBy, ...(wasPlaced ? await viewersOf('grn') : [])], employee),
+        referenceId: po._id,
+        additionalData: { purchaseOrderId: po._id.toString() },
+        channels: ['inapp', 'push', 'email'],
+      });
+    });
 
     return res.status(200).json({
       success: true,
@@ -1683,6 +1788,8 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
         runValidators: true,
       }
     ).populate('approvedHistory.approvedBy', 'firstName lastName');
+
+    await logPoAudit(req, purchaseOrder, 'approved', `${nextStatus === 'Approved' ? 'Approved (final step)' : 'Approved (step)'}${comment ? ` — ${comment}` : ''}`);
 
     const socket = req.app.get('io') as Server;
     if (nextStatus === 'Pending for Approval') {
@@ -1812,6 +1919,8 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
       }
     ).populate('rejectedHistory.rejectedBy', 'firstName lastName');
 
+    await logPoAudit(req, purchaseOrder, 'rejected', `Rejected${comment ? ` — ${comment}` : ''}`);
+
     // No issuedQuantity bookkeeping needed: 'Rejected' POs are already
     // excluded from the derived-sum queries in getSuppliersForPurchaseRequest
     // / getItemsForPurchaseRequest, so this PO stops counting automatically.
@@ -1846,6 +1955,99 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
       message: "Failed to reject purchase order",
       error: error.message,
     });
+  }
+};
+
+/** Sends a rejected LPO back through the PO approval workflow; the route is rebuilt from the current settings. */
+export const resendPurchaseOrder = async (req: Request, res: Response) => {
+  try {
+    const employee = await getEmployeeData(req.user);
+    if (!employee) return res.status(401).json({ success: false, message: "Employee not found" });
+    const isSuper = /^superadmin$/i.test(employee.category?.role ?? "");
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: "Invalid Purchase Order ID" });
+    }
+    const purchaseOrder = await PurchaseOrder.findById(req.params.id);
+    if (!purchaseOrder) return res.status(404).json({ success: false, message: "Purchase order not found" });
+    if (purchaseOrder.poStatus !== 'Rejected') {
+      return res.status(400).json({ success: false, message: `Only a rejected LPO can be resent (this one is ${purchaseOrder.poStatus})` });
+    }
+    if (!isSuper && purchaseOrder.createdBy?.toString() !== employee._id?.toString()) {
+      return res.status(403).json({ success: false, message: "Only the person who raised this LPO can resend it" });
+    }
+
+    // The sender may have corrected the LPO before resending: lines, delivery details, terms, discount.
+    const edits: any = {};
+    let auditBefore: any = purchaseOrder.toObject();
+    const body = req.body || {};
+    if (Array.isArray(body.items) && body.items.length) {
+      if (body.items.some((i: any) => !i?.detail || !(Number(i.quantity) > 0) || !(Number(i.unitCost) >= 0))) {
+        return res.status(400).json({ success: false, message: "Each line needs a description, a quantity above zero and a unit cost" });
+      }
+      edits.items = body.items.map((i: any) => ({ ...i, quantity: Number(i.quantity), unitCost: Number(i.unitCost), totalCost: Number(i.quantity) * Number(i.unitCost) }));
+      auditBefore = (purchaseOrder.toObject() as any);
+      await stampItemCodes(edits.items);
+      purchaseOrder.set('items', edits.items);
+    }
+    for (const key of ['placeOfDelivery', 'shippingTerms', 'subject', 'termsAndCondition'] as const) {
+      if (typeof body[key] === 'string') edits[key] = body[key];
+    }
+    if (body.poDate) edits.poDate = new Date(body.poDate);
+    if (body.discount !== undefined && Number(body.discount) >= 0) edits.discount = Number(body.discount);
+
+    // Rejected LPOs stop reserving PR quantity, so make sure it is still free before it counts again.
+    const pr = await purchaseRequest.findById(purchaseOrder.purchaseId);
+    if (!pr || pr.status !== 'Approved') {
+      return res.status(409).json({ success: false, message: "The purchase request is no longer approved, so this LPO cannot be resent" });
+    }
+    const allowedByLine = new Map<string, number>();
+    (pr.items || []).forEach((item: any) => (item.itemDetails || []).forEach((detail: any) => {
+      const selected = lineSuppliers(detail).find((entry) => String(entry.supplierId) === String(purchaseOrder.supplierId));
+      if (selected) allowedByLine.set(String(detail._id), (allowedByLine.get(String(detail._id)) || 0) + selected.quantity);
+    }));
+    const others = await PurchaseOrder.find({
+      _id: { $ne: purchaseOrder._id },
+      purchaseId: purchaseOrder.purchaseId,
+      supplierId: purchaseOrder.supplierId,
+      poStatus: { $nin: ['Draft', 'Rejected', 'Cancelled'] },
+    });
+    const reserved = new Map<string, number>();
+    others.forEach((po: any) => (po.items || []).forEach((item: any) => {
+      if (item.prLineKey) reserved.set(String(item.prLineKey), (reserved.get(String(item.prLineKey)) || 0) + (Number(item.quantity) || 0));
+    }));
+    for (const item of (purchaseOrder.items || []) as any[]) {
+      if (!item.prLineKey) continue;
+      const key = String(item.prLineKey);
+      if ((Number(item.quantity) || 0) > Math.max(0, (allowedByLine.get(key) || 0) - (reserved.get(key) || 0))) {
+        return res.status(409).json({ success: false, message: "Part of this LPO's quantity has since been used on another LPO, so it cannot be resent" });
+      }
+    }
+
+    let workflowSteps: any[];
+    try {
+      workflowSteps = await getWorkflowSteps(PO_WORKFLOW, String(purchaseOrder.createdBy), lpoApprovalContext(purchaseOrder));
+    } catch (workflowError) {
+      console.error('Error rebuilding LPO workflow steps:', workflowError);
+      return res.status(500).json({ success: false, message: "Could not start the PO approval workflow. Check Settings > Workflow > PO Approval." });
+    }
+    const poStatus = workflowSteps.length === 0 ? 'Approved' : 'Pending for Approval';
+    const updated = await PurchaseOrder.findByIdAndUpdate(
+      purchaseOrder._id,
+      { $set: { ...edits, poStatus, approvalStatus: workflowSteps, updatedAt: new Date() } },
+      { new: true }
+    );
+
+    if (edits.items) {
+      try { await syncPrPrices(pr, purchaseOrder.supplierId, edits.items); } catch (e) { console.error('PR price sync failed:', e); }
+    }
+    await logPoAudit(req, purchaseOrder, 'submitted', edits.items || Object.keys(edits).length ? 'Edited and resent for approval' : 'Resent for approval', diffPoEdits(auditBefore, edits));
+    if (updated && poStatus === 'Pending for Approval') {
+      await notifyLpoApprovers(updated, employee._id, req.app.get('io') as Server);
+    }
+    return res.status(200).json({ success: true, message: "Purchase order sent for approval again", data: updated });
+  } catch (error: any) {
+    console.error("Resend purchase order error:", error);
+    return res.status(500).json({ success: false, message: "Failed to resend purchase order", error: error.message });
   }
 };
 
@@ -1949,7 +2151,7 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
     // Key items by partNo (stable item reference) rather than the free-text
     // `detail` field, which can differ slightly between the purchase request
     // and issued POs and cause required/issued quantities to fail to match up.
-    const itemKey = (entry: any) => (entry.partNo ? entry.partNo.toString() : entry.detail);
+    const itemKey = lineItemKey;
 
     const supplierMap = new Map();
 
@@ -2105,6 +2307,7 @@ export const revokePurchaseOrder = async (req: Request, res: Response) => {
     // getSuppliersForPurchaseRequest / getItemsForPurchaseRequest, so this
     // PO stops counting automatically.
     await PurchaseOrder.findByIdAndDelete(id);
+    await logPoAudit(req, purchaseOrder, 'revoked', `Purchase order ${purchaseOrder.poNo} revoked and deleted`);
 
     return res.status(200).json({
       success: true,
@@ -2177,7 +2380,7 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
       PurchaseOrder.find(pendingQuery)
     ]);
 
-    const itemKey = (entry: any) => (entry.partNo ? entry.partNo.toString() : entry.detail);
+    const itemKey = lineItemKey;
 
     const issuedItemsMap = new Map();
     existingPurchaseOrders.forEach((po: any) => {
@@ -2219,7 +2422,7 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
                 _id: itemDetail._id ? itemDetail._id.toString() : `${itemDetail.detail}-${selectedComparison.quantity}`,
                 itemName: item.itemName,
                 detail: itemDetail.detail,
-                partNo: itemDetail.partNo,
+                partNo: itemDetail.productId,
                 originalQuantity: totalQuantity,
                 remainingQuantity: remainingQuantity,
                 issuedQuantity: totalIssued,

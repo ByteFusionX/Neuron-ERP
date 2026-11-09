@@ -18,20 +18,13 @@ export interface LineAward {
     clear?: boolean;
 }
 
+/** Remembers what a supplier offered before an award rewrites its quantity to the share. */
+const keepOffered = (c: any) => {
+    if (!c.selected && num(c.quantity) > 0) c.offeredQty = num(c.quantity);
+};
+
 export const findLine = (purchase: any, lineKey: string): any =>
     (purchase.items || []).flatMap((item: any) => item.itemDetails || []).find((d: any) => String(d._id) === String(lineKey));
-
-/** The line's cost, supplier and name follow its chosen suppliers: a split line costs the share-weighted average. */
-export const settleLine = (detail: any) => {
-    const won = (detail.comparisons || []).filter((c: any) => c.selected && c.supplierId);
-    if (!won.length) return;
-    const total = won.reduce((sum: number, c: any) => sum + num(c.awardedQty), 0);
-    if (total > 0) detail.unitCost = round4(won.reduce((sum: number, c: any) => sum + num(c.unitPrice) * num(c.awardedQty), 0) / total);
-    const lead = won.reduce((a: any, b: any) => (num(b.awardedQty) > num(a.awardedQty) ? b : a));
-    detail.supplierId = lead.supplierId;
-    const names = Array.from(new Set<string>(won.map((c: any) => String(c.supplierName || '')).filter(Boolean)));
-    if (names.length) detail.supplierName = names.join(' / ');
-};
 
 /**
  * Applies one award to its line. The whole line takes it from every other supplier; a share keeps the others,
@@ -46,8 +39,7 @@ export const applyLineAward = (purchase: any, award: LineAward, employeeId: any)
     let mine = detail.comparisons.find((c: any) => String(c.supplierId) === String(award.supplierId));
 
     if (award.clear) {
-        if (mine) { mine.selected = false; mine.awardedQty = undefined; }
-        settleLine(detail);
+        if (mine) { mine.selected = false; mine.awardedQty = undefined; mine.quantity = num(mine.offeredQty) || num(mine.quantity) || lineQty; mine.offeredQty = undefined; }
         return null;
     }
 
@@ -62,12 +54,14 @@ export const applyLineAward = (purchase: any, award: LineAward, employeeId: any)
         mine.unitPrice = num(award.unitPrice);
     }
     if (!(num(mine.unitPrice) > 0)) return `This supplier has no price for "${detail.detail}".`;
+    keepOffered(mine);
 
     const share = award.qty != null && num(award.qty) > 0 ? Math.min(num(award.qty), lineQty) : lineQty;
     let room = round4(lineQty - share);
     detail.comparisons.forEach((c: any) => {
         if (c === mine || !c.selected) return;
         const had = num(c.awardedQty) || num(c.quantity) || lineQty;
+        keepOffered(c);
         const keep = Math.min(had, room);
         room = round4(room - keep);
         if (keep > 0) { c.awardedQty = keep; c.quantity = keep; }
@@ -76,6 +70,5 @@ export const applyLineAward = (purchase: any, award: LineAward, employeeId: any)
     mine.selected = true;
     mine.awardedQty = share;
     mine.quantity = share;
-    settleLine(detail);
     return null;
 };

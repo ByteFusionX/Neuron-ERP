@@ -1,10 +1,10 @@
-<div class="h-full flex flex-col gap-5 bg-gray-50 p-6 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col gap-5 bg-gray-50 p-5 dark:bg-erp-surface-dark-alt">
   <app-data-grid
     #returnsGrid
     class="flex-1 min-h-0"
     [fillHeight]="true"
     title="Returns"
-    subtitle="Rejected GRN items, supplier returns, disputes, and resolved recovery in one register"
+    subtitle="Rejected GRN and customer-rejected DN items, supplier returns, disputes, and resolved recovery in one register"
     [breadcrumbs]="breadcrumbs"
     rowKey="registerKey"
     [data]="combinedRows"
@@ -52,7 +52,7 @@
 
     <!-- left: optional, per-tab (outline) -->
     <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
-      <app-action-button *ngIf="tab === 'overview'" variant="outline" (click)="openGrnDetails(row)" icon="view">View GRN</app-action-button>
+      <app-action-button *ngIf="tab === 'overview' && row.source !== 'DN'" variant="outline" (click)="openGrnDetails(row)" icon="view">View GRN</app-action-button>
       <app-action-button *ngIf="tab === 'logistics' && poNo(row)" variant="outline" (click)="openLpoDetails(row)" icon="view">View LPO</app-action-button>
     </ng-template>
 

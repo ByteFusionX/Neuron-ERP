@@ -81,3 +81,9 @@
   border-color: #262626;
   color: #a1a1a1;
 }
+
+/* Tab switch: skeleton rows while the list re-renders. */
+.pr-sk { display: block; background: #e5e7eb; animation: pr-sk-pulse 1.2s ease-in-out infinite; }
+:host-context(html.dark) .pr-sk { background: #262626; }
+@keyframes pr-sk-pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .pr-sk { animation: none; } }

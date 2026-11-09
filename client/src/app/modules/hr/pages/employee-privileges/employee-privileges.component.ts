@@ -84,22 +84,20 @@ const PRIVILEGE_MODULES: PrivilegeModule[] = [
     { path: 'purchaseOrder.canInitiateLPO', label: 'Initiate LPO and issue PO' },
     { path: 'purchaseOrder.canApprovePOs', label: 'Approve purchase orders' },
     { path: 'purchaseOrder.canReissueAndRevoke', label: 'Re-issue and revoke POs' },
-    { path: 'purchaseOrder.canCancel', label: 'Cancel POs and move their quantity to another supplier' },
+    { path: 'purchaseOrder.canCancel', label: 'Cancel POs and replace the supplier' },
   ]},
   { key: 'grn', label: 'GRN', flags: [
     { path: 'grn.canUploadInvoice', label: 'Upload supplier invoice' },
   ]},
   { key: 'dispatch', label: 'Dispatch', flags: [
     { path: 'dispatch.createDeliveryNote', label: 'Create delivery note' },
-    { path: 'dispatch.viewPendingDelivery', label: 'View pending delivery' },
-    { path: 'dispatch.viewInvoiceLinking', label: 'View invoice linking' },
-    { path: 'dispatch.viewInventoryDeduction', label: 'View inventory deduction' },
+    { path: 'dispatch.createInvoice', label: 'Create / edit invoice from delivery note' },
   ]},
   { key: 'invoice', label: 'Invoice', flags: [
-    { path: 'invoice.createInvoice', label: 'Create invoice' },
-    { path: 'invoice.viewInvoicesVsDn', label: 'View invoices vs DN' },
-    { path: 'invoice.viewCancelledAdjusted', label: 'View cancelled / adjusted' },
-    { path: 'invoice.viewReissued', label: 'View reissued' },
+    { path: 'invoice.createInvoice', label: 'Create invoice (finance)' },
+    { path: 'invoice.piCreateEdit', label: 'Proforma invoice: create / edit' },
+    { path: 'invoice.piApprove', label: 'Proforma invoice: update status' },
+        { path: 'invoice.pdcApprove', label: 'PDC: approve, reject and revoke' },
   ]},
   { key: 'technical', label: 'Technical', flags: [
     { path: 'technical.canViewOpenToWorkAndAssign', label: 'View open-to-work and assign engineer' },

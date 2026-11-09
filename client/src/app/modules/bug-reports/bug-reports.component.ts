@@ -74,7 +74,7 @@ export class BugReportsComponent implements OnInit, OnDestroy {
 
   readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Bug Reports' }];
   readonly detailTabs: DataGridDetailTab[] = [
-    { id: 'overview', label: 'Overview', icon: 'info' },
+    { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'diagnostics', label: 'Diagnostics', icon: 'files' },
   ];
   readonly statusOptions = ['new', 'analyzing', 'implementing', 'fix-ready', 'approved', 'rejected', 'resolved', 'failed'];

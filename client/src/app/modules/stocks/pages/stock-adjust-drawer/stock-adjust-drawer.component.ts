@@ -11,7 +11,7 @@ import { ModalService } from 'src/app/shared/components/modal';
 import { QuickAddDialogComponent, QuickAddDialogData } from 'src/app/modules/products/modals/quick-add-dialog/quick-add-dialog.component';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 
-const ADD_REASONS = ['Opening stock', 'Count correction', 'Found', 'Other'];
+const ADD_REASONS = ['Opening stock', 'Count correction', 'Other'];
 const REMOVE_REASONS = ['Count correction', 'Damaged', 'Lost / missing', 'Other'];
 
 /**
@@ -28,6 +28,8 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
   @Input() open = false;
   /** Product to adjust; leave empty to let the user choose one. */
   @Input() productId = '';
+  /** Warehouse to preselect (the one the stock sits in on the Stock Balance row). */
+  @Input() warehouseId = '';
   @Output() saved = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
 
@@ -106,6 +108,8 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
     if (!changes['open'] || !this.open) return;
     this.reset();
     if (this.productId) this.form.controls.product.setValue(this.productId);
+    // set after the product, which defaults the warehouse to the product's master-data one
+    if (this.warehouseId) this.form.controls.warehouse.setValue(this.warehouseId);
   }
 
   /** A product created here is added to the list and selected. */
@@ -181,6 +185,15 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
   private loadCurrent(productId: string | null): void {
     this.current = null;
     if (!productId) return;
+    // default the unit price to the product's last PO price, unless the user already typed one
+    this.stockService.getItemDetails(productId).subscribe({
+      next: (res) => {
+        const cost = res.data?.lastPo?.['unitCost'];
+        const control = this.form.controls.unitCost;
+        if (this.form.controls.product.value === productId && cost != null && !control.dirty) control.setValue(Number(cost));
+      },
+      error: () => { },
+    });
     this.stockService.getAvailability([productId]).subscribe({
       next: (res) => (this.current = res.data?.[productId] ?? null),
       error: () => (this.current = null),

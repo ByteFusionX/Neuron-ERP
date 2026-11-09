@@ -132,6 +132,8 @@ export class JobHistoryModalComponent implements OnInit {
         return 'bg-orange-100 text-orange-700';
       case 'deliveryNote':
         return 'bg-pink-100 text-pink-700';
+      case 'invoice':
+        return 'bg-emerald-100 text-emerald-700';
       default:
         return 'bg-gray-100 text-gray-700';
     }
@@ -149,6 +151,8 @@ export class JobHistoryModalComponent implements OnInit {
         return 'Technical';
       case 'deliveryNote':
         return 'DN';
+      case 'invoice':
+        return 'Invoice';
       default:
         return pipeline;
     }

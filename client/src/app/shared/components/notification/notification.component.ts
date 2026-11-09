@@ -3,7 +3,6 @@ import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { Observable, combineLatest, map, take } from 'rxjs';
 
 import { NotificationService } from 'src/app/core/services/notification.service';
-import { PushNotificationService } from 'src/app/core/services/push-notification.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { TextNotification } from '../../interfaces/notification.interface';
 import { RelativeTimePipe } from '../../pipes/relative-time.pipe';
@@ -31,7 +30,8 @@ interface TypeMeta {
 const ACTION_TYPES = new Set([
   'AssignedJob', 'ReAssignedJob', 'FeedbackRequest', 'DealSheet', 'TechnicalAssigned', 'MrApprovalRequest',
   'PurchaseApprovalRequest', 'PurchaseRequestAllocated', 'JobAllocated', 'LpoApprovalRequest',
-  'SupplierApprovalRequest', 'ClaimApprovalRequest', 'BugReportAssigned', 'EnquiryFollowUpOverdue', 'RfqFollowUpOverdue',
+  'SupplierApprovalRequest', 'ClaimApprovalRequest', 'BugReportAssigned', 'EnquiryFollowUpOverdue',
+  'PresaleRejected', 'QuotationWon', 'QuotationFollowUpOverdue', 'PurchaseFollowUpOverdue', 'PdcRejected', 'InvoiceOverdue',
 ]);
 
 /**
@@ -54,13 +54,9 @@ export class NotificationComponent implements OnInit {
   readonly warnText = toneClasses('warn').text;
   activeTab: 'All' | 'Unread' = 'All';
   sections$!: Observable<{ all: PanelSection[]; unread: PanelSection[]; unreadCount: number }>;
-  pushSubscribed$!: Observable<boolean>;
-  pushSupported = false;
-  pushToggleBusy = false;
 
   constructor(
     private _notificationService: NotificationService,
-    private _pushNotificationService: PushNotificationService,
   ) {}
 
   ngOnInit(): void {
@@ -77,10 +73,6 @@ export class NotificationComponent implements OnInit {
         return { all: this.group(items), unread: this.group(unread), unreadCount: unread.length };
       }),
     );
-
-    this.pushSupported = this._pushNotificationService.isSupported;
-    this.pushSubscribed$ = this._pushNotificationService.subscribed$;
-    if (this.pushSupported) this._pushNotificationService.refreshStatus();
   }
 
   trackById(_: number, item: PanelItem): string | undefined {
@@ -120,9 +112,11 @@ export class NotificationComponent implements OnInit {
     if (type?.startsWith('Lpo') || type?.startsWith('Purchase') || type === 'JobAllocated' || type === 'ProcurementTransferred')
       return { icon: 'heroShoppingCart', tone: 'warn' };
     if (type?.startsWith('Mr') || type?.startsWith('Technical')) return { icon: 'heroWrenchScrewdriver', tone: 'neutral' };
-    if (type?.includes('Job') || type === 'FeedbackRequest') return { icon: 'heroBriefcase', tone: 'active' };
+    if (type?.startsWith('Grn') || type?.startsWith('Dn') || type?.startsWith('StockHold')) return { icon: 'heroTruck', tone: 'info' };
+    if (type?.startsWith('Invoice') || type?.startsWith('Pdc') || type?.startsWith('Proforma')) return { icon: 'heroBanknotes', tone: 'warn' };
+    if (type?.includes('Job') || type?.startsWith('Feedback') || type === 'PresaleRejected') return { icon: 'heroBriefcase', tone: 'active' };
     if (type?.startsWith('Quotation') || type?.startsWith('DealSheet')) return { icon: 'heroDocumentText', tone: 'good' };
-    if (type?.startsWith('Enquiry') || type?.startsWith('Rfq')) return { icon: 'heroEnvelope', tone: 'info' };
+    if (type?.startsWith('Enquiry')) return { icon: 'heroEnvelope', tone: 'info' };
     return { icon: 'heroBellAlert', tone: 'neutral' };
   }
 
@@ -135,17 +129,13 @@ export class NotificationComponent implements OnInit {
     return toneClasses(tone).dot;
   }
 
-  menuItems(unreadCount: number, pushOn: boolean): ActionMenuItem[] {
+  menuItems(unreadCount: number): ActionMenuItem[] {
     const items: ActionMenuItem[] = [{ id: 'markAll', label: 'Mark all as read', icon: 'heroCheckCircle', disabled: !unreadCount }];
-    if (this.pushSupported) {
-      items.push({ id: 'push', label: pushOn ? 'Turn off desktop alerts' : 'Turn on desktop alerts', icon: pushOn ? 'heroBell' : 'heroBellAlert', disabled: this.pushToggleBusy });
-    }
     return items;
   }
 
   onMenu(id: string): void {
     if (id === 'markAll') this.markAllRead();
-    else if (id === 'push') this.onTogglePush();
   }
 
   open(item: PanelItem): void {
@@ -172,14 +162,6 @@ export class NotificationComponent implements OnInit {
     this._notificationService.markAllAsRead().subscribe({
       error: (error) => console.error('Error marking all notifications as read:', error),
     });
-  }
-
-  onTogglePush(): void {
-    if (this.pushToggleBusy) return;
-    this.pushToggleBusy = true;
-    this._pushNotificationService.toggle()
-      .catch((error) => console.error('Error toggling push notifications:', error))
-      .finally(() => (this.pushToggleBusy = false));
   }
 
   private markRead(item: PanelItem): void {

@@ -15,7 +15,7 @@ export interface MenuItem {
   /** Boolean privilege flags that also grant access, even when `privilegeValue` itself is not met. */
   anyOfFlags?: string[];
   children?: SubMenuItem[];
-  inventorySubKey?: 'products' | 'stockEntries';
+  inventorySubKey?: 'products' | 'stockEntries' | 'stockBalance' | 'stockMovements';
 }
 
 export interface SubMenuItem {
@@ -76,7 +76,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'customers',
-        label: 'Customers',
+        label: 'Customer',
         icon: 'heroUserGroup',
         route: '/customers',
         privilegeKey: 'customer',
@@ -102,7 +102,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       },
       {
         id: 'quotations',
-        label: 'Quotations',
+        label: 'Quotation',
         icon: 'heroNewspaper',
         route: '/quotations',
         privilegeKey: 'quotation',
@@ -142,7 +142,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'salesProducts',
-        label: 'Products',
+        label: 'Product',
         icon: 'heroCube',
         route: '/products',
         privilegeKey: 'inventory',
@@ -151,7 +151,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       },
       {
         id: 'salesSuppliers',
-        label: 'Suppliers',
+        label: 'Supplier',
         icon: 'heroBuildingOffice',
         route: '/suppliers',
         privilegeKey: 'supplier',
@@ -213,36 +213,11 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'grnList',
-        label: 'GRNs',
+        label: 'GRN',
         icon: 'heroInboxArrowDown',
         route: '/grn/grn-list',
         privilegeKey: 'grn',
         privilegeValue: 'none',
-      },
-    ],
-  },
-  {
-    id: 'inventory',
-    label: 'Inventory',
-    group: 'Operations',
-    items: [
-      {
-        id: 'stockOverview',
-        label: 'Stock Overview',
-        icon: 'heroCube',
-        route: '/stock/overview',
-        privilegeKey: 'inventory',
-        privilegeValue: 'none',
-        inventorySubKey: 'stockEntries',
-      },
-      {
-        id: 'stockLedger',
-        label: 'Stock Entries',
-        icon: 'heroCube',
-        route: '/stock/ledger',
-        privilegeKey: 'inventory',
-        privilegeValue: 'none',
-        inventorySubKey: 'stockEntries',
       },
     ],
   },
@@ -254,10 +229,35 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       {
         id: 'dispatch',
         label: 'Dispatch',
-        icon: 'heroTruck',
+        icon: 'heroMapPin',
         route: '/dispatch',
         privilegeKey: 'dispatch',
         privilegeValue: 'none',
+      },
+    ],
+  },
+  {
+    id: 'inventory',
+    label: 'Inventory',
+    group: 'Operations',
+    items: [
+      {
+        id: 'stockOverview',
+        label: 'Stock Balance',
+        icon: 'heroCube',
+        route: '/stock/overview',
+        privilegeKey: 'inventory',
+        privilegeValue: 'none',
+        inventorySubKey: 'stockBalance',
+      },
+      {
+        id: 'stockLedger',
+        label: 'Stock Movement',
+        icon: 'heroArrowsRightLeft',
+        route: '/stock/ledger',
+        privilegeKey: 'inventory',
+        privilegeValue: 'none',
+        inventorySubKey: 'stockMovements',
       },
     ],
   },
@@ -268,7 +268,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'purchaseProducts',
-        label: 'Products',
+        label: 'Product',
         icon: 'heroCube',
         route: '/products',
         privilegeKey: 'inventory',
@@ -277,7 +277,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       },
       {
         id: 'suppliers',
-        label: 'Suppliers',
+        label: 'Supplier',
         icon: 'heroBuildingOffice',
         route: '/suppliers',
         privilegeKey: 'supplier',
@@ -330,23 +330,30 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     ],
   },
   {
-    id: 'finance',
-    label: 'Invoices',
+    id: 'finance-receivables',
+    label: 'Receivables',
+    group: 'Finance',
+    items: [
+      {
+        id: 'invoices',
+        label: 'Invoice',
+        icon: 'heroDocumentText',
+        route: '/finance/invoices',
+        privilegeKey: 'invoice',
+        privilegeValue: 'none',
+      },
+    ],
+  },
+  {
+    id: 'finance-payables',
+    label: 'Payables',
     group: 'Finance',
     items: [
       {
         id: 'vendor-bills',
-        label: 'Vendor Bills',
-        icon: 'heroClipboardDocumentList',
+        label: 'Supplier Bill',
+        icon: 'heroDocumentArrowDown',
         route: '/finance/vendor-bills',
-        privilegeKey: 'invoice',
-        privilegeValue: 'none',
-      },
-      {
-        id: 'payables',
-        label: 'Payable',
-        icon: 'heroDocumentText',
-        route: '/finance/payables',
         privilegeKey: 'invoice',
         privilegeValue: 'none',
       },
@@ -359,7 +366,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'claims',
-        label: 'Expenses',
+        label: 'Expense',
         icon: 'heroDocumentPlus',
         route: '/claims/expenses',
         privilegeKey: 'claims',
@@ -368,7 +375,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         children: [
           {
             id: 'expenses',
-            label: 'Expenses',
+            label: 'Expense',
             route: '/claims/expenses',
             privilegeKey: 'claims',
             privilegeValue: 'none',
@@ -376,7 +383,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
           },
           {
             id: 'approvalRequests',
-            label: 'Approval Requests',
+            label: 'Approval Request',
             route: '/claims/approval-requests',
             privilegeKey: 'claims',
             privilegeValue: 'canApprove',
@@ -406,7 +413,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'employees',
-        label: 'Employees',
+        label: 'Employee',
         icon: 'heroIdentification',
         route: '/hr/employees',
         privilegeKey: 'employee',
@@ -414,7 +421,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       },
       {
         id: 'hr-departments',
-        label: 'Departments',
+        label: 'Department',
         icon: 'heroBuildingLibrary',
         route: '/hr/departments',
         privilegeKey: 'departments',
@@ -494,7 +501,8 @@ export function hasMenuAccess(privileges: Privileges | undefined, item: MenuItem
     // Products / Stocks are now separate top-level tabs, each gated on
     // its own nested viewReport instead of the combined inventory check.
     if ('inventorySubKey' in item && item.inventorySubKey) {
-      const subPrivilege = inventoryPrivilege[item.inventorySubKey];
+      // Roles saved before the balance/movements split only have stockEntries: fall back to it.
+      const subPrivilege = inventoryPrivilege[item.inventorySubKey] ?? inventoryPrivilege.stockEntries;
       return item.privilegeValue === 'none'
         ? subPrivilege?.viewReport !== 'none'
         : subPrivilege?.viewReport === item.privilegeValue;

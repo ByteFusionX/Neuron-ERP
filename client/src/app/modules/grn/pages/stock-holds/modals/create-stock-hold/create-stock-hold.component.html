@@ -4,7 +4,11 @@
   submitIcon="transfer" [saving]="isSubmitting" [invalid]="holdForm.invalid && holdForm.touched"
   (closed)="onCancel()">
   <form id="create-stock-hold-form" [formGroup]="holdForm" (ngSubmit)="onSubmit()" class="space-y-4">
-    <p class="text-xs text-gray-500 dark:text-gray-400">Rejected quantity available: {{ data?.rejectedQty }}</p>
+    <p class="text-xs text-gray-500 dark:text-gray-400">Rejected quantity available: {{ data?.rejectedQty }}<ng-container *ngIf="isDn"> · DN {{ data?.dnNo }}<ng-container *ngIf="data?.jobNo"> · Job {{ data?.jobNo }}</ng-container></ng-container></p>
+    <div class="grid gap-4 sm:grid-cols-2" *ngIf="isDn">
+      <app-sf-field label="Supplier" required [control]="holdForm.get('supplierId')"><app-sf-select formControlName="supplierId" [options]="supplierOptions" [placeholder]="supplierOptions.length ? 'Select supplier to return to' : 'No PO on this job for this item'"></app-sf-select></app-sf-field>
+      <app-sf-field label="Reason code" required [control]="holdForm.get('reasonCode')"><app-sf-select formControlName="reasonCode" [options]="reasonOptions" placeholder="Select reason"></app-sf-select></app-sf-field>
+    </div>
     <div class="grid gap-4 sm:grid-cols-2">
       <app-sf-field label="Vendor authorization no." [control]="holdForm.get('vendorAuthorizationNo')"><app-sf-input formControlName="vendorAuthorizationNo" placeholder="RMA / vendor reference"></app-sf-input></app-sf-field>
       <app-sf-field label="Return reason" [control]="holdForm.get('returnReason')"><app-sf-input formControlName="returnReason" placeholder="Defective, wrong item, damaged"></app-sf-input></app-sf-field>

@@ -58,3 +58,19 @@
 }
 .qv-link:hover { text-decoration: underline; }
 :host-context(.dark) .qv-link { color: #a78bfa; }
+
+/* Key-details banner under the header. Cells sit on a 1px gap so the border colour draws the dividers. */
+.qv-banner { border-color: #e5e7eb; background: #e5e7eb; }
+.qv-banner-cell { background: #fff; }
+.qv-banner-emphasis { background: #f5f3ff; }
+.qv-banner-label { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #4b5563; }
+.qv-banner-value { margin-top: 0.25rem; font-size: 0.875rem; font-weight: 600; color: #111827; }
+.qv-banner-emphasis .qv-banner-value { font-size: 1rem; color: #6d28d9; }
+.qv-banner-sub { margin-top: 0.125rem; font-size: 0.75rem; color: #4b5563; }
+:host-context(html.dark) .qv-banner { border-color: #2e2e2e; background: #2e2e2e; }
+:host-context(html.dark) .qv-banner-cell { background: #1a1a1a; }
+:host-context(html.dark) .qv-banner-emphasis { background: rgb(139 92 246 / 0.1); }
+:host-context(html.dark) .qv-banner-label,
+:host-context(html.dark) .qv-banner-sub { color: #c4c4c4; }
+:host-context(html.dark) .qv-banner-value { color: #ededed; }
+:host-context(html.dark) .qv-banner-emphasis .qv-banner-value { color: #c4b5fd; }

@@ -141,7 +141,7 @@
   </form>
 
   <ng-container sfDrawerFooter>
-    <app-action-button variant="outline" (click)="onDiscardClicks()">Exit</app-action-button>
+    <app-action-button variant="secondary" (click)="onDiscardClicks()">Cancel</app-action-button>
     <app-action-button variant="primary" [disabled]="isCreatingPO()" (click)="onIssueClicks()">{{ isCreatingPO() ? (isReissueMode ? 'Re-issuing...' : 'Creating PO...') : (isReissueMode ? 'Re-issue LPO' : 'Issue LPO') }}</app-action-button>
   </ng-container>
 </app-sf-drawer>

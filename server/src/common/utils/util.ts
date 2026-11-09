@@ -44,7 +44,7 @@ export const calculateTotalCost = (quotation: any, items: any): number => {
     return totalCost;
 }
 
-export const buildDashboardFilters = (filters: Filters, accessFilter: any) => {
+export const buildDashboardFilters = (filters: Filters, accessFilter: any, dateField: string = 'createdDate') => {
     const matchFilter: any = {};
 
     if (filters) {
@@ -54,17 +54,17 @@ export const buildDashboardFilters = (filters: Filters, accessFilter: any) => {
             const endDate = new Date(filters.toDate);
             endDate.setHours(23, 59, 59, 999); // Set to end of the day
 
-            matchFilter['createdDate'] = {
+            matchFilter[dateField] = {
                 $gte: startDate,
                 $lt: endDate
             };
 
         } else if (filters.fromDate) {
-            matchFilter['createdDate'] = { $gte: new Date(filters.fromDate) };
+            matchFilter[dateField] = { $gte: new Date(filters.fromDate) };
         } else if (filters.toDate) {
             const endDate = new Date(filters.toDate);
             endDate.setHours(23, 59, 59, 999); // Set to end of the day
-            matchFilter['createdDate'] = { $lt: endDate };
+            matchFilter[dateField] = { $lt: endDate };
         }
 
         // Handle multiple salesPersons
@@ -424,6 +424,8 @@ export async function getQarRates(): Promise<{ rates: Record<string, number>; as
 }
 
 export const getAllReportedEmployees = async (userId: any): Promise<ObjectId[]> => {
+    // No user supplied (e.g. an unscoped list request): nobody reports to them.
+    if (!userId) return [];
     try {
         // Step 1: Fetch all employees and their reportingTo relationships in one go
         const employees = await employeeModel.find({}, '_id reportingTo').lean();

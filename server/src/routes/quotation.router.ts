@@ -7,6 +7,7 @@ import {
     getProductSuggestions,
     getQuotations,
     getQuotationById,
+    getQuoteViewers,
     getQuoteNote,
     getQuoteRevisions,
     getReportDetails,
@@ -73,6 +74,7 @@ quoteRouter.post('/stock-hold/:quoteId', requireUnlessDenied("quotation", "statu
 quoteRouter.delete('/stock-hold/:quoteId', requireUnlessDenied("quotation", "statusUpdate"), releaseQuoteStockHold)
 quoteRouter.post('/get', getQuotations)
 quoteRouter.post('/get/:id', getQuotationById)
+quoteRouter.get('/viewers/:quoteId', getQuoteViewers)
 quoteRouter.get('/note/:quoteId', getQuoteNote)
 quoteRouter.get('/revisions/:quoteId', getQuoteRevisions)
 quoteRouter.post('/report', getReportDetails)

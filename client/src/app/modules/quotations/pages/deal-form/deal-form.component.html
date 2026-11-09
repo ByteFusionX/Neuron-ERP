@@ -1,17 +1,25 @@
-<app-sf-drawer title="Convert to Deal Sheet"
+<app-sf-drawer [title]="title"
     [subtitle]="q ? ((q.quoteId || '') + ' · ' + (q.client.companyName || '') + ' · ' + q.currency) : ''"
-    [width]="step === 2 ? 'min(720px, 96vw)' : 'min(1400px, 96vw)'" [open]="open" [dirty]="!!form?.dirty" (closed)="onDrawerClosed()">
+    [width]="fullView ? '100vw' : (step === 2 ? 'min(720px, 96vw)' : 'min(1400px, 96vw)')" [open]="open" [dirty]="dirty" (closed)="onDrawerClosed()">
+
+    <button sfDrawerHeader type="button"
+        class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+        [attr.aria-label]="fullView ? 'Exit full view' : 'Expand to full view'" [title]="fullView ? 'Exit full view' : 'Expand to full view'"
+        (click)="fullView = !fullView">
+        <ng-icon [name]="fullView ? 'heroArrowsPointingIn' : 'heroArrowsPointingOut'" class="h-4 w-4"></ng-icon>
+    </button>
 
     <form *ngFor="let f of forms" id="deal-form" [formGroup]="f" (ngSubmit)="onSubmit()" novalidate>
 
         <!-- Step header -->
         <ol class="mb-5 flex items-center gap-3">
             <ng-container *ngFor="let s of steps; let last = last">
-                <li class="flex items-center gap-2">
+                <li><button type="button" class="flex items-center gap-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                    [class.cursor-default]="step === s.n" [attr.aria-current]="step === s.n ? 'step' : null" (click)="goTo(s.n)">
                     <span class="grid h-6 w-6 place-content-center rounded-full text-xs font-semibold"
                         [ngClass]="step === s.n ? 'bg-violet-600 text-white' : step > s.n ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400'">{{ step > s.n ? '✓' : s.n }}</span>
                     <span class="text-[13px] font-medium" [ngClass]="step === s.n ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'">{{ s.label }}</span>
-                </li>
+                </button></li>
                 <li *ngIf="!last" aria-hidden="true" class="h-px w-10 bg-gray-200 dark:bg-erp-border-dark"></li>
             </ng-container>
         </ol>
@@ -52,7 +60,7 @@
 
             <section class="rounded-lg border border-gray-200 p-4 dark:border-erp-border-dark">
                 <header class="mb-3">
-                    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Adjustments <span class="ml-1 text-[11px] font-normal text-gray-400">Optional</span></h3>
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Adjustments<span class="ml-1 text-[11px] font-normal text-gray-400">Optional</span></h3>
                     <p class="mt-0.5 text-xs text-gray-500">Costs and discounts on the whole deal. Supplier discounts can only name a supplier picked on the lines.</p>
                 </header>
 
@@ -66,7 +74,8 @@
                         </div>
                         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <ng-container [ngSwitch]="c.get('type')?.value">
-                                <app-sf-input *ngSwitchCase="'Additional Cost'" formControlName="name" placeholder="What is this cost for?"></app-sf-input>
+                                <app-sf-combobox *ngSwitchCase="'Additional Cost'" formControlName="name" [options]="costReasonOptions"
+                                    placeholder="Select cost type"></app-sf-combobox>
                                 <app-sf-combobox *ngSwitchCase="'Supplier Discount'" formControlName="supplierId" [options]="discountSupplierOptions"
                                     placeholder="Select supplier"></app-sf-combobox>
                             </ng-container>
@@ -92,23 +101,92 @@
                     <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Attachments <span class="ml-1 text-[11px] font-normal text-gray-400">Optional</span></h3>
                     <p class="mt-0.5 text-xs text-gray-500">Supplier quotes or approvals · PDF, Word or images, up to 5 MB each.</p>
                 </header>
+                <ul *ngIf="existingFiles.length" class="mb-2 divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-erp-border-dark dark:border-erp-border-dark">
+                    <li *ngFor="let file of existingFiles; let i = index" class="flex items-center gap-3 px-3 py-2 text-[13px]">
+                        <ng-icon name="heroDocumentArrowUp" class="h-4 w-4 shrink-0 text-gray-400"></ng-icon>
+                        <span class="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100">{{ fileLabel(file) }}</span>
+                        <button type="button" class="rounded px-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400" [attr.aria-label]="'Remove ' + fileLabel(file)"
+                            (click)="onExistingFileRemoved(i)">&times;</button>
+                    </li>
+                </ul>
                 <app-sf-file formControlName="attachments" [maxSizeMb]="5"></app-sf-file>
             </section>
         </div>
 
         <!-- Step 1 owns the editable line table. Step 2 renders the same totals above the drawer footer. -->
         <div *ngIf="step === 1">
-            <app-item-entry mode="deal" [optionalItems]="$any(f.get('optionalItems'))" [seedOptionalItems]="seed"
+            <app-item-entry mode="deal" [dealDescriptionTextarea]="true" [optionalItems]="$any(f.get('optionalItems'))" [seedOptionalItems]="seed"
                 [currency]="q?.currency || 'QAR'" [supplierOptions]="supplierOptions"
-                [itemsHidden]="false" [costAdjustment]="costAdjustment" [discountAdjustment]="discountAdjustment"
-                [allowOptionalItems]="false" [allowCreateProduct]="false" (optionChanged)="onOptionChanged($event)"></app-item-entry>
+                [itemsHidden]="false" [dealAllowAdd]="true" [costAdjustment]="costAdjustment" [discountAdjustment]="discountAdjustment"
+                [allowOptionalItems]="false" [allowCreateProduct]="false" [lineExtraTemplate]="partsTpl" (optionChanged)="onOptionChanged($event)"></app-item-entry>
         </div>
+
+        <!-- Cost breakdown under each ticked line. The parts are already inside the line's cost, so cost and margin do not change and the customer still sees one line. -->
+        <ng-template #partsTpl let-detail>
+            <div *ngIf="detail.get('dealSelected')?.value && lineKey(detail) as key" class="w-full basis-full">
+                <div class="flex flex-wrap items-center gap-2 pt-1">
+                    <button type="button" (click)="toggleParts(key)" [attr.aria-expanded]="partsOpen.has(key)"
+                        class="inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-300">
+                        {{ partsOpen.has(key) ? '▾' : '▸' }} Parts<ng-container *ngIf="activeParts(key).length"> ({{ activeParts(key).length }})</ng-container>
+                    </button>
+                    <span *ngIf="activeParts(key).length" class="text-[11px] tabular-nums"
+                        [ngClass]="componentRest(key, detail) < -0.005 ? 'text-red-600 dark:text-red-400' : componentRest(key, detail) > 0.005 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'">
+                        {{ componentTotal(key) | number: '1.2-2' }} of {{ (+detail.get('unitCost')?.value || 0) | number: '1.2-2' }} ·
+                        {{ componentRest(key, detail) < -0.005 ? 'over by ' + (-componentRest(key, detail) | number: '1.2-2')
+                            : componentRest(key, detail) > 0.005 ? (componentRest(key, detail) | number: '1.2-2') + ' left, the parts must add up to the item cost'
+                            : 'fully allocated' }}
+                    </span>
+                </div>
+
+                <div *ngIf="partsOpen.has(key)" class="mt-1.5 rounded-md border border-dashed border-gray-200 p-2 dark:border-erp-border-dark"
+                    (mousedown)="$event.stopPropagation()" (touchstart)="$event.stopPropagation()">
+                    <div *ngFor="let c of componentsOf(key); let n = index" class="mb-2 flex flex-wrap items-start gap-2 sm:flex-nowrap" [class.opacity-50]="c.included === false">
+                        <input type="checkbox" class="mt-2 h-3.5 w-3.5 shrink-0 cursor-pointer accent-violet-600" aria-label="Connect part to the deal"
+                            [checked]="c.included !== false" (change)="togglePart(c)">
+                        <div class="relative w-full min-w-0 sm:w-auto sm:flex-[2]" (focusout)="closePartSuggestions()">
+                            <app-sf-textarea placeholder="Part description (search products)" expandOnFocus [rows]="1"
+                                [ngModelOptions]="{ standalone: true }" [(ngModel)]="c.description" (ngModelChange)="onPartDescriptionInput(key, n)"></app-sf-textarea>
+                            <ul *ngIf="partSuggestKey === key + '|' + n && partSuggestions.length"
+                                class="absolute left-0 right-0 top-full z-30 mt-1 max-h-56 overflow-auto rounded-md border border-gray-200 bg-white py-1 text-xs shadow-lg dark:border-erp-border-dark dark:bg-erp-surface-dark">
+                                <li *ngFor="let s of partSuggestions" (mousedown)="$event.preventDefault(); applyPartSuggestion(key, n, s)"
+                                    class="cursor-pointer px-2 py-1 hover:bg-violet-50 dark:hover:bg-violet-950/40">
+                                    <div class="truncate font-medium">{{ s.description || s.productName }}</div>
+                                    <div class="truncate text-[11px] text-gray-500">{{ s.itemCode }}<ng-container *ngIf="s.itemCode && s.partNo"> · </ng-container>{{ s.partNo }}</div>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="w-[calc(50%-0.25rem)] min-w-0 sm:w-auto sm:flex-1" (focusout)="lookupPartByCode(key, n, 'itemCode')" (keydown.enter)="lookupPartByCode(key, n, 'itemCode')">
+                            <app-sf-input placeholder="Item code"
+                                [ngModelOptions]="{ standalone: true }" [(ngModel)]="c.itemCode" (ngModelChange)="c.productId = null; onComponentEdited()"></app-sf-input>
+                        </div>
+                        <div class="w-[calc(50%-0.25rem)] min-w-0 sm:w-auto sm:flex-1" (focusout)="lookupPartByCode(key, n, 'partNo')" (keydown.enter)="lookupPartByCode(key, n, 'partNo')">
+                            <app-sf-input placeholder="Part no"
+                                [ngModelOptions]="{ standalone: true }" [(ngModel)]="c.partNo" (ngModelChange)="c.productId = null; onComponentEdited()"></app-sf-input>
+                        </div>
+                        <app-sf-number class="w-20 shrink-0" placeholder="Qty" [min]="0" [stepper]="false"
+                            [ngModelOptions]="{ standalone: true }" [(ngModel)]="c.quantity" (ngModelChange)="onComponentEdited()"></app-sf-number>
+                        <app-sf-combobox class="w-28 shrink-0" placeholder="UoM" [options]="uomOptions" [clearable]="true" footerLabel="Add unit" (footerAction)="addUnit(c)"
+                            [ngModelOptions]="{ standalone: true }" [(ngModel)]="c.uom" (ngModelChange)="onComponentEdited()"></app-sf-combobox>
+                        <app-sf-number class="w-28 shrink-0" placeholder="Unit cost" [min]="0" [decimals]="2" [stepper]="false"
+                            [ngModelOptions]="{ standalone: true }" [(ngModel)]="c.unitCost" (ngModelChange)="onComponentEdited()"></app-sf-number>
+                        <span class="flex h-9 w-28 shrink-0 items-center justify-end overflow-hidden whitespace-nowrap rounded-lg bg-gray-50 px-2 text-xs font-medium tabular-nums text-gray-900 dark:bg-gray-800/50 dark:text-gray-100" title="Total cost (qty × unit cost)">{{ partTotal(c) | number: '1.2-2' }}</span>
+                        <app-sf-combobox class="min-w-0 flex-1 sm:flex-[1.5]" placeholder="Supplier" [options]="supplierOptions" [clearable]="true"
+                            [ngModelOptions]="{ standalone: true }" [(ngModel)]="c.supplierId" (ngModelChange)="onComponentEdited()"></app-sf-combobox>
+                        <button type="button" aria-label="Remove part" (click)="removeComponent(key, n)"
+                            class="grid h-6 w-6 shrink-0 place-content-center rounded-md text-base leading-none text-gray-400 transition hover:text-red-600">&times;</button>
+                    </div>
+                    <app-action-button variant="ghost" (click)="addComponent(key)">
+                        <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add part
+                    </app-action-button>
+                </div>
+            </div>
+        </ng-template>
 
         <p *ngIf="issues.length" class="mt-2 text-right text-xs text-red-600 dark:text-red-400">{{ issues[0] }}<ng-container *ngIf="issues.length > 1"> (+{{ issues.length - 1 }} more)</ng-container></p>
     </form>
 
     <div *ngIf="step === 2 && form" sfDrawerBottom class="bg-gray-50 px-6 py-3 dark:bg-erp-surface-dark-alt">
-        <app-item-entry mode="deal" [optionalItems]="$any(form.get('optionalItems'))" [seedOptionalItems]="seed"
+        <app-item-entry mode="deal" [dealDescriptionTextarea]="true" [optionalItems]="$any(form.get('optionalItems'))" [seedOptionalItems]="seed"
             [currency]="q?.currency || 'QAR'" [supplierOptions]="supplierOptions"
             [itemsHidden]="true" [costAdjustment]="costAdjustment" [discountAdjustment]="discountAdjustment"
             [allowOptionalItems]="false" [allowCreateProduct]="false" (optionChanged)="onOptionChanged($event)"></app-item-entry>
@@ -119,7 +197,8 @@
         <app-action-button variant="secondary" (click)="drawer?.requestClose()">Cancel</app-action-button>
         <app-action-button *ngIf="step === 2" variant="secondary" (click)="back()">Back</app-action-button>
         <app-action-button *ngIf="step === 1" variant="primary" [disabled]="!!lineIssues.length" (click)="next()">Next</app-action-button>
-        <app-action-button *ngIf="step === 2 && !isResubmit" variant="primary" [disabled]="saving || !!termIssues.length" (click)="onSubmit()">
+        <app-action-button *ngIf="step === 2 && isUpdate" variant="primary" [disabled]="!!termIssues.length" (click)="onSubmit()">Update</app-action-button>
+        <app-action-button *ngIf="step === 2 && !isUpdate && !isResubmit" variant="primary" [disabled]="saving || !!termIssues.length" (click)="onSubmit()">
             {{ saving ? 'Submitting…' : 'Submit' }}
         </app-action-button>
         <app-action-button *ngIf="step === 2 && isResubmit" variant="primary" [disabled]="saving || !!termIssues.length" (click)="onSubmit()">

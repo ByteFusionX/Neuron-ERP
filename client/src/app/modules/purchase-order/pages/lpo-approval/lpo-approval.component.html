@@ -1,4 +1,4 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-5 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-data-grid #grid
     class="flex-1 min-h-0"
     [fillHeight]="true"
@@ -52,7 +52,7 @@
     </ng-template>
 
     <ng-template #detailFooterTemplate let-row>
-      <app-action-button variant="primary" (click)="openFullLpo(row, $event)" icon="view">Open full PO</app-action-button>
+      <app-action-button variant="primary" (click)="openFullLpo(row, $event)" icon="view">Details View</app-action-button>
     </ng-template>
 
     <ng-template #detailTemplate let-row let-tab="tab">
@@ -62,7 +62,7 @@
         </ng-container>
 
         <ng-container *ngSwitchCase="'items'">
-          <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals></app-detail-table>
+          <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" [currency]="row.currency || 'QAR'" showTotals></app-detail-table>
         </ng-container>
 
         <app-detail-documents *ngSwitchCase="'documents'"
@@ -73,7 +73,14 @@
           (open)="onDocumentOpen($event)"
           (download)="onDocumentDownload($event)"
           (remove)="onDocumentRemove(row, $event)"></app-detail-documents>
+
+        <app-detail-timeline *ngSwitchCase="'history'"
+          [entries]="(historyFor(row) | async) ?? []"
+          emptyMessage="No history recorded yet."></app-detail-timeline>
       </ng-container>
     </ng-template>
   </app-data-grid>
 </div>
+
+<app-initiate-lpo *ngIf="editRow" [purchaseIdInput]="idOf(editRow.purchaseId)" [initialSupplierId]="idOf(editRow.supplierId)" [editPoId]="editRow._id"
+  (issued)="onEditSaved()" (closed)="editRow = null"></app-initiate-lpo>

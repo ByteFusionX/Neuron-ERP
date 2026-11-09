@@ -12,6 +12,7 @@ import Rfq from "../models/rfq.model";
 import PurchaseOrder from "../models/purchaseOrder.model";
 import StockMovement from "../models/stockMovement.model";
 import Item from "../models/item.model";
+import PurchaseRequest from "../models/purchaseRequest.model";
 import { logAudit } from "../services/audit.service";
 import { cleanAliases, derivedKeys, findDuplicates, normalizePartNo, brandKeyOf } from "../common/utils/productMatch";
 import { PRODUCT_SOURCES, PRODUCT_TYPES } from "../models/products.model";
@@ -755,14 +756,15 @@ export const deleteProduct = async (req: Request, res: Response, next: NextFunct
         if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid id" });
 
         const live = { isDeleted: { $ne: true } };
-        const [quotes, rfqs, orders, stock, items] = await Promise.all([
+        const [quotes, rfqs, orders, stock, items, requests] = await Promise.all([
             Quotation.countDocuments({ ...live, 'itemDetails.productId': id }),
             Rfq.countDocuments({ ...live, 'requestedLines.partNo': id }),
             PurchaseOrder.countDocuments({ ...live, 'items.partNo': id }),
             StockMovement.countDocuments({ ...live, product: id }),
-            Item.countDocuments({ partNo: id }),
+            Item.countDocuments({ productId: id }),
+            PurchaseRequest.countDocuments({ ...live, "items.itemDetails.productId": id }),
         ]);
-        const used = ([[quotes, 'quotation'], [rfqs, 'RFQ'], [orders, 'purchase order'], [stock, 'stock movement'], [items, 'inventory item']] as [number, string][])
+        const used = ([[quotes, 'quotation'], [rfqs, 'RFQ'], [orders, 'purchase order'], [stock, 'stock movement'], [items, "inventory item"], [requests, "purchase request"]] as [number, string][])
             .filter(([n]) => n > 0)
             .map(([n, label]) => `${n} ${label}${n === 1 ? '' : 's'}`);
         if (used.length) {

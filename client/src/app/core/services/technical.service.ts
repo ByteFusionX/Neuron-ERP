@@ -67,6 +67,7 @@ export interface AssignEngineer {
   projectType: string;
   customerId: string;
   priority: string;
+  estimatedCostForProject?: number;
 }
 
 export interface ProjectUpdate {

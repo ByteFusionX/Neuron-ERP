@@ -259,6 +259,13 @@ th {
   text-align: left;
 }
 
+/* Full item description: wider, left-aligned, keeps the line breaks the user typed. */
+.mat-mdc-tooltip.erp-tooltip-detail .mdc-tooltip__surface {
+  max-width: 420px;
+  text-align: left;
+  white-space: pre-line;
+}
+
 /* --- Arrow ---------------------------------------------------------------
    Removed: it was pinned to the bubble's own center (left/top: 50%), but
    Material re-anchors the bubble to stay on-screen for longer tooltip text,

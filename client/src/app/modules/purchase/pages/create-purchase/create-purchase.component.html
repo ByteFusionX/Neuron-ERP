@@ -12,7 +12,7 @@
     [tabParam]="''"
   >
     <ng-container footerLeft>
-      <app-action-button variant="outline" *ngIf="canSaveDraft" (click)="onDraftClicks()">Save</app-action-button>
+      <app-action-button variant="outline" *ngIf="canSaveDraft" (click)="onDraftClicks()"><ng-icon name="heroArrowDownTray" class="h-3.5 w-3.5"></ng-icon> Save</app-action-button>
     </ng-container>
     <ng-container footerRight>
       <app-action-button (click)="onDiscardClicks()">Discard</app-action-button>
@@ -38,8 +38,13 @@
         [selectedJobSheet]="selectedJobSheet"
         [lineAwarded]="lineAwarded"
         [lineLocked]="lineLocked"
+        [lineHardLocked]="lineHardLocked"
+        [lineFixed]="lineFixed"
+        [lineMinQty]="lineMinQty"
+        [discountFloor]="discountFloor"
     [readOnly]="!canSaveDraft"
         [lineBadge]="lineBadge"
+        [lineUnregisteredSupplier]="lineUnregisteredSupplier"
         [linePills]="linePills"
         [lineOffers]="lineOffers"
         [lineDeal]="lineDeal"
@@ -52,13 +57,19 @@
     (tabSelected)="activeTab = $event"
     (supplierAdded)="onSupplierTabAdded($event)"
     (linesAddedToTab)="onLinesAddedToTab($event)"
+    [dealSupplierDiscounts]="dealSupplierDiscounts"
+    [dealExtraCosts]="dealExtraCostsTotal"
+    [prExtraCosts]="extraCostsTotal"
+    [customerDiscountTotal]="dealCustomerDiscount"
+    [jobTotals]="jobTotals"
+    (supplierDiscountEdited)="onSupplierDiscountEdited($event)"
     (supplierClosed)="onSupplierTabClosed($event)"
     (offerPicked)="onOfferPicked($event)"
     (pillPicked)="onPillPicked($event)"
         (jobLessChange)="toggleJobLess($event)"
         (jobSelected)="onJobSelected($event)"
         (materialRequestsClicked)="onGetMaterialRequestsClicks()"
-        (createProductRequested)="onCreatePartNumber()"
+        (createProductRequested)="onCreatePartNumber($event)"
       ></app-pr-form>
     </div>
   </app-detail-view-shell>
@@ -66,41 +77,17 @@
 
 <!-- Drawer: create from the PR list, same shape as the quotation create drawer. -->
 <app-sf-drawer #prDrawer *ngIf="drawer" [title]="formTitle()" [subtitle]="drawerSubtitle()"
-  [width]="fullView ? '100vw' : 'min(1200px, 96vw)'" [open]="drawerShown" [dirty]="isDrawerDirty()" (closed)="closeDrawer()">
+  [width]="fullView ? '100vw' : step === 4 ? 'min(720px, 96vw)' : 'min(1200px, 96vw)'" [open]="drawerShown" [dirty]="isDrawerDirty()" (closed)="closeDrawer()">
   <button sfDrawerHeader type="button"
     class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
     [attr.aria-label]="fullView ? 'Exit full view' : 'Expand to full view'"
     (click)="fullView = !fullView">
     <ng-icon [name]="fullView ? 'heroArrowsPointingIn' : 'heroArrowsPointingOut'" class="h-4 w-4"></ng-icon>
   </button>
-  <span sfDrawerHeader class="flex flex-wrap gap-1.5">
-    <app-detail-badge *ngFor="let b of badges()" [label]="b.label" [tone]="b.tone || 'neutral'"></app-detail-badge>
-  </span>
 
-  <ol class="mb-5 flex items-center gap-2">
-    <li *ngFor="let s of steps; let i = index" class="flex flex-1 items-center gap-2">
-      <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-        [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
-        [disabled]="stepLocked(s.n)"
-        (click)="goToStep(s.n)">
-        <span class="grid h-6 w-6 shrink-0 place-content-center rounded-full text-[11px] font-semibold"
-          [ngClass]="s.n === step
-            ? 'bg-violet-600 text-white'
-            : stepDone(s.n)
-              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-              : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">
-          <ng-icon *ngIf="s.n !== step && stepDone(s.n); else stepNumber" name="heroCheck" class="h-3.5 w-3.5"></ng-icon>
-          <ng-template #stepNumber>{{ i + 1 }}</ng-template>
-        </span>
-        <span class="truncate text-xs font-medium"
-          [ngClass]="s.n === step ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'">{{ s.label }}          <ng-container *ngIf="s.n === 3 && awardStats.total"> {{ awardStats.awarded }}/{{ awardStats.total }} ready</ng-container>
-        </span>
-      </button>
-      <span *ngIf="s.n < 4" class="h-px w-4 shrink-0 bg-gray-200 dark:bg-erp-border-dark"></span>
-    </li>
-  </ol>
+  <app-sf-stepper [labels]="shownLabels" [ids]="shownIds" [current]="step" [isComplete]="stepDoneFn" [isLocked]="stepLockedFn" [tickAhead]="true" (stepClick)="goToStep($any($event))"></app-sf-stepper>
 
-  <p *ngIf="!canSaveDraft && step < 4" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+  <p *ngIf="!canSaveDraft && step < 5" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
     This request is {{ f['status'].value }}: lines, prices and suppliers can no longer change.
   </p>
 
@@ -127,7 +114,12 @@
     [lineAwarded]="lineAwarded"
         [lineLocked]="lineLocked"
     [readOnly]="!canSaveDraft"
+        [lineHardLocked]="lineHardLocked"
+        [lineFixed]="lineFixed"
+        [lineMinQty]="lineMinQty"
+        [discountFloor]="discountFloor"
     [lineBadge]="lineBadge"
+    [lineUnregisteredSupplier]="lineUnregisteredSupplier"
     [linePills]="linePills"
     [lineOffers]="lineOffers"
     [lineDeal]="lineDeal"
@@ -138,6 +130,12 @@
     (tabSelected)="activeTab = $event"
     (supplierAdded)="onSupplierTabAdded($event)"
     (linesAddedToTab)="onLinesAddedToTab($event)"
+    [dealSupplierDiscounts]="dealSupplierDiscounts"
+    [dealExtraCosts]="dealExtraCostsTotal"
+    [prExtraCosts]="extraCostsTotal"
+    [customerDiscountTotal]="dealCustomerDiscount"
+    [jobTotals]="jobTotals"
+    (supplierDiscountEdited)="onSupplierDiscountEdited($event)"
     (linesRemovedFromTab)="onLinesRemovedFromTab($event)"
     (linesAwardedToTab)="onLinesAwardedToTab($event)"
     (supplierClosed)="onSupplierTabClosed($event)"
@@ -146,7 +144,7 @@
     (jobLessChange)="toggleJobLess($event)"
     (jobSelected)="onJobSelected($event)"
     (materialRequestsClicked)="onGetMaterialRequestsClicks()"
-    (createProductRequested)="onCreatePartNumber()"
+    (createProductRequested)="onCreatePartNumber($event)"
   ></app-pr-form>
   </div>
 
@@ -160,98 +158,190 @@
       [locked]="!canSaveDraft"
       (awarded)="onReviewAward($event)"
       (awardedMany)="onReviewAwardMany($event)"
-      (shortToggled)="onReviewShort($event)"
     ></app-pr-review-step>
 
-    <!-- Same totals as the bottom bar of the items step -->
-    <div *ngIf="prForm.itemEntry as ie" class="sticky bottom-0 z-20 flex flex-wrap items-end gap-5 rounded-xl border border-gray-200 bg-gray-50/95 px-4 py-3 backdrop-blur dark:border-erp-border-dark dark:bg-gray-900/85">
+    <ng-container *ngTemplateOutlet="totalsBar"></ng-container>
+  </div>
+
+  <!-- Totals shared by Compare & award and Additional costs -->
+  <ng-template #totalsBar>
+    <div *ngIf="prForm.itemEntry as ie" class="sticky bottom-0 z-20 flex flex-wrap items-end justify-between gap-4 rounded-xl border border-gray-200 bg-gray-50/95 px-4 py-3 backdrop-blur dark:border-erp-border-dark dark:bg-gray-900/85">
+      <div class="flex flex-wrap items-end gap-5">
       <div>
-        <p class="text-[11px] uppercase tracking-wide text-gray-500">Total PR price</p>
-        <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ ie.totalCost() | number: '1.2-2' }}</p>
+        <p class="text-[11px] uppercase tracking-wide text-gray-500">Discount</p>
+        <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ ie.discount() | number: '1.2-2' }}</p>
       </div>
       <div>
         <p class="text-[11px] uppercase tracking-wide text-gray-500">PR margin value</p>
-        <p class="text-sm font-semibold tabular-nums" [ngClass]="ie.marginTone(ie.prMarginPercent())">{{ ie.prMarginValue() | number: '1.2-2' }}</p>
+        <p class="text-sm font-semibold tabular-nums" [ngClass]="prMarginTone(ie)">{{ prMarginValue(ie) | number: '1.2-2' }}</p>
       </div>
       <div>
         <p class="text-[11px] uppercase tracking-wide text-gray-500">PR margin %</p>
-        <p class="text-sm font-semibold tabular-nums" [ngClass]="ie.marginTone(ie.prMarginPercent())">{{ ie.prMarginPercent() | number: '1.1-1' }}%</p>
+        <p class="text-sm font-semibold tabular-nums" [ngClass]="prMarginTone(ie)">{{ prMarginPercent(ie) | number: '1.1-1' }}%</p>
+      </div>
+      <div>
+        <p class="text-[11px] uppercase tracking-wide text-gray-500">Total PR cost</p>
+        <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ prTotalCost(ie) | number: '1.2-2' }}</p>
+      </div>
       </div>
       <div *ngIf="ie.dealFigures() as dl" class="ml-auto flex flex-wrap items-end gap-5">
+        <ng-container *ngIf="showDealFigures">
         <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Deal cost</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dl.cost | number: '1.2-2' }}</p>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Margin</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ absNum(ie.dealNetMargin().value) | number: '1.2-2' }}</p>
         </div>
         <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Deal margin value</p>
-          <p class="text-sm font-semibold tabular-nums" [ngClass]="ie.marginTone(dl.marginPercent)">{{ dl.marginValue | number: '1.2-2' }}</p>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Margin %</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ absNum(ie.dealNetMargin().percent) | number: '1.1-1' }}%</p>
         </div>
         <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Deal margin %</p>
-          <p class="text-sm font-semibold tabular-nums" [ngClass]="ie.marginTone(dl.marginPercent)">{{ dl.marginPercent | number: '1.1-1' }}%</p>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Total cost</p>
+          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ ie.dealTotalCost() | number: '1.2-2' }}</p>
         </div>
-        <div>
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Total selling price</p>
-          <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ dl.selling | number: '1.2-2' }}</p>
-        </div>
+        </ng-container>
       </div>
     </div>
+  </ng-template>
+
+  <!-- Additional costs: what the deal sheet added on top of the items (extra costs, supplier and customer discounts) -->
+  <div *ngIf="step === 4" class="space-y-4">
+
+    <!-- Additional costs -->
+    <section class="rounded-lg border border-gray-200 p-4 dark:border-erp-border-dark">
+      <header class="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Additional costs</h3>
+          <p class="mt-0.5 text-xs text-gray-500">Shipping, transport, manpower and other costs on the whole request.</p>
+        </div>
+        <span class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ extraCostsTotal | number: '1.2-2' }} {{ currency() || 'QAR' }}</span>
+      </header>
+      <div class="flex flex-col gap-2">
+        <div *ngFor="let c of extraCosts; let k = index" class="flex items-start gap-2 rounded-md border border-gray-200 p-2 dark:border-erp-border-dark">
+          <app-sf-combobox class="min-w-0 flex-1" [options]="costOptionsFor(c.name)" placeholder="Select cost type"
+            [ngModelOptions]="{ standalone: true }" [(ngModel)]="c.name" [disabled]="!canSaveDraft"></app-sf-combobox>
+          <div class="w-36 shrink-0">
+            <app-sf-number placeholder="Cost amount" [min]="0" [stepper]="false" [suffix]="currency() || ''"
+              [ngModelOptions]="{ standalone: true }" [(ngModel)]="c.value" [disabled]="!canSaveDraft"></app-sf-number>
+            <p *ngIf="dealCostFor(c.name) as d" class="mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums">
+              <span *ngIf="(+c.value! || 0) !== d" [ngClass]="(+c.value! || 0) > d ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">{{ (+c.value! || 0) > d ? '+' : '-' }}{{ ((+c.value! || 0) > d ? (+c.value! || 0) - d : d - (+c.value! || 0)) | number: '1.2-2' }}</span>
+            </p>
+          </div>
+          <button *ngIf="canSaveDraft" type="button" aria-label="Remove cost" (click)="removeExtraCost(k)"
+            class="grid h-8 w-6 shrink-0 place-content-center rounded-md text-base leading-none text-gray-400 transition hover:text-red-600">&times;</button>
+        </div>
+        <p *ngIf="!extraCosts.length" class="rounded-md border border-dashed border-gray-200 px-3 py-3 text-center text-xs text-gray-400 dark:border-erp-border-dark">No additional costs.</p>
+      </div>
+      <div *ngIf="canSaveDraft" class="mt-3">
+        <app-action-button variant="tool" (click)="addExtraCost()">+ Additional cost</app-action-button>
+      </div>
+    </section>
+
+    <!-- Supplier discounts -->
+    <section class="rounded-lg border border-gray-200 p-4 dark:border-erp-border-dark">
+      <header class="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Supplier discounts</h3>
+          <p class="mt-0.5 text-xs text-gray-500">Discounts a supplier gives on their order. Also editable on the supplier's tab in Compare & award.</p>
+        </div>
+        <span class="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">-{{ supplierDiscountTotal | number: '1.2-2' }} {{ currency() || 'QAR' }}</span>
+      </header>
+      <div class="flex flex-col gap-2">
+        <div *ngFor="let r of discountRows; trackBy: trackBySupplierId" class="flex items-start gap-2 rounded-md border border-gray-200 p-2 dark:border-erp-border-dark" [ngClass]="{ 'opacity-60': !r.awarded }">
+          <span class="min-w-0 flex-1 truncate pt-1.5 text-sm text-gray-900 dark:text-gray-100">{{ r.name }}<span *ngIf="!r.awarded" class="ml-2 text-[11px] text-gray-400">Not awarded, not counted</span></span>
+          <div class="w-36 shrink-0">
+            <app-sf-number placeholder="Discount amount" [min]="0" [stepper]="false" [suffix]="currency() || ''"
+              [ngModelOptions]="{ standalone: true }" [ngModel]="r.pr" [disabled]="!canSaveDraft || !r.awarded"
+              (ngModelChange)="setPrDiscount(r, +$event || 0)"></app-sf-number>
+            <p *ngIf="r.deal && r.pr !== r.deal" class="mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums">
+              <span [ngClass]="r.pr > r.deal ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">{{ r.pr > r.deal ? '+' : '-' }}{{ (r.pr > r.deal ? r.pr - r.deal : r.deal - r.pr) | number: '1.2-2' }}</span>
+            </p>
+          </div>
+          <button *ngIf="canSaveDraft && r.awarded && (r.deal === 0 || r.pr !== r.deal)" type="button" [attr.aria-label]="r.deal ? 'Reset to deal discount' : 'Remove discount'" (click)="removeSupplierDiscount(r.supplierId)"
+            class="grid h-8 w-6 shrink-0 place-content-center rounded-md text-base leading-none text-gray-400 transition hover:text-red-600">&times;</button>
+          <span *ngIf="!(canSaveDraft && r.awarded && (r.deal === 0 || r.pr !== r.deal))" class="w-6 shrink-0"></span>
+        </div>
+        <p *ngIf="!discountRows.length" class="rounded-md border border-dashed border-gray-200 px-3 py-3 text-center text-xs text-gray-400 dark:border-erp-border-dark">No supplier discounts.</p>
+      </div>
+      <div *ngIf="canSaveDraft" class="mt-3 flex items-center gap-2">
+        <app-sf-combobox class="min-w-0 flex-1 sm:max-w-xs" [options]="discountSupplierChoices" placeholder="Select supplier"
+          [ngModelOptions]="{ standalone: true }" [(ngModel)]="newDiscountSupplier"></app-sf-combobox>
+        <app-action-button variant="tool" [disabled]="!newDiscountSupplier" (click)="addSupplierDiscount()">+ Supplier discount</app-action-button>
+      </div>
+    </section>
+
+    <!-- Customer discount: agreed on the deal, read-only here -->
+    <section *ngIf="customerDiscountTotal > 0" class="rounded-lg border border-gray-200 bg-gray-50/60 p-4 dark:border-erp-border-dark dark:bg-gray-900/40">
+      <header class="flex items-start justify-between gap-2">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Customer discount<span class="ml-1 text-[11px] font-normal text-gray-400">From deal sheet</span></h3>
+          <p class="mt-0.5 text-xs text-gray-500">Given to the customer on the deal. Change it on the deal sheet, not here.</p>
+        </div>
+        <span class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ customerDiscountTotal ? '-' : '' }}{{ customerDiscountTotal | number: '1.2-2' }} {{ currency() || 'QAR' }}</span>
+      </header>
+    </section>
+
+    <ng-container *ngTemplateOutlet="totalsBar"></ng-container>
   </div>
 
   <!-- POs: one per awarded supplier, raised once the request is approved -->
-  <div *ngIf="step === 4" class="space-y-3">
+  <div *ngIf="step === 5 && !viewOnly" class="space-y-3">
     <!-- The cards come from the awards; only the POs inside them wait for the load. -->
     <p *ngIf="posLoading()" class="text-xs text-gray-500">Loading POs…</p>
 
     <!-- Where the request stands: lines fully on POs, lines still to order, cancellations, quantity nobody is awarded -->
     <div *ngIf="poStepSummary() as sum" class="flex flex-wrap items-center gap-1.5 text-xs">
       <span class="rounded-full bg-emerald-50 px-2.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">{{ sum.fullyOrdered }} of {{ sum.lines }} lines on POs</span>
-      <span *ngIf="sum.toOrder" class="rounded-full bg-amber-50 px-2.5 py-0.5 font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">{{ sum.toOrder }} line{{ sum.toOrder === 1 ? '' : 's' }} still to order</span>
-      <span *ngIf="sum.cancelled" class="rounded-full bg-gray-100 px-2.5 py-0.5 font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ sum.cancelled }} with cancelled qty</span>
+      <span class="rounded-full bg-amber-50 px-2.5 py-0.5 font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">{{ sum.toOrder }} line{{ sum.toOrder === 1 ? '' : 's' }} still to order</span>
+      <span class="rounded-full bg-gray-100 px-2.5 py-0.5 font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ sum.cancelled }} with cancelled qty</span>
       <span *ngIf="sum.unawarded" class="rounded-full bg-red-50 px-2.5 py-0.5 font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300">{{ sum.unawarded }} not fully awarded</span>
-      <app-action-button *ngIf="!posLoading() && suppliersToOrder.length" class="ml-auto" variant="primary" [disabled]="makingPos()" (click)="onMakeAllPos()">
-        {{ makingPos() ? 'Making POs…' : 'Make POs (' + suppliersToOrder.length + ')' }}
-      </app-action-button>
     </div>
 
     <article *ngFor="let c of poCards()" class="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-erp-border-dark dark:bg-erp-surface-dark">
       <div *ngIf="poCardTotals(c.supplierId) as t" class="flex flex-wrap items-center gap-3 px-4 py-3">
-        <button type="button" (click)="togglePoCard(c.supplierId)" [attr.aria-expanded]="openPoCards.has(c.supplierId)" [attr.aria-label]="(openPoCards.has(c.supplierId) ? 'Hide' : 'Show') + ' lines'"
-          class="grid h-6 w-6 shrink-0 place-content-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
-          <ng-icon [name]="openPoCards.has(c.supplierId) ? 'heroChevronDown' : 'heroChevronRight'" class="h-4 w-4"></ng-icon>
-        </button>
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{{ c.name }}</p>
           <p class="text-xs text-gray-500">
             {{ c.lines }} line{{ c.lines === 1 ? '' : 's' }} awarded · {{ c.value | number: '1.2-2' }} {{ currency() || 'QAR' }}
+            <ng-container *ngIf="poCardDiscount(c.supplierId) as d"> · Supplier discount {{ d | number: '1.2-2' }}</ng-container>
             <ng-container *ngIf="t.ordered"> · {{ t.ordered }} on POs</ng-container>
             <ng-container *ngIf="t.received"> · {{ t.received }} received</ng-container>
-            <span *ngIf="t.cancelled" class="text-gray-400"> · {{ t.cancelled }} cancelled</span>
-            <span *ngIf="t.toOrder" class="font-medium text-amber-700 dark:text-amber-400"> · {{ t.toOrder }} to order</span>
+            <span class="font-medium" [ngClass]="t.toOrder ? 'text-amber-700 dark:text-amber-400' : 'text-gray-400'"> · {{ t.toOrder || 0 }} to order</span>
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <span *ngFor="let l of c.lpos" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2 py-1 text-xs dark:border-erp-border-dark">
-            <button type="button" class="font-medium text-violet-600 hover:underline" (click)="onViewPo(l._id)">{{ l.poNo }}</button>
-            <span class="rounded-full px-2 py-0.5 text-[11px] font-medium" [ngClass]="poTone(l.poStatus)">{{ l.poStatus }}</span>
-            <app-action-button *ngIf="l.poStatus === 'Approved'" variant="primary" [disabled]="placingId === l._id" (click)="onPlacePo(l)">{{ placingId === l._id ? 'Placing…' : 'Place order' }}</app-action-button>
-            <button *ngIf="canCancelPo && canCancelStatus(l.poStatus)" type="button" class="text-[11px] font-medium text-red-600 hover:underline" (click)="onCancelPo(l)">Cancel</button>
-          </span>
-          <app-action-button *ngIf="t.toOrder > 0 || (!orderRows().length && !c.lpos.length)" [variant]="c.lpos.length ? 'ghost' : 'primary'" (click)="onCreatePo(c.supplierId)">
-            <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> {{ c.lpos.length ? 'PO for the rest' : 'Create PO' }}
+          <ng-container *ngFor="let l of c.lpos">
+            <span class="inline-flex items-center gap-1">
+              <span class="rounded-full px-2.5 py-0.5 text-[11px] font-medium" [ngClass]="poTone(l.poStatus)" [title]="'LPO ' + l.poNo">{{ l.poNo }} · {{ l.poStatus }}</span>
+              <button type="button" (click)="onViewPo(l._id)" [attr.aria-label]="'View ' + l.poNo" [title]="'View ' + l.poNo"
+                class="grid h-7 w-7 place-content-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-sky-700 dark:hover:bg-gray-800 dark:hover:text-sky-300">
+                <ng-icon name="heroInformationCircle" class="h-4 w-4"></ng-icon>
+              </button>
+            </span>
+          </ng-container>
+          <button *ngIf="c.lpos.length && (t.toOrder > 0 || !orderRows().length)" type="button" (click)="onCreatePo(c.supplierId)"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-violet-600 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 dark:border-violet-400 dark:bg-transparent dark:text-violet-300 dark:hover:bg-violet-950/30">
+            <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> PO for the rest
+          </button>
+          <app-action-button *ngIf="!c.lpos.length && (t.toOrder > 0 || !orderRows().length)" variant="primary" (click)="onCreatePo(c.supplierId)">
+            <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Create PO
           </app-action-button>
+          <button *ngIf="c.lpos.length" type="button" (click)="togglePoCard(c.supplierId)" [attr.aria-expanded]="openPoCards.has(c.supplierId)" [attr.aria-label]="(openPoCards.has(c.supplierId) ? 'Hide' : 'Show') + ' lines'"
+            class="grid h-7 w-7 shrink-0 place-content-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+            <ng-icon [name]="openPoCards.has(c.supplierId) ? 'heroChevronDown' : 'heroChevronRight'" class="h-4 w-4"></ng-icon>
+          </button>
         </div>
       </div>
 
       <!-- The supplier's lines: its share, what its POs hold, and what is left to order or move -->
-      <div *ngIf="openPoCards.has(c.supplierId)" class="border-t border-gray-100 px-4 pb-3 pt-2 dark:border-erp-border-dark">
-        <div class="hidden grid-cols-[minmax(0,4fr)_repeat(5,minmax(0,1fr))_minmax(0,1.6fr)] gap-2 pb-1 text-[11px] uppercase tracking-wide text-gray-400 min-[900px]:grid">
-          <span>Item</span><span class="text-right">Awarded</span><span class="text-right">On PO</span><span class="text-right">Received</span><span class="text-right">Cancelled</span><span class="text-right">To order</span><span></span>
+      <div *ngIf="c.lpos.length && openPoCards.has(c.supplierId)" class="border-t border-gray-100 px-4 pb-3 pt-2 dark:border-erp-border-dark">
+        <div class="hidden grid-cols-[minmax(0,4fr)_repeat(3,minmax(0,1fr))] gap-2 pb-1 text-[11px] uppercase tracking-wide text-gray-400 min-[900px]:grid">
+          <span>Item</span><span class="text-right">Awarded</span><span class="text-right">On PO</span><span class="text-right">To order</span>
         </div>
         <div class="divide-y divide-gray-100 dark:divide-erp-border-dark">
-          <div *ngFor="let x of poCardLines(c.supplierId); trackBy: trackPoCardLine" class="grid grid-cols-3 items-center gap-2 py-2 text-xs min-[900px]:grid-cols-[minmax(0,4fr)_repeat(5,minmax(0,1fr))_minmax(0,1.6fr)]">
+          <div *ngFor="let x of poCardLines(c.supplierId); trackBy: trackPoCardLine" class="grid grid-cols-3 items-center gap-2 py-2 text-xs min-[900px]:grid-cols-[minmax(0,4fr)_repeat(3,minmax(0,1fr))]">
             <div class="col-span-3 min-w-0 min-[900px]:col-span-1">
-              <p class="whitespace-pre-line text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ x.row.detail }}</p>
+              <p class="line-clamp-2 whitespace-pre-line break-words text-[13px] font-medium text-gray-900 dark:text-gray-100"
+                [matTooltip]="x.row.detail" matTooltipPosition="above" matTooltipClass="erp-tooltip-detail" [matTooltipShowDelay]="250">{{ x.row.detail }}</p>
               <p class="text-[11px] text-gray-500">
                 {{ x.row.quantity }}{{ x.row.uom ? ' ' + x.row.uom : '' }} on the request
                 <ng-container *ngIf="x.s.unitPrice != null"> · {{ x.s.unitPrice | number: '1.2-2' }} each</ng-container>
@@ -260,12 +350,7 @@
             </div>
             <span class="text-right tabular-nums">{{ x.s.awardedQty }}</span>
             <span class="text-right tabular-nums">{{ x.s.orderedQty }}</span>
-            <span class="text-right tabular-nums">{{ x.s.receivedQty }}</span>
-            <span class="text-right tabular-nums text-gray-500">{{ x.s.cancelledQty || '-' }}</span>
-            <span class="text-right font-medium tabular-nums" [ngClass]="x.s.freeQty ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'">{{ x.s.freeQty || '✓' }}</span>
-            <div class="text-right">
-              <button *ngIf="canCancelPo && x.s.freeQty > 0" type="button" class="text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-400" (click)="onReassign(x.row, x.s)">Move to another supplier</button>
-            </div>
+            <span class="text-right font-medium tabular-nums" [ngClass]="x.s.freeQty ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'">{{ x.s.freeQty || 0 }}</span>
           </div>
           <p *ngIf="!poCardLines(c.supplierId).length" class="py-3 text-center text-xs text-gray-500">Loading lines…</p>
         </div>
@@ -276,7 +361,6 @@
 
   <ng-container sfDrawerFooter>
     <div class="mr-auto flex flex-wrap items-center gap-2">
-      <span *ngIf="purchaseId && !isEditing" class="text-xs text-gray-400 dark:text-gray-500">{{ f['purchaseNo'].value }} saved</span>
       <ng-container *ngIf="step <= 2 && canSaveDraft">
         <ng-container *ngIf="selectedJobSheet || isJobLess">
           <app-action-button variant="secondary" (click)="onCreatePartNumber()">
@@ -286,19 +370,23 @@
             <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add supplier
           </app-action-button>
         </ng-container>
-        <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onMrRequestClicks()">MR request</app-action-button>
+        <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onMrRequestClicks()"><ng-icon name="heroClipboardDocumentList" class="h-3.5 w-3.5"></ng-icon> MR request</app-action-button>
       </ng-container>
     </div>
-    <span *ngIf="step === 3 && canSaveDraft && submitBlockedReason" class="text-xs text-amber-600 dark:text-amber-400">{{ submitBlockedReason }}</span>
-    <app-action-button variant="secondary" (click)="prDrawer.requestClose()">{{ canSaveDraft ? 'Cancel' : 'Close' }}</app-action-button>
-    <app-action-button *ngIf="step > 2" variant="secondary" (click)="onBackClicks()">Back</app-action-button>
-    <app-action-button *ngIf="canSaveDraft" variant="tool" (click)="onDraftClicks()">Save</app-action-button>
-    <app-action-button *ngIf="step === 2" variant="primary" (click)="onNextClicks()" title="Saves the items, then opens Compare & award">Save & compare</app-action-button>
-    <app-action-button *ngIf="step === 3 && isApproved" variant="primary" (click)="goToStep(4)">Next: POs</app-action-button>
-    <span *ngIf="step === 3 && canSaveDraft">
+    <span *ngIf="step === 4 && canSaveDraft && submitBlockedReason" class="text-xs text-amber-600 dark:text-amber-400">{{ submitBlockedReason }}</span>
+    <app-action-button variant="secondary" (click)="prDrawer.requestClose()"><ng-icon name="heroXMark" class="h-3.5 w-3.5"></ng-icon> {{ canSaveDraft ? 'Cancel' : 'Close' }}</app-action-button>
+    <!-- view-only: the stepper moves between tabs, so the footer carries just Close -->
+    <ng-container *ngIf="!viewOnly">
+      <app-action-button *ngIf="step > 2" variant="secondary" (click)="onBackClicks()"><ng-icon name="heroArrowLeft" class="h-3.5 w-3.5"></ng-icon> Back</app-action-button>
+      <app-action-button *ngIf="canSaveDraft" variant="tool" (click)="onDraftClicks()"><ng-icon name="heroArrowDownTray" class="h-3.5 w-3.5"></ng-icon> Save</app-action-button>
+      <app-action-button *ngIf="step === 2" variant="primary" (click)="onNextClicks()" [title]="canSaveDraft ? 'Saves the items, then opens Compare & award' : ''"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> {{ canSaveDraft ? 'Save & compare' : 'Next' }}</app-action-button>
+      <app-action-button *ngIf="step === 3" variant="primary" (click)="goToStep(4)"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Next</app-action-button>
+      <app-action-button *ngIf="step === 4 && isApproved" variant="primary" (click)="goToStep(5)"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Next</app-action-button>
+    </ng-container>
+    <span *ngIf="step === 4 && canSaveDraft">
       <app-action-button variant="primary" [disabled]="!!submitBlockedReason" (click)="onSubmit()">
-        <ng-icon name="heroPaperAirplane" class="h-3.5 w-3.5"></ng-icon> Send for approval
-      </app-action-button>
+        <ng-icon name="heroPaperAirplane" class="h-3.5 w-3.5"></ng-icon> {{ isResend ? 'Resend' : 'Send' }}
+</app-action-button>
     </span>
   </ng-container>
 </app-sf-drawer>

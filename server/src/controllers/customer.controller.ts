@@ -6,7 +6,8 @@ import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
 import employeeModel from "../models/employee.model";
 import { getNextSequence } from "../models/counter.model";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
-import { customerNameKeys, duplicateGroups, findCustomerDuplicates, PartyMatch } from "../common/utils/partyMatch";
+import { logAudit } from "../services/audit.service";
+import { customerNameKeys, findCustomerDuplicates, PartyMatch } from "../common/utils/partyMatch";
 const { ObjectId } = require('mongodb')
 
 const normalizeEmail = (email?: string): string | undefined =>
@@ -659,6 +660,11 @@ export const shareOrTransferCustomer = async (req: Request, res: Response, next:
             return res.status(400).json({ message: "Invalid type. Use 'transfer' or 'share'" });
         }
         const savedCustomer = await customer.save();
+        if (type == "Transfer") {
+            const newOwner: any = await Employee.findById(employees).select('firstName lastName').lean();
+            const ownerName = `${newOwner?.firstName || ''} ${newOwner?.lastName || ''}`.trim();
+            await logAudit(req, { entityType: 'customer', entityId: savedCustomer._id, entityLabel: savedCustomer.companyName, action: 'transferred', summary: ownerName ? `Customer transferred to ${ownerName}` : 'Customer ownership transferred' });
+        }
 
         // Populate both `createdBy` and `sharedWith`
         const newCustomer = await Customer.findById(savedCustomer._id)
@@ -732,29 +738,6 @@ export const checkCustomerDuplicate = async (req: Request, res: Response, next: 
     }
 }
 
-/** Customers that may be entered twice: same name, same TRN, similar name, same email, same phone. */
-export const getCustomerDuplicatesReport = async (_req: Request, res: Response, next: NextFunction) => {
-    try {
-        const fields = ['_id', 'companyName', 'clientRef', 'customerEmailId', 'contactNo', 'trn'];
-        const [sameName, sameTrn, similarName, sameEmail, samePhone] = await Promise.all([
-            duplicateGroups(Customer, 'nameKey', fields),
-            duplicateGroups(Customer, 'normalizedTrn', fields),
-            duplicateGroups(Customer, 'nameCore', fields),
-            duplicateGroups(Customer, 'normalizedEmail', fields),
-            duplicateGroups(Customer, 'normalizedPhone', fields),
-        ]);
-        // A pair already listed under "same name" is not repeated under "similar name".
-        const exact = new Set(sameName.map((g) => g.records.map((r: any) => String(r._id)).sort().join()));
-        return res.status(200).json({
-            sameName, sameTrn, sameEmail, samePhone,
-            similarName: similarName.filter((g) => !exact.has(g.records.map((r: any) => String(r._id)).sort().join())),
-        });
-    } catch (error) {
-        console.error(error);
-        next(error);
-    }
-}
-
 /**
  * Turns duplicate matches into the response the form understands, or null when the save may go ahead.
  * Blocks are final; warnings can be overridden by resending with `confirmDuplicates: true`.
@@ -821,6 +804,7 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
         const saveCustomer = await customer.save()
 
         if (saveCustomer) {
+            await logAudit(req, { entityType: 'customer', entityId: saveCustomer._id, entityLabel: saveCustomer.companyName, action: 'created', summary: `Customer ${saveCustomer.companyName} created` });
             return res.status(200).json(saveCustomer)
         }
 
@@ -931,7 +915,12 @@ export const updateCustomerStatus = async (req: Request, res: Response, next: Ne
         customer.updatedBy = changedBy._id;
         customer.updatedDate = new Date();
 
+        const previousStatus = customer.statusHistory.length > 1 ? customer.statusHistory[customer.statusHistory.length - 2]?.status : undefined;
         const updatedCustomer = await customer.save();
+        await logAudit(req, {
+            entityType: 'customer', entityId: updatedCustomer._id, entityLabel: updatedCustomer.companyName, action: 'status-changed',
+            summary: `Status ${previousStatus ? `changed from ${previousStatus} to ${status}` : `set to ${status}`}${reason ? ` — ${reason}` : ''}`,
+        });
         return res.status(200).json(updatedCustomer);
     } catch (error) {
         console.error(error);
@@ -959,6 +948,7 @@ export const deleteCustomer = async (req: Request, res: Response, next: NextFunc
             isDeleted: true
         });
         newTrash('Customer', dataId, employeeId)
+        await logAudit(req, { entityType: 'customer', entityId: customer._id, entityLabel: customer.companyName, action: 'deleted', summary: `Customer ${customer.companyName} deleted` });
 
         return res.status(200).json({
             success: true,

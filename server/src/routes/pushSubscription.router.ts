@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { subscribe, unsubscribe } from "../controllers/pushSubscription.controller";
+import { unsubscribe } from "../controllers/pushSubscription.controller";
 
 const pushSubscriptionRouter = Router();
 
-pushSubscriptionRouter.post('/subscribe', subscribe);
+// Subscribing lives at POST /employee/push-subscription: it needs the session cookie, which is only sent to /employee.
 pushSubscriptionRouter.post('/unsubscribe', unsubscribe);
 
 export default pushSubscriptionRouter;

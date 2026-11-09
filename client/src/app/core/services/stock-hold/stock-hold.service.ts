@@ -7,8 +7,13 @@ import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/er
 const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 export interface CreateStockHoldPayload {
-  grnId: string;
-  itemIndex: number;
+  source?: 'GRN' | 'DN';
+  grnId?: string;
+  itemIndex?: number;
+  dnId?: string;
+  dnItemId?: string;
+  supplierId?: string;
+  reasonCode?: string;
   qty?: number;
   logisticsType: 'PhysicalReturn' | 'SupplierPickup' | 'Courier' | 'NoPhysicalReturn';
   trackingRef?: string;
@@ -40,8 +45,12 @@ export class StockHoldService {
     return this.http.post<any>(this.baseUrl, payload, { context: context() });
   }
 
-  getStockHolds(params?: { grnId?: string; stockEntryId?: string; supplierId?: string; status?: string }): Observable<any> {
+  getStockHolds(params?: { grnId?: string; stockEntryId?: string; supplierId?: string; status?: string; dnId?: string; jobId?: string; source?: 'GRN' | 'DN' }):Observable<any> {
     return this.http.get<any>(this.baseUrl, { params: params as any, context: context() });
+  }
+
+  getDnRejections(): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/dn-rejections`, { context: context() });
   }
 
   getStockHoldById(id: string): Observable<any> {

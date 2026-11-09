@@ -10,7 +10,10 @@ import { FormatStringPipe } from 'src/app/shared/pipes/formatString.pipe';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import {
   DetailViewBadge,
   DetailViewBreadcrumb,
@@ -30,7 +33,7 @@ const STATUS_TONE: Record<string, DetailViewBadge['tone']> = {
 @Component({
   selector: 'app-customer-view',
   standalone: true,
-  imports: [NgIf, NgSwitch, NgSwitchCase, DetailViewShellComponent, DetailOverviewComponent, DetailTableComponent, ActionButtonComponent],
+  imports: [NgIf, NgSwitch, NgSwitchCase, DetailViewShellComponent, DetailOverviewComponent, DetailTableComponent, DetailTimelineComponent, ActionButtonComponent],
   template: `
     <div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
       <app-detail-view-shell
@@ -62,6 +65,9 @@ const STATUS_TONE: Record<string, DetailViewBadge['tone']> = {
           <div *ngSwitchCase="'contacts'">
             <app-detail-table title="Contacts" [columns]="contactColumns" [rows]="contactRows" emptyMessage="No contacts."></app-detail-table>
           </div>
+          <div *ngSwitchCase="'history'">
+            <app-detail-timeline [entries]="historyEntries" emptyMessage="No history yet."></app-detail-timeline>
+          </div>
         </div>
       </app-detail-view-shell>
     </div>
@@ -71,11 +77,13 @@ export class CustomerViewComponent implements OnInit {
   customer: getCustomer | null = null;
   loading = true;
   readonly noGrid: any = null;
-  tab: 'overview' | 'contacts' = 'overview';
+  tab: 'overview' | 'contacts' | 'history' = 'overview';
   readonly tabs: DetailViewTab[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'contacts', label: 'Contacts' },
+    { id: 'history', label: 'History' },
   ];
+  historyEntries: DetailTimelineEntry[] = [];
   readonly contactColumns: DetailTableColumn[] = [
     { key: 'name', label: 'Name', type: 'text', wrap: true },
     { key: 'designation', label: 'Designation', type: 'text' },
@@ -95,6 +103,7 @@ export class CustomerViewComponent implements OnInit {
     private customerService: CustomerService,
     private employeeService: EmployeeService,
     private toast: ToastrService,
+    private auditLog: AuditLogService,
   ) {}
 
   get avatarText(): string {
@@ -121,6 +130,10 @@ export class CustomerViewComponent implements OnInit {
           }
           this.customer = res.customerData;
           this.build(res.customerData);
+          this.auditLog.getHistory('customer', res.customerData._id).subscribe({
+            next: (entries) => (this.historyEntries = toTimelineEntries(entries)),
+            error: () => (this.historyEntries = []),
+          });
         },
         error: () => (this.loading = false),
       });

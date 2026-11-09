@@ -38,8 +38,8 @@ export class DeliveryNoteService {
     return this.http.get<any>(`${this.apiUrl}/draft/${jobId}`);
   }
 
-  getDnItemsForJob(jobId: string): Observable<any> {
-    return this.http.get<any>(`${this.apiUrl}/items-for-job/${jobId}`);
+  getDnItemsForJob(jobId: string, invoiceId?: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/items-for-job/${jobId}`, invoiceId ? { params: { invoiceId } } : {});
   }
 
   getAllDeliveryNotes(filter: any): Observable<any> {
@@ -52,14 +52,6 @@ export class DeliveryNoteService {
     return this.http.get<any>(`${this.apiUrl}/ready-for-dn`, { params, context: context() });
   }
 
-  getPendingDeliveries(filter: any): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/pending`, filter);
-  }
-
-
-  getPendingDeliveryDetails(jobId: string): Observable<any> {
-    return this.http.get<any>(`${this.apiUrl}/pending/${jobId}`);
-  }
 
   getDnById(id: string): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/${id}`);
@@ -78,7 +70,7 @@ export class DeliveryNoteService {
     return this.http.patch<any>(`${this.apiUrl}/${id}/dispatch`, {});
   }
 
-  rejectDnItems(id: string, data: { items: { itemId: string; rejectedQty: number; reason?: string }[]; reason: string }): Observable<any> {
+  rejectDnItems(id: string, data: { items: { itemId: string; rejectedQty: number; reason?: string }[]; reason?: string }): Observable<any> {
     return this.http.patch<any>(`${this.apiUrl}/${id}/reject`, data);
   }
 

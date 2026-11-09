@@ -4,6 +4,11 @@ import {
   getEmployees,
   login,
   loginWithMicrosoft,
+  refreshToken,
+  logout,
+  revokeMySessions,
+  getMySessions,
+  revokeMySession,
   getEmployee,
   getFilteredEmployees,
   editEmployee,
@@ -31,6 +36,7 @@ import {
   uploadMyPhoto,
   removeMyPhoto,
 } from "../controllers/employeeSelf.controller";
+import { subscribe } from "../controllers/pushSubscription.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 import passport from "passport";
 const upload = require("../common/multer.storage");
@@ -80,8 +86,18 @@ empRouter.patch(
 );
 // /login (employeeId/password) and /login-microsoft are globally exempt from the app's own JWT
 // middleware (no employeeToken yet); /login-microsoft is gated on the caller's Azure AD token.
-empRouter.post("/login", login);
+// Azure AD (/login-microsoft) is the only login. The employeeId/password login is kept for development
+// testing only: set ALLOW_PASSWORD_LOGIN=true in .env to register it again.
+if (process.env.ALLOW_PASSWORD_LOGIN === "true") {
+  empRouter.post("/login", login);
+}
 empRouter.post("/login-microsoft", passport.authenticate("oauth-bearer", { session: false }), loginWithMicrosoft);
+empRouter.post("/refresh", refreshToken);
+empRouter.post("/logout", logout);
+empRouter.post("/revoke-sessions", revokeMySessions);
+empRouter.get("/sessions", getMySessions);
+empRouter.delete("/sessions/:id", revokeMySession);
+empRouter.post("/push-subscription", subscribe);
 empRouter.get("/get", getEmployee);
 // Deprecated: Use /notification endpoint instead for privilege-aware notifications
 // empRouter.get('/notifications', getNotificationCounts)

@@ -2,15 +2,15 @@ import { Component, OnDestroy, OnInit, ViewChild, inject, signal } from '@angula
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
+import { ModalService } from 'src/app/shared/components/modal';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
-import { Subscription, catchError, forkJoin, map, of } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, catchError, forkJoin, map, of } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { ToastrService } from 'ngx-toastr';
 
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { InvoiceService } from 'src/app/core/services/invoice.service';
-import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
-import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { DeliveryNote, DnStatus } from 'src/app/shared/interfaces/delivery-note.interface';
 import { PaginationService } from 'src/app/core/services/pagination.service';
@@ -21,12 +21,17 @@ import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridQuery, D
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
-import { DetailDocument, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
+import { DetailDocument, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
 import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
 import { CreateDnComponent } from '../create-dn/create-dn.component';
-import { ConfirmDeliveryData, ConfirmDeliveryModalComponent } from '../../components/confirm-delivery-modal/confirm-delivery-modal.component';
-import { RejectDnData, RejectDnModalComponent } from '../../components/reject-dn-modal/reject-dn-modal.component';
+import { CustomerInvoiceFormComponent } from 'src/app/modules/finance/pages/vendor-bills/customer-invoice-form.component';
+import { CustomerInvoiceService } from 'src/app/core/services/customer-invoice.service';
+import { InvoiceService } from 'src/app/core/services/invoice.service';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { ConfirmDeliveryDrawerComponent } from '../../components/confirm-delivery-drawer/confirm-delivery-drawer.component';
+import { ReturnDnDrawerComponent } from '../../components/return-dn-drawer/return-dn-drawer.component';
 
 interface FilterParams {
   [key: string]: any;
@@ -55,7 +60,11 @@ interface FilterParams {
     DetailTimelineComponent,
     DetailFieldComponent,
     DetailSectionComponent,
+    DetailTableComponent,
     CreateDnComponent,
+    CustomerInvoiceFormComponent,
+    ConfirmDeliveryDrawerComponent,
+    ReturnDnDrawerComponent,
     IconsModule,
     MatMenuModule
   ],
@@ -70,15 +79,22 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   private _router = inject(Router);
   private _route = inject(ActivatedRoute);
   private _dialog = inject(MatDialog);
+  private modal = inject(ModalService);
   private toaster = inject(ToastrService);
   paginationService = inject(PaginationService);
   private employeeService = inject(EmployeeService);
-  private invoiceService = inject(InvoiceService);
-  private purchaseOrderService = inject(PurchaseOrderService);
-  private purchaseService = inject(PurchaseService);
   private subscriptions = new Subscription();
+  private auditLog = inject(AuditLogService);
+  private confirmDialog = inject(ConfirmDialogService);
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
 
   canCreateDn = signal<boolean>(false);
+  canInvoice = false;
+  openingInvoice = false;
+  invoiceDn: any = null;
+  private invoicedDnIds = new Set<string>();
+  private customerInvoices = inject(CustomerInvoiceService);
+  private invoiceService = inject(InvoiceService);
 
   tableData = signal<DeliveryNote[]>([]);
   tableColumns: DataGridColumn<DeliveryNote>[] = [];
@@ -86,6 +102,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   views: DataGridView<DeliveryNote>[] = [
     { id: 'all', label: 'All' },
     { id: 'ready', label: 'Ready for DN' },
+    { id: 'ready-to-deliver', label: 'Ready to Deliver', filters: [{ id: 1, key: 'status', op: 'is', value: DnStatus.READY_TO_DELIVER }] },
     { id: 'out-for-delivery', label: 'Out for Delivery', filters: [{ id: 1, key: 'status', op: 'is', value: DnStatus.DISPATCHED }] },
     // Both split Delivered DNs server-side (deliveryScope) by whether every line reached its ordered qty.
     { id: 'partially-delivered', label: 'Partially Delivered', filters: [{ id: 1, key: 'status', op: 'is', value: DnStatus.DELIVERED }] },
@@ -95,7 +112,8 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   ];
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Dispatch' }, { label: 'Delivery Notes' }];
   readonly detailTabs: DataGridDetailTab[] = [
-    { id: 'details', label: 'DN Details', icon: 'info' },
+    { id: 'overview', label: 'Details', icon: 'info' },
+    { id: 'items', label: 'Items', icon: 'card' },
     { id: 'documents', label: 'Documents', icon: 'files' },
     { id: 'history', label: 'History', icon: 'history' },
   ];
@@ -117,6 +135,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.subscriptions.add(
       this.employeeService.employeeData$.subscribe(emp => {
+        this.canInvoice = (/^(superadmin|admin)$/i.test(emp?.category?.role ?? '') || !!(emp?.category?.privileges?.dispatch?.createInvoice ?? emp?.category?.privileges?.invoice?.createInvoice));
         const privileges = emp?.category?.privileges?.dispatch;
         if (privileges?.createDeliveryNote) {
           this.canCreateDn.set(true);
@@ -179,20 +198,18 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
         valueGetter: (item) => item.job?.jobId || 'N/A'
       },
       {
-        key: 'products',
-        label: 'Products',
-        valueGetter: (item: any) => (item.items || []).map((i: any) => i.description || i.partNo).filter(Boolean).join(', ') || '-'
+        key: 'subject',
+        label: 'Subject',
+        valueGetter: (item: any) => item.quote?.subject || item.subject || '-'
       },
       {
         key: 'clientName',
         label: 'Customer',
       },
-      { key: 'deliveryType', label: 'Type', type: 'badge' },
-      { key: 'poNumbers', label: 'PO Number', valueGetter: (item: any) => (item.poNumbers || []).join(', ') || '-' },
       { key: 'grnNumbers', label: 'GRN No', valueGetter: (item: any) => (item.grnNumbers || []).join(', ') || '-' },
       {
         key: 'customerLpoNumber',
-        label: 'LPO Number',
+        label: 'LPO Ref',
         valueGetter: (item) => item.customerLpoNumber || 'N/A'
       },
       {
@@ -208,27 +225,32 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
 
   private setupReadyColumns(): void {
     this.tableColumns = [
+      { key: 'grnNo', label: 'GRN No', valueGetter: (row: any) => row.grnNo || '-' },
+      { key: 'grnDate', label: 'GRN Date', type: 'date' },
       { key: 'job.jobId', label: 'Job ID', valueGetter: (row: any) => row.job?.jobId || 'N/A' },
-      { key: 'poNumbers', label: 'PO Number', valueGetter: (row: any) => (row.poNumbers || []).join(', ') || '-' },
-      { key: 'grnNumbers', label: 'GRN No', valueGetter: (row: any) => (row.grnNumbers || []).join(', ') || '-' },
-      { key: 'productNames', label: 'Products', valueGetter: (row: any) => row.productNames || '-' },
-      { key: 'productCount', label: 'Items', type: 'number' },
-      { key: 'acceptedQty', label: 'Deliverable Qty', type: 'number' },
-      { key: 'lastGrnDate', label: 'Last Received', type: 'date', width: '120px' },
+      { key: 'clientName', label: 'Customer', valueGetter: (row: any) => row.clientName || '-' },
+      { key: 'customerPoNumber', label: 'Customer PO', valueGetter: (row: any) => row.customerPoNumber || '-' },
+      { key: 'subject', label: 'Subject', valueGetter: (row: any) => row.subject || '-' },
+      { key: 'prNo', label: 'PR No', valueGetter: (row: any) => row.prNo || '-' },
+      { key: 'poNo', label: 'PO No', valueGetter: (row: any) => row.poNo || '-' },
+      { key: 'receivedQty', label: 'Received', type: 'number', align: 'right' },
+      { key: 'deliveryStatus', label: 'Status', type: 'badge', valueGetter: (row: any) => row.deliveryStatus || '-' },
     ];
   }
 
   setupRowActions(): void {
     this.rowActions = [
-      { id: 'viewDn', label: 'Open full DN', icon: 'eye', quick: true, panel: true },
-      { id: 'confirmDelivery', label: 'Deliver', icon: 'check', quick: true, hidden: row => row.status !== DnStatus.DISPATCHED },
-      { id: 'rejectDn', label: 'Reject delivery', icon: 'close', hidden: row => !this.canReject(row) },
+      { id: 'viewDn', label: 'Detail view', icon: 'eye', quick: true, panel: true },
+      { id: 'editDn', label: 'Edit DN', icon: 'edit', hidden: row => row.status !== DnStatus.DRAFT && row.status !== DnStatus.READY_TO_DELIVER },
+      { id: 'placeOrder', label: 'Place order', icon: 'check', quick: true, hidden: row => row.status !== DnStatus.READY_TO_DELIVER },
+      { id: 'confirmDelivery', label: 'Confirm delivery', icon: 'check', quick: true, hidden: row => row.status !== DnStatus.DISPATCHED },
+      { id: 'returnDn', label: 'Return', icon: 'close', quick: true, variant: 'danger', hidden: row => !this.canReturn(row) },
       { id: 'previewDn', label: 'Preview DN', icon: 'files', quick: true },
-      { id: 'previewPo', label: 'Preview PO', icon: 'card' },
-      { id: 'downloadDn', label: 'Download DN PDF', icon: 'download' },
-      // Invoice documents are available once goods have left; a DN-based draft is used until finance raises one.
-      { id: 'previewInvoice', label: 'Preview invoice', icon: 'note', quick: true, hidden: row => !this.canHaveInvoice(row) },
-      { id: 'downloadInvoice', label: 'Download invoice PDF', icon: 'download', hidden: row => !this.canHaveInvoice(row) },
+      { id: 'downloadDn', label: 'Download DN', icon: 'download' },
+      { id: 'editInvoice', label: 'Edit invoice', icon: 'edit', hidden: row => !this.canInvoice || !this.hasInvoice(row) },
+      { id: 'createInvoice', label: 'Create invoice', icon: 'plus', quick: true, hidden: row => !this.canCreateInvoice(row) },
+      { id: 'previewInvoice', label: 'Preview invoice', icon: 'customerBill', quick: true, hidden: row => !this.hasInvoice(row) },
+      { id: 'downloadInvoice', label: 'Download invoice', icon: 'download', hidden: row => !this.hasInvoice(row) },
     ];
   }
 
@@ -240,6 +262,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
 
   loadData(filters?: Partial<FilterParams>): void {
     this.isLoading.set(true);
+    this.historyCache.clear();
     const requestId = ++this.requestSequence;
     const paginationState = this.paginationService.paginationState();
 
@@ -348,6 +371,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
         }
       }
     });
+    if (query.viewId === 'ready-to-deliver') filterParams.status = DnStatus.READY_TO_DELIVER;
     if (query.viewId === 'out-for-delivery') filterParams.status = DnStatus.DISPATCHED;
     if (query.viewId === 'partially-delivered') {
       filterParams.status = DnStatus.DELIVERED;
@@ -392,18 +416,27 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
       case 'createDn':
         this.openCreateDrawer(null, row.job?._id || row.jobId);
         break;
-      case 'rejectDn':
-        this.openReject(row);
+      case 'editDn':
+        this.openCreateDrawer(row._id);
+        break;
+      case 'placeOrder':
+        void this.placeOrder(row);
         break;
       case 'confirmDelivery':
         this.openConfirmDelivery(row);
+        break;
+      case 'returnDn':
+        this.returnDnRow = row;
         break;
       case 'previewDn':
       case 'downloadDn':
         this.dnPdf(row, action.id === 'downloadDn');
         break;
-      case 'previewPo':
-        this.poPdf(row);
+      case 'createInvoice':
+        this.openCreateInvoice(row);
+        break;
+      case 'editInvoice':
+        this.openEditInvoice(row);
         break;
       case 'previewInvoice':
       case 'downloadInvoice':
@@ -412,97 +445,190 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     }
   }
 
+  hasInvoice(row: DeliveryNote): boolean {
+    return this.invoicedDnIds.has(row._id) || !!(row as any).customerInvoiceNo;
+  }
+
+  /** Shapes the customer invoice raised for this DN like the invoice the PDF generator prints. */
+  private invoicePdf(row: DeliveryNote, download: boolean): void {
+    this.customerInvoices.list({ page: 1, limit: 1, search: '', deliveryNote: row._id }).subscribe({
+      next: res => {
+        const inv = res?.data?.[0];
+        if (!inv) {
+          this.toaster.error('Invoice details are not available');
+          return;
+        }
+        const invoice = {
+          invoiceNo: inv.invoiceNo,
+          date: inv.invoiceDate,
+          customer: { companyName: inv.client?.name },
+          attention: inv.attention,
+          jobId: { jobId: inv.jobNo },
+          dnNumbers: inv.dnNo,
+          lpoRef: inv.lpoRef,
+          subject: inv.subject,
+          paymentTerms: inv.paymentTerms,
+          currency: inv.currency || 'QAR',
+          amount: inv.amount,
+          discount: inv.discount || 0,
+          items: (inv.items || []).map((i: any) => ({ description: i.description, quantity: i.quantity, amount: i.totalCost })),
+        };
+        this.invoiceService.generateInvoicePDF(invoice, true)
+          .then(pdf => download
+            ? pdf.download(`${inv.invoiceNo || 'invoice'}.pdf`)
+            : pdf.getBlob((blob: Blob) => this.openPreview(blob, invoice, 'invoice')))
+          .catch(() => this.toaster.error('Failed to generate the invoice PDF'));
+      },
+      error: () => this.toaster.error('Failed to load the invoice details'),
+    });
+  }
+
+  /** Offered from DN creation (Ready to Deliver) until it is invoiced or delivered. */
+  canCreateInvoice(row: DeliveryNote): boolean {
+    return this.canInvoice && !this.hasInvoice(row)
+      && (row.status === DnStatus.READY_TO_DELIVER || row.status === DnStatus.DISPATCHED);
+  }
+
+  openCreateInvoice(row: DeliveryNote): void {
+    if (this.openingInvoice) return;
+    this.openingInvoice = true;
+    this.customerInvoices.prepareDn(row._id).subscribe({
+      next: (response: any) => {
+        this.openingInvoice = false;
+        this.invoiceDn = response?.success ? response.data : response;
+      },
+      error: (error) => {
+        this.openingInvoice = false;
+        this.toaster.error(error?.error?.message || 'Failed to load the delivery note for invoicing');
+      },
+    });
+  }
+
+  editingInvoice: any = null;
+
+  /** Only a still-pending invoice can be edited (a PDC one only while its PDC is un-actioned). */
+  openEditInvoice(row: DeliveryNote): void {
+    if (this.openingInvoice) return;
+    this.openingInvoice = true;
+    this.customerInvoices.list({ page: 1, limit: 1, search: '', deliveryNote: row._id }).subscribe({
+      next: res => {
+        const inv = res?.data?.[0];
+        const editable = !!inv?._id && inv.status === 'Pending'
+          && (inv.paymentMethod !== 'PDC' || !inv.pdcStatus || inv.pdcStatus === 'Pending');
+        if (!editable) {
+          this.openingInvoice = false;
+          this.toaster.error(inv ? 'This invoice can no longer be edited' : 'Invoice details are not available');
+          return;
+        }
+        this.customerInvoices.prepareDn(row._id).subscribe({
+          next: (response: any) => {
+            this.openingInvoice = false;
+            this.invoiceDn = response?.success ? response.data : response;
+            this.editingInvoice = inv;
+          },
+          error: (error) => {
+            this.openingInvoice = false;
+            this.toaster.error(error?.error?.message || 'Failed to load the invoice for editing');
+          },
+        });
+      },
+      error: () => {
+        this.openingInvoice = false;
+        this.toaster.error('Failed to load the invoice details');
+      },
+    });
+  }
+
+  onInvoiceClosed(): void {
+    this.invoiceDn = null;
+    this.editingInvoice = null;
+  }
+
+  onInvoiceSaved(invoice: any): void {
+    const wasEdit = !!this.editingInvoice;
+    this.editingInvoice = null;
+    if (wasEdit) {
+      this.invoiceDn = null;
+      this.toaster.success(`Customer invoice ${invoice?.invoiceNo || ''} updated`.replace('  ', ' '));
+      return;
+    }
+    if (this.invoiceDn?._id) {
+      const id = this.invoiceDn._id;
+      this.invoicedDnIds.add(id);
+      const subject = this.historyCache.get(id);
+      if (subject) this.auditLog.getHistory('deliveryNote', id).subscribe({ next: (e) => { if (e?.length) subject.next(toTimelineEntries(e)); }, error: () => {} });
+    }
+    this.invoiceDn = null;
+    this.toaster.success(`Customer invoice ${invoice?.invoiceNo || ''} created`.replace('  ', ' '));
+  }
+
   viewDnDetails(dn: DeliveryNote): void {
     this._router.navigate(['/dispatch/view', dn._id]);
   }
 
+  /** Place Order confirms, then dispatches the DN (stock leaves the warehouse). */
+  async placeOrder(row: DeliveryNote): Promise<void> {
+    if (row.status !== DnStatus.READY_TO_DELIVER) return;
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Place order?',
+      message: 'The delivery note will be dispatched and its stock taken out of the warehouse.',
+      details: [{ label: 'Delivery note', value: row.dnNo }],
+      confirmLabel: 'Place order',
+    });
+    if (!confirmed) return;
+    this._dnService.dispatchDn(row._id).subscribe({
+      next: () => {
+        this.toaster.success('Order placed; delivery note dispatched');
+        this.loadData(this.activeFilters);
+        this.refreshViewCounts();
+      },
+      error: (error) => this.toaster.error(error?.error?.message || 'Failed to dispatch delivery'),
+    });
+  }
+
+  deliveryDn: DeliveryNote | null = null;
+  returnDnRow: DeliveryNote | null = null;
+
+  /** A delivered note (or one already partly returned) with quantity still left to send back. */
+  canReturn(row: DeliveryNote): boolean {
+    return (row.status === DnStatus.DELIVERED || row.status === DnStatus.PARTIALLY_REJECTED)
+      && (row.items || []).some((i: any) => Number(i.currentDeliveryQty || i.deliveredQty || 0) > Number(i.rejectedQty || 0));
+  }
+
+  onReturnSaved(): void {
+    this.returnDnRow = null;
+    this.loadData(this.activeFilters);
+    this.refreshViewCounts();
+  }
+
   openConfirmDelivery(row: DeliveryNote): void {
-    const data: ConfirmDeliveryData = { id: row._id, dnNo: row.dnNo, clientName: row.clientName };
-    this._dialog.open(ConfirmDeliveryModalComponent, { data, width: '640px', maxWidth: '95vw' })
-      .afterClosed().subscribe(done => {
-        if (!done) return;
-        this.loadData(this.activeFilters);
-        this.refreshViewCounts();
-      });
+    this.deliveryDn = row;
   }
 
-  /** The customer can refuse goods once they've left: at the door (Dispatched) or after receipt. */
-  canReject(row: DeliveryNote): boolean {
-    return row.status === DnStatus.DISPATCHED || row.status === DnStatus.DELIVERED || row.status === DnStatus.PARTIALLY_REJECTED;
+  onDeliverySaved(): void {
+    this.deliveryDn = null;
+    this.loadData(this.activeFilters);
+    this.refreshViewCounts();
   }
 
-  openReject(row: DeliveryNote): void {
-    const data: RejectDnData = { id: row._id, dnNo: row.dnNo, clientName: row.clientName };
-    this._dialog.open(RejectDnModalComponent, { data, width: '640px', maxWidth: '95vw' })
-      .afterClosed().subscribe(done => {
-        if (!done) return;
-        this.loadData(this.activeFilters);
-        this.refreshViewCounts();
-      });
-  }
-
-  private canHaveInvoice(row: DeliveryNote): boolean {
-    return row.status !== DnStatus.DRAFT && row.status !== DnStatus.CANCELLED;
-  }
-
-  /** The list row is thin, so the DN is loaded in full; the invoice no is filled in when one exists. */
+  /** The list row is thin, so the DN is loaded in full; the invoice no and payment terms come from the row's customer invoice. */
   private dnPdf(row: DeliveryNote, download: boolean): void {
     this._dnService.getDnById(row._id).subscribe({
       next: (res: any) => {
         const dn = res?.data || res;
-        const render = (invoiceNo?: string) => {
-          const data = { ...dn, invoiceNo };
-          this._dnService.generatePDF(data, true)
-            .then(pdf => download
-              ? pdf.download(`${dn.dnNo || 'delivery-note'}.pdf`)
-              : pdf.getBlob((blob: Blob) => this.openPreview(blob, data, 'delivery-note')))
-            .catch(() => this.toaster.error('Failed to generate the DN PDF'));
-        };
-        if (!this.canHaveInvoice(row)) return render();
-        this._dnService.getDnInvoice(row._id).subscribe({ next: inv => render(inv?.data?.invoiceNo), error: () => render() });
-      },
-      error: () => this.toaster.error('Failed to load the delivery note'),
-    });
-  }
-
-  /** A DN is raised per job, so every PO linked to it is previewed (one dialog each). */
-  private poPdf(row: DeliveryNote): void {
-    this._dnService.getDnById(row._id).subscribe({
-      next: (res: any) => {
-        const dn = res?.data || res;
-        const pos: any[] = dn?.linkedRecords?.purchaseOrders || [];
-        if (!pos.length) return void this.toaster.info('No purchase order is linked to this delivery note');
-        pos.forEach(linked => this.purchaseOrderService.getPurchaseOrderById(linked._id).subscribe({
-          next: (response: any) => {
-            const po = response?.success ? response.data : response;
-            this.purchaseService.generatePDF(po, false)
-              .then(pdf => pdf.getBlob((blob: Blob) => this.openPreview(blob, po, 'purchase')))
-              .catch(() => this.toaster.error('Failed to generate the PO PDF'));
-          },
-          error: () => this.toaster.error('Failed to load the PO'),
-        }));
-      },
-      error: () => this.toaster.error('Failed to load the delivery note'),
-    });
-  }
-
-  private invoicePdf(row: DeliveryNote, download: boolean): void {
-    this._dnService.getDnInvoice(row._id).subscribe({
-      next: (res: any) => {
-        const inv = res?.data;
         const data = {
-          ...inv,
-          lpoRef: inv?.lpoRef || row.customerLpoNumber || '',
-          subject: inv?.subject || (row as any).subject || inv?.jobId?.quoteId?.subject || '',
-          currency: inv?.currency || inv?.jobId?.quoteId?.currency || 'QAR',
+          ...dn,
+          invoiceNo: (row as any).customerInvoiceNo || '',
+          paymentTerms: (row as any).customerInvoicePaymentTerms || '',
         };
-        this.invoiceService.generateInvoicePDF(data)
+        this._dnService.generatePDF(data, true)
           .then(pdf => download
-            ? pdf.download(`${inv.isPreview ? `invoice-${row.dnNo}` : (inv.invoiceNo || 'invoice')}.pdf`)
-            : pdf.getBlob((blob: Blob) => this.openPreview(blob, data, 'invoice')))
-          .catch(() => this.toaster.error('Failed to generate the invoice PDF'));
+            ? pdf.download(`${dn.dnNo || 'delivery-note'}.pdf`)
+            : pdf.getBlob((blob: Blob) => this.openPreview(blob, data, 'delivery-note')))
+          .catch(() => this.toaster.error('Failed to generate the DN PDF'));
       },
-      error: () => this.toaster.error('Failed to load the invoice details'),
+      error: () => this.toaster.error('Failed to load the delivery note'),
     });
   }
 
@@ -514,9 +640,49 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     });
   }
 
-  dnTitle = (row: DeliveryNote): string => row.dnNo || 'Delivery Note';
-  dnSubtitle = (row: DeliveryNote): string => row.clientName || '';
-  dnRowOpenable = (): boolean => this.activeViewId !== 'ready';
+  dnTitle = (row: DeliveryNote): string => this.activeViewId === 'ready' ? ((row as any).job?.jobId || 'Ready for DN') : (row.dnNo || 'Delivery Note');
+  dnSubtitle = (row: DeliveryNote): string => this.activeViewId === 'ready' ? ((row as any).clientName || '') : (row.clientName || '');
+  dnRowOpenable = (): boolean => true;
+
+  readonly readyDetailTabs: DataGridDetailTab[] = [
+    { id: 'ready-details', label: 'Details', icon: 'info' },
+    { id: 'ready-items', label: 'Items', icon: 'card' },
+  ];
+
+  readonly readyItemColumns: DetailTableColumn[] = [
+    { key: 'name', label: 'Item Description', wrap: true },
+    { key: 'totalQty', label: 'Total Qty', type: 'number', total: true },
+    { key: 'receivedQty', label: 'Received Qty', type: 'number', total: true },
+    { key: 'rejectedQty', label: 'Rejected Qty', type: 'number', total: true },
+    { key: 'deliveredQty', label: 'Delivered Qty', type: 'number', total: true },
+    { key: 'totalPrice', label: 'Total Price', type: 'number', total: true },
+    { key: 'status', label: 'Status' },
+  ];
+
+  readonly readyJobItemColumns: DetailTableColumn[] = [
+    { key: 'name', label: 'Item Description', truncate: true },
+    { key: 'totalQty', label: 'Total Qty', type: 'number' },
+    { key: 'dnQty', label: 'Delivery', type: 'number', tooltipKey: 'dnNos' },
+    { key: 'deliveredQty', label: 'Delivered', type: 'number' },
+    { key: 'totalCost', label: 'Cost', type: 'number', total: true },
+    { key: 'totalPrice', label: 'Price', type: 'number', total: true },
+  ];
+
+  /** All the job's items; those not on this GRN are muted and left out of the totals. */
+  readyJobItemRows(row: any): Record<string, any>[] {
+    const norm = (v: any) => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const onGrn = new Set((row?.products || []).map((p: any) => norm(p.name)));
+    return (row?.jobProducts || []).map((p: any) => ({
+      name: p.name || '-',
+      totalQty: p.totalQty || 0,
+      deliveredQty: p.deliveredQty || 0,
+      dnQty: p.dnQty || 0,
+      dnNos: p.dnNos ? `On DN: ${p.dnNos}` : '',
+      totalCost: p.totalCost || 0,
+      totalPrice: p.totalPrice || 0,
+      _excludeFromTotal: !onGrn.has(norm(p.name)),
+    }));
+  }
 
   openCreateDrawer(editId: string | null = null, jobId: string | null = null): void {
     this.formEditId = editId;
@@ -548,6 +714,31 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     this.updateUrlParams();
   }
 
+  readonly itemColumns: DetailTableColumn[] = [
+    { key: 'description', label: 'Description', wrap: true },
+    { key: 'orderedQty', label: 'Qty', type: 'number', total: true },
+    { key: 'unitPrice', label: 'Price', type: 'currency' },
+    { key: 'amount', label: 'Total', type: 'currency', total: true },
+  ];
+
+  /** Total per line is qty x price; the footer sums those. */
+  itemRows(row: DeliveryNote): Record<string, any>[] {
+    return (row.items || []).map((item) => {
+      const qty = item.orderedQty || 0;
+      const unitPrice = item.unitSellingPrice || 0;
+      return { description: item.description || '-', orderedQty: qty, unitPrice, amount: qty * unitPrice };
+    });
+  }
+
+  /** Reference numbers for the job behind the DN, shown as a joined line. */
+  linked(numbers?: string[]): string {
+    return (numbers || []).join(', ') || '-';
+  }
+
+  rejectionReasons(row: DeliveryNote): string {
+    return (row.items || []).filter((i) => i.rejectionReason).map((i) => `${i.partNo || i.description}: ${i.rejectionReason}`).join('; ') || '-';
+  }
+
   detailDocuments(row: DeliveryNote): DetailDocument[] {
     return (row.pod?.attachments || []).map((file, index) => ({
       id: file.fileName || `${index}`,
@@ -555,6 +746,20 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
       date: row.pod?.receivedDate || row.updatedDate || row.createdDate,
       uploadedBy: 'Proof of Delivery',
     }));
+  }
+
+  /** Recorded events when the DN has any; DNs from before logging keep the timeline derived from their fields. */
+  historyFor(row: DeliveryNote): Observable<DetailTimelineEntry[]> {
+    let subject = this.historyCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(row._id, subject);
+      this.auditLog.getHistory('deliveryNote', row._id).subscribe({
+        next: (e) => subject!.next(e?.length ? toTimelineEntries(e) : this.detailHistory(row)),
+        error: () => this.historyCache.delete(row._id),
+      });
+    }
+    return subject.asObservable();
   }
 
   detailHistory(row: DeliveryNote): DetailTimelineEntry[] {
@@ -597,6 +802,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   }
 
   private filtersForView(viewId: string): Partial<FilterParams> {
+    if (viewId === 'ready-to-deliver') return { status: DnStatus.READY_TO_DELIVER };
     if (viewId === 'out-for-delivery') return { status: DnStatus.DISPATCHED };
     if (viewId === 'partially-delivered') return { status: DnStatus.DELIVERED, deliveryScope: 'partial' };
     if (viewId === 'fully-delivered') return { status: DnStatus.DELIVERED, deliveryScope: 'full' };

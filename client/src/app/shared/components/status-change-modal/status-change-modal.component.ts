@@ -20,6 +20,8 @@ export interface StatusChangeModalData<T extends string = string> {
   warnings?: Partial<Record<T, string>>;
   /** Overrides for the note field label/placeholder per status. */
   reasonLabels?: Partial<Record<T, { label: string; placeholder: string }>>;
+  /** Required select shown while the given status is selected; an option with `reasonOptional` drops the note requirement. */
+  choices?: Partial<Record<T, { label: string; options: { label: string; value: string; description?: string; reasonOptional?: boolean }[] }>>;
   title?: string;
   subtitle?: string;
   /** The status is fixed to `targetStatus` (shown read-only) for confirm-style prompts such as Approve / Reject. */
@@ -33,6 +35,8 @@ export interface StatusChangeModalData<T extends string = string> {
 export interface StatusChangeResult<T extends string = string> {
   status: T;
   reason: string;
+  /** Value picked in the status's select, when it has one. */
+  choice?: string;
 }
 
 /** Generic "new status + note" dialog. Closes with `{ status, reason }` or null. */
@@ -66,6 +70,10 @@ export interface StatusChangeResult<T extends string = string> {
           <app-sf-combobox [ngModelOptions]="{ standalone: true }" [(ngModel)]="status" [options]="options" placeholder="Select status"></app-sf-combobox>
         </app-sf-field>
 
+        <app-sf-field *ngIf="choiceSet" [label]="choiceSet.label" required>
+          <app-sf-combobox [ngModelOptions]="{ standalone: true }" [(ngModel)]="choice" [options]="choiceSet.options" placeholder="Select"></app-sf-combobox>
+        </app-sf-field>
+
         <app-sf-field [label]="reasonLabel" [required]="reasonRequired" [optional]="!reasonRequired">
           <app-sf-textarea [ngModelOptions]="{ standalone: true }" [(ngModel)]="reason" [rows]="4"
             [placeholder]="reasonPlaceholder"></app-sf-textarea>
@@ -81,6 +89,7 @@ export interface StatusChangeResult<T extends string = string> {
 export class StatusChangeModalComponent {
   status: string | null;
   reason = '';
+  choice: string | null = null;
   submitted = false;
   readonly options: SfOption<string>[];
 
@@ -102,8 +111,13 @@ export class StatusChangeModalComponent {
     return this.data.formatStatus ? this.data.formatStatus(status) : status;
   }
 
+  get choiceSet() {
+    return (this.status && this.data.choices?.[this.status]) || null;
+  }
+
   get reasonRequired(): boolean {
-    return !!this.status && !!this.data.requireReasonFor?.includes(this.status);
+    const optional = !!this.choiceSet?.options.find((o) => o.value === this.choice)?.reasonOptional;
+    return !!this.status && !!this.data.requireReasonFor?.includes(this.status) && !optional;
   }
 
   get reasonLabel(): string {
@@ -119,7 +133,7 @@ export class StatusChangeModalComponent {
   }
 
   get canSave(): boolean {
-    return !!this.status && (!this.reasonRequired || !!this.reason.trim());
+    return !!this.status && (!this.choiceSet || !!this.choice) && (!this.reasonRequired || !!this.reason.trim());
   }
 
   onCancel(): void {
@@ -129,6 +143,6 @@ export class StatusChangeModalComponent {
   onSave(): void {
     this.submitted = true;
     if (!this.canSave) return;
-    this.dialogRef.close({ status: this.status as string, reason: this.reason.trim() });
+    this.dialogRef.close({ status: this.status as string, reason: this.reason.trim(), choice: this.choiceSet ? this.choice ?? undefined : undefined });
   }
 }

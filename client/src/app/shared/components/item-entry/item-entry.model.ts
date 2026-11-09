@@ -113,6 +113,8 @@ export interface ItemEntryLineValue {
   alternative?: string;
   supplierId?: string | { _id?: string } | null;
   uom?: string;
+  /** Deal mode: the line was added in the deal, not quoted, so its description and unit stay editable. */
+  dealAdded?: boolean;
   image?: {
     fileName: string;
     originalname: string;
@@ -128,6 +130,8 @@ export interface ItemEntryItemValue {
   itemName?: string;
   isOptional?: boolean;
   includeInTotal?: boolean;
+  /** Deal mode: the item was added in the deal, so its name stays editable. */
+  dealAdded?: boolean;
   itemDetails?: ItemEntryLineValue[];
 }
 

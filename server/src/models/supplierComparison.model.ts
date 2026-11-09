@@ -12,6 +12,7 @@ export interface SupplierComparison extends Document {
     totalCost?: Number;
     netAmount?: Number;
     landedCost?: Number;
+    uom?: String;
     etaTerms: String;
     paymentTerms: String;
     validityDate?: Date;
@@ -20,6 +21,7 @@ export interface SupplierComparison extends Document {
     selected: Boolean;
     /** Split award: the part of the line's quantity this supplier won. Blank = the whole line. */
     awardedQty?: Number;
+    offeredQty?: Number;
     createdBy: Types.ObjectId;
     createdAt : Date
 }
@@ -70,6 +72,9 @@ export const supplierComparisonSchema = new Schema<SupplierComparison>({
         type: Number,
         default: 0
     },
+    uom: {
+        type: String,
+    },
     etaTerms: {
         type: String,
     },
@@ -91,6 +96,11 @@ export const supplierComparisonSchema = new Schema<SupplierComparison>({
         default: false,
     },
     awardedQty: {
+        type: Number,
+        min: 0
+    },
+    /** The quantity the supplier offered, kept while an award changes `quantity` to the share, so an unaward can restore it. */
+    offeredQty: {
         type: Number,
         min: 0
     },

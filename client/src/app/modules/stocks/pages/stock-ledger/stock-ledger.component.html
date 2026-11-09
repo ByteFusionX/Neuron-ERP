@@ -1,8 +1,9 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-5 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-data-grid
+    #grid
     class="flex-1 min-h-0"
     [fillHeight]="true"
-    title="Stock Ledger"
+    title="Stock Movement"
     [subtitle]="subtitle"
     [breadcrumbs]="breadcrumbs"
     rowKey="_id"
@@ -13,13 +14,25 @@
     [loading]="isLoading()"
     [pageSize]="row"
     [selectable]="false"
-    [showDetailPanel]="false"
     [views]="views"
     searchPlaceholder="Search item, document no, remarks..."
     emptyMessage="No stock movements found yet."
     exportable
     exportFileName="stock-ledger.xlsx"
+    storageKey="stock-ledger"
+    [detailTabs]="detailTabs"
+    [detailTitle]="detailTitle"
+    [detailSubtitle]="detailSubtitle"
     (queryChange)="onQueryChange($event)"
-    (viewChange)="onViewChange($event)">
+    (viewChange)="onViewChange($event)"
+    (rowOpen)="onRowOpen($event)">
+
+    <ng-template #detailMetaTemplate let-row>
+      <app-detail-meta [items]="metaFor(row)"></app-detail-meta>
+    </ng-template>
+
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <app-detail-overview *ngIf="tab === 'overview'" [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+    </ng-template>
   </app-data-grid>
 </div>

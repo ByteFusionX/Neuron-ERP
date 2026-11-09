@@ -4,6 +4,8 @@ import { AbstractControl, FormArray, FormGroup, FormsModule, ReactiveFormsModule
 import { NgIcon } from '@ng-icons/core';
 import { SF_STYLES, SmartFormModule } from 'src/app/shared/components/smart-form';
 
+import { expandDealComponents } from 'src/app/shared/utils/deal-pricing.util';
+
 type GrnFilter = 'discrepancy' | 'rejected' | 'errors' | 'done';
 
 /**
@@ -19,9 +21,10 @@ type GrnFilter = 'discrepancy' | 'rejected' | 'errors' | 'done';
   imports: [CommonModule, FormsModule, ReactiveFormsModule, NgIcon, SmartFormModule],
   styles: [SF_STYLES + `
     :host { display: block; }
+    :host ::ng-deep app-sf-number.ge-qty-exceeded .sf-input { border-color: #f97316 !important; }
     .ge-strip { display: grid; gap: 0.375rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     @media (min-width: 900px) {
-      .ge-strip { grid-template-columns: minmax(0, 5fr) repeat(2, minmax(0, 1.1fr)) minmax(0, 1.5fr) minmax(0, 1.1fr) minmax(0, 1.5fr) minmax(0, 1.4fr) minmax(0, 2fr) minmax(0, 2.5fr); }
+      .ge-strip { grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.3fr) repeat(2, minmax(0, 1.2fr)) minmax(0, 1.8fr) minmax(0, 2.2fr) minmax(0, 1.8fr); }
     }
     .ge-sub { display: grid; gap: 0.375rem; grid-template-columns: minmax(0, 1fr); }
     @media (min-width: 900px) { .ge-sub { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -35,6 +38,75 @@ type GrnFilter = 'discrepancy' | 'rejected' | 'errors' | 'done';
 })
 export class GrnItemEntryComponent {
   @Input({ required: true }) items!: FormArray;
+  @Input() purchaseOrder: any;
+
+  /** The PO line behind a GRN line: by position on a new GRN, by item/part match on a saved one. */
+  private poLineFor(line: AbstractControl, index: number): any {
+    const poLines: any[] = this.purchaseOrder?.items || [];
+    if (!this.locked) return poLines[index];
+    const key = (value: any): string => String(value?._id ?? value ?? '').trim().toLowerCase();
+    return poLines.find((item) =>
+      key(item.detail) === key(line.get('itemDescription')?.value) &&
+      (!line.get('partNo')?.value || key(item.partNo?.partNo ?? item.partNo) === key(line.get('partNo')?.value)));
+  }
+
+  unitCost(line: AbstractControl, index: number): number {
+    return Number(this.poLineFor(line, index)?.unitCost) || 0;
+  }
+
+  /** Cost of what is accepted on this line. */
+  lineCost(line: AbstractControl, index: number): number {
+    return this.unitCost(line, index) * Math.max(0, this.num(line, 'acceptedQty'));
+  }
+
+  get costSummary(): { prCost: number; prPrice: number; prDiscount: number; jobCost: number; jobPrice: number; jobDiscount: number } {
+    const po = this.purchaseOrder;
+    const poLines: any[] = po?.items || [];
+    const groups: any[] = po?.purchaseId?.items || [];
+    const prLines: any[] = groups.flatMap((item: any) => item?.itemDetails || []);
+    const deal = po?.quoteId?.dealData || po?.purchaseId?.jobId?.quoteId?.dealData;
+    const dealGroups = expandDealComponents<any>(deal?.updatedItems);
+    const dealLines: any[] = dealGroups.flatMap((item: any) => item.itemDetails || []);
+    const key = (value: any): string => String(value?._id ?? value ?? '').trim().toLowerCase();
+    const num = (value: any): number => Number(value) || 0;
+    const totals = { prCost: 0, prPrice: 0, prDiscount: 0, jobCost: 0, jobPrice: 0, jobDiscount: 0 };
+    const selectedJobCosts = new Map<string, number>();
+    for (const [index, line] of this.lines.entries()) {
+      const poLine = !this.locked ? poLines[index] : poLines.find((item) =>
+        key(item.detail) === key(line.get('itemDescription')?.value) &&
+        (!line.get('partNo')?.value || key(item.partNo?.partNo ?? item.partNo) === key(line.get('partNo')?.value)));
+      if (!poLine) continue;
+      const prLine = prLines.find((item) => poLine.prLineKey && key(item._id) === key(poLine.prLineKey))
+        || prLines.find((item) => poLine.partNo && key(item.productId ?? item.partNo) === key(poLine.partNo))
+        || prLines.find((item) => key(item.detail) === key(poLine.detail));
+      const group = groups.find((item) => item.itemDetails?.includes(prLine));
+      const sameGroup = dealGroups.find((item) => key(item.itemName) === key(group?.itemName));
+      const candidates = dealLines.filter((item) => key(item.detail) === key(poLine.detail));
+      const jobLine = sameGroup?.itemDetails?.find((item: any) => key(item.detail) === key(poLine.detail))
+        || (candidates.length === 1 ? candidates[0] : undefined);
+      const qty = Math.max(0, this.num(line, 'acceptedQty'));
+      totals.prCost += num(poLine.unitCost) * qty;
+      totals.prPrice += num(prLine?.unitSellingPrice) * qty;
+      // A PR-only line has no job baseline; do not substitute its award for a job cost.
+      const jobCost = num(jobLine?.unitCost ?? prLine?.dealUnitCost) * qty;
+      totals.jobCost += jobCost;
+      totals.jobPrice += num(jobLine?.unitSellingPrice) * qty;
+      const supplier = key(jobLine?.supplierId);
+      selectedJobCosts.set(supplier, (selectedJobCosts.get(supplier) || 0) + jobCost);
+    }
+    const poCost = poLines.reduce((sum, item) => sum + num(item.unitCost) * num(item.quantity), 0);
+    totals.prDiscount = poCost > 0 ? Math.max(0, num(po?.discount)) * Math.min(totals.prCost / poCost, 1) : 0;
+    // Allocate the job's supplier discounts only to the received share of that supplier's items.
+    for (const adjustment of deal?.additionalCosts || []) {
+      if (adjustment.type !== 'Supplier Discount') continue;
+      const supplier = key(adjustment.supplierId);
+      const supplierCost = dealLines.filter((item) => key(item.supplierId) === supplier)
+        .reduce((sum, item) => sum + num(item.unitCost) * num(item.quantity), 0);
+      if (supplierCost > 0) totals.jobDiscount += Math.max(0, num(adjustment.value))
+        * Math.min((selectedJobCosts.get(supplier) || 0) / supplierCost, 1);
+    }
+    return totals;
+  }
   /** Editing a saved GRN: stock is already posted, so quantities, UoM and batch / serial numbers are read-only. */
   @Input() locked = false;
   /** The LPO is fully received: nothing on the list can be entered. */

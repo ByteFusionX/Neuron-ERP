@@ -1,0 +1,179 @@
+<div class="flex h-full flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-detail-view-shell
+        class="min-h-0 flex-1"
+        headerTone="contrast"
+        [loading]="loading"
+        [empty]="!loading && !job"
+        emptyTitle="Job sheet not found"
+        emptyMessage="It may have been deleted, or you may not have access to it."
+        [emptyLink]="[returnPath]"
+        emptyLinkLabel="Back to job sheet"
+        customTitle
+        [stats]="stats"
+        statsLayout="fields"
+        statsTitle="Summary"
+        statsStorageKey="job-summary"
+        tabParam=""
+        bodyBare
+        [hasSidebar]="true"
+        [(panelOpen)]="panelOpen"
+        sidebarBare
+        sectioned
+    >
+        <div headerTitle *ngIf="job" class="flex min-w-0 flex-col gap-0.5">
+            <!-- line 1: identity (job ID); line 2: who it's for and who owns it -->
+            <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+                <h1 class="dvs-strong truncate text-lg font-semibold text-gray-900 dark:text-gray-50">{{ job.jobId || 'Job Sheet' }}</h1>
+            </div>
+            <div class="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] font-normal text-gray-900 dark:text-gray-100">
+                <span *ngIf="companyName" class="truncate">{{ companyName }}</span>
+                <span *ngIf="companyName && salesPersonName" class="text-gray-300 dark:text-gray-600">·</span>
+                <span *ngIf="salesPersonName">Owner {{ salesPersonName }}</span>
+            </div>
+        </div>
+
+        <!-- overview facts, left of the metrics -->
+        <app-detail-section beforeStats title="Details" class="lg:col-span-2 lg:border-r lg:border-gray-200 lg:pr-8 dark:lg:border-gray-800">
+            <app-detail-fields-menu sectionActions [items]="detailItems" storageKey="job-details" (hiddenChange)="hiddenDetail = $event" (orderChange)="detailOrder = $event"></app-detail-fields-menu>
+            <div class="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
+                <app-detail-field *ngFor="let f of visibleDetail; trackBy: trackFact" [label]="f.label" stacked>
+                    <span *ngIf="f.state" class="inline-flex items-center gap-1.5">
+                        <span class="h-1.5 w-1.5 rounded-full" [ngClass]="f.state.dot"></span>
+                        <span class="font-medium" [ngClass]="f.state.text">{{ f.value }}</span>
+                    </span>
+                    <a *ngIf="!f.state && f.link" [routerLink]="f.link" [queryParams]="f.queryParams" class="dv-link">{{ f.value }}</a>
+                    <ng-container *ngIf="!f.state && !f.link">{{ f.value }}</ng-container>
+                </app-detail-field>
+            </div>
+        </app-detail-section>
+
+        <ng-container headerActions *ngIf="job">
+            <app-action-button variant="outline" (click)="onBack()">
+                <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3L5 8l5 5M5 8h9" /></svg>
+                Back
+            </app-action-button>
+            <app-action-button variant="outline" *ngIf="canChangeStatus" (click)="onUpdateStatus()" icon="edit">Update status</app-action-button>
+            <app-action-button variant="primary" *ngIf="canAllocate" (click)="onAllocate()" icon="refresh">Allocate</app-action-button>
+        </ng-container>
+
+        <!-- right panel: same tab strip look as the deal sheet view's side panel -->
+        <div sidebar class="flex min-h-0 flex-1 flex-col">
+            <nav role="tablist"
+                class="dv-tabs sticky top-0 z-10 flex h-11 shrink-0 flex-nowrap items-center gap-x-4 overflow-x-auto overflow-y-hidden border-b border-gray-300 bg-white px-5 dark:border-neutral-700 dark:bg-[#111111]">
+                <button *ngFor="let t of panelTabs" type="button" role="tab" (click)="selectTab(t.id)"
+                    [attr.aria-selected]="panelTab === t.id"
+                    class="-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 py-2.5 text-sm transition-colors"
+                    [ngClass]="panelTab === t.id ? 'border-violet-600 dark:border-gray-100 text-gray-900 dark:text-gray-100 font-medium' : 'border-transparent text-gray-500 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'">
+                    {{ t.label }}
+                </button>
+            </nav>
+
+            <div class="dv-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel" [ngSwitch]="panelTab">
+                <ng-container *ngSwitchCase="'costs'">
+                    <app-detail-section title="Pricing">
+                        <dl class="text-[13px]">
+                            <div *ngFor="let l of pricingLines" class="flex items-baseline justify-between gap-3 py-1"
+                                [ngClass]="l.divider ? 'mt-1 border-t border-gray-200 pt-2 dark:border-erp-border-dark' : ''">
+                                <dt class="min-w-0">
+                                    <span class="block truncate" [title]="l.label"
+                                        [ngClass]="l.emphasis ? 'font-semibold text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400'">{{ l.label }}</span>
+                                    <span *ngIf="l.note" class="block text-[11px] text-gray-400">{{ l.note }}</span>
+                                </dt>
+                                <dd class="shrink-0 tabular-nums"
+                                    [ngClass]="l.emphasis ? 'font-semibold text-gray-900 dark:text-gray-100' : l.tone === 'reduce' ? 'text-orange-600 dark:text-orange-400' : l.tone === 'add' ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-900 dark:text-gray-100'">{{ l.value }}</dd>
+                            </div>
+                        </dl>
+                    </app-detail-section>
+                </ng-container>
+
+                <app-detail-documents *ngSwitchCase="'documents'"
+                    title="Customer LPO"
+                    [documents]="documents"
+                    emptyMessage="No customer LPO files available."
+                    (open)="onDocumentOpen($event)"
+                    (download)="onDocumentDownload($event)"></app-detail-documents>
+
+                <ng-container *ngSwitchCase="'pi'">
+                    <p *ngIf="piStatus === 'loading'" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Loading PI details&hellip;</p>
+                    <p *ngIf="piStatus === 'error'" class="py-6 text-center text-[13px] text-red-600 dark:text-red-400">Could not load PI details. Reopen this tab to retry.</p>
+                    <ng-container *ngIf="piStatus === 'ready'">
+                        <app-detail-section title="Payment summary">
+                            <app-detail-field label="Total price" numeric>{{ piTotalPrice | currency:(quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field label="Received value" numeric>{{ piReceivedValue | currency:(quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field label="Remaining to pay" numeric>{{ piRemainingValue | currency:(quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                        </app-detail-section>
+                        <app-detail-section *ngFor="let pi of proformas" [title]="pi.piNo">
+                            <app-detail-field label="PI ID">{{ pi.piNo }}</app-detail-field>
+                            <app-detail-field label="Status">{{ pi.status }}</app-detail-field>
+                            <app-detail-field label="Date">{{ pi.createdAt | date:'dd MMM yyyy' }}</app-detail-field>
+                            <app-detail-field label="Subject">{{ pi.subject || '-' }}</app-detail-field>
+                            <app-detail-field label="Payment terms">{{ pi.paymentTerms || '-' }}</app-detail-field>
+                            <app-detail-field label="Expected date">{{ (pi.expectedDate | date:'dd MMM yyyy') || '-' }}</app-detail-field>
+                            <app-detail-field label="Requested value" numeric>{{ piRequested(pi) | currency:(pi.currency || quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field label="Received value" numeric>{{ piReceived(pi) | currency:(pi.currency || quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field *ngIf="pi.payment?.receivedAt" label="Received date">{{ pi.payment?.receivedAt | date:'dd MMM yyyy' }}</app-detail-field>
+                            <app-detail-field *ngIf="pi.payment?.method" label="Payment method">{{ pi.payment?.method === 'Other' ? pi.payment?.otherMethod : pi.payment?.method }}</app-detail-field>
+                            <app-detail-field *ngIf="pi.payment?.referenceNo" label="Reference">{{ pi.payment?.referenceNo }}</app-detail-field>
+                        </app-detail-section>
+                        <p *ngIf="!proformas.length" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">No proforma invoices for this job yet.</p>
+                    </ng-container>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="isStageTab(panelTab) ? panelTab : ''">
+                    <p *ngIf="stagesStatus === 'loading'" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Loading details&hellip;</p>
+                    <p *ngIf="stagesStatus === 'error'" class="py-6 text-center text-[13px] text-red-600 dark:text-red-400">Could not load this stage. Reopen this tab to retry.</p>
+                    <ng-container *ngIf="stagesStatus === 'ready' && isStageTab(panelTab)">
+                        <app-detail-table *ngIf="stages[panelTab].length"
+                            [columns]="stageColumns(panelTab)"
+                            [rows]="stageRows[panelTab]"
+                            [currency]="quote?.currency"
+                            numbered
+                            [footRows]="stageFoot[panelTab]"
+                            emptyMessage="Nothing at this stage for this job yet."></app-detail-table>
+                        <p *ngIf="!stages[panelTab].length" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Nothing at this stage for this job yet.</p>
+                    </ng-container>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'workflow'">
+                    <p *ngIf="workflowStatus === 'loading'" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Loading workflow…</p>
+                    <p *ngIf="workflowStatus === 'error'" class="py-6 text-center text-[13px] text-red-600 dark:text-red-400">Could not load the workflow. Reopen this tab to retry.</p>
+                    <div *ngIf="workflowStatus === 'ready' && workflow.length" class="space-y-3">
+                        <div *ngFor="let event of workflow" class="rounded-lg border px-3 py-2.5" [ngClass]="eventTone(event)">
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="text-[13px] font-medium">{{ event.title }}</p>
+                                <p class="whitespace-nowrap text-[11px] opacity-75">{{ event.timestamp | date: 'dd MMM yyyy, HH:mm' }}</p>
+                            </div>
+                            <p class="mt-0.5 text-xs opacity-90">{{ event.description }}</p>
+                            <p *ngIf="eventPerformedBy(event)" class="mt-1 text-[11px] opacity-75">By {{ eventPerformedBy(event) }}</p>
+                        </div>
+                    </div>
+                    <p *ngIf="workflowStatus === 'ready' && !workflow.length" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">No workflow history for this job yet.</p>
+                </ng-container>
+
+                <app-detail-timeline *ngSwitchCase="'history'"
+                    [entries]="historyEntries"
+                    emptyMessage="No history recorded yet."></app-detail-timeline>
+            </div>
+        </div>
+
+        <div tabBody class="h-full">
+            <app-detail-table class="block h-full"
+                [columns]="itemColumns"
+                [rows]="itemRows"
+                [currency]="quote?.currency"
+                [footRows]="itemFootRows"
+                groupStyle="band"
+                centerGroups
+                numbered
+                groupTotals
+                [striped]="false"
+                spread
+                bare
+                tools
+                storageKey="job-items"
+                searchKey="detail"
+                searchTextKey="detailText"
+                emptyMessage="No deal items on this job."></app-detail-table>
+        </div>
+    </app-detail-view-shell>
+</div>

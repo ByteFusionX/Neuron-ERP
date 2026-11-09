@@ -1,3 +1,4 @@
+import { followUpTaskSchema } from './followUpTask.schema';
 import { Schema, Document, model, Types, } from "mongoose";
 import { Item, ItemDetail, itemSchema } from "./item.model";
 
@@ -165,6 +166,7 @@ export enum PurchaseRequestStatus {
     InProgress = 'In Progress',
     Pending = 'Pending',
     Rejected = 'Rejected',
+    Revoked = 'Revoked',
     OnHoldCancelled = 'OnHoldCancelled',
     Approved = 'Approved'
 }
@@ -175,12 +177,15 @@ export enum PurchaseRequestSourceType {
 }
 
 interface PurchaseRequest extends Document {
+    followUp?: any;
     jobId?: Types.ObjectId;
     sourceType: PurchaseRequestSourceType;
     purchaseNo: String;
     items: PurchaseRequestItem[];
     /** @deprecated Discounts now live on the RFQ quotes. Kept for old PRs; don't write to it. */
     supplierDiscounts: discounts[];
+    /** Extra costs on the request (shipping, manpower...), seeded from the deal sheet and editable on the PR. */
+    additionalCosts?: { name: string; value: number }[];
     status: PurchaseRequestStatus;
     rejectedReason: rejectedReason[];
     approvalStatus: PurchaseRequestApprovalStatus[];
@@ -210,6 +215,12 @@ interface PurchaseRequest extends Document {
 }
 
 const purchaseRequestSchema = new Schema<PurchaseRequest>({
+    followUp: {
+        nextFollowUpDate: Date,
+        lastActivityDate: Date,
+        lastOutcome: String,
+        history: { type: [followUpTaskSchema], default: [] },
+    },
     jobId: {
         type: Schema.Types.ObjectId,
         ref: 'Job',
@@ -236,6 +247,10 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
         totalDiscount: {
             type: Number,
         }
+    },
+    additionalCosts: {
+        type: [{ _id: false, name: { type: String, trim: true }, value: { type: Number, min: 0 } }],
+        default: undefined
     },
     status: {
         type: String,

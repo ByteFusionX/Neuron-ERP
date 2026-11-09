@@ -2,8 +2,12 @@ import { Request, Response, NextFunction } from "express";
 import Employee from "../models/employee.model";
 import * as bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { startSession, refreshSession, endSession, revokeAllSessions, listSessions, revokeSession } from "../services/authSession.service";
 import announcementModel from "../models/announcement.model";
 import { activeForUser } from "../common/utils/announcementVisibility";
+import { logAudit } from "../services/audit.service";
+
+const employeeName = (e: any) => `${e?.firstName || ''} ${e?.lastName || ''}`.trim();
 import enquiryModel from "../models/enquiry.model";
 import quotationModel from "../models/quotation.model";
 import categoryModel, { UserRole } from "../models/category.model";
@@ -668,6 +672,7 @@ export const createEmployee = async (
       await employee.save()
     ).populate("category department reportingTo");
     if (saveEmployee) {
+      await logAudit(req, { entityType: 'employee', entityId: saveEmployee._id, entityLabel: employeeName(saveEmployee), action: 'created', summary: `Employee ${employeeName(saveEmployee)} created` });
       return res.status(200).json(saveEmployee);
     }
     return res.status(502).json();
@@ -754,6 +759,10 @@ export const editEmployee = async (
     ).populate("category department reportingTo");
 
     if (saveEmployeeEdit) {
+      if (existing && updatedEmployeeData.category && String(existing.category) !== String(updatedEmployeeData.category)) {
+        const roleName = (saveEmployeeEdit.category as any)?.categoryName;
+        await logAudit(req, { entityType: 'employee', entityId: saveEmployeeEdit._id, entityLabel: employeeName(saveEmployeeEdit), action: 'role-changed', summary: roleName ? `Role changed to ${roleName}` : 'Role changed' });
+      }
       return res.status(200).json(saveEmployeeEdit);
     }
     return res.status(502).json();
@@ -901,6 +910,10 @@ export const login = async (
   res: Response,
   next: NextFunction,
 ) => {
+  // Login is Azure-only now: this route is disabled (code kept). Set ALLOW_PASSWORD_LOGIN=true to re-enable.
+  if (process.env.ALLOW_PASSWORD_LOGIN !== "true") {
+    return res.status(410).send({ message: "Password login is disabled. Sign in with Microsoft." });
+  }
   try {
     const { employeeId, password } = req.body;
 
@@ -925,8 +938,7 @@ export const login = async (
       return res.send({ passwordNotMatchError: true });
     }
 
-    const payload = { id: employee._id, employeeId: employee.employeeId };
-    const token = jwt.sign(payload, process.env.JWT_SECRET as string);
+    const token = await startSession(req, res, employee);
     await Employee.updateOne({ _id: employee._id }, { $set: { lastLoginAt: new Date() } });
 
     const employeeData = await Employee.findById(employee._id, {
@@ -1009,8 +1021,7 @@ export const loginWithMicrosoft = async (
       }
     }
 
-    const payload = { id: employee._id, employeeId: employee.employeeId };
-    const token = jwt.sign(payload, process.env.JWT_SECRET as string);
+    const token = await startSession(req, res, employee);
     await Employee.updateOne({ _id: employee._id }, { $set: { lastLoginAt: new Date() } });
 
     const employeeData = await Employee.findById(employee._id, {
@@ -1197,6 +1208,7 @@ export const deleteEmployee = async (
     });
 
     newTrash("Employee", dataId, employeeId);
+    await logAudit(req, { entityType: 'employee', entityId: employee._id, entityLabel: employeeName(employee), action: 'deleted', summary: `Employee ${employeeName(employee)} deleted` });
 
     return res.status(200).json({
       success: true,
@@ -1230,11 +1242,15 @@ export const setEmployeeApprovalLimit = async (
     const employee = await Employee.findByIdAndUpdate(
       employeeId,
       { $set: { approvalLimit: { maxAmount, maxDiscountPercent } } },
-      { new: true, projection: { approvalLimit: 1 } },
+      { new: true, projection: { approvalLimit: 1, firstName: 1, lastName: 1 } },
     );
     if (!employee) {
       return res.status(404).json({ message: "Employee not found" });
     }
+    await logAudit(req, {
+      entityType: 'employee', entityId: employee._id, entityLabel: employeeName(employee), action: 'approval-limit-changed',
+      summary: `Approval limit set to ${maxAmount ?? 'no limit'} amount, ${maxDiscountPercent ?? 'no limit'}% discount`,
+    });
     return res.status(200).json(employee.approvalLimit);
   } catch (error) {
     console.log(error);
@@ -1284,11 +1300,15 @@ export const setEmployeeExtraPrivilege = async (
     const employee = await Employee.findByIdAndUpdate(
       employeeId,
       update,
-      { new: true, projection: { extraPrivileges: 1 } },
+      { new: true, projection: { extraPrivileges: 1, firstName: 1, lastName: 1 } },
     );
     if (!employee) {
       return res.status(404).json({ message: "Employee not found" });
     }
+    await logAudit(req, {
+      entityType: 'employee', entityId: employee._id, entityLabel: employeeName(employee), action: value ? 'privilege-granted' : 'privilege-revoked',
+      summary: `Individual privilege ${fullPath} ${value ? 'granted' : 'revoked'}`,
+    });
     return res.status(200).json(employee.extraPrivileges ?? {});
   } catch (error) {
     console.log(error);
@@ -1341,16 +1361,14 @@ export const blockEmployee = async (
         { new: true },
       );
       if (isBlocked) {
-        // Pull today's birthday/anniversary post; older posts carry no employee link, so also match by name in the title
-        const startOfToday = new Date();
-        startOfToday.setUTCHours(0, 0, 0, 0);
+        // Pull every birthday/anniversary post (past ones stay in the announcements inbox); older posts carry no employee link, so also match by name in the title
         const fullName = `${employee.firstName} ${employee.lastName}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         await announcementModel.deleteMany({
           celeb: true,
-          date: { $gte: startOfToday },
           $or: [{ employee: employee._id }, { title: new RegExp(fullName, "i") }],
         });
       }
+      await logAudit(req, { entityType: 'employee', entityId: employee._id, entityLabel: employeeName(employee), action: isBlocked ? 'blocked' : 'unblocked', summary: `Employee ${isBlocked ? 'blocked' : 'unblocked'}` });
       return res.status(200).json({ isBlocked });
     } else {
       return res.status(404).json({ message: "Employee not found" });
@@ -1358,5 +1376,53 @@ export const blockEmployee = async (
   } catch (error) {
     console.log(error);
     next(error);
+  }
+};
+
+// Silent session renewal: the httpOnly refresh cookie is rotated and a new access token returned.
+export const refreshToken = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = await refreshSession(req, res);
+    if (!token) return res.status(401).json({ message: "Session expired" });
+    return res.status(200).json({ token });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const logout = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await endSession(req, res);
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// Sign out of every device for the calling employee.
+export const revokeMySessions = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    await revokeAllSessions(req.user.id);
+    await endSession(req, res);
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const getMySessions = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    return res.status(200).json(await listSessions(req, req.user.id));
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const revokeMySession = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const ok = await revokeSession(req, res, req.user.id, String(req.params.id));
+    return ok ? res.status(200).json({ success: true }) : res.status(404).json({ message: "Session not found" });
+  } catch (error) {
+    return next(error);
   }
 };

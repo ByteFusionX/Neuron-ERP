@@ -138,15 +138,15 @@ export class NavBarComponent {
 
   signOut() {
     const account = this.msalService.instance.getActiveAccount() ?? this.msalService.instance.getAllAccounts()[0];
+    // Ends the server session and clears the refresh cookie; local sign-out proceeds even if this fails.
+    this._employeeService.logout().subscribe({ error: () => {} });
+    this._notificationService.endSession();
     clearSessionStorage();
     this._employeeService.employeeSubject.next(undefined);
     this._router.navigate(['/login'])
-    if (account) {
-      // Clear the Azure session too, otherwise "Continue with Microsoft" on the
-      // login page silently signs the same account back in without a prompt.
-      this.msalService.instance.setActiveAccount(null);
-      this.msalService.logoutPopup({ account }).subscribe({ error: () => {} });
-    }
+    // Keep the Microsoft session/account so it stays saved in the browser; the login page's
+    // prompt: 'select_account' still lets the user choose the account each time.
+    if (account) this.msalService.instance.setActiveAccount(null);
   }
 
   onBellClick() {

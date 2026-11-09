@@ -14,6 +14,8 @@ const creditNoteSchema = new Schema({
     customer: { type: Schema.Types.ObjectId, ref: 'Customer' },
     items: [{
         itemId: { type: String },
+        itemCode: { type: String },
+        partNo: { type: String },
         description: String,
         rejectedQty: { type: Number, required: true },
         unitPrice: { type: Number, required: true },

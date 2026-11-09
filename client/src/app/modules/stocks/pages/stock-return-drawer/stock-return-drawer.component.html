@@ -1,43 +1,54 @@
-<app-sf-drawer [title]="title" [subtitle]="subtitle" width="620px" [open]="open" [dirty]="form.dirty" (closed)="onDrawerClosed($event)">
+<app-sf-drawer [title]="title" [subtitle]="subtitle" width="820px" [open]="open" [dirty]="form.dirty" (closed)="onDrawerClosed($event)">
 
     <form id="stock-return-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
-        <app-sf-section title="Items to return" columns="1"
-            [description]="isCustomer ? 'Enter how many of each item the customer is sending back.' : 'Enter how many rejected items you are sending back from quarantine.'">
-            <p *ngIf="loading" class="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
-            <p *ngIf="!loading && !lines.length" class="text-sm text-gray-500 dark:text-gray-400">Nothing is left to return on this document.</p>
-
-            <div *ngFor="let line of lines; let i = index"
-                class="flex items-center gap-4 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-erp-border-dark dark:bg-erp-surface-dark">
-                <div class="min-w-0 flex-1">
-                    <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{{ line.partNo }}</p>
-                    <p class="truncate text-xs text-gray-500 dark:text-gray-400">{{ line.description }}</p>
-                    <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Up to {{ line.maxQuantity }} {{ line.uom }}</p>
-                </div>
-                <app-sf-field class="w-32 shrink-0" [control]="quantities.at(i)" [messages]="{ max: 'More than can be returned', min: 'Cannot be negative' }">
-                    <app-sf-number [formControl]="quantities.at(i)" [min]="0" [max]="line.maxQuantity" placeholder="0"></app-sf-number>
+        <app-sf-section title="Details" columns="1">
+            <div class="grid grid-cols-2 gap-4">
+                <app-sf-field label="Reason" [control]="form.controls.reason">
+                    <app-sf-input formControlName="reason" placeholder="Reason for the return"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field *ngIf="isCustomer" label="Condition of returned goods" [control]="form.controls.condition">
+                    <app-sf-select formControlName="condition" [options]="conditionOptions"></app-sf-select>
+                </app-sf-field>
+                <app-sf-field *ngIf="!isCustomer" label="Resolution" [control]="form.controls.resolution">
+                    <app-sf-input formControlName="resolution" placeholder="e.g. Replacement or credit note"></app-sf-input>
                 </app-sf-field>
             </div>
-        </app-sf-section>
-
-        <app-sf-section title="Details" columns="1">
-            <app-sf-field label="Reason" [control]="form.controls.reason">
-                <app-sf-select formControlName="reason" [options]="reasonOptions" placeholder="Select reason"></app-sf-select>
-            </app-sf-field>
-            <app-sf-field *ngIf="isCustomer" label="Condition of returned goods" [control]="form.controls.condition">
-                <app-sf-select formControlName="condition" [options]="conditionOptions"></app-sf-select>
-            </app-sf-field>
-            <app-sf-field *ngIf="!isCustomer" label="Resolution" [control]="form.controls.resolution">
-                <app-sf-select formControlName="resolution" [options]="resolutionOptions" placeholder="Replacement or credit note"></app-sf-select>
-            </app-sf-field>
             <app-sf-field label="Remarks" optional [control]="form.controls.remarks">
                 <app-sf-textarea formControlName="remarks" [rows]="3" placeholder="Anything the team should know"></app-sf-textarea>
             </app-sf-field>
         </app-sf-section>
+
+        <app-sf-section [title]="isCustomer ? 'Items to return' : 'Rejected items'" columns="1"
+            [description]="isCustomer ? 'Enter how many of each item the customer is sending back.' : 'Enter how many rejected items you are sending back from quarantine.'">
+            <p *ngIf="loading" class="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+            <p *ngIf="!loading && !lines.length" class="text-sm text-gray-500 dark:text-gray-400">Nothing is left to return on this document.</p>
+
+            <div *ngIf="lines.length" class="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white dark:divide-erp-border-dark dark:border-erp-border-dark dark:bg-erp-surface-dark">
+                <div class="flex items-center gap-2 px-3 py-2 text-[11px] uppercase tracking-wide text-gray-400">
+                    <span class="w-6 shrink-0"></span>
+                    <span class="min-w-0 flex-1">Description</span>
+                    <span *ngIf="!isCustomer" class="w-16 shrink-0 text-right">Rejected</span>
+                    <span class="w-24 shrink-0">Returning</span>
+                    <span class="w-48 shrink-0">{{ isCustomer ? 'Remark' : 'Reject reason' }}</span>
+                </div>
+                <div *ngFor="let line of lines; let i = index" class="flex items-start gap-2 px-3 py-2.5">
+                    <span class="mt-1 grid h-6 w-6 shrink-0 place-content-center rounded-md bg-gray-100 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ i + 1 }}</span>
+                    <div class="min-w-0 flex-1">
+                        <p class="line-clamp-2 whitespace-pre-line text-xs text-gray-900 dark:text-gray-100">{{ line.description || '-' }}</p>
+                    </div>
+                    <span *ngIf="!isCustomer" class="mt-2 w-16 shrink-0 text-right text-xs tabular-nums text-gray-700 dark:text-gray-300">{{ line.rejectedQty ?? '-' }}</span>
+                    <app-sf-field class="w-24 shrink-0" [control]="quantities.at(i)" [messages]="{ max: 'More than can be returned', min: 'Cannot be negative' }">
+                        <app-sf-number [formControl]="quantities.at(i)" [min]="0" [max]="line.maxQuantity" placeholder="0"></app-sf-number>
+                    </app-sf-field>
+                    <app-sf-textarea class="w-48 shrink-0" [formControl]="lineRemarks.at(i)" [rows]="1" [placeholder]="isCustomer ? 'Remark' : 'Reject reason'"></app-sf-textarea>
+                </div>
+            </div>
+        </app-sf-section>
     </form>
 
     <ng-container sfDrawerFooter>
-        <app-action-button variant="secondary" (click)="onDrawerClosed(false)">Cancel</app-action-button>
-        <app-action-button variant="primary" type="submit" form="stock-return-form" [disabled]="saving || loading || !lines.length">
+        <app-action-button variant="secondary" icon="withdraw" (click)="onDrawerClosed(false)">Cancel</app-action-button>
+        <app-action-button variant="primary" icon="check" type="submit" form="stock-return-form" [disabled]="saving || loading || !lines.length">
             {{ saving ? 'Saving…' : 'Record return' }}
         </app-action-button>
     </ng-container>

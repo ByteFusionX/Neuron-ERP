@@ -8,19 +8,43 @@ import Quotation from '../models/quotation.model';
 import PurchaseRequest from '../models/purchaseRequest.model';
 import PurchaseOrder from '../models/purchaseOrder.model';
 import { StockError, findDeliveryShortages, postDelivery, post as postStock, reverseByReference } from '../services/stock.service';
-import { getNextSequence } from '../models/counter.model';
+import { issueDocNo, peekDocNo } from '../services/docNumber.service';
 import GRN from '../models/grn.model';
 import { Invoice } from '../models/invoice.model';
-import { checkAndUpdateJobCompletionStatus } from './job.controller';
+import { CustomerInvoice } from '../models/customerInvoice.model';
+import { jobTotalsOf } from './customerInvoice.controller';
+import { checkAndUpdateJobCompletionStatus, jobBasePipeline } from './job.controller';
 import { createNotificationWithPrivileges } from './notification.controller';
-import { getEmployeeData } from '../common/utils/util';
+import { getEmployeeData, getUSDRated } from '../common/utils/util';
 import { Server } from 'socket.io';
 import { uploadFileToAws } from '../common/aws-connect';
+import { logAudit } from '../services/audit.service';
+import { notify } from '../services/notify.service';
+import { billingRecipients, jobOwnerOf, recipientsExcluding, safely } from '../services/workflowNotify.service';
+
+const logDnAudit = (req: any, dn: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
+    logAudit(req, { entityType: 'deliveryNote', entityId: dn._id, entityLabel: dn.dnNo, action, summary, changes });
 
 /**
  * The stock lines a delivery note takes out of the warehouse: its inventory items with a positive
  * delivery quantity, resolved to catalogue products. Throws when an inventory item is not a catalogue product.
  */
+export const resolveDeliveryProduct = async (item: any): Promise<any> => {
+    let product: any = null;
+    const code = String(item.itemCode || '').trim();
+    if (code) {
+        product = await Product.findOne({ itemCode: new RegExp(`^${code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'), isDeleted: { $ne: true } }).select('_id partNo');
+        if (product) return product;
+    }
+    if (item.itemId) {
+        const po: any = await PurchaseOrder.findOne({ 'items.prLineKey': String(item.itemId), 'items.partNo': { $ne: null } }).select('items').lean();
+        const linked = po?.items?.find((l: any) => String(l.prLineKey) === String(item.itemId) && l.partNo);
+        if (linked) product = await Product.findOne({ _id: linked.partNo, isDeleted: { $ne: true } }).select('_id partNo');
+    }
+    if (!product && String(item.partNo || '').trim()) product = await Product.findOne({ partNo: item.partNo, isDeleted: { $ne: true } }).select('_id partNo');
+    return product;
+};
+
 const buildDeliveryLines = async (items: any[] | undefined): Promise<{ product: any; quantity: number; partNo: string }[]> => {
     const lines: { product: any; quantity: number; partNo: string }[] = [];
     for (const item of items || []) {
@@ -29,13 +53,7 @@ const buildDeliveryLines = async (items: any[] | undefined): Promise<{ product: 
         if (quantity <= 0) continue;
         // The PO line GRN linked to this job line is the most reliable product link (generic products have no part no).
         // A blank part no must never be looked up: it would match any product that also has none.
-        let product: any = null;
-        if (item.itemId) {
-            const po: any = await PurchaseOrder.findOne({ 'items.prLineKey': String(item.itemId), 'items.partNo': { $ne: null } }).select('items').lean();
-            const linked = po?.items?.find((l: any) => String(l.prLineKey) === String(item.itemId) && l.partNo);
-            if (linked) product = await Product.findOne({ _id: linked.partNo, isDeleted: { $ne: true } }).select('_id partNo');
-        }
-        if (!product && String(item.partNo || '').trim()) product = await Product.findOne({ partNo: item.partNo, isDeleted: { $ne: true } }).select('_id partNo');
+        const product = await resolveDeliveryProduct(item);
         if (!product) throw new StockError(`"${item.description || item.partNo}" is marked as a stock item but has no product in the catalogue yet; receive it through a GRN or link a product first`, 400);
         lines.push({ product: product._id, quantity, partNo: item.partNo || item.description || String(product._id) });
     }
@@ -81,22 +99,9 @@ const hasInventoryDeduction = async (dnId: any): Promise<boolean> => !!(await St
     isDeleted: { $ne: true }
 }));
 
-const seedDnSequence = async (): Promise<number> => {
-    const lastDn = await DeliveryNote.findOne().sort({ createdDate: -1 });
-    if (lastDn && lastDn.dnNo) {
-        const matches = lastDn.dnNo.match(/DN-(\d+)/);
-        if (matches && matches[1]) {
-            return parseInt(matches[1], 10);
-        }
-    }
-    return 0;
-};
-
 export const generateDnNumber = async (req: Request, res: Response) => {
     try {
-        const nextNum = await getNextSequence('dnNo', seedDnSequence);
-        const dnNumber = `DN-${String(nextNum).padStart(4, '0')}`;
-        res.status(200).json({ dnNumber });
+        res.status(200).json({ dnNumber: await peekDocNo('DN') });
     } catch (error) {
         res.status(500).json({ message: 'Error generating DN Number', error });
     }
@@ -150,7 +155,7 @@ const calculateDnStatus = async (jobId: string, currentDnItems: any[], excludeDn
     }
 
     if (anyItemDelivered) {
-        return 'Ready for Dispatch';
+        return 'Ready to Deliver';
     }
 
     return 'Draft';
@@ -247,6 +252,7 @@ export const createDn = async (req: Request, res: Response) => {
 
         const newDn = new DeliveryNote({
             ...req.body,
+            dnNo: await issueDocNo('DN'),
             status: finalStatus,
             createdBy: employee?._id
         });
@@ -260,6 +266,8 @@ export const createDn = async (req: Request, res: Response) => {
         if (jobId && mongoose.Types.ObjectId.isValid(jobId)) {
             await checkAndUpdateJobCompletionStatus(jobId);
         }
+
+        await logDnAudit(req, savedDn, 'created', savedDn.status === 'Draft' ? `Delivery note ${savedDn.dnNo} saved as draft` : `Delivery note ${savedDn.dnNo} created`);
 
         res.status(201).json({ success: true, data: savedDn });
     } catch (error) {
@@ -366,13 +374,26 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
         const jobIds = [...new Set(dns.map((d: any) => String(d.jobId)))];
         const pos: any[] = await PurchaseOrder.find({ jobId: { $in: jobIds } }).select('poNo jobId').lean();
         const grns: any[] = pos.length
-            ? await GRN.find({ purchaseOrderId: { $in: pos.map((p) => p._id) }, isDeleted: { $ne: true } }).select('grnNo purchaseOrderId').lean()
+            ? await GRN.find({ purchaseOrderId: { $in: pos.map((p) => p._id) }, isDeleted: { $ne: true } }).select('grnNo purchaseOrderId items.itemDescription items.acceptedQty').lean()
             : [];
+        const normDesc = (s: any) => String(s || '').trim().toLowerCase();
         dns.forEach((d: any) => {
             const dnPos = pos.filter((p) => String(p.jobId) === String(d.jobId));
             const poIds = new Set(dnPos.map((p) => String(p._id)));
-            d.poNumbers = dnPos.map((p) => p.poNo).filter(Boolean);
-            d.grnNumbers = grns.filter((g) => poIds.has(String(g.purchaseOrderId))).map((g) => g.grnNo).filter(Boolean);
+            // Only the GRNs (and their POs) that supplied items on this DN.
+            const dnItems = new Set((d.items || []).map((i: any) => normDesc(i.description)));
+            const usedGrns = grns.filter((g) => poIds.has(String(g.purchaseOrderId))
+                && (g.items || []).some((i: any) => (i.acceptedQty || 0) > 0 && dnItems.has(normDesc(i.itemDescription))));
+            const usedPoIds = new Set(usedGrns.map((g) => String(g.purchaseOrderId)));
+            d.poNumbers = dnPos.filter((p) => usedPoIds.has(String(p._id))).map((p) => p.poNo).filter(Boolean);
+            d.grnNumbers = usedGrns.map((g) => g.grnNo).filter(Boolean);
+        });
+        // Customer invoice raised against each DN, so the register can offer preview/download instead of Create invoice.
+        const invoices: any[] = await CustomerInvoice.find({ deliveryNote: { $in: dns.map((d: any) => d._id) } }).select('deliveryNote invoiceNo paymentTerms').lean();
+        dns.forEach((d: any) => {
+            const inv = invoices.find((i) => String(i.deliveryNote) === String(d._id));
+            d.customerInvoiceNo = inv?.invoiceNo || '';
+            d.customerInvoicePaymentTerms = inv?.paymentTerms || '';
         });
         return res.status(200).json({ total: total, dns: dns });
 
@@ -382,113 +403,224 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
     }
 };
 
-/** Accepted GRN receipts that can start a delivery note, including partial receipts. */
+/** GRN receipts with accepted stock: one row per GRN, with its PO/PR, the job it serves and a few job details. */
 export const getReadyForDnReceipts = async (req: Request, res: Response) => {
     try {
         const page = Math.max(1, Number(req.query.page) || 1);
         const row = Math.max(1, Number(req.query.row) || 10);
-        const search = String(req.query.search || '').trim();
+        const search = String(req.query.search || '').trim().toLowerCase();
+        const norm = (s: any) => String(s || '').trim().toLowerCase();
 
-        const pipeline: any[] = [
-            {
-                $match: {
-                    isDeleted: { $ne: true },
-                    $expr: {
-                        $and: [
-                            {
-                                $or: [
-                                    { $eq: ['$outcomeStatus', 'Resolved'] },
-                                    { $ne: ['$inspectionResult', 'Failed'] }
-                                ]
-                            },
-                            {
-                                $gt: [
-                                    { $sum: { $map: { input: { $ifNull: ['$items', []] }, as: 'item', in: { $ifNull: ['$$item.acceptedQty', 0] } } } },
-                                    0
-                                ]
-                            },
-                            {
-                                $or: [
-                                    { $eq: ['$outcomeStatus', 'Resolved'] },
-                                    {
-                                        $eq: [
-                                            { $sum: { $map: { input: { $ifNull: ['$items', []] }, as: 'item', in: { $ifNull: ['$$item.rejectedQty', 0] } } } },
-                                            0
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                }
-            },
-            { $lookup: { from: 'purchaseorders', localField: 'purchaseOrderId', foreignField: '_id', as: 'purchaseOrder' } },
-            { $unwind: { path: '$purchaseOrder', preserveNullAndEmptyArrays: true } },
-            // A GRN may carry no jobId of its own; fall back to the job on the PO's purchase request.
-            { $lookup: { from: 'purchases', localField: 'purchaseOrder.purchaseId', foreignField: '_id', as: 'purchaseRequest' } },
-            { $addFields: { resolvedJobId: { $ifNull: ['$jobId', { $ifNull: ['$purchaseOrder.jobId', { $arrayElemAt: ['$purchaseRequest.jobId', 0] }] }] } } },
-            { $match: { resolvedJobId: { $ne: null } } },
-            // The tab is job-based: one row per job, listing its products with deliverable (accepted) qty.
-            { $unwind: { path: '$items', preserveNullAndEmptyArrays: false } },
-            { $match: { 'items.acceptedQty': { $gt: 0 } } },
-            {
-                $group: {
-                    _id: { job: '$resolvedJobId', product: { $toLower: { $trim: { input: { $ifNull: ['$items.partNo', { $ifNull: ['$items.itemDescription', ''] }] } } } } },
-                    name: { $first: { $ifNull: ['$items.itemDescription', '$items.partNo'] } },
-                    acceptedQty: { $sum: '$items.acceptedQty' },
-                    lastGrnDate: { $max: '$grnDate' }
-                }
-            },
-            {
-                $group: {
-                    _id: '$_id.job',
-                    products: { $push: { name: '$name', acceptedQty: '$acceptedQty' } },
-                    acceptedQty: { $sum: '$acceptedQty' },
-                    lastGrnDate: { $max: '$lastGrnDate' }
-                }
-            },
-            { $lookup: { from: 'jobs', localField: '_id', foreignField: '_id', as: 'job' } },
-            { $unwind: '$job' },
-            { $addFields: { productNames: { $reduce: { input: '$products', initialValue: '', in: { $concat: ['$$value', { $cond: [{ $eq: ['$$value', ''] }, '', ', '] }, { $ifNull: ['$$this.name', ''] }] } } }, productCount: { $size: '$products' } } },
-            ...(search ? [{
-                $match: {
-                    $or: [
-                        { 'job.jobId': { $regex: search, $options: 'i' } },
-                        { productNames: { $regex: search, $options: 'i' } }
-                    ]
-                }
-            }] : []),
-            { $sort: { lastGrnDate: -1 } },
-            {
-                $facet: {
-                    data: [{ $skip: (page - 1) * row }, { $limit: row }],
-                    total: [{ $count: 'count' }]
-                }
-            }
-        ];
+        const grns: any[] = await GRN.find({ isDeleted: { $ne: true }, 'items.acceptedQty': { $gt: 0 } })
+            .select('grnNo grnDate purchaseOrderId items.itemDescription items.receivedQty items.acceptedQty items.rejectedQty')
+            .sort({ grnDate: -1, _id: -1 }).lean();
 
-        const [result] = await GRN.aggregate(pipeline);
-        const grnRows: any[] = result?.data || [];
+        const pos: any[] = await PurchaseOrder.find({ _id: { $in: grns.map((g) => g.purchaseOrderId).filter(Boolean) } })
+            .select('poNo poStatus jobId purchaseId supplierId paymentTerms deliveryTerms etaTerms expectedDeliveryDate items.detail items.quantity items.unitCost items.cancelledQty')
+            .populate('supplierId', 'supplierName').lean();
+        const poById = new Map(pos.map((p: any) => [String(p._id), p]));
+        const prs: any[] = await PurchaseRequest.find({ _id: { $in: pos.map((p) => p.purchaseId).filter(Boolean) } }).select('purchaseNo jobId').lean();
+        const prById = new Map(prs.map((p: any) => [String(p._id), p]));
+        const jobIdOf = (g: any) => {
+            const po = poById.get(String(g.purchaseOrderId));
+            return po ? String(po.jobId || prById.get(String(po.purchaseId))?.jobId || '') : '';
+        };
 
-        // PO and GRN numbers for each job row
-        const jobIds = grnRows.map((r) => r._id);
-        const pos: any[] = jobIds.length ? await PurchaseOrder.find({ jobId: { $in: jobIds } }).select('poNo jobId').lean() : [];
-        const jobGrns: any[] = pos.length
-            ? await GRN.find({ purchaseOrderId: { $in: pos.map((p) => p._id) }, isDeleted: { $ne: true } }).select('grnNo purchaseOrderId').lean()
+        const jobIds = [...new Set(grns.map(jobIdOf).filter(Boolean))];
+        const jobRows: any[] = jobIds.length ? await Job.aggregate([
+            ...jobBasePipeline(null, await getUSDRated(), { _id: { $in: jobIds.map((id) => new mongoose.Types.ObjectId(id)) } }),
+            {
+                $project: {
+                    job: { _id: '$_id', jobId: '$jobId', status: '$status' },
+                    clientName: '$clientDetails.companyName',
+                    lpoValue: 1,
+                    customerPoNumber: '$quotation.customerAcceptance.customerPoNumber',
+                    subject: '$quotation.subject',
+                    quoteNo: '$quotation.quoteId',
+                    salesPersonName: 1,
+                    customerPaymentTerms: { $ifNull: ['$quotation.dealData.paymentTerms', '$quotation.paymentTerms'] },
+                    customerDeliveryTerms: { $ifNull: ['$quotation.dealData.deliveryTerms', '$quotation.deliveryTerms'] },
+                },
+            },
+        ]) : [];
+        const jobById = new Map(jobRows.map((j) => [String(j._id), j]));
+
+        let rows: any[] = grns.filter((g) => jobById.has(jobIdOf(g))).map((g) => {
+            const po = poById.get(String(g.purchaseOrderId));
+            const { _id, ...job } = jobById.get(jobIdOf(g));
+            return {
+                _id: g._id, grnNo: g.grnNo, grnDate: g.grnDate,
+                poId: g.purchaseOrderId || null,
+                poNo: po?.poNo || '', prNo: prById.get(String(po?.purchaseId))?.purchaseNo || '',
+                supplier: po?.supplierId?.supplierName || '', poStatus: po?.poStatus || '',
+                poPaymentTerms: po?.paymentTerms || '', poDeliveryTerms: po?.deliveryTerms || po?.etaTerms || '',
+                expectedDeliveryDate: po?.expectedDeliveryDate || null,
+                ...job, _grn: g, _po: po,
+            };
+        });
+
+        // A GRN whose accepted stock is already covered by delivery notes (any live DN, drafts included) leaves
+        // this tab and shows under its DN's status tab. DN qty is pooled per job + item and allocated to the
+        // oldest GRNs first, because DNs are not linked to a single GRN.
+        const allJobIds = [...new Set(rows.map((r) => String(r.job._id)))];
+        const allDns: any[] = allJobIds.length
+            ? await DeliveryNote.find({ jobId: { $in: allJobIds }, status: { $ne: 'Cancelled' } }).select('jobId dnNo status items.description items.currentDeliveryQty items.deliveredQty items.rejectedQty').lean()
             : [];
-        grnRows.forEach((r) => {
-            const rowPos = pos.filter((p) => String(p.jobId) === String(r._id));
-            const poIds = new Set(rowPos.map((p) => String(p._id)));
-            r.poNumbers = rowPos.map((p) => p.poNo).filter(Boolean);
-            r.grnNumbers = jobGrns.filter((g) => poIds.has(String(g.purchaseOrderId))).map((g) => g.grnNo).filter(Boolean);
+        const pool = new Map<string, number>();
+        allDns.forEach((d) => (d.items || []).forEach((i: any) => {
+            const k = `${d.jobId}|${norm(i.description)}`;
+            pool.set(k, (pool.get(k) || 0) + (i.currentDeliveryQty || 0));
+        }));
+        const covered = new Set<string>();
+        [...rows].reverse().forEach((r) => {
+            let fully = true;
+            ((r._grn.items || []) as any[]).forEach((i: any) => {
+                const accepted = i.acceptedQty || 0;
+                if (accepted <= 0) return;
+                const k = `${r.job._id}|${norm(i.itemDescription)}`;
+                const take = Math.min(accepted, pool.get(k) || 0);
+                pool.set(k, (pool.get(k) || 0) - take);
+                if (take < accepted) fully = false;
+            });
+            if (fully && ((r._grn.items || []) as any[]).some((i: any) => (i.acceptedQty || 0) > 0)) covered.add(String(r._id));
+        });
+        rows = rows.filter((r) => !covered.has(String(r._id)));
+
+        if (search) {
+            rows = rows.filter((r) => [r.grnNo, r.poNo, r.prNo, r.supplier, r.job?.jobId, r.clientName, r.customerPoNumber, r.subject, r.quoteNo]
+                .some((v) => norm(v).includes(search)));
+        }
+        const total = rows.length;
+        rows = rows.slice((page - 1) * row, page * row);
+
+        // Qty on a DN is currentDeliveryQty (deliveredQty is only the snapshot of earlier DNs). It counts as delivered
+        // once the DN is delivered (net of rejections); before that it is only out for delivery.
+        const DELIVERED_DN = ['Delivered', 'Partially Rejected', 'Rejected'];
+        const dns: any[] = allDns.filter((d) => DELIVERED_DN.includes(d.status));
+
+        // Job-wide picture: every live PO of the paged jobs and all their GRNs.
+        const pageJobIds = [...new Set(rows.map((r) => String(r.job._id)))];
+        const jobPrs: any[] = pageJobIds.length ? await PurchaseRequest.find({ jobId: { $in: pageJobIds }, isDeleted: { $ne: true }, status: { $nin: ['Rejected', 'Cancelled'] } }).select('_id jobId items.itemDetails.detail items.itemDetails.quantity items.itemDetails.unitCost items.itemDetails.comparisons').lean() : [];
+        const prJob = new Map(jobPrs.map((p: any) => [String(p._id), String(p.jobId)]));
+        const jobPos: any[] = pageJobIds.length ? await PurchaseOrder.find({
+            $or: [{ jobId: { $in: pageJobIds } }, { purchaseId: { $in: jobPrs.map((p) => p._id) } }],
+            poStatus: { $ne: 'Cancelled' },
+        }).select('poNo jobId purchaseId items.detail items.quantity items.unitCost items.cancelledQty').lean() : [];
+        const jobGrns: any[] = jobPos.length ? await GRN.find({ purchaseOrderId: { $in: jobPos.map((p) => p._id) }, isDeleted: { $ne: true } })
+            .select('purchaseOrderId items.itemDescription items.receivedQty items.acceptedQty items.rejectedQty').lean() : [];
+        const jobDocs: any[] = pageJobIds.length ? await Job.find({ _id: { $in: pageJobIds } }).select('quoteId').lean() : [];
+        const quotes: any[] = jobDocs.length ? await Quotation.find({ _id: { $in: jobDocs.map((j) => j.quoteId).filter(Boolean) } }).select('optionalItems.items.itemName optionalItems.items.itemDetails.detail optionalItems.items.itemDetails.quantity optionalItems.items.itemDetails.unitSellingPrice').lean() : [];
+        const quoteById = new Map(quotes.map((q: any) => [String(q._id), q]));
+        const quoteByJob = new Map(jobDocs.map((j: any) => [String(j._id), quoteById.get(String(j.quoteId))]));
+        const poJob = (p: any) => String(p.jobId || prJob.get(String(p.purchaseId)) || '');
+
+        rows.forEach((r) => {
+            const { _grn: g, _po: po } = r;
+            delete r._grn; delete r._po;
+            const delivered = new Map<string, number>();
+            dns.filter((d) => String(d.jobId) === String(r.job._id)).forEach((d) => (d.items || []).forEach((i: any) => {
+                const net = Math.max(0, (i.currentDeliveryQty || 0) - (i.rejectedQty || 0));
+                delivered.set(norm(i.description), (delivered.get(norm(i.description)) || 0) + net);
+            }));
+            const poItem = new Map<string, any>((po?.items || []).map((i: any) => [norm(i.detail), i]));
+
+            r.products = (g.items || []).filter((i: any) => (i.acceptedQty || 0) > 0 || (i.rejectedQty || 0) > 0 || (i.receivedQty || 0) > 0).map((i: any) => {
+                const pi = poItem.get(norm(i.itemDescription));
+                const totalQty = pi ? Math.max(0, (pi.quantity || 0) - (pi.cancelledQty || 0)) : (i.receivedQty || 0);
+                const deliveredQty = delivered.get(norm(i.itemDescription)) || 0;
+                const accepted = i.acceptedQty || 0;
+                const status = deliveredQty >= accepted && accepted > 0 ? 'Delivered'
+                    : deliveredQty > 0 ? 'Partially Delivered'
+                    : accepted > 0 ? 'Ready to Deliver'
+                    : (i.rejectedQty || 0) > 0 ? 'Rejected' : 'Under Inspection';
+                return {
+                    name: i.itemDescription, totalQty, receivedQty: i.receivedQty || 0, acceptedQty: accepted, rejectedQty: i.rejectedQty || 0,
+                    deliveredQty, totalPrice: (pi?.unitCost || 0) * totalQty, deliverableQty: Math.max(0, accepted - deliveredQty), status,
+                };
+            });
+            const sum = (k: string) => r.products.reduce((a: number, p: any) => a + (p[k] || 0), 0);
+            r.productCount = r.products.length;
+            r.totalQty = sum('totalQty');
+            r.receivedQty = sum('receivedQty');
+            r.rejectedQty = sum('rejectedQty');
+            r.deliveredQty = sum('deliveredQty');
+            r.deliverableQty = sum('deliverableQty');
+            r.deliveryStatus = !r.products.length ? 'No items'
+                : r.products.every((p: any) => p.status === 'Delivered') ? 'Delivered'
+                : r.deliverableQty > 0 ? 'Ready to Deliver' : 'Under Inspection';
+
+            // Job-level items: ordered on all live POs, received/accepted on all GRNs, delivered on all DNs.
+            const myPos = jobPos.filter((p) => poJob(p) === String(r.job._id));
+            const myPoIds = new Set(myPos.map((p) => String(p._id)));
+            const agg = new Map<string, any>();
+            const at = (name: string) => {
+                const k = norm(name);
+                if (!agg.has(k)) agg.set(k, { name, totalQty: 0, totalPrice: 0, totalCost: 0, receivedQty: 0, acceptedQty: 0, rejectedQty: 0 });
+                return agg.get(k);
+            };
+            // The job's own items and prices come from its quotation (selling price), not from purchase cost.
+            let hasJobItems = false;
+            (quoteByJob.get(String(r.job._id))?.optionalItems || []).forEach((opt: any) => (opt.items || []).forEach((it: any) => (it.itemDetails || []).forEach((d: any) => {
+                hasJobItems = true;
+                const a = at(d.detail || it.itemName || '-');
+                a.totalQty += d.quantity || 0; a.totalPrice += (d.quantity || 0) * (d.unitSellingPrice || 0);
+                a.totalCost += (d.quantity || 0) * (d.unitCost || 0);
+            })));
+            // No quotation lines: fall back to the job's purchase requests.
+            if (!hasJobItems) jobPrs.filter((p) => String(p.jobId) === String(r.job._id)).forEach((p) => (p.items || []).forEach((it: any) => (it.itemDetails || []).forEach((d: any) => {
+                hasJobItems = true;
+                const a = at(d.detail || '-');
+                a.totalQty += d.quantity || 0; a.totalPrice += (d.quantity || 0) * (d.unitCost || 0);
+                a.totalCost += (d.quantity || 0) * (d.unitCost || 0);
+            })));
+            // No purchase request lines: fall back to what was ordered on the POs.
+            if (!hasJobItems) myPos.forEach((p) => (p.items || []).forEach((i: any) => {
+                const q = Math.max(0, (i.quantity || 0) - (i.cancelledQty || 0));
+                const a = at(i.detail || '-');
+                a.totalQty += q; a.totalPrice += q * (i.unitCost || 0); a.totalCost += q * (i.unitCost || 0);
+            }));
+            // Cost is the value awarded to suppliers on the job's purchase requests (the selected comparisons).
+            agg.forEach((a) => { a.totalCost = 0; });
+            jobPrs.filter((p) => String(p.jobId) === String(r.job._id)).forEach((p) => (p.items || []).forEach((it: any) => (it.itemDetails || []).forEach((d: any) => {
+                (d.comparisons || []).filter((c: any) => c.selected).forEach((c: any) => {
+                    const value = Number(c.landedCost) || Number(c.netAmount) || Number(c.totalCost)
+                        || (Number(c.awardedQty) || Number(c.quantity) || 0) * (Number(c.unitPrice) || 0);
+                    at(d.detail || '-').totalCost += value;
+                });
+            })));
+            jobGrns.filter((x) => myPoIds.has(String(x.purchaseOrderId))).forEach((x) => (x.items || []).forEach((i: any) => {
+                const a = at(i.itemDescription || '-');
+                a.receivedQty += i.receivedQty || 0; a.acceptedQty += i.acceptedQty || 0; a.rejectedQty += i.rejectedQty || 0;
+            }));
+            r.jobProducts = [...agg.values()].map((a) => {
+                const deliveredQty = delivered.get(norm(a.name)) || 0;
+                // Qty already on a live DN (drafts included) and which DNs carry it.
+                let dnQty = 0;
+                const dnNos: string[] = [];
+                allDns.filter((d) => String(d.jobId) === String(r.job._id)).forEach((d) => (d.items || []).forEach((i: any) => {
+                    if (norm(i.description) !== norm(a.name)) return;
+                    if (DELIVERED_DN.includes(d.status)) return; // already delivered, not out for delivery
+                    dnQty += i.currentDeliveryQty || 0;
+                    if (d.dnNo && !dnNos.includes(d.dnNo)) dnNos.push(d.dnNo);
+                }));
+                const status = a.acceptedQty > 0 && deliveredQty >= a.acceptedQty && a.acceptedQty >= a.totalQty ? 'Delivered'
+                    : deliveredQty > 0 ? 'Partially Delivered'
+                    : a.acceptedQty > 0 ? 'Ready to Deliver'
+                    : a.rejectedQty > 0 ? 'Rejected'
+                    : a.receivedQty > 0 ? 'Under Inspection' : 'Awaiting GRN';
+                return { ...a, deliveredQty, dnQty, dnNos: dnNos.join(', '), remainingQty: Math.max(0, a.acceptedQty - deliveredQty), status };
+            });
+            const jsum = (k: string) => r.jobProducts.reduce((s: number, p: any) => s + (p[k] || 0), 0);
+            r.jobSummary = {
+                poCount: myPos.length, grnCount: jobGrns.filter((x) => myPoIds.has(String(x.purchaseOrderId))).length,
+                totalQty: jsum('totalQty'), receivedQty: jsum('receivedQty'), acceptedQty: jsum('acceptedQty'),
+                rejectedQty: jsum('rejectedQty'), deliveredQty: jsum('deliveredQty'), remainingQty: jsum('remainingQty'),
+            };
         });
 
-        return res.status(200).json({
-            total: result?.total?.[0]?.count || 0,
-            grns: grnRows
-        });
+        return res.status(200).json({ total, grns: rows });
     } catch (error) {
-        console.error('Get ready for DN receipts error:', error);
+        console.error('Get ready for DN GRNs error:', error);
         return res.status(500).json({ message: 'Error fetching GRNs ready for delivery', error });
     }
 };
@@ -518,6 +650,32 @@ export const getDnInvoice = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, message: 'Delivery Note not found' });
         }
 
+        // The invoice raised from this DN (and edited from the DN page) lives in CustomerInvoice; it wins.
+        const customerInvoice: any = await CustomerInvoice.findOne({ deliveryNote: dnObjId }).sort({ createdAt: -1 }).lean();
+        if (customerInvoice) {
+            const job = dn.jobId;
+            const quotation = job?.quoteId;
+            return res.status(200).json({
+                success: true,
+                data: {
+                    invoiceNo: customerInvoice.invoiceNo,
+                    date: customerInvoice.invoiceDate || customerInvoice.createdAt,
+                    customer: quotation?.client || { companyName: customerInvoice.client?.name },
+                    attention: customerInvoice.attention,
+                    jobId: job,
+                    dnNumbers: customerInvoice.dnNo || dn.dnNo,
+                    lpoRef: customerInvoice.lpoRef,
+                    subject: customerInvoice.subject,
+                    paymentTerms: customerInvoice.paymentTerms || quotation?.dealData?.paymentTerms || quotation?.paymentTerms || '',
+                    currency: quotation?.currency || 'QAR',
+                    quoteCompany: quotation?.quoteCompany || '',
+                    amount: customerInvoice.amount,
+                    discount: customerInvoice.discount || 0,
+                    items: (customerInvoice.items || []).map((i: any) => ({ description: i.description, quantity: i.quantity, amount: i.totalCost })),
+                },
+            });
+        }
+
         const invoice: any = await Invoice.findOne({
             isDeleted: { $ne: true },
             status: { $nin: ['Cancelled', 'Reissued'] },
@@ -542,6 +700,8 @@ export const getDnInvoice = async (req: Request, res: Response) => {
                         dnId: dn._id,
                         dnRefs: [{ dnId: dn._id, quantity }],
                         itemId: item.itemId,
+                        itemCode: item.itemCode,
+                        partNo: item.partNo,
                         description: item.description || item.partNo || '',
                         quantity,
                         amount: quantity * unitPrice
@@ -579,8 +739,10 @@ export const getDnInvoice = async (req: Request, res: Response) => {
         });
         const dns = await DeliveryNote.find({ _id: { $in: [...dnIds] } }).select('dnNo').lean();
         invoice.dnNumbers = dns.map((d: any) => d.dnNo).filter(Boolean).join(', ');
-        invoice.lpoRef = customerPo;
-        invoice.subject = dn.subject || quotation?.subject || '';
+        // Values saved on the invoice (including edits) win over the DN's own.
+        invoice.lpoRef = invoice.lpoRef || customerPo;
+        invoice.subject = invoice.subject || dn.subject || quotation?.subject || '';
+        if (invoice.invoiceDate) invoice.date = invoice.invoiceDate;
         invoice.currency = quotation?.currency || 'QAR';
         invoice.quoteCompany = quotation?.quoteCompany || '';
         invoice.paymentTerms = invoice.paymentTerms || salesTerms;
@@ -600,6 +762,7 @@ export const getDnById = async (req: Request, res: Response) => {
             .populate('jobId', 'jobId projectName')
             .populate('createdBy', 'firstName lastName')
             .populate('pod.deliveredBy', 'firstName lastName')
+            .populate('rejectedHistory.rejectedBy', 'firstName lastName')
             .lean();
 
         if (!dn) {
@@ -617,14 +780,42 @@ export const getDnById = async (req: Request, res: Response) => {
         const purchaseOrderIds = purchaseOrders.map((po: any) => po._id);
         const grns = purchaseOrderIds.length
             ? await GRN.find({ purchaseOrderId: { $in: purchaseOrderIds }, isDeleted: { $ne: true } })
-                .select('grnNo grnDate inspectionResult outcomeStatus purchaseOrderId')
+                .select('grnNo grnDate inspectionResult outcomeStatus purchaseOrderId items.partNo items.itemDescription')
                 .sort({ grnDate: -1 })
                 .lean()
             : [];
+        // only GRNs that received an item this DN carries (a PO's GRN may cover other items)
+        const norm = (v: any) => String(v || '').trim().toLowerCase();
+        const dnKeys = new Set<string>();
+        (dn.items || []).forEach((i: any) => { if (norm(i.partNo)) dnKeys.add('p:' + norm(i.partNo)); else if (norm(i.description)) dnKeys.add('d:' + norm(i.description)); });
+        const dnGrns = grns
+            .filter((g: any) => (g.items || []).some((i: any) => norm(i.partNo) ? dnKeys.has('p:' + norm(i.partNo)) : dnKeys.has('d:' + norm(i.itemDescription))))
+            .map(({ items, ...rest }: any) => rest);
+
+        // Job totals come from the approved deal; the DN carries its share of the discount (same rule as its invoice).
+        const round2 = (n: number) => Math.round(n * 100) / 100;
+        const quote: any = jobId ? await Job.findById(jobId).select('quoteId').populate({ path: 'quoteId', select: 'dealData.updatedItems dealData.additionalCosts dealData.totalDiscount' }).lean().then((j: any) => j?.quoteId) : null;
+        const job = jobTotalsOf(quote);
+        const dnTotal = round2((dn.items || []).reduce((sum: number, item: any) =>
+            sum + Math.max(0, Number(item.currentDeliveryQty || 0) - Number(item.rejectedQty || 0)) * Number(item.unitSellingPrice || 0), 0));
+        const dnDiscount = job.price > 0 && job.discount > 0 ? round2(Math.min(job.discount * dnTotal / job.price, job.discount, dnTotal)) : 0;
+        // covered = what the job's other DNs already delivered (this DN excluded)
+        const otherDns: any[] = jobId
+            ? await DeliveryNote.find({ jobId, _id: { $ne: dn._id }, status: { $nin: ['Cancelled', 'Draft'] } }).select('items.currentDeliveryQty items.rejectedQty items.unitSellingPrice').lean()
+            : [];
+        const coveredTotal = round2(otherDns.reduce((acc: number, other: any) => acc + (other.items || []).reduce((sum: number, item: any) =>
+            sum + Math.max(0, Number(item.currentDeliveryQty || 0) - Number(item.rejectedQty || 0)) * Number(item.unitSellingPrice || 0), 0), 0));
+        const coveredDiscount = job.price > 0 && job.discount > 0 ? round2(Math.min(job.discount * coveredTotal / job.price, job.discount, coveredTotal)) : 0;
+        const priceSummary = {
+            jobTotal: round2(job.price), jobDiscount: round2(job.discount), jobNet: round2(job.price - job.discount),
+            dnTotal, dnDiscount, dnNet: round2(dnTotal - dnDiscount),
+            coveredTotal, coveredDiscount, coveredNet: round2(coveredTotal - coveredDiscount),
+        };
 
         return res.status(200).json({
             ...dn,
-            linkedRecords: { purchaseOrders, grns }
+            priceSummary,
+            linkedRecords: { purchaseOrders, grns: dnGrns }
         });
     } catch (error) {
         console.error("Get DN by ID Error:", error);
@@ -665,8 +856,8 @@ export const updateDn = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Delivery Note not found' });
         }
 
-        if (dn.status !== 'Draft') {
-            return res.status(400).json({ message: 'Only draft DNs can be updated' });
+        if (!['Draft', 'Ready to Deliver'].includes(dn.status)) {
+            return res.status(400).json({ message: 'Only draft or ready-to-deliver DNs can be updated' });
         }
 
         if (items && Array.isArray(items)) {
@@ -700,6 +891,7 @@ export const updateDn = async (req: Request, res: Response) => {
             finalStatus = await calculateDnStatus(dn.jobId.toString(), items, id);
         }
 
+        const previousStatus = dn.status;
         Object.assign(dn, {
             ...req.body,
             status: finalStatus,
@@ -707,6 +899,10 @@ export const updateDn = async (req: Request, res: Response) => {
         });
 
         const updatedDn = await dn.save();
+
+        if (updatedDn.status !== previousStatus) {
+            await logDnAudit(req, updatedDn, 'status-changed', `Delivery note ${updatedDn.dnNo} moved from ${previousStatus} to ${updatedDn.status}`, [{ label: 'Status', from: previousStatus, to: updatedDn.status }]);
+        }
 
         if (dn.jobId && mongoose.Types.ObjectId.isValid(dn.jobId.toString())) {
             await checkAndUpdateJobCompletionStatus(dn.jobId.toString());
@@ -729,7 +925,7 @@ export const dispatchDn = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, message: 'Delivery Note not found' });
         }
 
-        if (dn.status !== 'Ready for Dispatch') {
+        if (dn.status !== 'Ready to Deliver') {
             return res.status(400).json({ success: false, message: 'Only ready delivery notes can be dispatched' });
         }
 
@@ -745,7 +941,20 @@ export const dispatchDn = async (req: Request, res: Response) => {
             dn.status = 'Dispatched';
             dn.updatedDate = new Date();
             const updatedDn = await dn.save();
+            await logDnAudit(req, updatedDn, 'dispatched', `Delivery note ${updatedDn.dnNo} dispatched${updatedDn.deliveryType === 'Drop Ship' ? ' (drop ship)' : ' and stock deducted'}`);
             await checkAndUpdateJobCompletionStatus(dn.jobId.toString());
+            await safely('DnDispatched', async () => {
+                await notify({
+                    type: 'DnDispatched',
+                    referenceModel: 'DeliveryNote',
+                    title: 'Delivery dispatched',
+                    message: `Delivery note ${updatedDn.dnNo} has left for the customer`,
+                    sentBy: employee?._id?.toString(),
+                    recipients: recipientsExcluding([await jobOwnerOf(dn.jobId)], employee),
+                    referenceId: updatedDn._id,
+                    additionalData: { dnId: updatedDn._id.toString() },
+                });
+            });
             return res.status(200).json({ success: true, data: updatedDn });
         } catch (saveError) {
             if (dn.deliveryType !== 'Drop Ship' && !stockAlreadyDeducted) {
@@ -796,6 +1005,7 @@ export const cancelDn = async (req: Request, res: Response) => {
             }
         }
 
+        const statusBeforeCancel = dn.status;
         dn.status = 'Cancelled';
         dn.updatedDate = new Date();
         await dn.save();
@@ -804,6 +1014,8 @@ export const cancelDn = async (req: Request, res: Response) => {
             const employee = await getEmployeeData((req as any).user);
             await reverseInventoryDeductions(dn, employee?._id);
         }
+
+        await logDnAudit(req, dn, 'cancelled', `Delivery note ${dn.dnNo} cancelled${stockWasDeducted ? '; stock put back' : ''}`, [{ label: 'Status', from: statusBeforeCancel, to: 'Cancelled' }]);
 
         return res.status(200).json({ message: 'Delivery Note cancelled successfully', dn });
     } catch (error) {
@@ -856,6 +1068,27 @@ export const completeDnPod = async (req: Request, res: Response) => {
         dn.updatedDate = new Date();
         const updatedDn = await dn.save();
 
+        await logDnAudit(req, updatedDn, 'delivered', `Delivery note ${updatedDn.dnNo} delivered${receivedBy ? `, received by ${receivedBy}` : ''}`);
+        if (attachments.length) {
+            await logDnAudit(req, updatedDn, 'pod-files', `${attachments.length} proof-of-delivery file${attachments.length > 1 ? 's' : ''} attached`);
+        }
+
+        // Delivered goods can be invoiced now: billing is told, and so is the job's owner.
+        await safely('DnDelivered', async () => {
+            const actor = await getEmployeeData((req as any).user);
+            const jobOwner = await jobOwnerOf(dn.jobId);
+            await notify({
+                type: 'DnDelivered',
+                referenceModel: 'DeliveryNote',
+                title: 'Delivery confirmed',
+                message: `Delivery note ${updatedDn.dnNo} was delivered${receivedBy ? ` and received by ${receivedBy}` : ''}. It is ready to invoice`,
+                sentBy: actor?._id?.toString(),
+                recipients: recipientsExcluding([jobOwner, ...await billingRecipients([jobOwner])], actor),
+                referenceId: updatedDn._id,
+                additionalData: { dnId: updatedDn._id.toString() },
+            });
+        });
+
         return res.status(200).json({ success: true, data: updatedDn });
     } catch (error) {
         console.error("Complete DN POD Error:", error);
@@ -870,9 +1103,9 @@ export const completeDnPod = async (req: Request, res: Response) => {
 const restoreRejectedItemToQuarantine = async (dn: any, item: any, rejectedQty: number, reason: string, userId?: string): Promise<string | null> => {
     if (!item.isInventoryItem || rejectedQty <= 0) return null;
 
-    const product = await Product.findOne({ partNo: item.partNo, isDeleted: { $ne: true } });
+    const product = await resolveDeliveryProduct(item);
     if (!product) {
-        return `Item "${item.description || item.partNo}": Product not found for part number "${item.partNo}" — rejection recorded, but stock was not restored to quarantine`;
+        return `Item "${item.description || item.partNo}": catalogue product not found — rejection recorded, but stock was not restored to quarantine`;
     }
 
     const delivered: any[] = await StockMovement.find({
@@ -916,9 +1149,12 @@ export interface RejectDnItemInput {
  * and the invoice rejection cascade (rejectInvoiceByCustomer).
  * Throws an Error with a user-facing message on validation failure.
  */
-export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[], fallbackReason: string | undefined, userId?: string, socket?: Server): Promise<string[]> => {
+export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[], fallbackReason: string | undefined, userId?: string, socket?: Server, req?: Request): Promise<string[]> => {
     if (dn.status === 'Cancelled') {
         throw new Error('Cannot reject items on a cancelled Delivery Note');
+    }
+    if (!['Dispatched', 'Delivered', 'Partially Rejected', 'Rejected'].includes(dn.status)) {
+        throw new Error('Only a dispatched or delivered Delivery Note can be returned');
     }
 
     const warnings: string[] = [];
@@ -971,6 +1207,9 @@ export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[],
     dn.updatedDate = new Date();
     await dn.save();
 
+    const rejectedUnits = items.reduce((sum, i) => sum + (Number(i.rejectedQty) || 0), 0);
+    await logDnAudit(req, dn, 'items-rejected', `${rejectedUnits} unit${rejectedUnits === 1 ? '' : 's'} rejected on delivery note ${dn.dnNo}${fallbackReason ? `: ${fallbackReason}` : ''}`, [{ label: 'Status', to: dn.status }]);
+
     await createNotificationWithPrivileges(
         {
             type: 'DnItemsRejected',
@@ -1007,481 +1246,12 @@ export const rejectDnItems = async (req: Request, res: Response) => {
 
         const socket = req.app.get('io') as Server;
         const employee = await getEmployeeData((req as any).user);
-        const warnings = await applyDnItemRejections(dn, items, reason, employee?._id, socket);
+        const warnings = await applyDnItemRejections(dn, items, reason, employee?._id, socket, req);
 
         return res.status(200).json({ success: true, data: dn, warnings });
     } catch (error: any) {
         console.error("Reject DN Items Error:", error);
         res.status(400).json({ success: false, message: error.message || 'Error rejecting Delivery Note items' });
-    }
-};
-
-export const getInventoryDeductionReport = async (req: Request, res: Response) => {
-    try {
-        let { page, row, fromDate, toDate, customerName, jobId, dnNumber, partNo, status } = req.body;
-        page = page || 1;
-        row = row || 10;
-        const skipNum: number = (page - 1) * row;
-
-        // One line per Delivery row posted for a delivery note; a cancel shows as Reversed.
-        const matchFilters: any = { referenceType: 'DeliveryNote', movementType: 'Delivery', reversalOf: { $exists: false }, isDeleted: { $ne: true } };
-        if (fromDate && toDate) {
-            matchFilters.movementDate = { $gte: new Date(fromDate), $lte: new Date(toDate) };
-        }
-        if (dnNumber) {
-            matchFilters.referenceNo = { $regex: dnNumber, $options: 'i' };
-        }
-
-        const pipeline: any[] = [
-            { $match: matchFilters },
-            { $lookup: { from: 'deliverynotes', localField: 'referenceId', foreignField: '_id', as: 'dn' } },
-            { $unwind: { path: '$dn', preserveNullAndEmptyArrays: true } },
-            { $lookup: { from: 'products', localField: 'product', foreignField: '_id', as: 'prod' } },
-            { $unwind: { path: '$prod', preserveNullAndEmptyArrays: true } },
-            { $lookup: { from: 'jobs', localField: 'dn.jobId', foreignField: '_id', as: 'job' } },
-            { $unwind: { path: '$job', preserveNullAndEmptyArrays: true } },
-            { $lookup: { from: 'stockmovements', localField: '_id', foreignField: 'reversalOf', as: 'reversals' } },
-            { $addFields: { isReversed: { $gt: [{ $size: '$reversals' }, 0] } } },
-        ];
-        const afterLookup: any = {};
-        if (customerName) afterLookup['dn.clientName'] = { $regex: customerName, $options: 'i' };
-        if (jobId) afterLookup['dn.jobId'] = new mongoose.Types.ObjectId(jobId);
-        if (partNo) afterLookup['prod.partNo'] = { $regex: partNo, $options: 'i' };
-        if (status && Array.isArray(status) && status.length === 1) {
-            afterLookup.isReversed = status[0] === 'Reversed';
-        }
-        if (Object.keys(afterLookup).length) pipeline.push({ $match: afterLookup });
-        pipeline.push({ $sort: { movementDate: -1 } });
-
-        const countResult = await StockMovement.aggregate([...pipeline, { $count: 'total' }]);
-        const total = countResult.length > 0 ? countResult[0].total : 0;
-
-        const deductions = await StockMovement.aggregate([
-            ...pipeline,
-            { $skip: skipNum },
-            { $limit: row },
-            {
-                $project: {
-                    _id: 1,
-                    dnId: '$referenceId',
-                    dnNumber: '$referenceNo',
-                    date: '$dn.dnDate',
-                    jobId: '$job.jobId',
-                    jobMongoId: '$dn.jobId',
-                    customerName: '$dn.clientName',
-                    partNo: '$prod.partNo',
-                    description: '$prod.productDescription',
-                    uom: '$prod.unitOfMeasure',
-                    quantityDeducted: '$quantityOut',
-                    requestedQty: '$quantityOut',
-                    hasShortfall: { $literal: false },
-                    deductedDate: '$movementDate',
-                    status: { $cond: { if: '$isReversed', then: 'Reversed', else: 'Deducted' } }
-                }
-            }
-        ]);
-
-        res.status(200).json({
-            data: {
-                items: deductions,
-                pagination: {
-                    total,
-                    page,
-                    limit: row,
-                    pages: Math.ceil(total / row)
-                }
-            }
-        });
-
-    } catch (error) {
-        console.error("Inventory Deduction Report Error:", error);
-        res.status(500).json({ message: 'Error generating report', error });
-    }
-};
-
-export const getPendingDeliveriesSummary = async (req: Request, res: Response) => {
-    try {
-        let { page, row, customerName, jobId, supplierName, supplierLpoNo, status } = req.body;
-        page = page || 1;
-        row = row || 10;
-
-        const pipeline: any[] = [
-            { $match: { isDeleted: { $ne: true }, status: 'Approved' } },
-            { $unwind: { path: '$items', preserveNullAndEmptyArrays: true } },
-            { $unwind: { path: '$items.itemDetails', preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: 'jobs',
-                    localField: 'jobId',
-                    foreignField: '_id',
-                    pipeline: [
-                        { $match: { isDeleted: { $ne: true } } },
-                        { $project: { jobId: 1, quoteId: 1 } }
-                    ],
-                    as: 'job'
-                }
-            },
-            { $unwind: { path: '$job', preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: 'quotations',
-                    localField: 'job.quoteId',
-                    foreignField: '_id',
-                    pipeline: [{ $project: { client: 1 } }],
-                    as: 'quotation'
-                }
-            },
-            { $unwind: { path: '$quotation', preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: 'customers',
-                    localField: 'quotation.client',
-                    foreignField: '_id',
-                    pipeline: [{ $project: { companyName: 1 } }],
-                    as: 'customer'
-                }
-            },
-            { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: 'deliverynotes',
-                    let: {
-                        jobObjId: '$job._id',
-                        itemDetailId: { $convert: { input: '$items.itemDetails._id', to: 'string', onError: '', onNull: '' } }
-                    },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: { $eq: ['$jobId', '$$jobObjId'] },
-                                status: { $nin: ['Cancelled', 'Draft'] }
-                            }
-                        },
-                        { $unwind: '$items' },
-                        { $match: { $expr: { $eq: ['$items.itemId', '$$itemDetailId'] } } },
-                        { $group: { _id: null, total: { $sum: '$items.currentDeliveryQty' } } }
-                    ],
-                    as: 'dnData'
-                }
-            },
-            {
-                $addFields: {
-                    _deliveredQty: { $ifNull: [{ $arrayElemAt: ['$dnData.total', 0] }, 0] },
-                    _prQty: { $ifNull: ['$items.itemDetails.quantity', 0] }
-                }
-            },
-            {
-                $match: {
-                    $expr: {
-                        $or: [
-                            { $lte: ['$_prQty', 0] },
-                            { $lt: ['$_deliveredQty', '$_prQty'] }
-                        ]
-                    }
-                }
-            },
-            {
-                $lookup: {
-                    from: 'purchaseorders',
-                    let: {
-                        prId: '$_id',
-                        itemPartNo: '$items.itemDetails.partNo',
-                        itemDetail: { $toLower: { $trim: { input: { $ifNull: ['$items.itemDetails.detail', ''] } } } }
-                    },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $and: [
-                                        { $eq: ['$purchaseId', '$$prId'] },
-                                        { $eq: ['$poStatus', 'Closed'] }
-                                    ]
-                                }
-                            }
-                        },
-                        { $unwind: '$items' },
-                        {
-                            $match: {
-                                $expr: {
-                                    $or: [
-                                        {
-                                            $and: [
-                                                { $ne: ['$$itemPartNo', null] },
-                                                { $ne: ['$items.partNo', null] },
-                                                { $eq: [
-                                                    { $convert: { input: '$items.partNo', to: 'string', onError: '', onNull: '' } },
-                                                    { $convert: { input: '$$itemPartNo', to: 'string', onError: '', onNull: '' } }
-                                                ] }
-                                            ]
-                                        },
-                                        {
-                                            $and: [
-                                                { $ne: ['$$itemDetail', ''] },
-                                                { $ne: ['$items.detail', null] },
-                                                { $eq: [{ $toLower: { $trim: { input: '$items.detail' } } }, '$$itemDetail'] }
-                                            ]
-                                        }
-                                    ]
-                                }
-                            }
-                        },
-                        {
-                            $lookup: {
-                                from: 'suppliers',
-                                localField: 'supplierId',
-                                foreignField: '_id',
-                                pipeline: [{ $project: { supplierName: 1 } }],
-                                as: 'supplier'
-                            }
-                        },
-                        { $unwind: { path: '$supplier', preserveNullAndEmptyArrays: true } },
-                        {
-                            $lookup: {
-                                from: 'grns',
-                                let: {
-                                    poId: '$_id',
-                                    poItemDetail: { $toLower: { $trim: { input: '$items.detail' } } }
-                                },
-                                pipeline: [
-                                    {
-                                        $match: {
-                                            $expr: { $eq: ['$purchaseOrderId', '$$poId'] },
-                                            isDeleted: { $ne: true }
-                                        }
-                                    },
-                                    { $unwind: '$items' },
-                                    {
-                                        $match: {
-                                            $expr: {
-                                                $eq: [
-                                                    { $toLower: { $trim: { input: '$items.itemDescription' } } },
-                                                    '$$poItemDetail'
-                                                ]
-                                            }
-                                        }
-                                    },
-                                    { $group: { _id: null, total: { $sum: '$items.acceptedQty' } } }
-                                ],
-                                as: 'grnData'
-                            }
-                        },
-                        {
-                            $project: {
-                                orderedQty: '$items.quantity',
-                                receivedQty: { $ifNull: [{ $arrayElemAt: ['$grnData.total', 0] }, 0] },
-                                supplierName: { $ifNull: ['$supplier.supplierName', ''] },
-                                poNo: 1
-                            }
-                        }
-                    ],
-                    as: 'poData'
-                }
-            },
-            {
-                $addFields: {
-                    _hasPO: { $gt: [{ $size: '$poData' }, 0] },
-                    _firstPO: { $arrayElemAt: ['$poData', 0] }
-                }
-            },
-            {
-                $project: {
-                    _id: 0,
-                    customerName: { $ifNull: ['$customer.companyName', ''] },
-                    jobId: '$job.jobId',
-                    description: { $ifNull: ['$items.itemDetails.detail', ''] },
-                    supplierName: {
-                        $cond: {
-                            if: '$_hasPO',
-                            then: { $ifNull: ['$_firstPO.supplierName', ''] },
-                            else: ''
-                        }
-                    },
-                    supplierLpoNo: {
-                        $cond: {
-                            if: '$_hasPO',
-                            then: { $ifNull: ['$_firstPO.poNo', ''] },
-                            else: ''
-                        }
-                    },
-                    orderedQty: {
-                        $cond: { if: '$_hasPO', then: { $ifNull: ['$_firstPO.orderedQty', 0] }, else: null }
-                    },
-                    receivedQty: {
-                        $cond: { if: '$_hasPO', then: { $ifNull: ['$_firstPO.receivedQty', 0] }, else: null }
-                    },
-                    deliveredQty: {
-                        $cond: { if: '$_hasPO', then: '$_deliveredQty', else: null }
-                    },
-                    balanceQty: {
-                        $cond: {
-                            if: '$_hasPO',
-                            then: { $max: [0, { $subtract: [{ $ifNull: ['$_firstPO.orderedQty', 0] }, { $ifNull: ['$_firstPO.receivedQty', 0] }] }] },
-                            else: null
-                        }
-                    },
-                    status: {
-                        $cond: {
-                            if: { $gt: ['$_deliveredQty', 0] },
-                            then: 'Partially Delivered',
-                            else: 'Not Delivered'
-                        }
-                    }
-                }
-            }
-        ];
-
-        pipeline.push({
-            $match: {
-                $expr: {
-                    $not: {
-                        $and: [
-                            { $ne: ['$orderedQty', null] },
-                            { $gt: ['$orderedQty', 0] },
-                            { $gte: ['$deliveredQty', '$orderedQty'] }
-                        ]
-                    }
-                }
-            }
-        });
-
-        const filterMatch: any = {};
-        if (customerName) filterMatch.customerName = { $regex: customerName, $options: 'i' };
-        if (jobId) filterMatch.jobId = { $regex: jobId, $options: 'i' };
-        if (supplierName) filterMatch.supplierName = { $regex: supplierName, $options: 'i' };
-        if (supplierLpoNo) filterMatch.supplierLpoNo = { $regex: supplierLpoNo, $options: 'i' };
-        if (status) {
-            const statusArr = Array.isArray(status) ? status : [status];
-            filterMatch.status = { $in: statusArr };
-        }
-        if (Object.keys(filterMatch).length > 0) {
-            pipeline.push({ $match: filterMatch });
-        }
-
-        pipeline.push({
-            $facet: {
-                metadata: [{ $count: 'total' }],
-                data: [
-                    { $skip: (page - 1) * row },
-                    { $limit: row }
-                ]
-            }
-        });
-
-        const result = await PurchaseRequest.aggregate(pipeline).allowDiskUse(true);
-
-        
-
-        const total = result[0]?.metadata[0]?.total || 0;
-        const items = (result[0]?.data || []).map((r: any, i: number) => ({
-            ...r,
-            slNo: (page - 1) * row + i + 1
-        }));
-
-        return res.status(200).json({ total, items });
-    } catch (error) {
-        console.error('Get Pending Deliveries Summary Error:', error);
-        res.status(500).json({ message: 'Error fetching pending deliveries summary', error });
-    }
-};
-
-export const getPendingDeliveryDetails = async (req: Request, res: Response) => {
-    try {
-        const { jobId } = req.params;
-
-        if (!jobId || !mongoose.Types.ObjectId.isValid(jobId)) {
-            return res.status(400).json({ message: 'Invalid Job ID' });
-        }
-
-        const job = await Job.findById(jobId).lean();
-        if (!job) {
-            return res.status(404).json({ message: 'Job not found' });
-        }
-
-        const quotation = job.quoteId ? await Quotation.findById(job.quoteId).lean() : null;
-        if (!quotation || !quotation.optionalItems || quotation.optionalItems.length === 0) {
-            return res.status(200).json({
-                job: {
-                    _id: job._id,
-                    jobId: job.jobId,
-                    customer: (job as any).clientDetails?.companyName || (job as any).client?.companyName || '',
-                    projectName: (job as any).projectName || ''
-                },
-                items: []
-            });
-        }
-
-        let allItems: any[] = [];
-        quotation.optionalItems.forEach((opt: any) => {
-            if (opt.items) {
-                opt.items.forEach((item: any) => {
-                    if (item.itemDetails) {
-                        allItems.push(...item.itemDetails.map((detail: any) => ({
-                            ...detail,
-                            itemName: item.itemName
-                        })));
-                    }
-                });
-            }
-        });
-
-        const dns = await DeliveryNote.find({
-            jobId: new mongoose.Types.ObjectId(jobId),
-            status: { $nin: ['Cancelled', 'Draft'] }
-        }).lean();
-
-        const itemsResult: any[] = [];
-
-        allItems.forEach((item: any, index: number) => {
-            const orderedQty = item.quantity || 0;
-            let deliveredQty = 0;
-            const deliveryNotes: any[] = [];
-
-            dns.forEach(dn => {
-                if (dn.items && Array.isArray(dn.items)) {
-                    dn.items.forEach((dnItem: any) => {
-                        if (dnItem.itemId === String(item._id)) {
-                            const qty = dnItem.currentDeliveryQty || 0;
-                            if (qty > 0) {
-                                deliveredQty += qty;
-                                deliveryNotes.push({
-                                    dnId: dn._id,
-                                    dnNo: dn.dnNo,
-                                    dnDate: dn.dnDate,
-                                    currentDeliveryQty: qty
-                                });
-                            }
-                        }
-                    });
-                }
-            });
-
-            const balanceQty = Math.max(0, orderedQty - deliveredQty);
-
-            itemsResult.push({
-                slNo: index + 1,
-                itemId: item._id,
-                partNo: item.partNo || item.itemName || '',
-                description: item.detail || item.itemDescription || '',
-                orderedQty,
-                deliveredQty,
-                balanceQty,
-                deliveryNotes
-            });
-        });
-
-        const customerName = (job as any).clientDetails?.companyName || (job as any).client?.companyName || '';
-
-        return res.status(200).json({
-            job: {
-                _id: job._id,
-                jobId: job.jobId,
-                customer: customerName,
-                projectName: (job as any).projectName || ''
-            },
-            items: itemsResult
-        });
-    } catch (error) {
-        console.error('Get Pending Delivery Details Error:', error);
-        res.status(500).json({ message: 'Error fetching pending delivery details', error });
     }
 };
 
@@ -1537,7 +1307,7 @@ export const getDnItemsForJob = async (req: Request, res: Response) => {
             {
                 $lookup: {
                     from: 'products',
-                    localField: 'items.itemDetails.partNo',
+                    localField: 'items.itemDetails.productId',
                     foreignField: '_id',
                     as: 'productInfo'
                 }
@@ -1561,6 +1331,8 @@ export const getDnItemsForJob = async (req: Request, res: Response) => {
                     purchaseRequestId: { $toString: '$_id' },
                     itemName: '$items.itemName',
                     detail: '$items.itemDetails.detail',
+                    itemCode: '$items.itemDetails.itemCode',
+                    itemPartNo: '$items.itemDetails.partNo',
                     totalQuantity: '$items.itemDetails.quantity',
                     orderedQty: '$closedQty',
                     partNo: {
@@ -1606,8 +1378,14 @@ export const getDnItemsForJob = async (req: Request, res: Response) => {
             const linkedPoIds = new Set([...(item.purchaseOrderIds || []), ...(item.allPurchaseOrderIds || [])].map((id: any) => id.toString()));
             const partNo = normalize(item.partNo?.partNo);
             const detail = normalize(item.detail);
-            const sameItem = (grnItem: any) => (partNo && normalize(grnItem.partNo) === partNo)
-                || (detail && normalize(grnItem.itemDescription) === detail);
+            const itemCode = normalize(item.itemCode) || normalize(item.partNo?.itemCode);
+            // Item code first; part no and description only for GRN lines that carry no code.
+            const sameItem = (grnItem: any) => {
+                const grnCode = normalize(grnItem.itemCode);
+                if (itemCode && grnCode) return grnCode === itemCode;
+                return (partNo && normalize(grnItem.partNo) === partNo)
+                    || (detail && normalize(grnItem.itemDescription) === detail);
+            };
 
             let deliverableQty = 0;
             let heldQty = 0;
@@ -1668,190 +1446,16 @@ export const getDnItemsForJob = async (req: Request, res: Response) => {
             };
         });
 
+        // Items already billed on another (non-rejected) invoice of this job; the invoice being edited is excluded.
+        const invoiceFilter: any = { job: new mongoose.Types.ObjectId(jobId), status: { $ne: 'Rejected' } };
+        if (req.query.invoiceId && mongoose.Types.ObjectId.isValid(String(req.query.invoiceId))) invoiceFilter._id = { $ne: new mongoose.Types.ObjectId(String(req.query.invoiceId)) };
+        const billed = await CustomerInvoice.find(invoiceFilter).select('items.itemId').lean();
+        const invoicedIds = new Set(billed.flatMap((inv: any) => (inv.items || []).map((i: any) => i.itemId).filter(Boolean)));
+        items.forEach((i: any) => { i.invoiced = invoicedIds.has(String(i._id)); });
+
         return res.status(200).json({ success: true, data: items });
     } catch (error) {
         console.error('Get DN Items For Job Error:', error);
         res.status(500).json({ success: false, message: 'Error fetching DN items', error });
-    }
-};
-
-export const getInvoiceLinkingSummary = async (req: Request, res: Response) => {
-    try {
-        let { page, row, customerName, jobId, dnNo, invoiceNo, status } = req.body;
-        page = page || 1;
-        row = row || 10;
-
-        const pipeline: any[] = [
-            { $match: { status: 'Delivered' } },
-            {
-                $addFields: {
-                    deliveredQty: { $sum: '$items.currentDeliveryQty' }
-                }
-            },
-            {
-                $lookup: {
-                    from: 'jobs',
-                    localField: 'jobId',
-                    foreignField: '_id',
-                    pipeline: [
-                        { $match: { isDeleted: { $ne: true } } },
-                        { $project: { jobId: 1, quoteId: 1 } }
-                    ],
-                    as: 'job'
-                }
-            },
-            { $unwind: { path: '$job', preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: 'quotations',
-                    localField: 'job.quoteId',
-                    foreignField: '_id',
-                    pipeline: [{ $project: { client: 1 } }],
-                    as: 'quotation'
-                }
-            },
-            { $unwind: { path: '$quotation', preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: 'customers',
-                    localField: 'quotation.client',
-                    foreignField: '_id',
-                    pipeline: [{ $project: { companyName: 1 } }],
-                    as: 'customer'
-                }
-            },
-            { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: 'invoices',
-                    let: { dnObjId: '$_id' },
-                    pipeline: [
-                        {
-                            $match: {
-                                isDeleted: { $ne: true }
-                            }
-                        },
-                        { $unwind: '$items' },
-                        {
-                            $addFields: {
-                                hasDnRefs: {
-                                    $gt: [
-                                        { $size: { $ifNull: ['$items.dnRefs', []] } },
-                                        0
-                                    ]
-                                }
-                            }
-                        },
-                        {
-                            $unwind: {
-                                path: '$items.dnRefs',
-                                preserveNullAndEmptyArrays: true
-                            }
-                        },
-                        {
-                            $match: {
-                                $expr: {
-                                    $cond: [
-                                        '$hasDnRefs',
-                                        { $eq: ['$items.dnRefs.dnId', '$$dnObjId'] },
-                                        { $eq: ['$items.dnId', '$$dnObjId'] }
-                                    ]
-                                }
-                            }
-                        },
-                        {
-                            $group: {
-                                _id: null,
-                                totalQty: {
-                                    $sum: {
-                                        $cond: [
-                                            '$hasDnRefs',
-                                            { $ifNull: ['$items.dnRefs.quantity', 0] },
-                                            { $ifNull: ['$items.quantity', 0] }
-                                        ]
-                                    }
-                                },
-                                invoiceNo: { $first: '$invoiceNo' },
-                                invoiceDate: { $first: '$date' }
-                            }
-                        }
-                    ],
-                    as: 'invoiceData'
-                }
-            },
-            {
-                $addFields: {
-                    _invoiceInfo: { $arrayElemAt: ['$invoiceData', 0] },
-                    invoicedQty: { $ifNull: [{ $arrayElemAt: ['$invoiceData.totalQty', 0] }, 0] }
-                }
-            },
-            {
-                $addFields: {
-                    balanceQty: { $max: [0, { $subtract: ['$deliveredQty', '$invoicedQty'] }] }
-                }
-            },
-            {
-                $project: {
-                    _id: 1,
-                    dnNo: 1,
-                    dnDate: 1,
-                    customerName: { $ifNull: ['$customer.companyName', ''] },
-                    jobId: '$job.jobId',
-                    deliveredQty: 1,
-                    invoicedQty: 1,
-                    balanceQty: 1,
-                    invoiceNo: { $ifNull: ['$_invoiceInfo.invoiceNo', ''] },
-                    invoiceDate: { $ifNull: ['$_invoiceInfo.invoiceDate', null] },
-                    status: {
-                        $cond: {
-                            if: { $lte: ['$invoicedQty', 0] },
-                            then: 'Pending Invoice',
-                            else: {
-                                $cond: {
-                                    if: { $gte: ['$invoicedQty', '$deliveredQty'] },
-                                    then: 'Fully Invoiced',
-                                    else: 'Partially Invoiced'
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        ];
-
-        const filterMatch: any = {};
-        if (customerName) filterMatch.customerName = { $regex: customerName, $options: 'i' };
-        if (jobId) filterMatch.jobId = { $regex: jobId, $options: 'i' };
-        if (dnNo) filterMatch.dnNo = { $regex: dnNo, $options: 'i' };
-        if (invoiceNo) filterMatch.invoiceNo = { $regex: invoiceNo, $options: 'i' };
-        if (status) {
-            const statusArr = Array.isArray(status) ? status : [status];
-            filterMatch.status = { $in: statusArr };
-        }
-        if (Object.keys(filterMatch).length > 0) {
-            pipeline.push({ $match: filterMatch });
-        }
-
-        pipeline.push({
-            $facet: {
-                metadata: [{ $count: 'total' }],
-                data: [
-                    { $sort: { dnDate: -1 } },
-                    { $skip: (page - 1) * row },
-                    { $limit: row }
-                ]
-            }
-        });
-
-        const result = await DeliveryNote.aggregate(pipeline).allowDiskUse(true);
-
-        const metadata = result[0]?.metadata[0];
-        const total = metadata?.total || 0;
-        const items = result[0]?.data || [];
-
-        return res.status(200).json({ success: true, items, total, page, row });
-    } catch (error) {
-        console.error('Invoice Linking Summary Error:', error);
-        res.status(500).json({ success: false, message: 'Error fetching invoice linking summary', error });
     }
 };

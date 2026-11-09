@@ -18,6 +18,8 @@ export interface DetailOverviewField {
   /** Renders the value as a status pill, using `tone`. Only used for type 'field'. */
   pill?: boolean;
   stacked?: boolean;
+  /** Spans both columns of a two-column section. Only used for type 'field'. */
+  fullRow?: boolean;
   noHover?: boolean;
   /** Highlights the value semantically. Used by 'field', 'badge' and 'progress'. */
   tone?: DetailTone;
@@ -74,6 +76,8 @@ export interface DetailDocument {
 export interface DetailTableColumn {
   key: string;
   label: string;
+  /** Starts unchecked in the column chooser (tables with `tools`); the user can still turn it on. */
+  hiddenByDefault?: boolean;
   /** 'stack' renders `key` as a bold title with `subKey` as a muted second line. */
   type?: 'text' | 'number' | 'currency' | 'date' | 'badge' | 'html' | 'stack' | 'image' | 'textarea';
   /** type 'image' only: shows a View action that opens a larger modal preview. */
@@ -89,10 +93,14 @@ export interface DetailTableColumn {
   wrap?: boolean;
   /** Keeps a long text value on one line with an ellipsis (full text on hover) instead of widening the table. */
   truncate?: boolean;
+  /** With `truncate`: no click-to-expand; the full text (or `tooltipKey`) shows as a tooltip on hover instead. */
+  hoverOnly?: boolean;
   /** Sum this column in the footer row. */
   total?: boolean;
   /** Row field holding the raw number to sum, when `key` holds a formatted string. */
   totalKey?: string;
+  /** Include muted (`_excludeFromTotal`) rows in this column's footer total. */
+  totalAll?: boolean;
   /** Angular number-pipe format for the footer total, e.g. '1.2-2'. */
   totalFormat?: string;
   /** Maps a badge cell's value to a semantic tone. Preferred over hand-written classes. */

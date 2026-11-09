@@ -1,0 +1,69 @@
+<app-sf-drawer [open]="true" [title]="editing ? 'Edit Customer Invoice' : 'Create Customer Invoice'" [subtitle]="drawerSubtitle" [width]="step === 2 ? '1180px' : '860px'" [dirty]="form.dirty" (closed)="!saving && closed.emit()">
+<app-sf-stepper [labels]="stepLabels" [current]="step" (stepClick)="goToStep($event)"></app-sf-stepper>
+<form id="customer-invoice-form" [formGroup]="form" (ngSubmit)="save()" novalidate>
+
+    <ng-container *ngIf="step === 1">
+    <app-sf-section title="Source" columns="3">
+      <app-sf-field label="Invoice No" [control]="form.controls.invoiceNo">
+        <app-sf-input formControlName="invoiceNo" readonly></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Job No" [control]="form.controls.jobNo">
+        <app-sf-input formControlName="jobNo" readonly></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="DN No" optional [control]="form.controls.dnNo">
+        <app-sf-input formControlName="dnNo" readonly></app-sf-input>
+      </app-sf-field>
+    </app-sf-section>
+
+    <app-sf-section title="Client" columns="2">
+      <app-sf-field label="Client" [control]="form.controls.clientName">
+        <app-sf-input formControlName="clientName" readonly></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Attention" optional [control]="form.controls.attention">
+        <app-sf-input formControlName="attention"></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="LPO Ref (Customer LPO No)" optional [control]="form.controls.lpoRef">
+        <app-sf-input formControlName="lpoRef"></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Subject" optional [control]="form.controls.subject">
+        <app-sf-input formControlName="subject"></app-sf-input>
+      </app-sf-field>
+    </app-sf-section>
+
+    <app-sf-section title="Payment" columns="3">
+      <app-sf-field label="Invoice Date" [control]="form.controls.invoiceDate">
+        <app-sf-date formControlName="invoiceDate" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
+      </app-sf-field>
+      <app-sf-field label="Payment Terms" optional [control]="form.controls.paymentTerms">
+        <app-sf-input formControlName="paymentTerms"></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Payment Method" optional [control]="form.controls.paymentMethod">
+        <app-sf-combobox formControlName="paymentMethod" [options]="paymentMethodOptions" placeholder="Select method"></app-sf-combobox>
+      </app-sf-field>
+    </app-sf-section>
+    </ng-container>
+    <section *ngIf="step === 2">
+      <section class="mb-4 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-erp-border-dark dark:bg-erp-surface-dark">
+        <p class="text-[11px] font-medium uppercase tracking-wide text-gray-400">Invoice details</p>
+        <dl class="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+          <div class="min-w-0"><dt class="text-[11px] text-gray-500 dark:text-gray-400">Job No</dt><dd class="mt-0.5 break-words text-sm font-medium text-gray-900 dark:text-gray-100">{{ jobNo }}</dd></div>
+          <div class="min-w-0"><dt class="text-[11px] text-gray-500 dark:text-gray-400">Client</dt><dd class="mt-0.5 break-words text-sm font-medium text-gray-900 dark:text-gray-100">{{ form.controls.clientName.value || '-' }}</dd></div>
+          <div class="min-w-0"><dt class="text-[11px] text-gray-500 dark:text-gray-400">{{ dn ? 'DN No' : 'PO No' }}</dt><dd class="mt-0.5 break-words text-sm font-medium text-gray-900 dark:text-gray-100">{{ dn ? dn.dnNo : po?.poNo }}</dd></div>
+          <div class="min-w-0"><dt class="text-[11px] text-gray-500 dark:text-gray-400">Invoice date</dt><dd class="mt-0.5 break-words text-sm font-medium text-gray-900 dark:text-gray-100">{{ form.controls.invoiceDate.value | date:'dd/MM/yyyy' }}</dd></div>
+        </dl>
+      </section>
+      <app-invoice-item-entry [items]="invoiceLines" [currency]="currency" [selectable]="selectable" [title]="'From the ' + sourceLabel"
+        [summary]="jobTotals ? { jobPrice: jobTotals.price, jobDiscount: jobTotals.discount, jobNet: jobNet, dnDiscount: dnDiscount, dnNet: dnNet } : null"></app-invoice-item-entry>
+    </section>
+
+</form>
+  <ng-container sfDrawerFooter>
+    <span *ngIf="error" role="alert" class="mr-auto text-xs text-red-600 dark:text-red-400">{{ error }}</span>
+    <app-action-button *ngIf="step === 1" variant="secondary" (click)="closed.emit()" [disabled]="saving">Cancel</app-action-button>
+    <app-action-button *ngIf="step === 2" variant="secondary" (click)="step = 1" [disabled]="saving">Back</app-action-button>
+    <app-action-button *ngIf="step === 1" variant="primary" (click)="next()">Next</app-action-button>
+    <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="customer-invoice-form" [disabled]="saving">
+      {{ saving ? (editing ? 'Saving...' : 'Submitting...') : (editing ? 'Save Changes' : 'Submit Invoice') }}
+    </app-action-button>
+  </ng-container>
+</app-sf-drawer>

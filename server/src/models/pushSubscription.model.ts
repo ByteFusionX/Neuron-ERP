@@ -10,6 +10,8 @@ interface PushSubscription {
     endpoint: string;
     keys: PushSubscriptionKeys;
     userAgent?: string;
+    // The login session (RefreshToken.family) this browser subscription belongs to.
+    family?: string;
     createdAt: Date;
 }
 
@@ -30,6 +32,10 @@ const pushSubscriptionSchema = new Schema<PushSubscription>({
     },
     userAgent: {
         type: String,
+    },
+    family: {
+        type: String,
+        index: true,
     },
     createdAt: {
         type: Date,

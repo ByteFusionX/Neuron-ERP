@@ -1,13 +1,5 @@
 <div class="flex flex-col gap-4">
 
-  <!-- Supplier picker: a dropdown, so it still works with dozens of suppliers --------------- -->
-  <div class="flex flex-wrap items-center gap-3 border-b border-gray-100 pb-3 dark:border-erp-border-dark">
-    <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Supplier</span>
-    <app-sf-combobox class="block w-72 max-w-full" aria-label="Supplier" placeholder="Select supplier" [options]="supplierOptions"
-      [ngModel]="activeTab?.key ?? null" (ngModelChange)="$event && selectTab($event)"></app-sf-combobox>
-    <span class="text-xs text-gray-400">{{ tabs.length }} supplier{{ tabs.length === 1 ? '' : 's' }}</span>
-  </div>
-
   <ng-container *ngIf="activeTab as tab">
     <p *ngIf="tab.issuable === false" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-erp-border-dark">This supplier is not on record, so no LPO can be issued for it.</p>
     <p *ngIf="tab.issuable !== false && loading" class="py-8 text-center text-sm text-gray-500">Loading items…</p>
@@ -43,7 +35,7 @@
         </div>
       </div>
 
-      <p *ngIf="lines.length && !openCount" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">Everything for this supplier is already on an LPO.</p>
+      <p *ngIf="lines.length && !openCount && !readOnly"class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">Everything for this supplier is already on an LPO.</p>
       <p *ngIf="!lines.length" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-erp-border-dark">No items for this supplier.</p>
       <p *ngIf="lines.length && filterActive && !visibleLines.length" class="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-xs text-gray-500 dark:border-erp-border-dark">
         No lines match. <button type="button" (click)="clearFilters()" class="font-medium text-violet-700 hover:underline dark:text-violet-400">Clear filters</button>
@@ -75,7 +67,7 @@
             <span class="w-4 shrink-0"></span>
             <div class="le-strip le-labels min-w-0 flex-1">
               <span>Item</span><span class="text-right">Total qty</span><span class="text-right">Issued</span><span class="text-right">Pending</span><span class="text-right">Remaining</span>
-              <span>Issue qty</span><span>UoM</span><span class="text-right">Unit price</span><span class="text-right">Total</span>
+              <span>Issue qty</span><span class="text-right">Unit price</span><span class="text-right">Total</span>
             </div>
           </div>
 
@@ -89,7 +81,7 @@
                   <div class="col-span-4 min-w-0 py-1.5 min-[900px]:col-span-1">
                     <p [title]="line.item.detail" class="line-clamp-2 whitespace-pre-line text-xs font-normal text-gray-900 dark:text-gray-100">{{ line.item.detail }}</p>
                     <p *ngIf="partNo(line)" class="text-xs text-gray-500">{{ partNo(line) }}</p>
-                    <span *ngIf="!isOpen(line)" class="text-xs font-semibold text-orange-600">Fully issued</span>
+                    <span *ngIf="!isOpen(line) && !readOnly" class="text-xs font-semibold text-orange-600">Fully issued</span>
                   </div>
                   <div class="le-cell le-num" title="Total qty">{{ totalQty(line) }}</div>
                   <div class="le-cell le-num" title="Issued">{{ line.item.issuedQuantity || 0 }}</div>
@@ -100,11 +92,6 @@
                       [ngModel]="line.qty" (ngModelChange)="setQty(line, $event)" [attr.aria-label]="'Issue qty for ' + line.item.detail"></app-sf-number>
                     <ng-template #noQty><div class="le-cell le-num" [class.text-gray-400]="!allIssued">{{ allIssued ? totalQty(line) : '-' }}</div></ng-template>
                     <p *ngIf="qtyError(line)" class="mt-1 text-[11px] text-red-600">{{ qtyError(line) }}</p>
-                  </div>
-                  <div>
-                    <app-sf-combobox *ngIf="line.picked; else noUom" [options]="uomOptions" [ngModel]="uom(line)" (ngModelChange)="setUom(line, $event)" placeholder="UoM"
-                      [attr.aria-label]="'UoM for ' + line.item.detail"></app-sf-combobox>
-                    <ng-template #noUom><div class="le-cell">{{ uom(line) || '-' }}</div></ng-template>
                   </div>
                   <div>
                     <app-sf-number *ngIf="line.picked; else noPrice" [min]="0" [stepper]="false" [ngModel]="unitPrice(line)" (ngModelChange)="setPrice(line, $event)"

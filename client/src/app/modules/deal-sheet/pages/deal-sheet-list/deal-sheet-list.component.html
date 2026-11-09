@@ -1,5 +1,5 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
-    <app-data-grid #grid
+<div class="h-full flex flex-col p-5 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid [strong]="true"
         class="flex-1 min-h-0"
         [fillHeight]="true"
         title="Deal Sheets"
@@ -54,7 +54,7 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'items'">
-                    <app-detail-table title="Deal items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" [currency]="row.currency"></app-detail-table>
+                    <app-detail-table title="Items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" [currency]="row.currency"></app-detail-table>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'costs'">
@@ -87,4 +87,4 @@
     </app-data-grid>
 </div>
 
-<app-update-dealsheet [open]="updateOpen" [data]="updateData" (saved)="onUpdateSaved($event)" (closed)="updateOpen = false"></app-update-dealsheet>
+<app-deal-form class="contents" [update]="updateOpen ? updateData : null" (updated)="onUpdateSaved($event)" (closed)="updateOpen = false"></app-deal-form>

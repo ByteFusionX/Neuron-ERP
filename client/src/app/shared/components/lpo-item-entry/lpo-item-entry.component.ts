@@ -31,7 +31,7 @@ type LpoFilter = 'selected' | 'unselected' | 'errors' | 'issued';
     :host { display: block; }
     .le-strip { display: grid; gap: 0.375rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
     @media (min-width: 900px) {
-      .le-strip { grid-template-columns: minmax(0, 5fr) repeat(4, minmax(0, 1.2fr)) minmax(0, 1.6fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.6fr); }
+      .le-strip { grid-template-columns: minmax(0, 5fr) repeat(4, minmax(0, 1.2fr)) minmax(0, 1.6fr) minmax(0, 1.6fr) minmax(0, 1.6fr); }
     }
     .le-labels { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.03em; color: #9ca3af; }
     :host-context(html.dark) .le-labels { color: #6b7280; }
@@ -49,6 +49,8 @@ export class LpoItemEntryComponent implements OnChanges {
   @Input() currency = '';
   /** The supplier's approved discount, shown in the totals bar. */
   @Input() discount = 0;
+  /** Showing an existing PO: no "fully issued" notes, nothing to pick. */
+  @Input() readOnly = false;
 
   @Output() tabSelected = new EventEmitter<string>();
   /** Units of measure offered on each line. */
@@ -203,7 +205,9 @@ export class LpoItemEntryComponent implements OnChanges {
   partNo(line: LpoIssueLine): string {
     const p = line.item?.partNo;
     if (!p) return '';
-    return typeof p === 'string' ? p : p.partNo || '';
+    const text = typeof p === 'string' ? p : p.partNo || '';
+    // An unpopulated reference is a bare ObjectId, not a part number.
+    return /^[a-f\d]{24}$/i.test(text) ? '' : text;
   }
 
   trackTab = (_: number, t: LpoSupplierTab): string => t.key;

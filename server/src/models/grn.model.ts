@@ -17,8 +17,9 @@ interface GRN extends Document {
   inspectionNotes?: string;
   inspectedBy?: Types.ObjectId;
   outcomeStatus: "Completed" | "Return Required" | "Return in Progress" | "Resolved";
+  receiptStatus: "Not Received" | "Partially Received" | "Fully Received" | "Fully Rejected";
   invoiceStatus: "Ready for Invoice" | "Blocked by Return";
-  returnResolution?: "Replacement" | "Credit Note";
+  returnResolution?: string;
   returnDispatchedAt?: Date;
   returnResolvedAt?: Date;
   returnResolvedBy?: Types.ObjectId;
@@ -32,6 +33,7 @@ interface GRN extends Document {
     originalname: string;
   }[];
   items: {
+    itemCode?: string;
     partNo?: string;
     itemDescription: string;
     uom?: string;
@@ -56,6 +58,11 @@ interface GRN extends Document {
 }
 
 const itemSchema = new Schema({
+  // The product's item code: stock movement and balance are posted against the product it identifies.
+  itemCode: {
+    type: String,
+    trim: true
+  },
   partNo: {
     type: String,
     trim: true
@@ -113,7 +120,7 @@ const itemSchema = new Schema({
 
 const grnSchema = new Schema<GRN>(
   {
-    grnNo: {
+    grnNo: {  
       type: String,
       required: true,
       unique: true,
@@ -163,6 +170,11 @@ const grnSchema = new Schema<GRN>(
     inspectionDate: { type: Date },
     inspectionNotes: { type: String, trim: true },
     inspectedBy: { type: Schema.Types.ObjectId, ref: "Employee" },
+    receiptStatus: {
+      type: String,
+      enum: ["Not Received", "Partially Received", "Fully Received", "Fully Rejected"],
+      default: "Not Received"
+    },
     outcomeStatus: {
       type: String,
       enum: ["Completed", "Return Required", "Return in Progress", "Resolved"],
@@ -173,7 +185,7 @@ const grnSchema = new Schema<GRN>(
       enum: ["Ready for Invoice", "Blocked by Return"],
       default: "Ready for Invoice"
     },
-    returnResolution: { type: String, enum: ["Replacement", "Credit Note"] },
+    returnResolution: { type: String, trim: true },
     returnDispatchedAt: { type: Date },
     returnResolvedAt: { type: Date },
     returnResolvedBy: { type: Schema.Types.ObjectId, ref: "Employee" },

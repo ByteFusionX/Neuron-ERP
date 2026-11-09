@@ -19,37 +19,48 @@
     </app-sf-field>
   </div>
 
-  <!-- Items step: how many lines still have no supplier -->
-  <div *ngIf="stage === 'ask' && (selectedJobSheet || isJobLess)" class="flex flex-wrap items-center gap-2 rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-2.5 text-xs text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/20 dark:text-violet-200">
-    <span>Tick lines on <b>Items</b>, pick a supplier and click <b>Compare</b> to enter its prices. Each supplier starts at its last price. Choose the supplier of a line with its pill or <b>Assign</b> on the supplier's tab.</span>
-    <span *ngIf="askSummary" class="ml-auto flex flex-wrap gap-1.5">
-      <span class="rounded-full bg-white px-2.5 py-0.5 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ supplierTabs.length }} supplier{{ supplierTabs.length === 1 ? '' : 's' }}</span>
-      <span *ngIf="askSummary.unasked" class="rounded-full bg-amber-100 px-2.5 py-0.5 font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{{ askSummary.unasked }} line{{ askSummary.unasked === 1 ? '' : 's' }} with no supplier</span>
-    </span>
-  </div>
-
-  <div *ngIf="selectedJobSheet || isJobLess" class="flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-erp-border-dark pb-3">
-    <div class="flex flex-wrap items-center gap-1">
+  <div *ngIf="selectedJobSheet || isJobLess" class="flex flex-nowrap items-center gap-6 border-b border-gray-100 dark:border-erp-border-dark pb-3">
+    <div class="flex min-w-0 flex-1 items-center gap-1">
+    <button
+      type="button"
+      class="grid h-7 w-7 shrink-0 place-content-center rounded-lg border border-gray-200 dark:border-erp-border-dark text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+      [disabled]="!canScrollLeft"
+      aria-label="Scroll tabs left"
+      (click)="tabStrip.scrollBy({ left: -200, behavior: 'smooth' })"
+    >
+      <ng-icon name="heroChevronLeft" class="h-3.5 w-3.5"></ng-icon>
+    </button>
+    <div #tabStrip data-tab-strip (scroll)="updateStripScroll()" (wheel)="onStripWheel($event)" class="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
       <button
         type="button"
         class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
-        [ngClass]="activeTab === 'items' ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 dark:border-erp-border-dark text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
-        (click)="tabSelected.emit('items')"
+        [ngClass]="shownTab === 'items' ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 dark:border-erp-border-dark text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
+        (click)="pickTab('items')"
       >
         Items
-        <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="activeTab === 'items' ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ itemCount() }}</span>
+        <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="shownTab === 'items' ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ itemCount() }}</span>
       </button>
       <div
         *ngFor="let t of supplierTabs"
         class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
-        [ngClass]="activeTab === t.id ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 dark:border-erp-border-dark text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
+        [ngClass]="shownTab === t.id ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 dark:border-erp-border-dark text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
       >
-        <button type="button" class="inline-flex items-center gap-1.5" (click)="tabSelected.emit(t.id)">
+        <button type="button" class="inline-flex items-center gap-1.5" (click)="pickTab(t.id)">
           <span class="max-w-[7rem] truncate">{{ t.name }}</span>
-          <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="activeTab === t.id ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ t.count }}<ng-container *ngIf="t.total != null">/{{ t.total }}</ng-container></span>
+          <span class="rounded-full px-1.5 text-[10px] tabular-nums" [ngClass]="shownTab === t.id ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-800'">{{ t.count }}<ng-container *ngIf="t.total != null">/{{ t.total }}</ng-container></span>
         </button>
         <button
-          *ngIf="t.closable"
+          *ngIf="selectedKeys.length && shownTab === 'items' && !readOnly"
+          type="button"
+          class="-mr-1 grid h-4 w-4 place-content-center rounded hover:bg-black/10"
+          [attr.aria-label]="'Add ' + selectedKeys.length + ' selected item(s) to ' + t.name"
+          [title]="'Add ' + selectedKeys.length + ' selected to ' + t.name"
+          (click)="addToSupplier(t.id)"
+        >
+          <ng-icon name="heroPlus" class="h-3 w-3"></ng-icon>
+        </button>
+        <button
+          *ngIf="t.closable && !(selectedKeys.length && shownTab === 'items' && !readOnly)"
           type="button"
           class="-mr-1 grid h-4 w-4 place-content-center rounded hover:bg-black/10"
           aria-label="Close supplier tab"
@@ -59,7 +70,17 @@
         </button>
       </div>
     </div>
-    <div *ngIf="!readOnly" class="ml-auto flex items-center gap-2">
+    <button
+      type="button"
+      class="grid h-7 w-7 shrink-0 place-content-center rounded-lg border border-gray-200 dark:border-erp-border-dark text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+      [disabled]="!canScrollRight"
+      aria-label="Scroll tabs right"
+      (click)="tabStrip.scrollBy({ left: 200, behavior: 'smooth' })"
+    >
+      <ng-icon name="heroChevronRight" class="h-3.5 w-3.5"></ng-icon>
+    </button>
+    </div>
+    <div *ngIf="!readOnly" class="ml-auto flex shrink-0 items-center gap-2">
       <app-sf-combobox
         class="w-56"
         [options]="freeSuppliers"
@@ -75,16 +96,17 @@
     </div>
   </div>
 
-  <!-- Supplier tab: the supplier whose prices are entered below -->
-  <section *ngIf="activeTab !== 'items' && (selectedJobSheet || isJobLess)" class="rounded-xl border border-gray-200 px-4 py-3 dark:border-erp-border-dark">
-    <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-      <span class="text-sm text-gray-700 dark:text-gray-300">{{ activeTabName }}</span>
-      <span class="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">{{ tabHint }}</span>
+  <!-- Read-only once the request has left In Progress: item-entry makes the lines inert but keeps its search/filter/density toolbar live. -->
+  <div *ngIf="selectedJobSheet || isJobLess; else noJob">
+    <div *ngIf="switching" class="pr-skeleton space-y-2" aria-busy="true" aria-label="Loading items">
+      <div *ngFor="let r of skeletonRows" class="flex items-center gap-3">
+        <span class="pr-sk h-8 w-8 rounded"></span>
+        <span class="pr-sk h-8 flex-1 rounded"></span>
+        <span class="pr-sk h-8 w-20 rounded"></span>
+        <span class="pr-sk h-8 w-24 rounded"></span>
+      </div>
     </div>
-  </section>
-
-  <!-- Read-only once the request has left In Progress: inert blocks typing, clicks and focus but keeps the lines visible. -->
-  <div *ngIf="selectedJobSheet || isJobLess; else noJob" [attr.inert]="readOnly ? '' : null" [class.opacity-80]="readOnly">
+    <div [class.hidden]="switching">
     <app-item-entry
       mode="purchase"
       [quoteLayout]="true"
@@ -96,15 +118,27 @@
       [supplierOptions]="supplierOptions()"
       [allowCreateProduct]="true"
       [bulkSelect]="true"
+      [readOnly]="readOnly"
       [flat]="true"
       [lineLocked]="lineLocked"
+      [lineHardLocked]="lineHardLocked"
+      [lineFixed]="lineFixed"
+      [lineMinQty]="lineMinQty"
+      [discountFloor]="discountFloor"
       [lineAwarded]="lineAwarded"
       [lineBadge]="lineBadge"
+      [lineUnregisteredSupplier]="lineUnregisteredSupplier"
       [linePills]="linePills"
       (pillClicked)="pillPicked.emit($event)"
       [lineOffers]="lineOffers"
       [lineDeal]="lineDeal"
       [supplierScope]="activeTab === 'items' ? null : activeTab"
+      [supplierDiscounts]="purchaseForm.get('supplierDiscounts')?.value?.suppliers ?? null"
+      [dealSupplierDiscounts]="dealSupplierDiscounts"
+      [dealExtraCosts]="dealExtraCosts"
+      [jobTotals]="jobTotals"
+      [prExtraCosts]="prExtraCosts"
+      [customerDiscountTotal]="customerDiscountTotal"
       [supplierScopeName]="activeTab === 'items' ? '' : activeTabName"
       [scopeLineKeys]="tabLineKeys"
       [scopeExcludedKeys]="tabExcludedKeys"
@@ -112,7 +146,9 @@
       (awardToTab)="linesAwardedToTab.emit($event)"
       (offerPicked)="offerPicked.emit($event)"
       (addToTab)="linesAddedToTab.emit($event)"
-      (createProductRequested)="createProductRequested.emit()"    ></app-item-entry>
+      (supplierDiscountEdited)="supplierDiscountEdited.emit($event)"
+      (createProductRequested)="createProductRequested.emit($event)"></app-item-entry>
+    </div>
   </div>
 
   <ng-template #noJob>

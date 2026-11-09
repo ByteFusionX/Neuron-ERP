@@ -11,6 +11,8 @@ interface PurchaseOrder extends Document {
         unitCost: number;
         totalCost: number;
         partNo?: any;
+        itemCode?: string;
+        productPartNo?: string;
         prLineKey?: string;
         rfqQuoteId?: any;
         receivedQty?: number;
@@ -91,6 +93,17 @@ const purchaseOrderItemSchema = new Schema({
     partNo: {
         type: Schema.Types.ObjectId,
         ref: 'Product'
+    },
+    // Snapshot of the product's item code (and its manufacturer part no, when it has one) at the time the PO was raised.
+    itemCode: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    productPartNo: {
+        type: String,
+        trim: true,
+        default: ''
     },
     // Links the line back to the PR line it covers and the RFQ quote it was awarded from.
     prLineKey: {

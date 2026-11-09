@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import StockMovement, { StockBucket, StockMovementType } from "../models/stockMovement.model";
 import StockReservation from "../models/stockReservation.model";
+import auditLogModel from "../models/auditLog.model";
 
 /**
  * The single place stock quantity is read or written. Other modules ask it for availability, reserve
@@ -150,7 +151,7 @@ export const post = async (input: PostInput) => {
     }
 
     const unitCost = input.unitCost !== undefined ? Number(input.unitCost) || 0 : undefined;
-    return StockMovement.create({
+    const created = await StockMovement.create({
         product: oid(input.product),
         warehouse: oid(input.warehouse),
         movementType: input.type,
@@ -172,6 +173,23 @@ export const post = async (input: PostInput) => {
         createdDate: new Date(),
         isDeleted: false,
     });
+
+    // Global activity log, shown in the stock balance History tab. A failed audit write must not fail the posting.
+    try {
+        const ref = [input.referenceType, input.referenceNo].filter(Boolean).join(' ');
+        await auditLogModel.create({
+            entityType: 'stock',
+            entityId: oid(input.product),
+            entityLabel: input.referenceNo,
+            action: String(input.type).toLowerCase(),
+            summary: `${input.type}: ${input.direction === 'in' ? '+' : '-'}${quantity}${bucket === 'Quarantine' ? ' (quarantine)' : ''}${ref ? ` - ${ref}` : ''}${input.reason ? `, ${input.reason}` : ''}${input.remarks?.trim() ? ` (${input.remarks.trim()})` : ''}`,
+            actor: input.createdBy ? oid(input.createdBy) : undefined,
+            at: new Date(),
+        });
+    } catch (error) {
+        console.error('Audit failed:', error);
+    }
+    return created;
 };
 
 /**

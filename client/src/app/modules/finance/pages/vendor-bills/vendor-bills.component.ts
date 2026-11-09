@@ -1,13 +1,20 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, ViewChild, inject } from '@angular/core';
-import { MatDialog } from '@angular/material/dialog';
-import { ActivatedRoute } from '@angular/router';
-import { ToastrService } from 'ngx-toastr';
-import { catchError, forkJoin, map, of } from 'rxjs';
-import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
-import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
+import { Component, DestroyRef, OnInit, ViewChild, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { BehaviorSubject, Observable, Subscription, catchError, forkJoin, map, of } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { CustomerInvoiceService } from 'src/app/core/services/customer-invoice.service';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { InvoiceService } from 'src/app/core/services/invoice.service';
+import { MatDialog } from '@angular/material/dialog';
+import { ActivatedRoute, Router } from '@angular/router';
+import { GrnListModalComponent, GrnListModalData } from 'src/app/shared/components/grn-list-modal/grn-list-modal.component';
+import { ToastrService } from 'ngx-toastr';
+import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
+import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import {
@@ -21,7 +28,7 @@ import {
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
-import { DetailDocument, DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocument, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 
 const STATUS_CLASSES: Record<string, string> = {
@@ -39,7 +46,7 @@ const RECEIPT_CLASSES: Record<string, string> = {
 @Component({
   selector: 'app-vendor-bills',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailDocumentsComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailDocumentsComponent, DetailTimelineComponent],
   templateUrl: './vendor-bills.component.html',
   styleUrl: './vendor-bills.component.css',
 })
@@ -53,6 +60,14 @@ export class VendorBillsComponent implements OnInit {
   private readonly notificationService = inject(ToastrService);
   private readonly dialog = inject(MatDialog);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly invoices = inject(CustomerInvoiceService);
+  private readonly employeeService = inject(EmployeeService);
+  private readonly auditLog = inject(AuditLogService);
+  private readonly destroyRef = inject(DestroyRef);
+  private loadSub?: Subscription;
+  canApprovePdc = false;
+  updatingPdc = false;
 
   rows: any[] = [];
   total = 0;
@@ -62,29 +77,48 @@ export class VendorBillsComponent implements OnInit {
   search = '';
   activeViewId = 'all';
 
-  readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Finance' }, { label: 'Vendor Bills' }];
+  readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Finance' }, { label: 'Supplier Bills' }];
   views: DataGridView<any>[] = [
     { id: 'all', label: 'All' },
     { id: 'upcoming', label: 'Upcoming' },
     { id: 'not-received', label: 'Not Received' },
-    { id: 'partial', label: 'Partly Received' },
-    { id: 'received', label: 'Fully Received' },
-    { id: 'ready-to-deliver', label: 'Ready to Deliver' },
+    { id: 'received', label: 'Received' },
   ];
   readonly detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'documents', label: 'Documents', icon: 'files' },
+    { id: 'history', label: 'History', icon: 'clock' },
   ];
+
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+
+  /** Recorded events of the purchase order behind the bill. */
+  historyFor(row: any): Observable<DetailTimelineEntry[]> {
+    let subject = this.historyCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(row._id, subject);
+      this.auditLog.getHistory('purchaseOrder', row._id).subscribe({
+        next: (entries) => subject!.next(toTimelineEntries(entries)),
+        error: () => this.historyCache.delete(row._id),
+      });
+    }
+    return subject.asObservable();
+  }
   readonly rowActions: DataGridRowAction<any>[] = [
-    { id: 'view-po', label: 'View PO', icon: 'card', quick: true, panel: false },
-    { id: 'view-documents', label: 'View documents', icon: 'files', quick: true, panel: false },
-    { id: 'preview-dn', label: 'Preview delivery note', icon: 'note', quick: true, panel: false, hidden: (row) => !this.deliveryNote(row) },
-    { id: 'download-dn', label: 'Download delivery note', icon: 'download', panel: false, hidden: (row) => !this.deliveryNote(row) },
-    { id: 'preview-invoice', label: 'Preview invoice', icon: 'wallet', quick: true, panel: false, hidden: (row) => !this.invoiceDeliveryNote(row) },
-    { id: 'download-invoice', label: 'Download invoice', icon: 'download', panel: false, hidden: (row) => !this.invoiceDeliveryNote(row) },
+    ...['Approved', 'Rejected', 'Revoked'].map(status => ({
+      id: 'pdc-' + status, label: status === 'Approved' ? 'Approve PDC' : status === 'Rejected' ? 'Reject PDC' : 'Revoke PDC',
+      icon: status === 'Approved' ? 'check' : 'close', quick: true, panel: true,
+      hidden: (row: any) => this.activeViewId !== 'pdc' || !this.canApprovePdc || this.updatingPdc || row.pdcStatus !== (status === 'Revoked' ? 'Approved' : 'Pending'),
+    })),
+    { id: 'view-po', label: 'View PO', icon: 'card', quick: true, panel: false, hidden: () => this.isInvoiceView },
+    { id: 'view-grn', label: 'View GRN', icon: 'eye', quick: true, panel: false, hidden: (row) => this.isInvoiceView || !row.grns?.length },
+    { id: 'view-documents', label: 'View documents', icon: 'files', quick: true, panel: false, hidden: () => this.isInvoiceView },
+    { id: 'download-dn', label: 'Download delivery note', icon: 'download', panel: false, hidden: (row) => this.isInvoiceView || !this.deliveryNote(row) },
+    { id: 'download-invoice', label: 'Download invoice', icon: 'download', panel: false, hidden: (row) => this.isInvoiceView || !this.invoiceDeliveryNote(row) },
   ];
-  readonly columns: DataGridColumn<any>[] = [
+  readonly poColumns: DataGridColumn<any>[] = [
     { key: 'poDate', label: 'PO Date', type: 'date', width: '125px' },
     { key: 'poNo', label: 'PO No', locked: true },
     { key: 'supplier', label: 'Supplier', valueGetter: (row) => row.supplierId?.supplierName || '-' },
@@ -98,17 +132,46 @@ export class VendorBillsComponent implements OnInit {
     { key: 'paymentTerms', label: 'Payment Terms' },
     { key: 'amount', label: 'PO Value', align: 'right', valueGetter: (row) => this.amount(row) },
   ];
+  readonly invoiceColumns: DataGridColumn<any>[] = [
+    { key: 'invoiceDate', label: 'Invoice Date', type: 'date' },
+    { key: 'invoiceNo', label: 'Invoice No', locked: true },
+    { key: 'dnNo', label: 'DN No' },
+    { key: 'poNo', label: 'PO No' },
+    { key: 'client', label: 'Client', valueGetter: row => row.client?.name || '-' },
+    { key: 'jobNo', label: 'Job No' },
+    { key: 'status', label: 'Status', type: 'badge' },
+    { key: 'amount', label: 'Amount', align: 'right' },
+    { key: 'createdAt', label: 'Created Date', type: 'date' },
+    { key: 'createdBy', label: 'Created By', valueGetter: row => `${row.createdBy?.firstName || ''} ${row.createdBy?.lastName || ''}`.trim() || '-' },
+  ];
+  readonly pdcColumns: DataGridColumn<any>[] = [...this.invoiceColumns, { key: 'pdcStatus', label: 'PDC Status', type: 'badge' }];
+  get isInvoiceView(): boolean {
+    return this.activeViewId === 'invoices' || this.activeViewId === 'pdc';
+  }
+  get columns(): DataGridColumn<any>[] {
+    if (this.activeViewId === 'invoices') return this.invoiceColumns;
+    return this.activeViewId === 'pdc' ? this.pdcColumns : this.poColumns;
+  }
+  get emptyMessage(): string {
+    return this.isInvoiceView ? 'No customer invoices yet' : 'No approved purchase orders are waiting for finance';
+  }
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'description', label: 'Description', wrap: true },
+    { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
+    { key: 'description', label: 'Description', truncate: true },
+    { key: 'partNo', label: 'Part No', hiddenByDefault: true },
     { key: 'ordered', label: 'Ordered', type: 'number' },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
     { key: 'total', label: 'Total', type: 'currency', total: true },
   ];
 
-  readonly title = (row: any) => row.poNo || 'Purchase Order';
-  readonly subtitle = (row: any) => row.supplierId?.supplierName || '';
+  readonly title = (row: any) => row.invoiceNo || row.poNo || 'Purchase Order';
+  readonly subtitle = (row: any) => row.invoiceNo ? (row.client?.name || '') : (row.supplierId?.supplierName || '');
 
   ngOnInit(): void {
+    this.employeeService.employeeData$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(employee => {
+      this.canApprovePdc = /^(superadmin|admin)$/i.test(employee?.category?.role || '') || !!employee?.category?.privileges?.invoice?.pdcApprove;
+    });
+    this.destroyRef.onDestroy(() => this.loadSub?.unsubscribe());
     // Notifications deep-link with ?view=upcoming; the grid restores the tab without asking for data.
     const view = this.route.snapshot.queryParamMap.get('view');
     if (view && this.views.some((v) => v.id === view)) this.activeViewId = view;
@@ -129,12 +192,26 @@ export class VendorBillsComponent implements OnInit {
   }
 
   onRowAction({ action, row }: DataGridRowActionEvent<any>): void {
+    if (action.id.startsWith('pdc-')) {
+      if (!this.canApprovePdc || this.updatingPdc || this.activeViewId !== 'pdc') return;
+      this.updatingPdc = true;
+      this.invoices.updatePdcStatus(row._id, action.id.slice(4)).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: response => { Object.assign(row, response.data); this.updatingPdc = false; this.notificationService.success('PDC status updated'); this.load(); },
+        error: error => { this.updatingPdc = false; this.notificationService.error(error.error?.message || 'Failed to update PDC'); this.load(); },
+      });
+      return;
+    }
     if (action.id === 'view-po') this.previewPo(row);
+    if (action.id === 'view-grn') this.viewGrn(row);
     if (action.id === 'view-documents') this.grid.openRow(row, 'documents');
-    if (action.id === 'preview-dn') this.renderDeliveryNote(this.deliveryNote(row), false);
     if (action.id === 'download-dn') this.renderDeliveryNote(this.deliveryNote(row), true);
-    if (action.id === 'preview-invoice') this.previewDnInvoice(this.invoiceDeliveryNote(row));
     if (action.id === 'download-invoice') this.downloadDnInvoice(this.invoiceDeliveryNote(row));
+  }
+
+  private viewGrn(row: any): void {
+    const grns = row?.grns ?? [];
+    if (grns.length === 1) { this.router.navigate(['/grn/view-grn', grns[0]._id]); return; }
+    this.dialog.open(GrnListModalComponent, { data: { lpoId: row._id, lpoNo: row.poNo, grns, hasBalanceQty: false } as GrnListModalData });
   }
 
   /** The list row isn't fully populated (supplier contacts, quote, terms), so the PO is loaded in full first. */
@@ -203,9 +280,9 @@ export class VendorBillsComponent implements OnInit {
   }
 
   private syncViewColumns(): void {
-    const grnDate = this.columns.find((column) => column.key === 'grnDate');
-    if (grnDate) grnDate.visible = this.activeViewId === 'partial' || this.activeViewId === 'received';
-    const invoice = this.columns.find((column) => column.key === 'dnInvoice');
+    const grnDate = this.poColumns.find((column) => column.key === 'grnDate');
+    if (grnDate) grnDate.visible = this.activeViewId === 'received';
+    const invoice = this.poColumns.find((column) => column.key === 'dnInvoice');
     if (invoice) invoice.visible = this.activeViewId === 'ready-to-deliver';
   }
 
@@ -217,13 +294,23 @@ export class VendorBillsComponent implements OnInit {
 
   amount(row: any): string {
     const currency = row.currency || 'QAR';
-    return `${Number(row.totalLpoValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+    return `${Number(row.amount ?? row.totalLpoValue ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
   }
 
   overviewSections(row: any): DetailOverviewSection[] {
+    if (row.invoiceNo) return [{ title: 'Invoice details', columns: '2', fields: [
+      ...[
+        ['Client', row.client?.name], ['Attention', row.attention], ['Invoice No', row.invoiceNo],
+        ['Invoice Date', this.date(row.invoiceDate)], ['DN No', row.dnNo], ['LPO Ref (Customer LPO No)', row.lpoRef],
+        ['Subject', row.subject], ['Payment Terms', row.paymentTerms], ['Payment Method', row.paymentMethod],
+        ['PO No', row.poNo], ['Job No', row.jobNo], ['Status', row.status], ['Amount', this.amount(row)],
+        ...(row.paymentMethod === 'PDC' ? [['PDC Status', row.pdcStatus || 'Pending']] : []),
+        ['Created Date', this.date(row.createdAt)], ['Created By', `${row.createdBy?.firstName || ''} ${row.createdBy?.lastName || ''}`.trim()],
+      ].map(([label, value]) => ({ type: 'field' as const, label, value: value || '-' })),
+    ] }];
     return [
       {
-        title: 'Finance preparation',
+        title: 'Finance preparation', columns: '2',
         fields: [
           { type: 'field', label: 'PO status', value: row.poStatus || '-' },
           { type: 'field', label: 'Receipt status', value: row.receiptStatus || 'Not Received' },
@@ -232,7 +319,7 @@ export class VendorBillsComponent implements OnInit {
         ],
       },
       {
-        title: 'Terms and delivery',
+        title: 'Terms and delivery', columns: '2',
         fields: [
           { type: 'field', label: 'Payment terms', value: row.paymentTerms || '-' },
           { type: 'field', label: 'Expected delivery', value: this.date(row.expectedDeliveryDate) },
@@ -245,7 +332,9 @@ export class VendorBillsComponent implements OnInit {
 
   itemRows(row: any): Record<string, any>[] {
     return (row.items || []).map((item: any) => ({
-      description: item.detail || '-',
+      itemCode: item.itemCode || '',
+      partNo: item.partNo || item.productPartNo || '',
+      description: item.description || item.detail || '-',
       ordered: Number(item.quantity || 0),
       unitCost: Number(item.unitCost || 0),
       total: Number(item.totalCost || 0),
@@ -336,15 +425,15 @@ export class VendorBillsComponent implements OnInit {
   }
 
   private load(): void {
+    this.loadSub?.unsubscribe();
     this.isLoading = true;
-    this.purchaseOrderService.getAllPurchaseOrders({
+    this.loadSub = this.purchaseOrderService.getAllPurchaseOrders({
       page: this.page,
       row: this.pageSize,
       search: this.search || undefined,
       receiptStatus: this.receiptStatus(),
       status: this.activeViewId === 'upcoming' ? ['Placed'] : undefined,
       vendorBills: true,
-      readyToDeliver: this.activeViewId === 'ready-to-deliver',
     }).subscribe({
       next: (response) => {
         this.rows = response?.data || [];
@@ -353,7 +442,7 @@ export class VendorBillsComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error loading vendor bills:', error);
-        this.notificationService.error('Failed to load vendor bills');
+        this.notificationService.error('Failed to load supplier bills');
         this.isLoading = false;
       },
     });
@@ -361,24 +450,28 @@ export class VendorBillsComponent implements OnInit {
 
   /** Server-paged tabs only know their own total, so ask each view for a one-row page to get its count. */
   private refreshViewCounts(): void {
-    const countOf = (id: string) => this.purchaseOrderService.getAllPurchaseOrders({
-      page: 1,
-      row: 1,
-      search: this.search || undefined,
-      receiptStatus: this.receiptStatus(id),
-      status: id === 'upcoming' ? ['Placed'] : undefined,
-      vendorBills: true,
-      readyToDeliver: id === 'ready-to-deliver',
-    }).pipe(map((r: any) => r?.pagination?.total ?? 0), catchError(() => of(undefined)));
-    forkJoin(this.views.map((v) => countOf(v.id))).subscribe((counts) => {
+    const countOf = (id: string) => {
+      return this.purchaseOrderService.getAllPurchaseOrders({
+        page: 1,
+        row: 1,
+        search: this.search || undefined,
+        receiptStatus: this.receiptStatus(id),
+        status: id === 'upcoming' ? ['Placed'] : undefined,
+        vendorBills: true,
+      }).pipe(map((r: any) => r?.pagination?.total ?? 0), catchError(() => of(undefined)));
+    };
+    forkJoin(this.views.map((v) => countOf(v.id))).pipe(takeUntilDestroyed(this.destroyRef)).subscribe((counts) => {
       this.views = this.views.map((v, i) => ({ ...v, count: counts[i], hideCount: counts[i] === undefined }));
     });
   }
 
+  private setViewCount(id: string, count: number): void {
+    this.views = this.views.map((view) => view.id === id ? { ...view, count, hideCount: false } : view);
+  }
+
   private receiptStatus(viewId = this.activeViewId): string | undefined {
     if (viewId === 'not-received') return 'Not Received';
-    if (viewId === 'partial') return 'Partially Received';
-    if (viewId === 'received') return 'Received';
+    if (viewId === 'received') return 'Partially Received,Received';
     return undefined;
   }
 

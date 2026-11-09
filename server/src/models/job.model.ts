@@ -16,9 +16,14 @@ interface Job extends Document {
     productDistribution?: boolean;
     projectInstallation?: boolean;
     amc?: boolean;
+    holdReason?: string;
+    holdType?: string;
     lostReason?: string;
     lostAt?: Date;
     lostBy?: Types.ObjectId;
+    // Set when a deal revoke puts the job on hold: where the job was, so a rejected re-submission can put it back.
+    preRevokeStatus?: string;
+    preRevokeAllocateStatus?: string;
 }
 
 export enum jobStatus {
@@ -98,9 +103,14 @@ const jobSchema = new Schema<Job>({
     },
     allocatedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     allocatedAt: { type: Date },
+    holdReason: { type: String },
+    // advance-payment: Finance raises a proforma, and receiving it returns the job to Pending.
+    holdType: { type: String, enum: ['advance-payment', 'other'] },
     lostReason: { type: String },
     lostAt: { type: Date },
     lostBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+    preRevokeStatus: { type: String },
+    preRevokeAllocateStatus: { type: String },
 });
 
 export default model<Job>("Job", jobSchema);

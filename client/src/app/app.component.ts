@@ -24,6 +24,7 @@ import { ActiveItemEntryService } from './core/services/active-item-entry.servic
 import { CommandPaletteComponent } from './shared/components/command-palette/command-palette.component';
 import { BugReportLauncherService } from './core/diagnostics/bug-report-launcher.service';
 import { clearSessionStorage } from './shared/utils/clear-session.util';
+import { ThemeService } from './core/services/theme.service';
 
 import { AlertHostComponent } from './shared/components/alert-host/alert-host.component';
 
@@ -61,7 +62,8 @@ export class AppComponent implements OnDestroy, OnInit {
     public layout: LayoutService,
     private palette: CommandPaletteService,
     private activeItemEntry: ActiveItemEntryService,
-    private bugReportLauncher: BugReportLauncherService
+    private bugReportLauncher: BugReportLauncherService,
+    private themeService: ThemeService
   ) { }
 
 
@@ -75,6 +77,7 @@ export class AppComponent implements OnDestroy, OnInit {
 
 
     this.idle.onTimeout.subscribe(() => {
+      this._notificationService.endSession();
       clearSessionStorage();
       this.router.navigate(['/login']);
     });
@@ -107,12 +110,8 @@ export class AppComponent implements OnDestroy, OnInit {
     const employeeToken = this._employeeService.getToken();
     if (employeeToken) {
       this.token = employeeToken;
-      this._notificationService.authSocketIo(employeeToken)
-      this._notificationService.getEmployeeTextNotifications()
-      this._notificationService.initializeNotifications()
-      if (Notification.permission === 'granted') {
-        this.pushNotificationService.registerAndSubscribe().catch(() => this.pushNotificationService.subscribedSubject.next(false));
-      }
+      // socket auth, list, live feed and push (push re-syncs on every start)
+      this._notificationService.startSession();
       if (!this.isLoginRoute()) {
         this.isUserThere();
       }
@@ -126,6 +125,9 @@ export class AppComponent implements OnDestroy, OnInit {
           this.layout.closeOverlay();
           this.isUserThere();
           this._notificationService.markAsReadForRoute(event.urlAfterRedirects);
+          if (this._employeeService.getToken() && Notification.permission === 'default') {
+            this.pushNotificationService.ensurePermissionPrompt();
+          }
         }
       }
     });
@@ -161,8 +163,15 @@ export class AppComponent implements OnDestroy, OnInit {
     }
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase();
-    if (key !== 'b' && key !== 'k') return;
+    if (key !== 'b' && key !== 'k' && key !== 'l') return;
     if (this.isLoginRoute()) return;
+    if (key === 'l' && event.shiftKey) {
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || target?.matches('input, textarea, select')) return;
+      event.preventDefault();
+      this.themeService.toggleTheme();
+      return;
+    }
     if (key === 'k') {
       event.preventDefault();
       this.palette.toggle();

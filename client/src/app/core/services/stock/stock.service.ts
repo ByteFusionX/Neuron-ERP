@@ -35,6 +35,8 @@ export interface StockRow {
   availableQuantity: number;
   shortfallQuantity: number;
   quarantinedQuantity: number;
+  /** Job id (or the PO number when there is no job) the quarantined stock came from. */
+  quarantineRef?: string;
   stockValue: number;
   warehouses: StockWarehouseSplit[];
   warehouseText: string;
@@ -55,7 +57,7 @@ export interface StockOverviewResponse {
   success: boolean;
   data: {
     overview: StockRow[];
-    summary: { totalItems: number; exceptionCount: number; quarantineCount: number };
+    summary: { totalItems: number; availableCount: number; reservedCount: number; quarantineCount: number };
     pagination: StockPagination;
   };
 }
@@ -120,6 +122,10 @@ export interface StockReturnLine {
   description: string;
   uom: string;
   maxQuantity: number;
+  /** Supplier returns only: what arrived and what was rejected on the GRN. */
+  receivedQty?: number;
+  rejectedQty?: number;
+  rejectionReason?: string;
 }
 
 export interface StockReturnSource {
@@ -133,28 +139,36 @@ export interface StockReturnPayload {
   reason: string;
   remarks?: string;
   toQuarantine?: boolean;
-  resolution?: 'Replacement' | 'Credit Note';
-  lines: { product: string; quantity: number }[];
+  resolution?: string;
+  lines: { product: string; quantity: number; remarks?: string }[];
 }
 
 export interface StockReservationRow {
   _id: string;
   product: { partNo?: string; itemCode?: string; productDescription?: string } | null;
-  quote?: { quoteId?: string } | null;
-  job?: { jobId?: string } | null;
+  quote?: { quoteId?: string; createdBy?: { firstName?: string; lastName?: string } | null } | null;
+  job?: { jobId?: string; quoteId?: { quoteId?: string; createdBy?: { firstName?: string; lastName?: string } | null } | null } | null;
   customer?: { companyName?: string } | null;
+  createdBy?: { firstName?: string; lastName?: string } | null;
   sourceType: string;
   quantity: number;
   expiresAt?: string;
   createdDate: string;
 }
 
-export const ADJUSTMENT_REASONS = ['Opening stock', 'Count correction', 'Damaged', 'Lost / missing', 'Found', 'Other'] as const;
+export interface StockItemDetails {
+  item: Record<string, any>;
+  lastPo: Record<string, any> | null;
+  lastGrn: Record<string, any> | null;
+  jobs: { jobId: string; status: string; customer: string; reservedQty: number; reservedOn: string }[];
+}
+
+export const ADJUSTMENT_REASONS = ['Opening stock', 'Count correction', 'Damaged', 'Lost / missing', 'Other'] as const;
 
 /**
  * Reasons that only make sense in one direction. The server enforces the same rules.
  */
-export const ADD_ONLY_REASONS: readonly string[] = ['Opening stock', 'Found'];
+export const ADD_ONLY_REASONS: readonly string[] = ['Opening stock'];
 export const REMOVE_ONLY_REASONS: readonly string[] = ['Damaged', 'Lost / missing'];
 
 @Injectable({ providedIn: 'root' })
@@ -175,8 +189,8 @@ export class StockService {
     return this.http.get<StockOverviewResponse>(`${this.api}/overview`, { params: this.toParams(params), context: context() });
   }
 
-  getLedger(params: StockLedgerParams = {}): Observable<{ success: boolean; data: { movements: StockMovement[]; pagination: StockPagination } }> {
-    return this.http.get<{ success: boolean; data: { movements: StockMovement[]; pagination: StockPagination } }>(`${this.api}/ledger`, { params: this.toParams(params), context: context() });
+  getLedger(params: StockLedgerParams = {}): Observable<{ success: boolean; data: { movements: StockMovement[]; counts?: Record<string, number>; pagination: StockPagination } }> {
+    return this.http.get<{ success: boolean; data: { movements: StockMovement[]; counts?: Record<string, number>; pagination: StockPagination } }>(`${this.api}/ledger`, { params: this.toParams(params), context: context() });
   }
 
   /** On hand, reserved and available for products, keyed by product id. Open to every module. */
@@ -205,6 +219,10 @@ export class StockService {
 
   resolveSupplierReturn(grnId: string): Observable<{ success: boolean; message: string }> {
     return this.http.patch<{ success: boolean; message: string }>(`${this.api}/returns/supplier/${grnId}/resolve`, {}, { context: context() });
+  }
+
+  getItemDetails(product: string): Observable<{ success: boolean; data: StockItemDetails }> {
+    return this.http.get<{ success: boolean; data: StockItemDetails }>(`${this.api}/item-details`, { params: this.toParams({ product }), context: context() });
   }
 
   getReservations(product?: string): Observable<{ success: boolean; data: StockReservationRow[] }> {

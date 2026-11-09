@@ -7,7 +7,7 @@ export type StockMovementType = typeof STOCK_MOVEMENT_TYPES[number];
 export const STOCK_BUCKETS = ['Available', 'Quarantine'] as const;
 export type StockBucket = typeof STOCK_BUCKETS[number];
 
-export const ADJUSTMENT_REASONS = ['Opening stock', 'Count correction', 'Damaged', 'Lost / missing', 'Found', 'Other'] as const;
+export const ADJUSTMENT_REASONS = ['Opening stock', 'Count correction', 'Damaged', 'Lost / missing', 'Other'] as const;
 
 /**
  * The only record of stock quantity. On hand is the sum of (quantityIn - quantityOut) per product and

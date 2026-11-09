@@ -52,7 +52,7 @@ import { DetailOverviewField, DetailOverviewSection } from './detail-panel.model
               <app-dg-field *ngIf="f.type === 'dg'" [grid]="grid" [row]="row" [key]="f.key!" [label]="f.label || ''"
                 [stacked]="f.stacked ?? (s.columns === '2')" [noHover]="f.noHover ?? false"></app-dg-field>
             </ng-template>
-            <app-detail-field *ngIf="f.type === 'field'" [label]="f.label || ''" [tone]="f.tone ?? null"
+            <app-detail-field *ngIf="f.type === 'field'" [class.col-span-2]="f.fullRow" [class.block]="f.fullRow" [label]="f.label || ''" [tone]="f.tone ?? null"
               [stacked]="f.stacked ?? (s.columns === '2')" [noHover]="f.noHover ?? false">
               <app-detail-textarea-field *ngIf="f.editable && f.editor === 'textarea'; else standardField"
                 [value]="f.value" [ariaLabel]="f.label || ''" (save)="f.onSave?.($event)"></app-detail-textarea-field>

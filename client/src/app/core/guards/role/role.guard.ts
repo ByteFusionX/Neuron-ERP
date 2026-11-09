@@ -4,6 +4,7 @@ import { EmployeeService } from '../../services/employee/employee.service';
 import { Observable, catchError, filter, map, switchMap, take, of } from 'rxjs';
 import { Privileges, getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { ToastrService } from 'ngx-toastr';
+import { clearAccessToken } from '../../auth/token-store';
 
 export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: RouterStateSnapshot) => {
     let privileges: Privileges | undefined;
@@ -22,7 +23,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
             privileges = data?.category.privileges;
             
             if (data.isBlocked) {
-                localStorage.removeItem('employeeToken');
+                clearAccessToken();
                 toast.error('Your account has been blocked. Please contact your administrator.');
                 router.navigate(['/login']);
                 return false;
@@ -180,7 +181,13 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                         return false;
                     }
                 } else if (url.startsWith('/stock')) {
-                    if (!hasView(privileges?.inventory?.stockEntries?.viewReport)) {
+                    const inv = privileges?.inventory;
+                    const stockSub = url.startsWith('/stock/ledger') ? inv?.stockMovements
+                        : url.startsWith('/stock/overview') ? inv?.stockBalance : undefined;
+                    // Roles saved before the balance/movements split only have stockEntries.
+                    const stockLevel = (stockSub ?? inv?.stockEntries)?.viewReport;
+                    const anyStock = hasView(inv?.stockBalance?.viewReport) || hasView(inv?.stockMovements?.viewReport) || hasView(inv?.stockEntries?.viewReport);
+                    if (!(url.startsWith('/stock/ledger') || url.startsWith('/stock/overview') ? hasView(stockLevel) : anyStock)) {
                         router.navigate(['/home']);
                         return false;
                     }
@@ -202,11 +209,6 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                             router.navigate(['/dispatch']);
                             return false;
                         }
-                    } else if (url.includes('/pending-delivery-reports')) {
-                        if (!privileges?.dispatch?.viewPendingDelivery) {
-                            router.navigate(['/home']);
-                            return false;
-                        }
                     } else {
                         // General dispatch view report check
                         if (privileges?.dispatch?.viewReport == 'none' || privileges?.dispatch?.viewReport == undefined) {
@@ -218,21 +220,6 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                     if (url.includes('/create') || url.includes('/edit') || url.includes('/reissue/')) {
                         if (!privileges?.invoice?.createInvoice) {
                             router.navigate(['/invoice/invoice-register']);
-                            return false;
-                        }
-                    } else if (url.includes('/invoice-dn-linking')) {
-                        if (!privileges?.invoice?.viewInvoicesVsDn) {
-                            router.navigate(['/home']);
-                            return false;
-                        }
-                    } else if (url.includes('/cancelled-invoices')) {
-                        if (!privileges?.invoice?.viewCancelledAdjusted) {
-                            router.navigate(['/home']);
-                            return false;
-                        }
-                    } else if (url.includes('/reissued')) {
-                        if (!privileges?.invoice?.viewReissued) {
-                            router.navigate(['/home']);
                             return false;
                         }
                     } else {

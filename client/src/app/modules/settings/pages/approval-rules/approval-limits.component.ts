@@ -116,7 +116,7 @@ export class ApprovalLimitsComponent implements OnInit {
     { key: 'maxDiscountPercent', label: 'Max discount %', type: 'number', align: 'left', width: '160px', sortable: true, editable: true, editor: 'number', valueGetter: (r) => r.maxDiscountPercent },
   ];
 
-  detailTabs: DataGridDetailTab[] = [{ id: 'overview', label: 'Overview', icon: 'info' }];
+  detailTabs: DataGridDetailTab[] = [{ id: 'overview', label: 'Details', icon: 'info' }];
 
   detailTitle(r: LimitRow): string { return r.name; }
   detailSubtitle(r: LimitRow): string { return r.employeeId; }

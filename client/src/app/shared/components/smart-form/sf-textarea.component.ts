@@ -25,7 +25,7 @@ import { SF_STYLES } from './sf.model';
     <textarea #ta class="sf-input block py-2 leading-5" [style.resize]="autoresize ? 'none' : 'vertical'"
       [style.color]="richText ? 'transparent' : null" [style.caret-color]="richText ? '#7c3aed' : null" (scroll)="syncScroll(ta)"
       [id]="inputId" [rows]="rows" [value]="value ?? ''" [placeholder]="placeholder" [disabled]="disabled" [readOnly]="readonly"
-      [attr.maxlength]="maxlength" (input)="update(ta.value); resize(ta); fit(ta)" (focus)="focused = true; fit(ta)" (blur)="focused = false; touch(); collapse(ta)"
+      [attr.maxlength]="maxlength" (input)="duplicateNotice = ''; update(ta.value); resize(ta); fit(ta)" (focus)="focused = true; fit(ta)" (blur)="focused = false; touch(); collapse(ta)"
       (keydown)="onFormatKey($event, ta)"
       (keydown.enter)="onEnter($event, ta)"></textarea>
     <!-- Live preview drawn over the transparent textarea text: bold and orange show while typing; the ** and { } markers stay faint so offsets match. -->
@@ -33,6 +33,7 @@ import { SF_STYLES } from './sf.model';
       <div class="whitespace-pre-wrap break-words" [style.transform]="'translateY(' + -scroll + 'px)'"><ng-container *ngFor="let s of segments"><span [style.opacity]="s.marker ? 0.35 : null" [style.color]="s.hl && !s.marker ? '#f97316' : null" [style.text-shadow]="s.bold && !s.marker ? '0.45px 0 0 currentColor, -0.45px 0 0 currentColor' : null">{{ s.text }}</span></ng-container><span>&#8203;</span></div>
     </div>
     </div>
+    <p *ngIf="duplicateNotice" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ duplicateNotice }}</p>
     <p *ngIf="maxlength" class="mt-1 text-right text-[11px] tabular-nums"
       [ngClass]="(value?.length || 0) >= maxlength ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'">{{ value?.length || 0 }} / {{ maxlength }}</p>
   `,
@@ -44,6 +45,7 @@ export class SfTextareaComponent extends SfControl<string> {
   @Input({ transform: booleanAttribute }) autoresize = false;
   @Input({ transform: booleanAttribute }) noEnter = false;
   @Input({ transform: booleanAttribute }) commaOnEnter = false;
+  duplicateNotice = '';
 
   /** Enter continues the list with a "*   " bullet; Enter on an empty bullet ends it. */
   @Input({ transform: booleanAttribute }) bullets = false;
@@ -151,6 +153,24 @@ export class SfTextareaComponent extends SfControl<string> {
     const after = value.substring(end).trimStart();
 
     if (!before || /[,;]\s*$/.test(before)) return;
+
+    // The scan just typed is the last token before the cursor; reject it if it is already in the list.
+    const sep = Math.max(before.lastIndexOf(','), before.lastIndexOf(';'), before.lastIndexOf('\n'));
+    const scanned = before.substring(sep + 1).trim();
+    const others = `${before.substring(0, sep + 1)},${after}`
+      .split(/[\n,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (scanned && others.includes(scanned.toLowerCase())) {
+      const kept = before.substring(0, sep + 1).replace(/\s+$/, '');
+      const keptText = kept ? (/[,;]$/.test(kept) ? `${kept} ` : `${kept}, `) : '';
+      const nextVal = `${keptText}${after}`;
+      ta.value = nextVal;
+      ta.selectionStart = ta.selectionEnd = keptText.length;
+      this.duplicateNotice = `"${scanned}" is already added`;
+      this.update(nextVal);
+      this.fit(ta);
+      return;
+    }
+    this.duplicateNotice = '';
 
     const next = `${before}, ${after}`;
     const position = before.length + 2;

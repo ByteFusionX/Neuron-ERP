@@ -122,6 +122,9 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   /** Total row count for the current query, used for pagination when `serverSide` is true. */
   @Input() totalCount = 0;
 
+  /** Higher-contrast palette (darker text, stronger borders, tinted header). Opt-in per module. */
+  @Input({ transform: booleanAttribute }) strong = false;
+
   @HostBinding('class.dg-fill-height') get hostFillHeight(): boolean {
     return this.fillHeight;
   }
@@ -436,11 +439,13 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     // in one tick both start from the old URL and the later one drops the other's params.
     setTimeout(() => {
       const current = this.route.snapshot.queryParamMap.get(this.viewUrlParam);
-      if (current === viewId) return;
-      this.lastRouteViewParam = viewId;
+      // The host's default tab keeps a clean URL: no view param, since opening the page lands there anyway.
+      const target = this.initialViewId && viewId === this.initialViewId ? null : viewId;
+      if (current === target) return;
+      this.lastRouteViewParam = target;
       this.router.navigate([], {
         relativeTo: this.route,
-        queryParams: { [this.viewUrlParam]: viewId },
+        queryParams: { [this.viewUrlParam]: target },
         queryParamsHandling: 'merge',
         replaceUrl: true,
       });

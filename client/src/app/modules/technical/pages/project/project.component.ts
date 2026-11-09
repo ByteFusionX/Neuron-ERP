@@ -7,9 +7,7 @@ import { Observable, Subject, Subscription, catchError, forkJoin, map, of, switc
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { ProjectService } from 'src/app/core/services/project.service';
-import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { TechnicalService } from 'src/app/core/services/technical.service';
-import { ApproveDealComponent } from 'src/app/modules/deal-sheet/pages/approve-deal/approve-deal.component';
 import { allocateType } from 'src/app/modules/job-sheet/pages/allocate-type-modal/allocate-type-modal.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
@@ -25,20 +23,20 @@ import {
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailOverviewSection } from 'src/app/shared/components/detail-panel/detail-panel.model';
-import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ProjectStatus } from 'src/app/shared/interfaces/project.interface';
 import { CreateProjectComponent } from '../../create-project/create-project.component';
-import { AssignEngineerDialogComponent } from '../../dialogs/assign-engineer-dialog/assign-engineer-dialog.component';
-import { TransferEngineerComponent } from '../../dialogs/transfer-engineer/transfer-engineer.component';
+import { ModalService } from 'src/app/shared/components/modal';
+import { AssignEngineerDialogComponent, AssignEngineerDialogResult } from '../../dialogs/assign-engineer-dialog/assign-engineer-dialog.component';
+import { TransferEngineerComponent, TransferEngineerDialogResult } from '../../dialogs/transfer-engineer/transfer-engineer.component';
 
-type ViewId = 'openToWork' | 'pendingProjects' | 'pendingAmc' | 'materials';
+type ViewId = 'openToWork' | 'newProject' | 'pendingProjects' | 'pendingAmc' | 'materials';
 
 interface PageResult {
   rows: any[];
   total: number;
 }
 
-const VIEW_IDS: ViewId[] = ['openToWork', 'pendingProjects', 'pendingAmc', 'materials'];
+const VIEW_IDS: ViewId[] = ['openToWork', 'newProject', 'pendingProjects', 'pendingAmc', 'materials'];
 
 const PRIORITY_BADGE_CLASSES: Record<string, string> = {
   High: 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900',
@@ -49,7 +47,7 @@ const PRIORITY_BADGE_CLASSES: Record<string, string> = {
 @Component({
   selector: 'app-technical-project',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, CreateProjectComponent],
   templateUrl: './project.component.html',
   styleUrl: './project.component.css',
 })
@@ -59,11 +57,11 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
   private jobService = inject(JobService);
   private projectService = inject(ProjectService);
   private technicalService = inject(TechnicalService);
-  private quotationService = inject(QuotationService);
   private employeeService = inject(EmployeeService);
   private confirmDialog = inject(ConfirmDialogService);
   private toaster = inject(ToastrService);
   private dialog = inject(MatDialog);
+  private modal = inject(ModalService);
   private router = inject(Router);
   private subscriptions = new Subscription();
   private load$ = new Subject<void>();
@@ -159,12 +157,14 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
   }
 
   get createLabel(): string {
+    if (this.activeViewId === 'newProject') return 'Create Project';
     return this.activeViewId === 'openToWork' && this.canAssign ? 'Add Project' : '';
   }
 
   get emptyMessage(): string {
     switch (this.activeViewId) {
       case 'openToWork': return 'No jobs are waiting to be assigned';
+      case 'newProject': return 'No new projects found';
       case 'pendingProjects': return 'No pending projects found';
       case 'pendingAmc': return 'No pending AMC found';
       default: return 'No material approval requests found';
@@ -180,6 +180,7 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
   private labelFor(id: ViewId): string {
     switch (id) {
       case 'openToWork': return 'Open To Work';
+      case 'newProject': return 'New Project';
       case 'pendingProjects': return 'Pending Projects';
       case 'pendingAmc': return 'Pending AMC';
       default: return 'Materials';
@@ -263,13 +264,14 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
         return this.jobService.getUnassignedToTechnical({ page, row, search: text, ...query }).pipe(
           map((res) => ({ rows: res?.data ?? [], total: res?.total ?? 0 })),
         );
+      case 'newProject':
       case 'pendingProjects':
       case 'pendingAmc':
         return this.projectService.getProjects({
           page,
           row,
           search: text,
-          projectType: id === 'pendingProjects' ? 'project' : 'amc',
+          projectType: id === 'pendingAmc' ? 'amc' : 'project',
           status: [ProjectStatus.Pending],
           ...query,
         } as any).pipe(map((res) => ({ rows: res?.data ?? [], total: res?.total ?? res?.data?.length ?? 0 })));
@@ -306,13 +308,14 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
         return [
           { key: 'jobId', label: 'Job ID', sortable: true, locked: true },
           { key: 'customer', label: 'Customer', sortable: true, valueGetter: (r) => r.clientDetails?.companyName || '-' },
-          { key: 'description', label: 'Description', sortable: true, valueGetter: (r) => r.quotation?.subject || '-' },
+          { key: 'description', label: 'Subject', sortable: true, valueGetter: (r) => r.quotation?.subject || '-' },
           { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (r) => this.personName(r.salesPersonDetails?.[0]) },
           { key: 'department', label: 'Department', sortable: true, valueGetter: (r) => r.departmentDetails?.[0]?.departmentName || '-' },
           { key: 'quotation', label: 'Quotation', sortable: true, valueGetter: (r) => r.quotation?.quoteId || '-' },
           { key: 'dealSheet', label: 'Deal Sheet', sortable: true, valueGetter: (r) => r.quotation?.dealData?.dealId || '-' },
           { key: 'allocateType', label: 'Scope', sortable: true, filterOptions: this.scopeOptions },
         ];
+      case 'newProject':
       case 'pendingProjects':
       case 'pendingAmc':
         return [
@@ -335,11 +338,10 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
 
   private buildRowActions(): void {
     const only = (id: ViewId) => () => this.activeViewId !== id;
-    const pendingProjectView = () => this.activeViewId !== 'pendingProjects' && this.activeViewId !== 'pendingAmc';
+    const pendingProjectView = () => !['newProject', 'pendingProjects', 'pendingAmc'].includes(this.activeViewId);
     this.rowActions = [
       { id: 'assignEngineer', label: 'Assign to Engineer', icon: 'user', quick: true, panel: true, hidden: only('openToWork') },
-      { id: 'viewQuotation', label: 'View Quotation', icon: 'files', hidden: (r) => this.activeViewId !== 'openToWork' || !r.quotation },
-      { id: 'viewDealSheet', label: 'View Deal Sheet', icon: 'card', hidden: (r) => this.activeViewId !== 'openToWork' || !r.quotation?.dealData?.dealId },
+      { id: 'viewJob', label: 'View Job', icon: 'eye', hidden: (r) => this.activeViewId !== 'openToWork' || !r._id },
       { id: 'editProject', label: 'Edit Project', icon: 'pencil', quick: true, panel: true, hidden: pendingProjectView },
       { id: 'transferEngineer', label: 'Transfer Engineer', icon: 'transfer', quick: true, hidden: (r) => pendingProjectView() || !this.canTransfer || !r.assignedTo },
       { id: 'deleteProject', label: 'Delete Project', icon: 'trash', variant: 'danger', divider: true, hidden: (r) => pendingProjectView() || r.status !== ProjectStatus.Pending },
@@ -353,25 +355,38 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
     const { action, row } = event;
     switch (action.id) {
       case 'assignEngineer': this.openAssignEngineer(row); break;
-      case 'viewQuotation': this.previewQuotation(row); break;
-      case 'viewDealSheet': this.viewDealSheet(row); break;
-      case 'editProject': this.router.navigate(['/technical/project', 'edit', row._id]); break;
+      case 'viewJob': this.router.navigate(['/job-sheet/view', row._id], { state: { returnUrl: this.router.url } }); break;
+      case 'editProject': this.editProjectId = row._id; this.createOpen = true; break;
       case 'transferEngineer': this.transferEngineer(row); break;
       case 'deleteProject': void this.deleteProject(row); break;
       case 'viewMr': this.router.navigate(['/technical/materials/view', row._id]); break;
     }
   }
 
+  createOpen = false;
+  /** Set while the drawer is editing an existing project; null means create. */
+  editProjectId: string | null = null;
+
   addProject(): void {
-    this.dialog.open(CreateProjectComponent, { data: { isEditMode: false }, width: '900px' })
-      .afterClosed().subscribe((result) => { if (result) this.reload(); });
+    this.editProjectId = null;
+    this.createOpen = true;
+  }
+
+  onProjectDrawerClosed(): void {
+    this.createOpen = false;
+    this.editProjectId = null;
+  }
+
+  onProjectCreated(): void {
+    this.onProjectDrawerClosed();
+    this.reload();
   }
 
   private openAssignEngineer(job: any): void {
     const projectType = job.allocateType === allocateType.AMC ? 'amc' : job.allocateType === allocateType.ProjectWithSupply ? 'project' : '';
-    this.dialog.open(AssignEngineerDialogComponent, {
-      width: '400px',
-      data: { engineerOptions: this.engineerOptions, priorityOptions: this.priorityOptions },
+    this.modal.open<AssignEngineerDialogResult>(AssignEngineerDialogComponent, {
+      width: '480px',
+      data: { engineerOptions: this.engineerOptions, priorityOptions: this.priorityOptions, jobId: job.jobId },
     }).afterClosed().subscribe((result) => {
       if (!result) return;
       this.technicalService.assignEngineer({
@@ -394,10 +409,9 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
   }
 
   private transferEngineer(project: any): void {
-    this.dialog.open(TransferEngineerComponent, {
-      data: { projectId: project._id, currentEngineer: project.assignedTo },
-      width: '500px',
-      disableClose: true,
+    this.modal.open<TransferEngineerDialogResult>(TransferEngineerComponent, {
+      width: '480px',
+      data: { projectId: project._id, currentEngineer: project.assignedTo, jobId: project.jobId?.jobId },
     }).afterClosed().subscribe((result) => {
       if (!result?.engineerId) return;
       this.projectService.transferEngineer(project._id, result.engineerId).subscribe({
@@ -433,46 +447,6 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
     });
   }
 
-  private previewQuotation(job: any): void {
-    const quote = job.quotation;
-    quote.createdBy = job.salesPersonDetails?.[0];
-    quote.client = job.clientDetails;
-    quote.attention = job.attention;
-    this.quotationService.generatePDF(quote, true).then((pdf: any) => {
-      pdf.getBlob((blob: Blob) => {
-        this.dialog.open(PdfPreviewComponent, { data: { url: window.URL.createObjectURL(blob), formatedQuote: quote } });
-      });
-    });
-  }
-
-  private viewDealSheet(job: any): void {
-    const quoteData = job.quotation;
-    quoteData.createdBy = job.salesPersonDetails?.[0];
-    quoteData.client = job.clientDetails;
-    const priceDetails = { totalSellingPrice: 0, totalCost: 0, profit: 0, perc: 0 };
-    const quoteItems = (quoteData.dealData?.updatedItems ?? []).map((item: any) => {
-      let itemSelected = 0;
-      item.itemDetails.forEach((detail: any) => {
-        if (!detail.dealSelected) return;
-        itemSelected++;
-        priceDetails.totalSellingPrice += detail.unitCost / (1 - (detail.profit / 100)) * detail.quantity;
-        priceDetails.totalCost += detail.quantity * detail.unitCost;
-      });
-      return itemSelected ? item : undefined;
-    });
-    (quoteData.dealData?.additionalCosts ?? []).forEach((cost: any) => {
-      if (cost.type === 'Supplier Discount') priceDetails.totalCost -= cost.value;
-      else if (cost.type === 'Customer Discount') priceDetails.totalSellingPrice -= cost.value;
-      else priceDetails.totalCost += cost.value;
-    });
-    priceDetails.profit = priceDetails.totalSellingPrice - priceDetails.totalCost;
-    priceDetails.perc = priceDetails.totalSellingPrice ? (priceDetails.profit / priceDetails.totalSellingPrice) * 100 : 0;
-    this.dialog.open(ApproveDealComponent, {
-      data: { approval: false, quoteData, quoteItems, priceDetails },
-      width: '1200px',
-    });
-  }
-
   // ---- detail panel ----
 
   detailTitle = (row: any): string => {
@@ -491,7 +465,7 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
         fields: [
           { type: 'field', label: 'Job ID', value: row.jobId || '-' },
           { type: 'field', label: 'Customer', value: row.clientDetails?.companyName || '-' },
-          { type: 'field', label: 'Description', value: row.quotation?.subject || '-' },
+          { type: 'field', label: 'Subject', value: row.quotation?.subject || '-' },
           { type: 'field', label: 'Scope', value: row.allocateType || '-' },
           { type: 'field', label: 'Sales Person', value: this.personName(row.salesPersonDetails?.[0]) },
           { type: 'field', label: 'Department', value: row.departmentDetails?.[0]?.departmentName || '-' },

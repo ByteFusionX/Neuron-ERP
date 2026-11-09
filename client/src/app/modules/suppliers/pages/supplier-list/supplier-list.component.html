@@ -1,12 +1,12 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
-    <div *ngIf="selectedCategory || selectedSupplierType" class="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300" role="status">
+<div class="h-full flex flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <div *ngIf="selectedCategory || selectedSupplierType" class="mb-3 flex shrink-0 flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300" role="status">
         <span>Filtered from report:</span>
         <span *ngIf="selectedCategory" class="rounded-full border border-violet-300 bg-violet-50 px-2.5 py-0.5 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">Category</span>
         <span *ngIf="selectedSupplierType" class="rounded-full border border-violet-300 bg-violet-50 px-2.5 py-0.5 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">Type: {{ selectedSupplierType }}</span>
         <button type="button" class="font-medium text-violet-700 hover:underline dark:text-violet-400" (click)="clearReportFilters()">Clear</button>
     </div>
 
-    <app-data-grid #grid
+    <app-data-grid #grid [strong]="true"
         class="flex-1 min-h-0"
         [fillHeight]="true"
         title="Suppliers"
@@ -32,7 +32,7 @@
         [detailTitle]="supplierTitle"
         [detailSubtitle]="supplierSubtitle"
         (queryChange)="onQueryChange($event)"
-        (rowOpen)="onRowOpen()"
+        (rowOpen)="onRowOpen($event)"
         (cellEdit)="onCellEdit($event)"
         (rowAction)="onRowAction($event)"
         (create)="onCreateSupplier()">
@@ -66,12 +66,12 @@
 
         <!-- left: optional, per-tab (outline) -->
         <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
-            <app-action-button *ngIf="tab === 'detail'"variant="outline" (click)="openEditDrawer(row)" icon="edit">Edit</app-action-button>
+            <app-action-button *ngIf="tab === 'overview'" variant="outline" (click)="openEditDrawer(row)" icon="edit">Edit</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">
             <ng-container [ngSwitch]="tab">
-                <ng-container *ngSwitchCase="'detail'">
+                <ng-container *ngSwitchCase="'overview'">
                     <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
                 </ng-container>
 
@@ -89,13 +89,13 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'history'">
-                    <app-detail-timeline [entries]="historyEntries(row)" emptyMessage="No approval or rejection history yet."></app-detail-timeline>
+                    <app-detail-timeline [entries]="historyEntries(row)" emptyMessage="No history yet."></app-detail-timeline>
                 </ng-container>
             </ng-container>
         </ng-template>
     </app-data-grid>
 
     <!-- Create and edit share one drawer; the list only decides which mode to open it in. -->
-    <app-supplier-form-drawer [open]="formOpen" [mode]="formMode" [supplier]="formSupplier"
+    <app-supplier-form-drawer class="contents" [open]="formOpen" [mode]="formMode" [supplier]="formSupplier"
         (saved)="getSuppliers()" (closed)="onFormClosed()"></app-supplier-form-drawer>
 </div>

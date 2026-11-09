@@ -1,8 +1,9 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
-    <app-data-grid #grid
+<div class="h-full flex flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid [strong]="true"
         class="flex-1 min-h-0"
         [fillHeight]="true"
         title="Customers"
+        subtitle="Manage customer records and contacts"
         [breadcrumbs]="breadcrumbs"
         rowKey="_id"
         [serverSide]="true"
@@ -30,10 +31,6 @@
         (rowAction)="onRowAction($event)"
         (bulkAction)="onBulkAction($event, grid)"
         (create)="onCreateCustomer()">
-
-        <div dgToolbarExtra class="flex items-center gap-2">
-            <button type="button" (click)="openDuplicatesReport()" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 hover:bg-gray-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200">Duplicates</button>
-        </div>
 
         <ng-template #detailAsideTemplate let-row>
             <app-status-pill [status]="row.status" [toneMap]="statusToneMap"></app-status-pill>
@@ -94,6 +91,10 @@
                         (remove)="onDocumentRemove(row, $event)"></app-detail-documents>
                 </ng-container>
 
+                <app-detail-timeline *ngSwitchCase="'history'"
+                    [entries]="(historyFor(row) | async) ?? []"
+                    emptyMessage="No history recorded yet."></app-detail-timeline>
+
                 <ng-container *ngSwitchCase="'share'">
                     <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">Employees who can access this customer.</p>
 
@@ -142,6 +143,6 @@
         </ng-template>
     </app-data-grid>
 
-    <app-customer-form-drawer [open]="formOpen" [mode]="formMode" [customer]="formCustomer"
+    <app-customer-form-drawer class="contents" [open]="formOpen" [mode]="formMode" [customer]="formCustomer"
         (saved)="onFormSaved()" (closed)="formOpen = false"></app-customer-form-drawer>
 </div>

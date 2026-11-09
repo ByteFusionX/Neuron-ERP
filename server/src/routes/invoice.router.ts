@@ -1,22 +1,22 @@
 import { Router } from 'express';
 import { getInvoices, createInvoice, generateInvoiceNumber, getInvoiceDnLinkingReport, getCancelledAdjustedInvoices, getInvoiceById, getInvoiceByInvoiceNo, updateInvoice, getCancelledAndReissuedInvoices, getJobItemInvoicedQty, cancelInvoice, cancelAndReissueInvoice, rejectInvoiceByCustomer } from '../controllers/invoice.controller';
-import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 
 const router = Router();
 
 router.use(requirePrivilege("invoice"));
 
-router.get('/dn-linking-report', requirePrivilege("invoice", "viewInvoicesVsDn"), getInvoiceDnLinkingReport);
-router.get('/cancelled-reissued-report', requirePrivilege("invoice", "viewReissued"), getCancelledAndReissuedInvoices);
-router.get('/audit', requirePrivilege("invoice", "viewCancelledAdjusted"), getCancelledAdjustedInvoices);
+router.get('/dn-linking-report', getInvoiceDnLinkingReport);
+router.get('/cancelled-reissued-report', getCancelledAndReissuedInvoices);
+router.get('/audit', getCancelledAdjustedInvoices);
 router.get('/generate-number', generateInvoiceNumber);
 router.get('/item-invoiced-qty/:jobId', getJobItemInvoicedQty);
 router.get('/by-invoice-no/:invoiceNo', getInvoiceByInvoiceNo);
-router.patch('/:id/cancel', cancelInvoice);
-router.patch('/:id/reject', rejectInvoiceByCustomer);
-router.post('/:id/cancel-reissue', cancelAndReissueInvoice);
+router.patch('/:id/cancel', requireUnlessDenied("invoice", "cancelInvoice"), cancelInvoice);
+router.patch('/:id/reject', requireUnlessDenied("invoice", "rejectInvoice"), rejectInvoiceByCustomer);
+router.post('/:id/cancel-reissue', requireUnlessDenied("invoice", "reissueInvoice"), cancelAndReissueInvoice);
 router.get('/:id', getInvoiceById);
-router.put('/:id', updateInvoice);
+router.put('/:id', requireUnlessDenied("invoice", "editInvoice"), updateInvoice);
 router.get('/', getInvoices);
 router.post('/', requirePrivilege("invoice", "createInvoice"), createInvoice);
 

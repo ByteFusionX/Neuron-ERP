@@ -46,7 +46,7 @@ export interface ActionMenuItem {
       border-radius: 0.5rem; border: 1px solid #d1d5db; color: #374151; background: transparent; }
     .am-trigger:hover { background: #f9fafb; }
     .am-trigger.am-icon-only { width: 2rem; padding: 0; justify-content: center; border: 0; outline: none; box-shadow: none; }
-    .am-panel { position: absolute; right: 0; top: calc(100% + 4px); z-index: 40; min-width: 13rem; padding: 0.25rem; border-radius: 0.5rem;
+    .am-panel { position: absolute; right: 0; top: calc(100% + 4px); z-index: 40; width: max-content; min-width: 8rem; white-space: nowrap; padding: 0.25rem; border-radius: 0.5rem;
       border: 1px solid #e5e7eb; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
     .am-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.4rem 0.625rem; text-align: left; font-size: 0.75rem; color: #374151; border-radius: 0.375rem; }
     .am-item:hover:not(:disabled) { background: #f3f4f6; }

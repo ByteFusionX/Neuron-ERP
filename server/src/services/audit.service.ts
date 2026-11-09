@@ -1,4 +1,4 @@
-import auditLogModel, { AuditLogChange } from "../models/auditLog.model";
+import auditLogModel, { AuditLogChange, AuditLogRelated } from "../models/auditLog.model";
 import { getEmployeeData } from "../common/utils/util";
 
 export interface AuditEntry {
@@ -8,6 +8,7 @@ export interface AuditEntry {
   action: string;
   summary: string;
   changes?: AuditLogChange[];
+  related?: AuditLogRelated;
 }
 
 /** Records one event for any module. Never throws: a failed audit write must not fail the request that caused it. */
@@ -22,6 +23,7 @@ export const logAudit = async (req: any, entry: AuditEntry): Promise<void> => {
       action: entry.action,
       summary: entry.summary,
       changes: entry.changes?.length ? entry.changes : undefined,
+      related: entry.related?.entityId ? entry.related : undefined,
       actor: actor?._id,
       actorName: actor ? `${actor.firstName || ''} ${actor.lastName || ''}`.trim() : '',
       at: new Date(),

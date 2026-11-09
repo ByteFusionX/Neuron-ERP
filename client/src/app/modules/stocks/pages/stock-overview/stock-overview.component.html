@@ -1,9 +1,9 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-5 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-data-grid
     #grid
     class="flex-1 min-h-0"
     [fillHeight]="true"
-    title="Stock Overview"
+    title="Stock Balance"
     subtitle="What is on hand, reserved and available for each item."
     [breadcrumbs]="breadcrumbs"
     rowKey="productId"
@@ -30,20 +30,19 @@
     (rowAction)="onRowAction($event)"
     (create)="openAdjust()">
 
+    <ng-template #detailMetaTemplate let-row>
+      <app-detail-meta [items]="metaFor(row)"></app-detail-meta>
+    </ng-template>
+
     <ng-template #detailTemplate let-row let-tab="tab">
       <ng-container [ngSwitch]="tab">
-        <ng-container *ngSwitchCase="'overview'">
-          <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+        <ng-container *ngSwitchCase="'details'">
+          <app-detail-overview [grid]="grid" [row]="row" [sections]="detailSections()"></app-detail-overview>
         </ng-container>
-        <ng-container *ngSwitchCase="'warehouses'">
-          <app-detail-table title="Stock by warehouse" [columns]="warehouseColumns" [rows]="row.warehouses" showTotals></app-detail-table>
-        </ng-container>
-        <ng-container *ngSwitchCase="'reservations'">
-          <app-detail-table title="Reserved for" [columns]="reservationColumns" [rows]="reservationRows()" showTotals></app-detail-table>
-        </ng-container>
+        <app-detail-timeline *ngSwitchCase="'history'" [entries]="historyEntries()" emptyMessage="No history recorded yet."></app-detail-timeline>
       </ng-container>
     </ng-template>
   </app-data-grid>
 </div>
 
-<app-stock-adjust-drawer [open]="adjustOpen" [productId]="adjustProductId" (saved)="loadStock()" (closed)="closeAdjust()"></app-stock-adjust-drawer>
+<app-stock-adjust-drawer [open]="adjustOpen" [productId]="adjustProductId" [warehouseId]="adjustWarehouseId"(saved)="loadStock()" (closed)="closeAdjust()"></app-stock-adjust-drawer>

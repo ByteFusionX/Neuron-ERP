@@ -11,6 +11,8 @@ export interface AuditLogEntry {
   action: string;
   summary: string;
   changes?: { label: string; from?: string; to?: string }[];
+  /** Another module's record this event involves. */
+  related?: { entityType: string; entityId: string; entityLabel?: string };
   actorName?: string;
   at: string;
 }

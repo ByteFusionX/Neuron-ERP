@@ -36,7 +36,7 @@
                 </div>
             }
             <app-sf-field full label="Description" [control]="productForm.controls.productDescription">
-                <app-sf-textarea formControlName="productDescription" placeholder="Standard description"></app-sf-textarea>
+                <app-sf-textarea formControlName="productDescription" expandOnFocus placeholder="Standard description"></app-sf-textarea>
             </app-sf-field>
             <app-sf-field full label="Type" [control]="productForm.controls.type">
                 <app-sf-radio-group formControlName="type" variant="segmented" [options]="typeOptions"></app-sf-radio-group>

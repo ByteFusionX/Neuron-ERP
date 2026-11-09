@@ -408,6 +408,9 @@ export interface PurchaseOrderStatusSupplier {
   supplierName: string;
   awardedQty: number;
   unitPrice: number | null;
+  /** The discount this supplier gave on the line (a percent of the line, or an amount). */
+  discountType?: 'amount' | 'percent';
+  discountValue?: number;
   orderedQty: number;
   receivedQty: number;
   cancelledQty: number;

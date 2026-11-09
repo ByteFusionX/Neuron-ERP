@@ -1,4 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 import {
@@ -8,7 +9,7 @@ import {
   QuoteItem,
   QuoteItemDetail,
 } from 'src/app/shared/interfaces/quotation.interface';
-import { UpdateDealsheetComponent } from '../update-dealsheet/update-dealsheet.component';
+import { DealFormComponent } from 'src/app/modules/quotations/pages/deal-form/deal-form.component';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { ViewCommentComponent } from 'src/app/shared/components/view-comment/view-comment.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -25,10 +26,13 @@ import { dealSheetPriceDetails, selectedDealItems } from 'src/app/shared/utils/d
 import { statusLabel } from 'src/app/shared/utils/text-format.util';
 import {
   CommonModule,
-  DatePipe,
+  formatDate,
 } from '@angular/common';
 
 import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
+import { DomSanitizer } from '@angular/platform-browser';
+import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
+import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
 import { SupplierService } from '../../../../core/services/supplier.service';
 import { Supplier } from '../../../../shared/interfaces/suppliers.interface';
 import { PurchaseOrderService } from '../../../../core/services/purchaseOrder/purchaseOrder.service';
@@ -47,15 +51,44 @@ import {
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
 import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
-import { } from 'src/app/shared/components/detail-panel/detail-badge.component';
+import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
+import { DetailFieldsMenuComponent, DetailFieldsMenuItem } from 'src/app/shared/components/detail-panel/detail-fields-menu.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import {
   DetailDocument,
   DetailFootRow,
   DetailTableColumn,
+  DetailTimelineEntry,
 } from 'src/app/shared/components/detail-panel/detail-panel.model';
-import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
+import { DETAIL_TONE, DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
+
+/** A label/value in the Details section; ids link out, the status shows as dot + text. */
+interface DealFact {
+  label: string;
+  value: string;
+  link?: any[];
+  queryParams?: Record<string, any>;
+  state?: { dot: string; text: string };
+}
+
+/** One step in the Costs tab breakdown; negative values reduce the total. */
+interface CostBreakdownLine {
+  label: string;
+  note?: string;
+  value: number;
+}
+
+interface CostBreakdownSection {
+  title: string;
+  start: CostBreakdownLine;
+  lines: CostBreakdownLine[];
+  total: CostBreakdownLine;
+  hint: string;
+}
 
 interface ViewDealsheetNavState {
   approval: boolean;
@@ -73,15 +106,17 @@ interface ViewDealsheetNavState {
   styleUrls: ['./view-dealsheet.component.css'],
   standalone: true,
   imports: [
-    UpdateDealsheetComponent,
-    DatePipe,
+    DealFormComponent,
     CommonModule,
     DetailViewShellComponent,
     ActionButtonComponent,
     DetailSectionComponent,
     DetailFieldComponent,
+    DetailBadgeComponent,
+    DetailFieldsMenuComponent,
     DetailTableComponent,
     DetailDocumentsComponent,
+    DetailTimelineComponent,
     RouterLink,
   ],
 })
@@ -97,34 +132,67 @@ export class ViewDealsheetComponent implements OnInit {
   returnUrl: string = '/deal-sheet/pendings';
   /** returnUrl may carry a query string, which router link arrays would encode into the path. */
   get returnPath(): string { return this.returnUrl.split('?')[0]; }
-  tab: 'overview' | 'items' | 'costs' | 'documents' = 'overview';
-  tabs: DetailViewTab[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'items', label: 'Items' },
-    { id: 'costs', label: 'Costs' },
+  panelOpen = true;
+  panelTab: 'approval' | 'costs' | 'documents' | 'history' = 'costs';
+  private readonly baseTabs: { id: 'approval' | 'costs' | 'documents' | 'history'; label: string }[] = [
+    { id: 'costs', label: 'Pricing' },
     { id: 'documents', label: 'Documents' },
+    { id: 'approval', label: 'Approval' },
   ];
+  private readonly allTabs = [...this.baseTabs, { id: 'history' as const, label: 'History' }];
+  /** The History tab is for super admins and the deal's owner (the quotation's creator). */
+  get panelTabs() { return this.canSeeHistory ? this.allTabs : this.baseTabs; }
+  historyEntries: DetailTimelineEntry[] = [];
+  private historyLoaded = false;
+  get canSeeHistory(): boolean {
+    const owner = this.data?.quoteData?.createdBy as any;
+    const ownerId = typeof owner === 'string' ? owner : owner?._id;
+    return this.isSuperAdmin || (!!ownerId && ownerId === this.userId);
+  }
+  private loadHistory(): void {
+    const id = this.data?.quoteData?._id;
+    if (this.historyLoaded || !id || !this.canSeeHistory) return;
+    this.historyLoaded = true;
+    this._auditLog.getHistory('quotation', id).subscribe({
+      next: (entries) => (this.historyEntries = toTimelineEntries(entries)),
+      error: () => (this.historyLoaded = false),
+    });
+  }
   breadcrumbs: DetailViewBreadcrumb[] = [];
-  badges: DetailViewBadge[] = [];
   stats: DetailViewStat[] = [];
+  detailFacts: DealFact[] = [];
+  detailItems: DetailFieldsMenuItem[] = [];
+  hiddenDetail = new Set<string>();
+  detailOrder: string[] = [];
+  /** Detail fields that are switched on, in the user's order. */
+  get visibleDetail(): DealFact[] {
+    const pos = (k: string) => { const i = this.detailOrder.indexOf(k); return i < 0 ? this.detailOrder.length : i; };
+    return this.detailFacts.filter((f) => !this.hiddenDetail.has(f.label)).sort((a, b) => pos(a.label) - pos(b.label));
+  }
+  trackFact = (_: number, f: DealFact) => f.label;
   itemRows: Record<string, any>[] = [];
-  costRows: Record<string, any>[] = [];
   documents: DetailDocument[] = [];
   private docFiles = new Map<string, any>();
-  readonly itemColumns: DetailTableColumn[] = [
-    { key: 'detail', label: 'Item Details', type: 'text', wrap: true },
+  private boldPipe = new ParseBoldTextPipe();
+  private bracketsPipe = new ParseBracketsTextPipe(inject(DomSanitizer));
+  // Same column set as the quotation view's item table, plus the deal-only supplier column.
+  private readonly allItemColumns: DetailTableColumn[] = [
+    { key: 'itemCode', label: 'Item Code', hiddenByDefault: true },
+    { key: 'detail', label: 'Item Details', type: 'html', truncate: true, tooltipKey: 'detailText' },
+    { key: 'partNo', label: 'Part No', hiddenByDefault: true },
+    { key: 'image', label: 'Image', type: 'image', imagePreview: true, align: 'center', width: '5rem' },
     { key: 'quantity', label: 'Qty', type: 'number', align: 'center' },
-    { key: 'unitSellingPrice', label: 'Unit Selling Price', type: 'currency', align: 'right' },
-    { key: 'totalSellingPrice', label: 'Total Selling Price', type: 'currency', align: 'right', total: true },
+    { key: 'uom', label: 'UOM', align: 'center', hiddenByDefault: true },
+    { key: 'margin', label: 'Margin', type: 'text', align: 'right' },
+    { key: 'marginValue', label: 'Margin Value', type: 'currency', align: 'right', total: true, hiddenByDefault: true },
     { key: 'unitCost', label: 'Unit Cost', type: 'currency', align: 'right' },
     { key: 'totalCost', label: 'Total Cost', type: 'currency', align: 'right', total: true },
+    { key: 'unitSellingPrice', label: 'Unit Selling Price', type: 'currency', align: 'right' },
+    { key: 'totalSellingPrice', label: 'Total Selling Price', type: 'currency', align: 'right', total: true },
     { key: 'supplier', label: 'Supplier', type: 'text' },
+    { key: 'availability', label: 'Availability', type: 'text', hiddenByDefault: true },
   ];
-  readonly costColumns: DetailTableColumn[] = [
-    { key: 'type', label: 'Type', type: 'text' },
-    { key: 'name', label: 'Name', type: 'text', wrap: true },
-    { key: 'value', label: 'Value', type: 'currency', align: 'right', total: true },
-  ];
+  itemColumns: DetailTableColumn[] = this.allItemColumns;
 
   constructor(
     private router: Router,
@@ -138,12 +206,16 @@ export class ViewDealsheetComponent implements OnInit {
     private supplierService: SupplierService,
     private _purchaseOrderService: PurchaseOrderService,
     private _decision: DealDecisionService,
+    private _auditLog: AuditLogService,
   ) {}
 
   userId!: string;
   private roleId: string | undefined;
   private isSuperAdmin = false;
   private canApprove = false;
+  private canRevoke = false;
+  private confirm = inject(ConfirmDialogService);
+  isRevoking = false;
   private canReject = false;
   canUpdate = false;
 
@@ -163,18 +235,7 @@ export class ViewDealsheetComponent implements OnInit {
       this.router.navigateByUrl(this.returnUrl);
       return;
     }
-    this._employeeService.employeeData$
-      .pipe(
-        take(1),
-        switchMap((employee) =>
-          this._quoteService.getQuotationById(
-            id,
-            dealSheetPrivileges(employee?.category?.privileges).viewReport,
-            employee?._id,
-          ),
-        ),
-      )
-      .subscribe({
+    this.fetchDeal(id).subscribe({
         next: (quote) => {
           if (!quote?.dealData) {
             this.toast.error('This quotation has no deal sheet yet.');
@@ -183,20 +244,10 @@ export class ViewDealsheetComponent implements OnInit {
           }
           const listByStatus: Record<string, string> = {
             approved: '/deal-sheet/approved',
-            rejected: '/deal-sheet/rejecteds',
+            rejected: '/deal-sheet/rejected',
           };
           this.returnUrl = listByStatus[quote.dealData.status ?? ''] ?? '/deal-sheet/pendings';
-          this.data = {
-            approval: quote.dealData.status === 'pending',
-            quoteData: quote,
-            quoteItems: selectedDealItems(quote.dealData.updatedItems),
-            priceDetails: dealSheetPriceDetails(
-              quote.dealData.updatedItems,
-              quote.dealData.additionalCosts,
-              quote.dealData.totalDiscount,
-            ),
-            quoteView: false,
-          };
+          this.applyDeal(quote);
           this.start();
         },
         error: (error) => {
@@ -210,6 +261,49 @@ export class ViewDealsheetComponent implements OnInit {
       });
   }
 
+  private fetchDeal(id: string) {
+    return this._employeeService.employeeData$.pipe(
+      take(1),
+      switchMap((employee) =>
+        this._quoteService.getQuotationById(
+          id,
+          dealSheetPrivileges(employee?.category?.privileges).viewReport,
+          employee?._id,
+        ),
+      ),
+    );
+  }
+
+  private applyDeal(quote: Quotatation): void {
+    this.data = {
+      ...this.data,
+      approval: quote.dealData.status === 'pending',
+      quoteData: quote,
+      quoteItems: selectedDealItems(quote.dealData.updatedItems),
+      priceDetails: dealSheetPriceDetails(
+        quote.dealData.updatedItems,
+        quote.dealData.additionalCosts,
+        quote.dealData.totalDiscount,
+      ),
+      quoteView: false,
+    };
+  }
+
+  /** After approve/reject/update the page stays open and shows the deal's new state. */
+  private reloadDeal(): void {
+    const id = this.data.quoteData._id;
+    if (!id) return;
+    this.fetchDeal(id).subscribe({
+      next: (quote) => {
+        if (!quote?.dealData) return;
+        this.applyDeal(quote);
+        this.rebuildView();
+        this.loadHistory();
+      },
+      error: () => this.toast.error('Could not refresh the deal sheet. Please reload the page.'),
+    });
+  }
+
   private start(): void {
     this.loadSuppliers();
     this.loadApprovedPo();
@@ -221,8 +315,10 @@ export class ViewDealsheetComponent implements OnInit {
         this.isSuperAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
         this.canApprove = canDoDealSheet(data, 'approve');
         this.canReject = canDoDealSheet(data, 'reject');
+        this.canRevoke = this.isSuperAdmin || canDoDealSheet(data, 'revoke');
         this.canUpdate = canDoDealSheet(data, 'update');
         this.markQuotationSeenIfCreator();
+        this.loadHistory();
       }
     });
   }
@@ -365,7 +461,7 @@ export class ViewDealsheetComponent implements OnInit {
       next: () => {
         this.updateOpen = false;
         this.toast.success('Deal sheet updated');
-        this.router.navigateByUrl(this.returnUrl);
+        this.reloadDeal();
       },
       error: (error) => {
         console.error('Error saving deal sheet:', error);
@@ -408,19 +504,81 @@ export class ViewDealsheetComponent implements OnInit {
       { label: 'Deal Sheets', link: [this.returnPath] },
       { label: d.dealId || 'Deal Sheet' },
     ];
-    this.badges = [
-      { label: statusLabel(d.status || 'pending'), tone: this.statusTone(d.status) },
-      ...(this.viewMode === 'po' ? [{ label: 'Purchase Order', tone: 'info' as DetailTone }] : []),
-    ];
+    const po = this.viewMode === 'po';
+    const discount = (Number(d.totalDiscount) || 0) + this.customerDiscount;
     this.stats = [
-      { label: `Total Selling Price${currency}`, value: this.formatNumber(this.data.priceDetails.totalSellingPrice) },
-      { label: `Total Cost${currency}`, value: this.formatNumber(this.viewMode === 'po' ? this.poSummaryTotalCost : this.data.priceDetails.totalCost) },
-      { label: `Profit${currency}`, value: this.formatNumber(this.viewMode === 'po' ? this.poSummaryProfit : this.data.priceDetails.profit) },
-      { label: 'Profit %', value: `${(this.viewMode === 'po' ? this.poSummaryPerc : this.data.priceDetails.perc).toFixed(2)}%` },
+      { label: `Total Cost${currency}`, value: this.formatNumber(po ? this.poSummaryTotalCost : this.data.priceDetails.totalCost) },
+      // Already taken off Total Cost; shown beside it so the saving is visible.
+      ...(this.supplierDiscount ? [{ label: `Supplier Discount${currency}`, value: this.formatNumber(this.supplierDiscount) }] : []),
+      // Extra deal costs already inside Total Cost; off until the user ticks it in the Summary menu.
+      ...(this.additionalCost ? [{ label: `Additional Cost${currency}`, value: this.formatNumber(this.additionalCost), hiddenByDefault: true }] : []),
+      { label: `Subtotal${currency}`, value: this.formatNumber(this.data.priceDetails.totalSellingPrice + discount) },
+      { label: `Profit${currency}`, value: this.formatNumber(po ? this.poSummaryProfit : this.data.priceDetails.profit) },
+      { label: 'Profit %', value: `${(po ? this.poSummaryPerc : this.data.priceDetails.perc).toFixed(2)}%` },
+      { label: `Quotation Discount${currency}`, value: this.formatNumber(Number(d.totalDiscount) || 0) },
+      ...(this.customerDiscount ? [{ label: `Customer Discount${currency}`, value: this.formatNumber(this.customerDiscount) }] : []),
+      { label: `Total Discount${currency}`, value: this.formatNumber(discount) },
+      { label: `Net Deal Value${currency}`, value: this.formatNumber(this.data.priceDetails.totalSellingPrice) },
     ];
+    this.detailFacts = this.buildDetailFacts();
+    this.detailItems = this.detailFacts.map((f) => ({ key: f.label, label: f.label, hiddenByDefault: f.label === 'Currency' || f.label === 'Department' }));
     this.itemRows = this.buildItemRows();
-    this.costRows = this.buildCostRows();
+    const hasImage = this.itemRows.some((r) => !r['_group'] && r['image']);
+    this.itemColumns = this.allItemColumns.filter((c) => c.key !== 'image' || hasImage);
     this.documents = this.buildDocuments();
+  }
+
+  /** Everything the Details section can show, in display order; empty values are dropped. */
+  private buildDetailFacts(): DealFact[] {
+    const q = this.data.quoteData;
+    const d = q.dealData;
+    const date = (v?: string | Date | null) => (v ? formatDate(v, 'dd MMM yyyy', 'en-US') : '');
+    const tone = DETAIL_TONE[this.statusTone(d.status)];
+    const attention: any = q.attention;
+    const contact = attention && typeof attention === 'object' ? [attention.firstName, attention.lastName].filter(Boolean).join(' ') : '';
+    const facts: DealFact[] = [
+      { label: 'Status', value: statusLabel(d.status || 'pending'), state: { dot: tone.dot, text: tone.text } },
+      { label: 'Quote ID', value: q.quoteId || '', link: q._id ? ['/quotations/view', q._id] : undefined },
+      { label: 'Subject', value: (q as any).subject || '' },
+      { label: 'Revision', value: `Rev ${q.revision ?? 0}` },
+      { label: 'Customer ID', value: this.customerRef, link: this.customerRef ? ['/customers'] : undefined, queryParams: { search: q.client?.companyName } },
+      { label: 'Company', value: q.client?.companyName || '' },
+      { label: 'Contact', value: contact },
+      { label: 'Email', value: q.attention?.email || q.client?.customerEmailId || '' },
+      { label: 'Phone', value: q.attention?.phoneNo || (q.client?.contactNo ? String(q.client.contactNo) : '') },
+      { label: 'Department', value: q.department?.departmentName || '' },
+      { label: 'Currency', value: q.currency || '' },
+      { label: 'Saved date', value: date(d.savedDate) },
+      { label: 'Approved', value: date(d.approvedDate) },
+      { label: 'Approved by', value: this.approverName },
+      { label: 'Revoked', value: date(d.revokedDate) },
+      { label: 'Resubmitted after revoke', value: date(d.revokeResubmittedDate) },
+      { label: 'Re-approved', value: date(d.reapprovedDate) },
+      { label: 'Payment terms', value: d.paymentTerms || '' },
+    ];
+    return facts.filter((f) => !!f.value);
+  }
+
+  get customerDiscount(): number {
+    return (this.data?.quoteData?.dealData?.additionalCosts ?? [])
+      .filter((c: any) => c.type === 'Customer Discount')
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+  }
+
+  get additionalCost(): number {
+    return (this.data?.quoteData?.dealData?.additionalCosts ?? [])
+      .filter((c: any) => c.type === 'Additional Cost')
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+  }
+
+  get supplierDiscount(): number {
+    return (this.data?.quoteData?.dealData?.additionalCosts ?? [])
+      .filter((c: any) => c.type === 'Supplier Discount')
+      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
+  }
+
+  get comments(): string[] {
+    return (this.data?.quoteData?.dealData?.comments ?? []).map((c: any) => String(c || '').trim()).filter(Boolean);
   }
 
   get headerTitle(): string {
@@ -526,29 +684,125 @@ export class ViewDealsheetComponent implements OnInit {
 
   /** Totals shown in the item table footer, each figure under the column it belongs to. */
   get itemFootRows(): DetailFootRow[] {
+    // Only the listed lines: deal-level additional costs and discounts belong to the Pricing tab, not this table.
     const po = this.viewMode === 'po';
-    const cost = po ? this.poSummaryTotalCost : this.data.priceDetails.totalCost;
-    const profit = po ? this.poSummaryProfit : this.data.priceDetails.profit;
-    const perc = po ? this.poSummaryPerc : this.data.priceDetails.perc;
-    const sell = this.data.priceDetails.totalSellingPrice;
-    const deal = this.data.quoteData?.dealData;
+    let sell = 0;
+    let cost = 0;
+    for (const item of this.data.quoteItems ?? []) {
+      for (const detail of item?.itemDetails ?? []) {
+        if (!detail.dealSelected) continue;
+        sell += (Number(detail.unitSellingPrice) || 0) * (Number(detail.quantity) || 0);
+        cost += po ? this.getPoItemTotalCost(detail) : (Number(detail.unitCost) || 0) * (Number(detail.quantity) || 0);
+      }
+    }
+    return [{
+      label: 'Total',
+      emphasis: true,
+      cells: {
+        totalSellingPrice: { value: sell, format: 'currency' },
+        totalCost: { value: cost, format: 'currency' },
+        marginValue: { value: sell - cost, format: 'currency' },
+        margin: { value: sell > 0 ? `${(((sell - cost) / sell) * 100).toFixed(2)}%` : '-', format: 'text' },
+      },
+    }];
+  }
+
+  /** Margin of one line (or the whole table) against its selling price, as the PR view shows it. */
+  private lineMarginCells(sell: number, cost: number): { marginValue: number; margin: string } {
+    return { marginValue: sell - cost, margin: sell > 0 ? `${(((sell - cost) / sell) * 100).toFixed(2)}%` : '-' };
+  }
+
+  /**
+   * Costs tab: how the selected lines' sums become the deal totals.
+   * Additional costs and supplier discounts move cost; quotation and customer discounts move selling price.
+   * The PO view costs lines at their PO prices, so deal-level cost adjustments are left out there.
+   */
+  get costBreakdown(): CostBreakdownSection[] {
+    const po = this.viewMode === 'po';
+    const deal = this.data.quoteData.dealData;
+    let lineSell = 0;
+    let lineCost = 0;
+    for (const item of this.data.quoteItems ?? []) {
+      for (const detail of item?.itemDetails ?? []) {
+        if (!detail.dealSelected) continue;
+        lineSell += (Number(detail.unitSellingPrice) || 0) * (Number(detail.quantity) || 0);
+        lineCost += po ? this.getPoItemTotalCost(detail) : (Number(detail.unitCost) || 0) * (Number(detail.quantity) || 0);
+      }
+    }
+
+    const costLines: CostBreakdownLine[] = [];
+    const sellLines: CostBreakdownLine[] = [];
+    for (const c of po ? [] : deal?.additionalCosts ?? []) {
+      const value = Number(c.value) || 0;
+      if (!value) continue;
+      if (c.type === 'Additional Cost') costLines.push({ label: c.name || 'Additional cost', note: 'Additional cost', value });
+      else if (c.type === 'Supplier Discount') costLines.push({ label: c.supplierDetails?.supplierName || c.name || 'Supplier', note: 'Supplier discount', value: -value });
+    }
     const quoteDiscount = Number(deal?.totalDiscount) || 0;
-    const customerDiscount = (deal?.additionalCosts ?? [])
-      .filter((c: any) => c.type === 'Customer Discount')
-      .reduce((sum: number, c: any) => sum + (Number(c.value) || 0), 0);
-    const discountRows: DetailFootRow[] = quoteDiscount || customerDiscount
-      ? [
-          { label: 'Subtotal', cells: { totalSellingPrice: { value: sell + quoteDiscount + customerDiscount, format: 'currency' } } },
-          ...(quoteDiscount ? [{ label: 'Quotation discount', cells: { totalSellingPrice: { value: -quoteDiscount, format: 'currency' as const } } }] : []),
-          ...(customerDiscount ? [{ label: 'Customer discount', cells: { totalSellingPrice: { value: customerDiscount, format: 'currency' as const } } }] : []),
-        ]
-      : [];
+    if (quoteDiscount) sellLines.push({ label: 'Quotation discount', value: -quoteDiscount });
+    for (const c of deal?.additionalCosts ?? []) {
+      if (c.type === 'Customer Discount' && Number(c.value)) sellLines.push({ label: c.name || 'Customer discount', note: 'Customer discount', value: -Number(c.value) });
+    }
+
     return [
-      ...discountRows,
-      { label: discountRows.length ? 'Net deal value' : 'Total', emphasis: true, cells: { totalSellingPrice: { value: sell, format: 'currency' }, totalCost: { value: cost, format: 'currency' } } },
-      { label: 'Profit', cells: { totalSellingPrice: { value: profit, format: 'currency' } } },
-      { label: 'Profit %', cells: { totalSellingPrice: { value: perc, format: 'percent' } } },
+      {
+        title: 'Cost',
+        start: { label: po ? 'Items at PO prices' : 'Items cost', value: lineCost },
+        lines: costLines,
+        total: { label: 'Total cost', value: po ? this.poSummaryTotalCost : this.data.priceDetails.totalCost },
+        hint: po ? 'PO view uses PO prices. Deal cost adjustments are not applied.' : '',
+      },
+      {
+        title: 'Selling price',
+        start: { label: 'Items selling price', value: lineSell },
+        lines: sellLines,
+        total: { label: 'Net deal value', value: this.data.priceDetails.totalSellingPrice },
+        hint: '',
+      },
     ];
+  }
+
+  get costBreakdownProfit(): { value: number; perc: number } {
+    return this.viewMode === 'po'
+      ? { value: this.poSummaryProfit, perc: this.poSummaryPerc }
+      : { value: this.data.priceDetails.profit, perc: this.data.priceDetails.perc };
+  }
+
+  /** Revoke is for approved deals only, and only for Super Admins or roles granted the revoke privilege. */
+  get canRevokeDeal(): boolean {
+    return this.canRevoke && this.data?.quoteData?.dealData?.status === 'approved' && this.viewMode === 'deal';
+  }
+
+  private readonly allocateStatusOrder = ['Pending', 'Work In Progress', 'OpenToWork', 'Completed'];
+
+  async onRevoke(): Promise<void> {
+    const allocateStatus = (this.data.quoteData as any).job?.allocateStatus;
+    if (allocateStatus && this.allocateStatusOrder.indexOf(allocateStatus) >= this.allocateStatusOrder.indexOf('OpenToWork')) {
+      this.toast.error('Deal cannot be revoked once the job has started allocation (Open to Work or later)');
+      return;
+    }
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Revoke this deal?',
+      message: 'The deal goes back to pending and its job is put on hold with this reason. If the re-submitted deal is rejected, the job returns to the status it had.',
+      reason: true,
+      reasonLabel: 'Reason for revoking',
+      reasonMaxLength: 500,
+      confirmLabel: 'Revoke',
+    });
+    if (!confirmed || !reason) return;
+    this.isRevoking = true;
+    this._quoteService.revokeDeal(this.data.quoteData._id, this.userId, reason).subscribe({
+      next: () => {
+        this.isRevoking = false;
+        this.toast.success('Deal revoked');
+        this.router.navigateByUrl(this.returnUrl);
+      },
+      error: (err) => {
+        this.isRevoking = false;
+        this.toast.error(err?.error?.message || 'Failed to revoke deal');
+      },
+    });
   }
 
   get customer(): any {
@@ -578,28 +832,46 @@ export class ViewDealsheetComponent implements OnInit {
       rows.push({ _group: true, label: item.itemName });
       selected.forEach((detail: QuoteItemDetail) => {
         const unitCost = this.viewMode === 'po' ? this.getPoUnitCost(detail) : detail.unitCost;
+        const d = detail as any;
         rows.push({
-          detail: detail.detail,
+          image: d.image?.fileName ? this._quoteService.itemImageUrl(d.image.fileName) : '',
+          imageAlt: d.image?.originalname || 'Item image',
+          detail: this.boldPipe.transform(this.bracketsPipe.transform(detail.detail) as string),
+          detailText: detail.detail,
+          uom: d.uom || '—',
+          availability: d.availability || '—',
+          itemCode: (detail as any).itemCode || '—',
+          partNo: (detail as any).partNo || '—',
           quantity: detail.quantity,
           unitSellingPrice: detail.unitSellingPrice,
           totalSellingPrice: detail.unitSellingPrice * detail.quantity,
           unitCost,
           totalCost: this.viewMode === 'po' ? this.getPoItemTotalCost(detail) : detail.quantity * detail.unitCost,
+          ...this.lineMarginCells(
+            detail.unitSellingPrice * detail.quantity,
+            this.viewMode === 'po' ? this.getPoItemTotalCost(detail) : detail.quantity * detail.unitCost,
+          ),
           supplier: detail.supplierName || (detail.supplierId ? this.getSupplierName(detail.supplierId) : '-') || '-',
+        });
+        // Parts of a split line follow it as sub rows (1.1, 1.2 ...); the line's own cost already covers them.
+        (d.components || []).forEach((c: any) => {
+          const qty = (Number(c.quantity) || 0) * (Number(detail.quantity) || 0);
+          rows.push({
+            _sub: true,
+            detail: this.boldPipe.transform(this.bracketsPipe.transform(c.description || '') as string),
+            detailText: c.description,
+            itemCode: c.itemCode || '—',
+            partNo: c.partNo || '—',
+            uom: c.uom || '—',
+            quantity: qty,
+            unitCost: c.unitCost,
+            totalCost: qty * (Number(c.unitCost) || 0),
+            supplier: (c.supplierId ? this.getSupplierName(c.supplierId) : '') || '-',
+          });
         });
       });
     });
     return rows;
-  }
-
-  private buildCostRows(): Record<string, any>[] {
-    return (this.data.quoteData.dealData.additionalCosts || []).map((cost: any) => ({
-      type: cost.type || 'Cost',
-      name: cost.type === 'Supplier Discount'
-        ? cost.supplierDetails?.supplierName || cost.name || 'Supplier discount'
-        : cost.name || cost.type || 'Additional cost',
-      value: cost.value || 0,
-    }));
   }
 
   private buildDocuments(): DetailDocument[] {
@@ -664,7 +936,7 @@ export class ViewDealsheetComponent implements OnInit {
               this.isApproving = false;
               if (res.success) {
                 this.toast.success(res.awaitingNextApproval ? (res.message || 'Approved at your stage') : 'Deal approved');
-                this.router.navigateByUrl(this.returnUrl);
+                this.reloadDeal();
               }
             },
             error: (error) => {
@@ -687,7 +959,7 @@ export class ViewDealsheetComponent implements OnInit {
             next: () => {
               this.isRejecting = false;
               this.toast.success('Deal rejected');
-              this.router.navigateByUrl(this.returnUrl);
+              this.reloadDeal();
             },
             error: (error) => {
               this.isRejecting = false;

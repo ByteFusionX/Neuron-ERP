@@ -63,6 +63,41 @@ export function selectedDealItems<T extends { itemDetails?: { dealSelected?: boo
   return (items ?? []).filter((item): item is T => !!item?.itemDetails?.some((d) => d.dealSelected));
 }
 
+/**
+ * Deal items as procurement buys them: a line with a cost breakdown becomes one line per part (each with its own
+ * supplier), plus the parent line for whatever cost the parts leave. Selling price is shared out by cost, so the
+ * PR's margins still add up to the deal's.
+ */
+export function expandDealComponents<T extends { itemDetails?: any[] }>(items: T[] | undefined): T[] {
+  // Quoted lines that did not make it into the deal are not bought, so they are left out.
+  return (items ?? []).map((item) => ({
+    ...item,
+    itemDetails: (item.itemDetails ?? []).filter((d: any) => d.dealSelected).flatMap((d: any) => {
+      const parts: any[] = (d.components ?? []).filter((c: any) => num(c.quantity) > 0);
+      if (!parts.length) return [d];
+      const lineCost = num(d.unitCost);
+      const sellRatio = lineCost > 0 ? num(d.unitSellingPrice) / lineCost : 0;
+      const rest = Math.max(0, lineCost - parts.reduce((s, c) => s + num(c.quantity) * num(c.unitCost), 0));
+      const partLines = parts.map((c) => ({
+        detail: c.description,
+        productId: c.productId || undefined,
+        itemCode: c.itemCode || '',
+        partNo: c.partNo || '',
+        uom: c.uom || d.uom,
+        quantity: num(c.quantity) * num(d.quantity),
+        unitCost: num(c.unitCost),
+        unitSellingPrice: num(c.unitCost) * sellRatio,
+        supplierId: c.supplierId || null,
+        dealSelected: d.dealSelected,
+        availability: d.availability,
+        componentOf: d.detail,
+      }));
+      const parent = { ...d, components: undefined, unitCost: rest, unitSellingPrice: rest * sellRatio };
+      return rest > 0.005 ? [parent, ...partLines] : partLines;
+    }),
+  })).filter((item) => (item.itemDetails ?? []).length > 0);
+}
+
 export interface DealPriceDetails {
   totalSellingPrice: number;
   totalCost: number;

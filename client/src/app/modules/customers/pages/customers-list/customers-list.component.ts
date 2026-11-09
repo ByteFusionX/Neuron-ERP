@@ -1,7 +1,10 @@
 import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription, forkJoin, of } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, forkJoin, of } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { ToastrService } from 'ngx-toastr';
 import { HttpEventType } from '@angular/common/http';
 import { saveAs } from 'file-saver';
@@ -18,12 +21,11 @@ import {
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { DetailMetaComponent } from 'src/app/shared/components/detail-panel/detail-meta.component';
-import { DetailOverviewSection, DetailDocument, DetailMetaItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailOverviewSection, DetailDocument, DetailMetaItem, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { FormatStringPipe } from 'src/app/shared/pipes/formatString.pipe';
-import { NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
+import { AsyncPipe, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { FormControl, FormsModule } from '@angular/forms';
 import { ModalService } from 'src/app/shared/components/modal';
-import { PartyDuplicatesReportComponent } from 'src/app/shared/components/party-duplicates-report/party-duplicates-report.component';
 import { DocumentUploadModalComponent, DocumentUploadModalResult } from 'src/app/shared/components/detail-panel/document-upload-modal/document-upload-modal.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailAvatarComponent } from 'src/app/shared/components/detail-panel/detail-avatar.component';
@@ -39,7 +41,7 @@ import { ChangeCustomerStatusComponent, ChangeCustomerStatusModalData, ChangeCus
   selector: 'app-customers-list',
   templateUrl: './customers-list.component.html',
   styleUrls: ['./customers-list.component.css'],
-  imports: [NgSwitch, NgSwitchCase, NgFor, NgIf, FormsModule, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailMetaComponent, DetailAvatarComponent, StatusPillComponent, ActionButtonComponent, SmartFormModule, CustomerFormDrawerComponent, CustomerPickerPanelComponent],
+  imports: [NgSwitch, NgSwitchCase, NgFor, NgIf, AsyncPipe, FormsModule, DetailTimelineComponent, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailMetaComponent, DetailAvatarComponent, StatusPillComponent, ActionButtonComponent, SmartFormModule, CustomerFormDrawerComponent, CustomerPickerPanelComponent],
 })
 export class CustomersListComponent implements OnInit, OnDestroy {
   @ViewChild('grid') grid!: DataGridComponent<getCustomer>;
@@ -85,9 +87,21 @@ export class CustomersListComponent implements OnInit, OnDestroy {
 
   private formatString = new FormatStringPipe();
   private modal = inject(ModalService);
+  private auditLog = inject(AuditLogService);
 
-  openDuplicatesReport(): void {
-    this.modal.open<any, string>(PartyDuplicatesReportComponent, { width: '720px', data: 'customer' });
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+
+  historyFor(row: getCustomer): Observable<DetailTimelineEntry[]> {
+    let subject = this.historyCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(row._id, subject);
+      this.auditLog.getHistory('customer', row._id).subscribe({
+        next: (entries) => subject!.next(toTimelineEntries(entries)),
+        error: () => this.historyCache.delete(row._id),
+      });
+    }
+    return subject.asObservable();
   }
 
   private confirm = inject(ConfirmDialogService);
@@ -157,6 +171,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       { id: 'overview', label: 'Details', icon: 'info' },
       { id: 'contacts', label: 'Contacts', icon: 'users' },
       { id: 'documents', label: 'Documents', icon: 'files' },
+      { id: 'history', label: 'History', icon: 'clock' },
       ...(this.shareAccess ? [{ id: 'share', label: 'Share', icon: 'send' }] : []),
       { id: 'transfer', label: 'Transfer', icon: 'transfer' },
     ];
@@ -187,17 +202,6 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         key: 'shared', label: 'Shared', type: 'badge', width: '100px',
         valueGetter: (r) => (r.sharedWith?.length ? 'Shared' : null),
         badgeClasses: { Shared: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300' },
-      },
-      { key: 'paymentTerms', label: 'Payment Terms', valueGetter: (r) => r.paymentTerms || '' },
-      {
-        key: 'creditStatus', label: 'Credit Status', type: 'badge', width: '120px',
-        valueGetter: (r) => r.creditStatus,
-        badgeClasses: {
-          'Good Standing': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
-          Watch: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
-          Hold: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
-          Exceeded: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
-        },
       },
     ];
   }
@@ -250,6 +254,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       this._customerService.getCustomers(filterData).subscribe({
         next: (data: getFilteredCustomer) => {
           this.rows = data ? [...data.customers] : [];
+          this.historyCache.clear();
           this.total = data ? data.total : 0;
           this.viewCounts = data?.viewCounts ?? {};
           this.details.clear();

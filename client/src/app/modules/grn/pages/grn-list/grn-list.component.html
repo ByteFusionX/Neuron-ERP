@@ -1,4 +1,4 @@
-<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-data-grid
     #grid
     class="flex-1 min-h-0"
@@ -18,6 +18,7 @@
     createLabel="Create GRN"
     [rowActions]="rowActions"
     [views]="views"
+    [initialViewId]="activeViewId"
     [rowAccent]="rowAccent"
     (viewChange)="onViewChange($event)"
     storageKey="grn-list"
@@ -58,10 +59,6 @@
       </ng-container>
       <ng-template #grnMeta>
         <div class="grn-meta">
-          <p class="grn-meta-label">Supplier</p>
-          <p class="grn-meta-value">{{ row.purchaseOrderId?.supplierId?.supplierName || 'N/A' }}</p>
-        </div>
-        <div class="grn-meta">
           <p class="grn-meta-label">LPO</p>
           <p class="grn-meta-value">{{ row.purchaseOrderId?.poNo || 'N/A' }}</p>
         </div>
@@ -70,15 +67,19 @@
           <p class="grn-meta-value">{{ row.warehouse?.wareHouseName || 'N/A' }}</p>
         </div>
         <div class="grn-meta">
-          <p class="grn-meta-label">Accepted Qty</p>
-          <p class="grn-meta-value">{{ totalAcceptedQty(row) }}</p>
+          <p class="grn-meta-label">Supplier</p>
+          <p class="grn-meta-value">{{ row.purchaseOrderId?.supplierId?.supplierName || 'N/A' }}</p>
+        </div>
+        <div class="grn-meta">
+          <p class="grn-meta-label">Date</p>
+          <p class="grn-meta-value">{{ formatDate(row.grnDate) }}</p>
         </div>
       </ng-template>
     </ng-template>
 
     <ng-template #detailFooterTemplate let-row let-tab="tab">
       <app-action-button *ngIf="isArrivingView" variant="primary" (click)="onCreateGRN(row._id)" icon="plus">Create GRN</app-action-button>
-      <app-action-button *ngIf="!isArrivingView" variant="primary" (click)="viewDetails(row)" icon="view">Open full GRN</app-action-button>
+      <app-action-button *ngIf="!isArrivingView" variant="primary" (click)="viewDetails(row)" icon="view">Detail view</app-action-button>
     </ng-template>
 
     <ng-template #detailTemplate let-row let-tab="tab">
@@ -92,6 +93,8 @@
             [title]="isArrivingView ? 'Ordered items' : 'Received items'"
             [columns]="isArrivingView ? arrivingItemColumns : itemColumns"
             [rows]="isArrivingView ? arrivingItemRows(row) : itemRows(row)"
+            [footRows]="isArrivingView ? [] : grnFootRows(row)"
+            [currency]="row.purchaseOrderId?.currency || 'QAR'"
             showTotals>
           </app-detail-table>
         </ng-container>
@@ -102,6 +105,10 @@
           [removable]="false"
           (open)="onDocumentOpen($event)"
           (download)="onDocumentDownload($event)"></app-detail-documents>
+
+        <app-detail-timeline *ngSwitchCase="'history'"
+          [entries]="(historyFor(row) | async) ?? []"
+          emptyMessage="No history recorded yet."></app-detail-timeline>
       </ng-container>
     </ng-template>
   </app-data-grid>

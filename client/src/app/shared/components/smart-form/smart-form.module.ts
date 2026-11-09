@@ -17,6 +17,7 @@ import { SfSectionComponent } from './sf-section.component';
 import { SfSelectComponent } from './sf-select.component';
 import { SfSliderComponent } from './sf-slider.component';
 import { SfSwitchComponent } from './sf-switch.component';
+import { SfStepperComponent } from './sf-stepper.component';
 import { SfTagsComponent } from './sf-tags.component';
 import { SfTextareaComponent } from './sf-textarea.component';
 
@@ -24,7 +25,7 @@ const SMART_FORM = [
   SfDrawerComponent, SfSectionComponent, SfFieldComponent, SfDraftDirective,
   SfInputComponent, SfTextareaComponent, SfNumberComponent, SfLimitComponent, SfCurrencyComponent, SfDateComponent,
   SfSelectComponent, SfComboboxComponent, SfCheckboxComponent, SfCheckboxGroupComponent, SfSwitchComponent,
-  SfRadioGroupComponent, SfSliderComponent, SfTagsComponent, SfFileComponent,
+  SfRadioGroupComponent, SfSliderComponent, SfTagsComponent, SfFileComponent, SfStepperComponent,
 ];
 
 /** Every control is standalone; import this module to get all of them plus ReactiveFormsModule. */

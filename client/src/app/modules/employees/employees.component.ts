@@ -1,7 +1,9 @@
-import { DatePipe, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
+import { AsyncPipe, DatePipe, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
-import { Subscription, forkJoin } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, forkJoin } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { getEmployee, getEmployeeDetails } from 'src/app/shared/interfaces/employee.interface';
@@ -9,7 +11,7 @@ import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid
 import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
-import { DetailOverviewSection } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailOverviewSection, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { EmployeeFormDrawerComponent } from './employee-form-drawer/employee-form-drawer.component';
 
@@ -20,7 +22,7 @@ type EmployeeRow = any;
   templateUrl: './employees.component.html',
   styleUrls: ['./employees.component.css'],
   providers: [DatePipe],
-  imports: [DatePipe, NgIf, NgSwitch, NgSwitchCase, DataGridComponent, DetailOverviewComponent, DetailTimelineComponent, ActionButtonComponent, EmployeeFormDrawerComponent],
+  imports: [AsyncPipe, DatePipe, NgIf, NgSwitch, NgSwitchCase, DataGridComponent, DetailOverviewComponent, DetailTimelineComponent, ActionButtonComponent, EmployeeFormDrawerComponent],
 })
 export class EmployeesComponent implements OnInit, OnDestroy {
   @ViewChild('grid') grid!: DataGridComponent<EmployeeRow>;
@@ -56,7 +58,23 @@ export class EmployeesComponent implements OnInit, OnDestroy {
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'contract', label: 'Contract', icon: 'card' },
     { id: 'history', label: 'History', icon: 'activity' },
+    { id: 'activity', label: 'Account activity', icon: 'clock' },
   ];
+
+  private activityCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+
+  activityFor(r: EmployeeRow): Observable<DetailTimelineEntry[]> {
+    let subject = this.activityCache.get(r._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.activityCache.set(r._id, subject);
+      this._auditLog.getHistory('employee', r._id).subscribe({
+        next: (entries) => subject!.next(toTimelineEntries(entries)),
+        error: () => this.activityCache.delete(r._id),
+      });
+    }
+    return subject.asObservable();
+  }
   employeeTitle = (r: EmployeeRow) => this.fullName(r);
   employeeSubtitle = (r: EmployeeRow) => [r.designation, r.department?.departmentName].filter(Boolean).join(' · ');
 
@@ -78,6 +96,7 @@ export class EmployeesComponent implements OnInit, OnDestroy {
     private _profileService: ProfileService,
     private _router: Router,
     private datePipe: DatePipe,
+    private _auditLog: AuditLogService,
   ) { }
 
   ngOnInit() {
@@ -178,6 +197,7 @@ export class EmployeesComponent implements OnInit, OnDestroy {
       }).subscribe({
         next: (data: { total: number, employees: getEmployee[] }) => {
           this.rows = data ? [...data.employees] : [];
+          this.activityCache.clear();
           this.total = data ? data.total : 0;
           this.refreshViewCounts();
           this.isLoading = false;

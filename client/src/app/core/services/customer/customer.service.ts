@@ -19,8 +19,6 @@ export interface PartyMatch {
   reason: string;
 }
 
-export interface PartyDuplicateGroup { key: string; count: number; records: { _id: string; [k: string]: any }[] }
-
 @Injectable({
   providedIn: 'root'
 })
@@ -52,9 +50,6 @@ export class CustomerService {
     return this.http.get<{ matches: PartyMatch[] }>(`${this.apiUrl}/customer/checkDuplicate?${q}`, { context: context() });
   }
 
-  getDuplicatesReport(): Observable<Record<'sameName' | 'sameTrn' | 'similarName' | 'sameEmail' | 'samePhone', PartyDuplicateGroup[]>> {
-    return this.http.get<any>(`${this.apiUrl}/customer/duplicatesReport`);
-  }
 
   getAllCustomers(userId?:string | undefined, slim = false): Observable<getCustomer[]> {
     return this.http.get<getCustomer[]>(`${this.apiUrl}/customer/${userId}`, slim ? { params: { slim: 'true' } } : {})

@@ -1,11 +1,11 @@
 .document-settings-grid {
-  min-height: 34rem;
+  min-height: 0;
   flex: 1 1 auto;
 }
 
 .document-preview-shell {
   height: calc(100vh - 10rem);
-  min-height: 34rem;
+  min-height: 0;
   display: flex;
   min-width: 0;
 }

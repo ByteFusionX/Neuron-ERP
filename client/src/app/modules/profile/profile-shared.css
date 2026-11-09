@@ -67,6 +67,48 @@
   @apply rounded-lg py-8 text-center text-sm;
 }
 
+/* Security tab */
+.sec-hero {
+  background: var(--pf-surface);
+}
+
+.sec-ring {
+  --p: 0;
+  --ring: var(--pf-accent);
+  background: conic-gradient(var(--ring) calc(var(--p) * 1%), var(--pf-border) 0);
+  @apply w-20 h-20 rounded-full p-[6px] shrink-0;
+}
+.sec-ring-ok { --ring: var(--pf-ok); }
+.sec-ring-warn { --ring: var(--pf-warn); }
+.sec-ring-inner {
+  background: var(--pf-surface);
+  @apply w-full h-full rounded-full flex flex-col items-center justify-center leading-none gap-1;
+}
+
+.sec-check {
+  background: var(--pf-warn-soft);
+  color: var(--pf-warn);
+  @apply w-6 h-6 rounded-full flex items-center justify-center shrink-0;
+}
+.sec-check-ok { background: var(--pf-ok-soft); color: var(--pf-ok); }
+
+.device-card {
+  background: var(--pf-surface-2);
+  border: 1px solid var(--pf-border);
+  @apply rounded-xl p-4 flex flex-col gap-3 transition;
+}
+.device-card:hover { border-color: var(--pf-accent); }
+.device-current {
+  border-color: var(--pf-accent);
+  box-shadow: 0 0 0 3px var(--pf-accent-soft);
+}
+
+.live-dot {
+  background: var(--pf-ok);
+  box-shadow: 0 0 0 3px var(--pf-ok-soft);
+  @apply w-2 h-2 rounded-full inline-block;
+}
+
 .fade-in { animation: pf-fade 0.25s ease-out; }
 
 @keyframes pf-fade {

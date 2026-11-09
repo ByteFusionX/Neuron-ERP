@@ -1,5 +1,5 @@
-<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
-    <app-data-grid #grid
+<div class="h-full flex flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid [strong]="true"
         class="flex-1 min-h-0"
         [fillHeight]="true"
         title="Quotations"
@@ -76,7 +76,7 @@
                 </ng-template>
             </ng-container>
             <app-action-button *ngIf="tab === 'events'" variant="outline" icon="plus" (click)="onAddEvent(row)">Add event</app-action-button>
-            <app-action-button *ngIf="tab === 'lpo' && canUploadLpo(row)" variant="outline" (click)="startLpoUpload(row)">Upload LPO</app-action-button>
+            <app-action-button *ngIf="tab === 'documents' && canUploadLpo(row)" variant="outline" (click)="startLpoUpload(row)">Upload LPO</app-action-button>
         </ng-template>
 
         <!-- right: permanent, every tab (filled) -->
@@ -113,7 +113,7 @@
                         (previewFile)="onPreviewEventFile($event.file)"
                         (deleteFile)="onDeleteEventFile(row, $event.item, $event.file)"></app-detail-task-list>
                 </ng-container>
-                <ng-container *ngSwitchCase="'lpo'">
+                <ng-container *ngSwitchCase="'documents'">
                     <app-detail-documents
                         title="Customer LPO"
                         emptyMessage="No Documents uploaded yet."
@@ -123,6 +123,10 @@
                         (open)="onLpoPreviewDoc(row, $event)"
                         (download)="onLpoDownloadDoc(row, $event)"
                         (remove)="onLpoRemoveDoc(row, $event)"></app-detail-documents>
+                </ng-container>
+                <ng-container *ngSwitchCase="'history'">
+                    <app-detail-timeline *ngIf="canSeeHistory(row); else noHistoryAccess" [entries]="(historyFor(row) | async) ?? []" emptyMessage="No history recorded yet."></app-detail-timeline>
+                    <ng-template #noHistoryAccess><p class="text-[13px] text-gray-500 dark:text-gray-400">History is only visible to super admins and the quotation's owner.</p></ng-template>
                 </ng-container>
             </ng-container>
         </ng-template>

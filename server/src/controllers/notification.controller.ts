@@ -5,7 +5,6 @@ import Category, { Privileges } from "../models/category.model";
 import jwt from 'jsonwebtoken';
 import { getEmployeeData } from "../common/utils/util";
 import { Server } from "socket.io";
-import { connectedSockets } from "../services/socket-io.service";
 import { ObjectId } from "mongodb";
 import { sendWebPushToEmployees } from "../services/webPush.service";
 import NotificationPreference from "../models/notificationPreference.model";
@@ -104,6 +103,13 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
         const unReadNotifications = unReadNotificationsRaw;
         const viewedNotifications = viewedNotificationsRaw;
 
+        /** True when the person can view at least one of the given modules. */
+        const canView = (...modules: (keyof Privileges)[]) =>
+            modules.some(module => {
+                const view = (privileges[module] as any)?.viewReport;
+                return !!view && view !== 'none';
+            });
+
         const filterByPrivileges = (notifications: any[]) => {
             return notifications.filter(notification => {
                 const type = notification.type;
@@ -123,7 +129,6 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                     case 'Enquiry':
                     case 'EnquiryEstimationReady':
                     case 'EnquiryFollowUpOverdue':
-                    case 'RfqFollowUpOverdue':
                         return privileges.enquiry?.viewReport !== 'none';
                     case 'JobAllocated':
                     case 'ProcurementTransferred':
@@ -169,6 +174,30 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                         return !!privileges.grn?.viewReport && privileges.grn.viewReport !== 'none';
                     case 'LpoPlacedBilling':
                         return !!privileges.invoice?.viewReport && privileges.invoice.viewReport !== 'none';
+                    case 'PresaleRejected':
+                        return canView('enquiry');
+                    case 'FeedbackGiven':
+                        return canView('assignedJob');
+                    case 'QuotationWon':
+                    case 'QuotationFollowUpOverdue':
+                        return canView('quotation');
+                    case 'PurchaseFollowUpOverdue':
+                        return canView('purchase');
+                    case 'LpoCancelled':
+                        return canView('purchaseOrder', 'grn');
+                    case 'GrnCreated':
+                        return canView('grn', 'invoice', 'quotation');
+                    case 'DnDispatched':
+                    case 'DnDelivered':
+                    case 'DnItemsRejected':
+                        return canView('dispatch', 'invoice', 'quotation');
+                    case 'PdcRejected':
+                    case 'ProformaPaymentConfirmed':
+                    case 'InvoiceOverdue':
+                    case 'InvoiceRejected':
+                        return canView('invoice', 'quotation');
+                    case 'StockHoldInitiated':
+                        return canView('stockHold');
                     case 'Event':
                         return true;
                     case 'BugReportAssigned':
@@ -334,8 +363,12 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
         case 'ReAssignedJob':
             return { routePath: '/presales/reassigned' };
 
+        case 'FeedbackGiven':
+            return { routePath: '/presales' };
+
         case 'FeedbackRequest':
         case 'Enquiry':
+        case 'PresaleRejected':
         case 'EnquiryEstimationReady':
         case 'EnquiryFollowUpOverdue':
             const enquiryId = additionalData?.enquiryId || referenceId?._id?.toString() || referenceId?.toString();
@@ -344,12 +377,6 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
                 routeData: { enquiryId }
             };
         
-        case 'RfqFollowUpOverdue':
-            return {
-                routePath: '/enquiry',
-                routeData: { enquiryId: additionalData?.enquiryId }
-            };
-
         case 'DealSheet':
             return { routePath: '/deal-sheet/pendings' };
         case 'DealSheetResponse':
@@ -497,7 +524,7 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
             return { routePath: '/grn/grn-list', routeData: { view: 'arriving' } };
 
         case 'LpoPlacedBilling':
-            return { routePath: '/finance/vendor-bills', routeData: { view: 'upcoming' } };
+            return { routePath: '/finance/vendor-bills', routeData: { view: 'new' } };
 
         case 'GrnItemsRejected': {
             const grnId = additionalData?.grnId || referenceId?._id?.toString?.() || referenceId?.toString?.();
@@ -507,19 +534,52 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
             };
         }
 
-        case 'DnItemsRejected': {
+        case 'DnItemsRejected':
+        case 'DnDispatched':
+        case 'DnDelivered': {
             const dnId = additionalData?.dnId || referenceId?._id?.toString?.() || referenceId?.toString?.();
             return {
-                routePath: '/dispatch/delivery-note-register/view',
+                routePath: '/dispatch/view',
                 routeData: { dnId }
             };
         }
 
-        case 'InvoiceRejected': {
-            const invoiceId = additionalData?.invoiceId || referenceId?._id?.toString?.() || referenceId?.toString?.();
+        case 'InvoiceRejected':
+        case 'InvoiceOverdue':
+            return { routePath: '/finance/receivables' };
+
+        case 'PdcRejected':
+        case 'ProformaPaymentConfirmed':
+            return { routePath: '/finance/vendor-bills' };
+
+        case 'QuotationWon':
+        case 'QuotationFollowUpOverdue':
             return {
-                routePath: '/invoice/invoice-register/view',
-                routeData: { invoiceId }
+                routePath: '/quotations/view',
+                routeData: { _id: additionalData?.quotationId || referenceId?._id?.toString?.() || referenceId?.toString?.() }
+            };
+
+        case 'PurchaseFollowUpOverdue': {
+            const purchaseId = additionalData?.purchaseId || referenceId?._id?.toString?.() || referenceId?.toString?.();
+            return {
+                routePath: '/purchase/view-purchase',
+                routeData: { purchaseId }
+            };
+        }
+
+        case 'LpoCancelled': {
+            const purchaseOrderId = additionalData?.purchaseOrderId || referenceId?._id?.toString?.() || referenceId?.toString?.();
+            return {
+                routePath: '/purchase/view-lpo',
+                routeData: { purchaseOrderId }
+            };
+        }
+
+        case 'GrnCreated': {
+            const grnId = additionalData?.grnId || referenceId?._id?.toString?.() || referenceId?.toString?.();
+            return {
+                routePath: '/grn/view-grn',
+                routeData: { grnId }
             };
         }
 
@@ -622,9 +682,9 @@ export const createNotificationWithPrivileges = async (
         if (notification && socket) {
             notification.recipients.forEach((recipient: any) => {
                 const recipientId = recipient.objectId._id?.toString() || recipient.objectId.toString();
-                if (connectedSockets[recipientId]) {
-                    socket.to(recipientId).emit("recieveNotifications", notification);
-                }
+                // Always emit to the room: connectedSockets tracks one socket per user, so it is wrong
+                // once a user has several tabs (closing one deletes the entry while others still listen).
+                socket.to(recipientId).emit("recieveNotifications", notification);
             });
         }
 

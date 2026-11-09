@@ -1,6 +1,6 @@
 import express from 'express';
-import { generateDnNumber, createDn, getDnsByJobId, getAllDeliveryNotes, getReadyForDnReceipts, getDnById, getDnInvoice, cancelDn, completeDnPod, dispatchDn, rejectDnItems, getInventoryDeductionReport, getDraftDnByJobId, updateDn, getPendingDeliveriesSummary, getPendingDeliveryDetails, getDnItemsForJob, getInvoiceLinkingSummary } from '../controllers/deliveryNote.controller';
-import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+import { generateDnNumber, createDn, getDnsByJobId, getAllDeliveryNotes, getReadyForDnReceipts, getDnById, getDnInvoice, cancelDn, completeDnPod, dispatchDn, rejectDnItems, getDraftDnByJobId, updateDn, getDnItemsForJob } from '../controllers/deliveryNote.controller';
+import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 
 const upload = require("../common/multer.storage");
 
@@ -12,19 +12,15 @@ deliveryNoteRouter.get('/generate-dn-number', generateDnNumber);
 deliveryNoteRouter.post('/', requirePrivilege("dispatch", "createDeliveryNote"), createDn);
 deliveryNoteRouter.get('/job/:jobId', getDnsByJobId);
 deliveryNoteRouter.get('/draft/:jobId', getDraftDnByJobId);
-deliveryNoteRouter.post('/pending', requirePrivilege("dispatch", "viewPendingDelivery"), getPendingDeliveriesSummary);
-deliveryNoteRouter.get('/pending/:jobId', requirePrivilege("dispatch", "viewPendingDelivery"), getPendingDeliveryDetails);
 deliveryNoteRouter.get('/items-for-job/:jobId', getDnItemsForJob);
 deliveryNoteRouter.get('/ready-for-dn', getReadyForDnReceipts);
-deliveryNoteRouter.put('/:id', updateDn);
+deliveryNoteRouter.put('/:id', requireUnlessDenied("dispatch", "editDeliveryNote"), updateDn);
 deliveryNoteRouter.post('/get', getAllDeliveryNotes);
 deliveryNoteRouter.get('/:id/invoice', getDnInvoice);
 deliveryNoteRouter.get('/:id', getDnById);
-deliveryNoteRouter.patch('/:id/cancel', cancelDn);
-deliveryNoteRouter.patch('/:id/dispatch', dispatchDn);
-deliveryNoteRouter.patch('/:id/pod', upload.array('files'), completeDnPod);
-deliveryNoteRouter.patch('/:id/reject', rejectDnItems);
-deliveryNoteRouter.post('/inventory-deduction-report', requirePrivilege("dispatch", "viewInventoryDeduction"), getInventoryDeductionReport);
-deliveryNoteRouter.post('/invoice-linking', requirePrivilege("dispatch", "viewInvoiceLinking"), getInvoiceLinkingSummary);
+deliveryNoteRouter.patch('/:id/cancel', requireUnlessDenied("dispatch", "cancelDeliveryNote"), cancelDn);
+deliveryNoteRouter.patch('/:id/dispatch', requireUnlessDenied("dispatch", "dispatchDeliveryNote"), dispatchDn);
+deliveryNoteRouter.patch('/:id/pod', requireUnlessDenied("dispatch", "uploadPod"), upload.array('files'), completeDnPod);
+deliveryNoteRouter.patch('/:id/reject', requireUnlessDenied("dispatch", "rejectDeliveryItems"), rejectDnItems);
 
 export default deliveryNoteRouter;

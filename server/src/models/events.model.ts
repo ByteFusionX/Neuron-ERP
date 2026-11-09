@@ -24,7 +24,7 @@ const eventSchema = new Schema<events>({
     from: {
         type: String,
         required: true,
-        enum: ['Employee', 'Customer', 'Quotation', 'Enquiry', 'Department', 'InternalDepartment', 'Category', 'Job', 'Rfq'],
+        enum: ['Employee', 'Customer', 'Quotation', 'Enquiry', 'Department', 'InternalDepartment', 'Category', 'Job', 'Rfq', 'Purchase'],
     },
     // Which stage of the sales flow raised it. Enquiry and presale share the enquiry id, so this keeps their events apart.
     stage: {
