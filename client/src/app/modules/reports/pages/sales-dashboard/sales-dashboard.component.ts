@@ -109,7 +109,7 @@ export class SalesDashboardComponent implements OnInit, OnDestroy {
   ];
 
   kpis: Kpi[] = [];
-  hero: { value: string; count: number; delta: Kpi['delta']; prev: string } | null = null;
+  hero: { value: string; count: number; delta: Kpi['delta']; prev: string; gp: string; gpPct: string; gpDelta: Kpi['delta'] } | null = null;
   spark: SparkChart | null = null;
   trendChart: TrendChart | null = null;
   openGroup: string | null = null;
@@ -604,6 +604,9 @@ export class SalesDashboardComponent implements OnInit, OnDestroy {
       count: c.won,
       delta: this.delta(c.wonValue, p.wonValue),
       prev: p.wonValue ? `${this.money(p.wonValue)} ${this.currency}` : 'nothing won',
+      gp: this.money(c.wonValue - c.wonCost, false),
+      gpPct: c.wonValue > 0 ? this.pct(Math.round(((c.wonValue - c.wonCost) / c.wonValue) * 1000) / 10) : '—',
+      gpDelta: this.delta(c.wonValue - c.wonCost, p.wonValue - p.wonCost),
     };
 
     this.kpis = [

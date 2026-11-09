@@ -89,6 +89,13 @@
                   {{ hero.delta.text }}
                 </span>
               </p>
+              <p class="sd-hero-meta" title="Gross profit = approved deal revenue − deal cost">
+                GP {{ hero.gp }} {{ currency }} · {{ hero.gpPct }}
+                <span *ngIf="hero.gpDelta" class="sd-hero-delta" [ngClass]="hero.gpDelta.tone">
+                  <ng-icon [name]="hero.gpDelta.tone === 'down' ? 'heroArrowDown' : 'heroArrowUp'" *ngIf="hero.gpDelta.tone !== 'flat'" class="h-3 w-3"></ng-icon>
+                  {{ hero.gpDelta.text }}
+                </span>
+              </p>
             </div>
             <span class="sd-hero-icon"><ng-icon name="heroBanknotes" class="h-5 w-5"></ng-icon></span>
           </div>

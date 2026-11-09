@@ -342,6 +342,7 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
                 quotesSentValue: sentQ.reduce((s, q) => s + q.value, 0),
                 won: won.length,
                 wonValue,
+                wonCost: won.reduce((s, q) => s + q.w.cost, 0),
                 lost: lost.length,
                 lostValue: lost.reduce((s, q) => s + q.value, 0),
                 winRate: decided ? round((won.length / decided) * 100, 1) : null,

@@ -23,6 +23,7 @@ export interface SalesPeriodKpis {
   quotesSentValue: number;
   won: number;
   wonValue: number;
+  wonCost: number;
   lost: number;
   lostValue: number;
   winRate: number | null;
