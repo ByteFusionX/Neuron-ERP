@@ -9,6 +9,7 @@ import { notify } from '../services/notify.service';
 import { jobOwnerOf, recipientsExcluding, safely } from '../services/workflowNotify.service';
 import { uploadFileToAws } from '../common/aws-connect';
 
+import { DEFAULT_CURRENCY } from '../common/currency';
 const ENTITY = 'proformaInvoice';
 const BILLABLE_JOB_STATUSES = ['Pending', 'OpenToWork', 'Work In Progress', 'On Hold'];
 
@@ -44,7 +45,7 @@ const normalizeBody = (body: any) => {
         shipTo: String(body.shipTo || '').trim(),
         lpoNo: String(body.lpoNo || '').trim(),
         subject: String(body.subject || '').trim(),
-        currency: String(body.currency || 'QAR').trim() || 'QAR',
+        currency: String(body.currency || DEFAULT_CURRENCY).trim() || DEFAULT_CURRENCY,
         quoteCompany: String(body.quoteCompany || '').trim(),
     };
 };

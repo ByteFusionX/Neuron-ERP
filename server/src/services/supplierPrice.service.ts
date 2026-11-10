@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import SupplierPriceModel, { SupplierPriceSource } from "../models/supplierPrice.model";
 
+import { DEFAULT_CURRENCY } from '../common/currency';
 export interface SupplierPriceInput {
     supplierId: any;
     productId: any;
@@ -21,7 +22,7 @@ export const recordPrices = async (
     ref: { currency?: string; sourceNo?: string; sourceId?: any; employeeId?: any }
 ) => {
     try {
-        const currency = String(ref.currency || 'QAR').toUpperCase();
+        const currency = String(ref.currency || DEFAULT_CURRENCY).toUpperCase();
         // One price per supplier and product; the last row given wins.
         const byKey = new Map<string, SupplierPriceInput>();
         rows.forEach((row) => {

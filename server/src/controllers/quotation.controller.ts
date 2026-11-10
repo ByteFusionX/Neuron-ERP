@@ -24,6 +24,7 @@ const { ObjectId } = require('mongodb');
 import { newTrash } from '../controllers/trash.controller'
 import { removeFile } from '../common/utils/util'
 import { dealSheetCan } from "../common/utils/dealSheetPrivilege";
+import { DEFAULT_CURRENCY, currencyFactor, currencyStampFrom, isSupportedCurrency } from "../common/currency";
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import { releaseQuoteStockHolds } from './quoteStockHold.controller';
 import Event from '../models/events.model'
@@ -316,7 +317,15 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
 
         delete quoteData.exchangeRate;
         delete quoteData.exchangeRateAt;
-        Object.assign(quoteData, await currentRateFields());
+        // A quote built from an estimation reuses the rate that estimation saved, so the figures
+        // the presales team priced with don't shift; otherwise take the live rate.
+        let inheritedRate: { exchangeRate?: number; exchangeRateAt?: Date } = {};
+        if (quoteData.enqId) {
+            const source: any = await Enquiry.findById(quoteData.enqId).select('preSale.estimations.exchangeRate preSale.estimations.exchangeRateAt').lean();
+            const est = source?.preSale?.estimations;
+            if (est?.exchangeRate > 0) inheritedRate = { exchangeRate: est.exchangeRate, exchangeRateAt: est.exchangeRateAt };
+        }
+        Object.assign(quoteData, inheritedRate.exchangeRate ? inheritedRate : await currentRateFields());
 
         const quote = new Quotation(quoteData)
 
@@ -1155,6 +1164,8 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
             },
             {
                 $addFields: {
+                    // The deal sheet is shown in its own currency (the quote keeps the one it was quoted in).
+                    currency: { $ifNull: ['$dealData.currency', '$currency'] },
                     'dealData.updatedItems': {
                         $map: {
                             input: '$dealData.updatedItems',
@@ -1412,6 +1423,8 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
             },
             {
                 $addFields: {
+                    // The deal sheet is shown in its own currency (the quote keeps the one it was quoted in).
+                    currency: { $ifNull: ['$dealData.currency', '$currency'] },
                     'dealData.updatedItems': {
                         $map: {
                             input: '$dealData.updatedItems',
@@ -1508,6 +1521,17 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
     }
 }
 
+
+/** Live QAR-per-USD rate, the same one new documents are stamped with. */
+export const getLiveExchangeRate = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+        const rate = Number(await getUSDRated());
+        if (!Number.isFinite(rate) || rate <= 0) return res.status(503).json({ message: 'Exchange rate unavailable' });
+        return res.status(200).json({ rate });
+    } catch (error) {
+        next(error);
+    }
+}
 
 export const getNextQuoteId = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -2462,7 +2486,26 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         }
         // The deal is built from the quote's first option and the discount isn't editable here, so the quote is the
         // source of truth: it is never dropped or tampered with by the payload.
-        const totalDiscount = Number(quote.optionalItems?.[0]?.totalDiscount) || 0;
+        // The deal keeps its own currency and rate: the quote stays as quoted, and everything after the deal copies these.
+        const quoteCurrency = String(quote.currency || DEFAULT_CURRENCY).toUpperCase();
+        const dealCurrency = String(parsedDealData.currency || quoteCurrency).toUpperCase();
+        if (!isSupportedCurrency(dealCurrency)) {
+            return res.status(400).json({ message: `Unsupported currency ${dealCurrency}` });
+        }
+        let dealStamp: { currency?: string; exchangeRate?: number; exchangeRateAt?: Date };
+        if (dealCurrency === quoteCurrency) {
+            dealStamp = { ...currencyStampFrom(quote), currency: quoteCurrency };
+        } else {
+            // Prefer the rate saved on the quote; the form used it for the conversion. Old quotes fall back to the form's rate.
+            const savedRate = Number(quote.exchangeRate);
+            const rate = savedRate > 0 ? savedRate : Number(parsedDealData.exchangeRate);
+            if (!(rate > 0)) {
+                return res.status(400).json({ message: "Exchange rate is missing for the selected currency" });
+            }
+            dealStamp = { currency: dealCurrency, exchangeRate: rate, exchangeRateAt: savedRate > 0 && quote.exchangeRateAt ? quote.exchangeRateAt : new Date() };
+        }
+        const discountFactor = currencyFactor(quoteCurrency, dealCurrency, dealStamp.exchangeRate ?? Number(quote.exchangeRate)) ?? 1;
+        const totalDiscount = Number(((Number(quote.optionalItems?.[0]?.totalDiscount) || 0) * discountFactor).toFixed(4));
         // Unselected lines carry no supplier; an empty string can't cast to ObjectId.
         for (const item of Array.isArray(items) ? items : []) {
             for (const d of item?.itemDetails ?? []) {
@@ -2539,6 +2582,7 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
             dealData: {
                 dealId: dealId,
                 paymentTerms,
+                ...dealStamp,
                 additionalCosts: costs,
                 // The first created/approved dates stay; only the revoke cycle dates move.
                 savedDate: quote.dealData?.savedDate ?? createdDate,

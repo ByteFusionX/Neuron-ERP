@@ -17,6 +17,7 @@ import {
   SalesRfqSupplierStatus,
 } from 'src/app/shared/interfaces/sales-rfq.interface';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 /** What the buyer types in for one line of a supplier's reply. */
 interface ReplyRow {
   unitPrice: number | null;
@@ -248,7 +249,7 @@ export class PrRfqDrawerComponent implements OnChanges {
     });
     const first = (rfq.quotes || []).find((q) => String(q.inviteId || '') === String(invite._id));
     this.draft = {
-      currency: invite.replyTerms?.currency || first?.currency || 'QAR',
+      currency: invite.replyTerms?.currency || first?.currency || DEFAULT_CURRENCY,
       paymentTerms: invite.replyTerms?.paymentTerms || first?.paymentTerms || '',
       deliveryTerms: invite.replyTerms?.deliveryTerms || '',
       rows,

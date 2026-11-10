@@ -17,6 +17,7 @@ import { recordPrices, findPrices } from "../services/supplierPrice.service";
 import { SupplierPriceSource } from "../models/supplierPrice.model";
 import { applyLineAward, LineAward } from "../services/purchaseAward.service";
 import { logAudit } from "../services/audit.service";
+import { currencyStampFrom, dealCurrencyStampFrom, dealCurrencyOf, dealRateOf } from "../common/currency";
 import PurchaseOrder from "../models/purchaseOrder.model";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
@@ -235,7 +236,7 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
         _id: { $nin: withPr },
     }).populate({
         path: 'quoteId',
-        select: 'client currency quoteId subject department createdBy dealData.dealId dealData.totalDiscount dealData.additionalCosts dealData.updatedItems',
+        select: 'client currency exchangeRate quoteId subject department createdBy dealData.currency dealData.exchangeRate dealData.dealId dealData.totalDiscount dealData.additionalCosts dealData.updatedItems',
         populate: [
             { path: 'client', select: 'companyName' },
             { path: 'department', select: 'departmentName' },
@@ -252,7 +253,7 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
     const lpoValueOf = (quote: any): number => {
         const lines = (quote?.dealData?.updatedItems ?? []).flatMap((item: any) => item.itemDetails ?? []);
         const total = lines.reduce((sum: number, d: any) => sum + (Number(d.unitSellingPrice) || 0) * (Number(d.quantity) || 0), 0) - (Number(quote?.dealData?.totalDiscount) || 0);
-        return quote?.currency === 'USD' ? total * qatarUsdRate : total;
+        return dealCurrencyOf(quote) === 'USD' ? total * (dealRateOf(quote) || qatarUsdRate) : total;
     };
     // Deal sheet money summary for the details panel: selling side, then cost side.
     const dealSummaryOf = (quote: any) => {
@@ -302,7 +303,7 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
             })).filter((item: any) => item.itemDetails.length > 0),
             jobId: job,
             customerId: job.quoteId?.client,
-            currency: job.quoteId?.currency,
+            currency: dealCurrencyOf(job.quoteId),
             procurementPerson: job.procurementPerson,
             allocatedBy: job.allocatedBy,
             allocatedAt: job.allocatedAt,
@@ -383,21 +384,17 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
             });
         }
 
-        let currency;
+        let currencyStamp: any = {};
         if (job && job.quoteId) {
             const quotation = await Quotation.findById(job.quoteId);
-            if (quotation && quotation.currency) {
-                currency = quotation.currency;
-            }
+            currencyStamp = dealCurrencyStampFrom(quotation);
         }
 
         const requestData: any = {...req.body, createdBy: employee._id};
         // The first save of an allocated job starts the work; status is never picked by hand.
         if (isDraft) requestData.status = PurchaseRequestStatus.InProgress;
 
-        if (currency) {
-            requestData.currency = currency;
-        }
+        Object.assign(requestData, currencyStamp);
 
         if (job && !requestData.procurementPerson && job.procurementPerson) {
             requestData.procurementPerson = job.procurementPerson;
@@ -2257,11 +2254,11 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
                                         baseLpoValue: {
                                             $sum: {
                                                 $cond: [
-                                                    { $eq: ['$jobId.quoteId.currency', 'USD'] },
+                                                    { $eq: [{ $ifNull: ['$jobId.quoteId.dealData.currency', '$jobId.quoteId.currency'] }, 'USD'] },
                                                     {
                                                         $multiply: [
                                                             calculateDiscountPricePipe('$jobId.quoteId.dealData.updatedItems', '$jobId.quoteId.dealData.totalDiscount'),
-                                                            qatarUsdRate
+                                                            { $ifNull: [{ $ifNull: ['$jobId.quoteId.dealData.exchangeRate', '$jobId.quoteId.exchangeRate'] }, qatarUsdRate] }
                                                         ]
                                                     },
                                                     calculateDiscountPricePipe('$jobId.quoteId.dealData.updatedItems', '$jobId.quoteId.dealData.totalDiscount')
@@ -3130,13 +3127,11 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
             });
         }
 
-        if (!updateData.currency && !existingPurchaseRequest.currency) {
+        if (!updateData.currency && !existingPurchaseRequest.currency) {  // legacy PR: copy once from the quote
             const job = await jobModel.findById(existingPurchaseRequest.jobId);
             if (job && job.quoteId) {
                 const quotation = await Quotation.findById(job.quoteId);
-                if (quotation && quotation.currency) {
-                    updateData.currency = quotation.currency;
-                }
+                Object.assign(updateData, dealCurrencyStampFrom(quotation));
             }
         }
 

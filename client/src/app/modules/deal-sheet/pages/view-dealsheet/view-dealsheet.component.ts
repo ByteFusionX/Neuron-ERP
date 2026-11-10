@@ -498,7 +498,8 @@ export class ViewDealsheetComponent implements OnInit {
     if (!this.data?.quoteData) return;
     const q = this.data.quoteData;
     const d = q.dealData;
-    const currency = q.currency ? ` ${q.currency}` : '';
+    const dealCur = (q as any).dealData?.currency || q.currency;
+    const currency = dealCur ? ` ${dealCur}` : '';
     this.breadcrumbs = [
       { label: 'Home', link: ['/home'] },
       { label: 'Deal Sheets', link: [this.returnPath] },

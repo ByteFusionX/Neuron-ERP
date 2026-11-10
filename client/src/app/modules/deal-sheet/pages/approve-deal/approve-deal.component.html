@@ -107,16 +107,16 @@
                             <div class="px-2 py-3">QTY</div>
                         </th>
                         <th scope="col" class="border   text-center">
-                            <div class="px-6 py-3">Unit Cost ({{ data.quoteData.currency }})</div>
+                            <div class="px-6 py-3">Unit Cost ({{ (data.quoteData.dealData?.currency || data.quoteData.currency) }})</div>
                         </th>
                         <th scope="col" class="border   text-center">
-                            <div class="px-6 py-3">Total Cost ({{ data.quoteData.currency }})</div>
+                            <div class="px-6 py-3">Total Cost ({{ (data.quoteData.dealData?.currency || data.quoteData.currency) }})</div>
                         </th>
                         <th scope="col" class="border   text-center">
-                            <div class="px-6 py-3">Unit Selling Price ({{ data.quoteData.currency }})</div>
+                            <div class="px-6 py-3">Unit Selling Price ({{ (data.quoteData.dealData?.currency || data.quoteData.currency) }})</div>
                         </th>
                         <th scope="col" class="border   text-center">
-                            <div class="px-6 py-3">Total Selling Price ({{ data.quoteData.currency }})</div>
+                            <div class="px-6 py-3">Total Selling Price ({{ (data.quoteData.dealData?.currency || data.quoteData.currency) }})</div>
                         </th>
 
                         <th scope="col" class="border   text-center min-w-[90px]">
@@ -225,15 +225,15 @@
                 <dl class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 px-4">
                     <div class="flex flex-col justify-center py-3 pr-4">
                         <dt class="font-medium text-gray-700">Total Selling Price</dt>
-                        <dd class="text-xl">{{ data.priceDetails.totalSellingPrice | numberFormatter }} {{ data.quoteData.currency }}</dd>
+                        <dd class="text-xl">{{ data.priceDetails.totalSellingPrice | numberFormatter }} {{ (data.quoteData.dealData?.currency || data.quoteData.currency) }}</dd>
                     </div>
                     <div class="flex flex-col justify-center py-3 px-4">
                         <dt class="font-medium text-gray-700">Total Cost</dt>
-                        <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryTotalCost : data.priceDetails.totalCost) | numberFormatter }} {{ data.quoteData.currency }}</dd>
+                        <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryTotalCost : data.priceDetails.totalCost) | numberFormatter }} {{ (data.quoteData.dealData?.currency || data.quoteData.currency) }}</dd>
                     </div>
                     <div class="flex flex-col justify-center py-3 px-4">
                         <dt class="font-medium text-gray-700">Profit</dt>
-                        <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryProfit : data.priceDetails.profit) | numberFormatter }} {{ data.quoteData.currency }}</dd>
+                        <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryProfit : data.priceDetails.profit) | numberFormatter }} {{ (data.quoteData.dealData?.currency || data.quoteData.currency) }}</dd>
                     </div>
                     <div class="flex flex-col justify-center py-3 pl-4">
                         <dt class="font-medium text-gray-700">Profit %</dt>

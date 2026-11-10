@@ -40,6 +40,7 @@ import { allocateStatus, filterJob, getJob, JobStatus, JobTable } from 'src/app/
 import { JobWorkflowTimeline, TimelineEvent } from 'src/app/shared/interfaces/job-history.interface';
 import { environment } from 'src/environments/environment';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 const ALLOCATE_STATUS_LABELS: Record<string, string> = {
   [allocateStatus.Pending]: 'Pending',
   [allocateStatus.OpenToWork]: 'Open To Work',
@@ -653,7 +654,7 @@ export class JobListComponent {
         { type: 'field', label: 'Created By', value: this.fullName(pi.createdBy) || '—' },
         { type: 'field', label: 'Payment Term', value: pi.paymentTerms || '—' },
         { type: 'field', label: 'Expected Date', value: this.datePipe.transform(pi.expectedDate, 'dd MMM yyyy') || '—' },
-        { type: 'field', label: 'Expected Amount', value: `${this.numberFormat.transform(pi.expectedAmount ?? 0)} ${pi.currency || 'QAR'}`, numeric: true },
+        { type: 'field', label: 'Expected Amount', value: `${this.numberFormat.transform(pi.expectedAmount ?? 0)} ${pi.currency || DEFAULT_CURRENCY}`, numeric: true },
         { type: 'field', label: 'Status', value: pi.status, pill: true, tone: this.piStatusTone(pi.status) },
       ],
     }));

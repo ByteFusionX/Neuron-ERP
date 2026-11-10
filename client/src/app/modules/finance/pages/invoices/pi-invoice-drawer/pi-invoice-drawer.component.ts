@@ -9,6 +9,7 @@ import { InvoiceItemEntryComponent, InvoiceLine } from '../../vendor-bills/invoi
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
 import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
 
+import { DEFAULT_CURRENCY } from '../../../../../shared/constants/currency';
 /**
  * Raises the invoice for a proforma whose payment is received, in the same drawer layout as Create PI.
  * Everything comes from the PI; the received date and method start from what was entered when it moved to Received.
@@ -61,7 +62,7 @@ export class PiInvoiceDrawerComponent implements OnChanges {
   goToStep(n: number): void { if (n === 2) this.next(); else this.step = 1; }
 
   get f() { return this.form.controls; }
-  get currency(): string { return this.pi?.currency || 'QAR'; }
+  get currency(): string { return this.pi?.currency || DEFAULT_CURRENCY; }
   get discount(): number { return this.pi?.summary?.customerDiscount || 0; }
   get net(): number { return Math.max(0, (this.pi?.amount || 0) - this.discount); }
 

@@ -30,7 +30,8 @@
         <!-- Step 1 — items -->
         <div [hidden]="step !== 1">
             <app-item-entry #itemEntry [paletteTargetLabel]="open ? 'Estimation' : null" [externalAddButtons]="true" [optionalItems]="optionalItems"
-                [seedOptionalItems]="seedOptionalItems" [suggestionScopeIds]="[]" [currency]="form.controls.currency.value || 'QAR'"
+                [seedOptionalItems]="seedOptionalItems" [suggestionScopeIds]="[]" [currency]="form.controls.currency.value || defaultCurrency" [currencyChoices]="currencyCodes"
+                (currencyChange)="form.controls.currency.setValue($event); form.controls.currency.markAsDirty()"
                 (totals)="onItemTotals($event)" (createProductRequested)="openCreateProduct($event)" [allowEditProduct]="true" (editProductRequested)="openEditProduct($event)"></app-item-entry>
         </div>
 

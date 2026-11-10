@@ -102,7 +102,6 @@ export class AllocateTypeModalComponent implements OnInit {
         this.buyerOptions = (res?.data ?? []).map((e: any) => ({
           value: e._id,
           label: `${e.firstName} ${e.lastName}`,
-          description: [e.employeeId, e.category?.categoryName].filter(Boolean).join(' · '),
         }));
       },
       error: (error) => console.error('Error loading buyers:', error),

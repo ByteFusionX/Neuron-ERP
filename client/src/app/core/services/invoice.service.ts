@@ -7,6 +7,7 @@ import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
 
+import { DEFAULT_CURRENCY } from '../../shared/constants/currency';
 // Methods below flagged with context() are called only from components that already
 // show their own error toast on failure, so requests opt out of the interceptor's global toast.
 const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
@@ -86,7 +87,7 @@ export class InvoiceService {
             ]);
         });
 
-        const currency = invoice.currency || 'QAR';
+        const currency = invoice.currency || DEFAULT_CURRENCY;
         
         tableBody.push([
             { text: `Total (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '',

@@ -59,6 +59,8 @@ interface PurchaseOrder extends Document {
     updatedAt: Date;
     createdBy: any;
     currency?: string;
+    exchangeRate?: number;
+    exchangeRateAt?: Date;
     originalPoId?: any;
     stockHoldId?: any;
     placedAt?: Date;
@@ -281,6 +283,8 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         currency: {
             type: String
         },
+        exchangeRate: { type: Number },
+        exchangeRateAt: { type: Date },
         originalPoId: {
             type: Schema.Types.ObjectId,
             ref: "PurchaseOrder",

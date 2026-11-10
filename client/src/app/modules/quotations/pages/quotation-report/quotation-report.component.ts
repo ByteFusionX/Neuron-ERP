@@ -72,6 +72,7 @@ type ReportSection = 'overview' | 'breakdown' | 'attention';
  * lets the toggle keep them: both routes read the same query params.
  */
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 @Component({
   selector: 'app-quotation-report',
   templateUrl: './quotation-report.component.html',
@@ -360,7 +361,7 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
     const dark = this.isDark;
     const axis = dark ? '#8f8f8f' : '#6b7280';
     const gridColor = dark ? '#262626' : '#f3f4f6';
-    const currency = this.report?.currency || 'QAR';
+    const currency = this.report?.currency || DEFAULT_CURRENCY;
 
     this.pipelineChart = {
       series: [{ name: 'Quotations', data: funnel.map((s) => s.count) }],
@@ -404,7 +405,7 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
 
     const dark = this.isDark;
     const text = dark ? '#d4d4d4' : '#374151';
-    const currency = this.report?.currency || 'QAR';
+    const currency = this.report?.currency || DEFAULT_CURRENCY;
 
     this.statusChart = {
       series: rows.map((r) => r.count),
@@ -486,7 +487,7 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
         theme: dark ? 'dark' : 'light',
         shared: true,
         intersect: false,
-        y: { formatter: (v: number) => (byValue ? `${this.numberFormat.transform(v)} ${this.report?.currency || 'QAR'}` : `${v}`) },
+        y: { formatter: (v: number) => (byValue ? `${this.numberFormat.transform(v)} ${this.report?.currency || DEFAULT_CURRENCY}` : `${v}`) },
       },
     };
   }

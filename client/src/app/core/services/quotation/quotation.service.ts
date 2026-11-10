@@ -92,6 +92,11 @@ export class QuotationService {
     return this.http.post<getDealSheet>(`${this.api}/quotation/deal/approved/get`, filterData)
   }
 
+  /** Live QAR-per-USD rate. */
+  getExchangeRate(): Observable<{ rate: number }> {
+    return this.http.get<{ rate: number }>(`${this.api}/quotation/exchange-rate`)
+  }
+
   getNextQuoteId(quoteData: nextQuoteData): Observable<{ quoteId: string }> {
     return this.http.post<{ quoteId: string }>(`${this.api}/quotation/nextQuoteId`, quoteData)
   }
@@ -221,7 +226,7 @@ export class QuotationService {
     });
   }
 
-  async generatePDF(quoteData: getQuotatation, includeStamp?: boolean, template?: QuotationTemplateSettings) {
+  async generatePDF(quoteData: getQuotatation, includeStamp?: boolean, template?: QuotationTemplateSettings, technical = false) {
     if (!template) {
       try {
         template = (await firstValueFrom(this.systemSettings.getDocuments())).data.quotation;
@@ -239,6 +244,17 @@ export class QuotationService {
       showNotes: template?.showNotes !== false,
       includeStampByDefault: template?.includeStampByDefault !== false,
     };
+    // The quote's contact can be missing (never set, or removed from the customer later). Fall back to the
+    // customer's primary contact, then to blanks, so the PDF still builds.
+    const contacts: any[] = (quoteData.client as any)?.contactDetails || [];
+    const fallbackContact: any = contacts.find((c) => c?.isPrimary) || contacts[0] || {};
+    const hasAttention = !!(quoteData.attention as any)?.firstName;
+    quoteData = {
+      ...quoteData,
+      attention: hasAttention ? quoteData.attention : ({ ...fallbackContact, courtesyTitle: fallbackContact.courtesyTitle || '', firstName: fallbackContact.firstName || '', lastName: fallbackContact.lastName || '' } as any),
+      createdBy: (quoteData.createdBy || { firstName: '', lastName: '' }) as any,
+    };
+    const attentionName = [quoteData.attention?.courtesyTitle, quoteData.attention?.firstName, quoteData.attention?.lastName].filter(Boolean).join(' ') || '-';
     const shouldIncludeStamp = includeStamp ?? templateSettings.includeStampByDefault;
     const wrapPdfText = (value: unknown): string =>
       String(value ?? '').replace(/([\/@._-])/g, '$1\u200B');
@@ -289,8 +305,10 @@ export class QuotationService {
         { text: 'Part Number/Description', style: 'tableHeader' },
         { text: 'Qty', style: 'tableHeader' },
         { text: 'Unit', style: 'tableHeader' },
-        { text: `Unit Price (${quoteData.currency})`, style: 'tableHeader' },
-        { text: `Total Cost (${quoteData.currency})`, style: 'tableHeader' },
+        ...(technical ? [] : [
+          { text: `Unit Price (${quoteData.currency})`, style: 'tableHeader' },
+          { text: `Total Cost (${quoteData.currency})`, style: 'tableHeader' },
+        ]),
         { text: `Availability`, style: 'tableHeader' },
       ];
 
@@ -308,10 +326,10 @@ export class QuotationService {
         tableBody.push([
           {
             text: item.itemName + (isExcludedOptional ? '  (Optional)' : ''),
-            colSpan: 7,
+            colSpan: technical ? 5 : 7,
             style: 'itemRow'
           },
-          '', '', '', '', '', ''
+          ...(technical ? ['', '', '', ''] : ['', '', '', '', '', '']),
         ]);
 
         for (const detail of item.itemDetails) {
@@ -364,8 +382,10 @@ export class QuotationService {
             },
             { text: detail.quantity, style: 'tableText', alignment: 'center' },
             { text: detail.uom || 'Ea', style: 'tableText', alignment: 'center' },
-            { text: this.formatNumber(unitPrice), style: 'tableText', alignment: 'center' },
-            { text: this.formatNumber(totalPrice), style: 'tableText', alignment: 'center' },
+            ...(technical ? [] : [
+              { text: this.formatNumber(unitPrice), style: 'tableText', alignment: 'center' },
+              { text: this.formatNumber(totalPrice), style: 'tableText', alignment: 'center' },
+            ]),
             { text: detail.availability, style: 'tableText', alignment: 'center' },
           ]);
         }
@@ -400,7 +420,9 @@ export class QuotationService {
       }
 
       let body;
-      if (optionalItems.length > 1) {
+      if (technical) {
+        body = [itemTableHeader, ...tableBody];
+      } else if (optionalItems.length > 1) {
         if (items.totalDiscount != 0) {
           body = [
             itemTableHeader,
@@ -439,11 +461,11 @@ export class QuotationService {
         {
           table: {
             headerRows: 1,
-            widths: [20, 175, 25, 40, 60, 60, 60],
+            widths: technical ? [20, 270, 40, 50, 60] : [20, 175, 25, 40, 60, 60, 60],
             body: body
           }
         },
-        ...(hasExcludedOptionalItems ? [{
+        ...(hasExcludedOptionalItems && !technical ? [{
           text: 'Note: Items marked (Optional) above are not included in the Total Amount.',
           style: 'optionalNote'
         }] : [])
@@ -510,7 +532,7 @@ export class QuotationService {
                 style: 'mainHead',
                 "border": [false, false, false, false],
                 "fillColor": templateSettings.primaryColor,
-                "text": templateSettings.title,
+                "text": technical ? 'TECHNICAL SPECIFICATION' : templateSettings.title,
                 "alignment": "center",
                 "margin": [0, 3, 0, 3]
               }]
@@ -526,7 +548,7 @@ export class QuotationService {
             widths: [63, 109, 35, 100, 61, 72],
             body: [
               [{ style: 'tableHead', text: 'Company:', alignment: 'left' }, { style: 'tableHead', text: wrapPdfText(quoteData.client.companyName), alignment: 'left', colSpan: 4 }, {}, {}, {}, pagesCell],
-              [{ style: 'tableHead', text: 'Attention:', alignment: 'left' }, { style: 'tableHead', text: `${quoteData.attention.courtesyTitle + ' ' + quoteData.attention.firstName + ' ' + quoteData.attention.lastName}`, alignment: 'left', colSpan: 3, bold: true }, {}, {}, { style: 'tableHead', text: 'Date:', alignment: 'left' }, { style: 'tableHead', text: quoteData.date ? new Date(quoteData.date).toLocaleDateString('en-GB') : '', alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Attention:', alignment: 'left' }, { style: 'tableHead', text: attentionName, alignment: 'left', colSpan: 3, bold: true }, {}, {}, { style: 'tableHead', text: 'Date:', alignment: 'left' }, { style: 'tableHead', text: quoteData.date ? new Date(quoteData.date).toLocaleDateString('en-GB') : '', alignment: 'left' }],
               [{ rowSpan: 2, style: 'vCentertableHead', text: 'Address:', alignment: 'left' }, { rowSpan: 2, style: 'vCentertableHead', text: wrapPdfText(quoteData.client.companyAddress), alignment: 'left', colSpan: 3 }, {}, {}, { style: 'stableHead', text: 'Client Ref:', alignment: 'left' }, { style: 'stableHead', text: wrapPdfText(quoteData.client.clientRef || '-'), alignment: 'left' }],
               ['', '', '', '', { style: 'stableHead', text: 'Valid Until:', alignment: 'left' }, { style: 'stableHead', text: (quoteData.closingDate || quoteData.validityDate) ? new Date((quoteData.closingDate || quoteData.validityDate) as string).toLocaleDateString('en-GB') : '', alignment: 'left' }],
               [{ style: 'tableHead', text: 'Client Tel:', alignment: 'left' }, { style: 'tableHead', text: quoteData.attention.phoneNo ? `+974 ${quoteData.attention.phoneNo}` : '-', alignment: 'left' }, { style: 'tableHead', text: 'Email:', alignment: 'center' }, { style: 'stableHead', text: wrapPdfText(quoteData.attention.email || '-'), alignment: 'left' }, { style: 'tableHead', text: 'Salesperson:', alignment: 'left' }, { style: 'tableHead', text: wrapPdfText(`${quoteData.createdBy.firstName + ' ' + quoteData.createdBy.lastName}`), alignment: 'left' }],
@@ -542,7 +564,7 @@ export class QuotationService {
           ]
           : []),
         ...tables,
-        ...(templateSettings.showTerms ? [
+        ...(templateSettings.showTerms && !technical ? [
           { text: 'TERMS & CONDITIONS', style: 'subHeading' },
           { text: quoteData.termsAndCondition, style: 'text' },
         ] : []),

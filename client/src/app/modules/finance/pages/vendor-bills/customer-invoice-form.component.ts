@@ -7,6 +7,7 @@ import { CustomerInvoiceService } from 'src/app/core/services/customer-invoice.s
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { InvoiceItemEntryComponent, InvoiceLine } from './invoice-item-entry.component';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 @Component({
   selector: 'app-customer-invoice-form', standalone: true,
   imports: [CommonModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, InvoiceItemEntryComponent],
@@ -42,7 +43,7 @@ export class CustomerInvoiceFormComponent implements OnInit {
   goToStep(n: number): void { if (n === 2) this.next(); else this.step = 1; }
 
   private get source(): any { return this.dn || this.po || {}; }
-  get currency(): string { return this.source.currency || 'QAR'; }
+  get currency(): string { return this.source.currency || DEFAULT_CURRENCY; }
   get lineCount(): number { return (this.source.items || []).length; }
   get sourceLabel(): string { return this.dn ? 'delivery note' : 'purchase order'; }
   get drawerSubtitle(): string {

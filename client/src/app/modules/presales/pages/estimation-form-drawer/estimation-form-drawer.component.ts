@@ -12,6 +12,7 @@ import { toCatalogueSuggestion } from 'src/app/shared/components/item-entry/cata
 import { ProductService } from 'src/app/core/services/product/product.service';
 import { CatalogueSuggestionSource, CreateProductRequest, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryOptionValue, ItemEntryTotals } from 'src/app/shared/components/item-entry';
 
+import { CURRENCY_OPTIONS, DEFAULT_CURRENCY, SUPPORTED_CURRENCIES } from '../../../../shared/constants/currency';
 /**
  * Two-step drawer for uploading/editing a job's presale estimation, mirroring the quotation
  * create/edit wizard: items first, then the totals-affecting fields (currency, discount, note).
@@ -84,10 +85,9 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
   seedOptionalItems: ItemEntryOptionValue[] | null = null;
   itemTotals: ItemEntryTotals = { totalCost: 0, sellingPrice: 0, totalProfit: 0, discount: 0 };
 
-  currencyOptions: SfOption[] = [
-    { label: 'QAR', value: 'QAR' },
-    { label: 'USD', value: 'USD' },
-  ];
+  currencyOptions: SfOption[] = CURRENCY_OPTIONS;
+  readonly defaultCurrency = DEFAULT_CURRENCY;
+  readonly currencyCodes: string[] = [...SUPPORTED_CURRENCIES];
 
   private fb = inject(FormBuilder);
   private catalogue = inject(CatalogueSuggestionSource);
@@ -97,7 +97,7 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
 
 
   form = this.fb.group({
-    currency: ['QAR', Validators.required],
+    currency: [DEFAULT_CURRENCY, Validators.required],
     optionalItems: this.fb.array([] as any[]),
     totalDiscount: ['0', Validators.required],
     presaleNote: ['', Validators.required],
@@ -144,7 +144,7 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
   private seedFromEstimation(estimation: Estimations): void {
     this.resetWizard();
     this.form.patchValue({
-      currency: (estimation as any).currency ?? 'QAR',
+      currency: (estimation as any).currency ?? DEFAULT_CURRENCY,
       totalDiscount: String(estimation.totalDiscount ?? '0'),
       presaleNote: estimation.presaleNote ?? '',
     });
@@ -156,7 +156,7 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
   private resetWizard(): void {
     this.seedOptionalItems = null;
     this.itemEntry ? this.itemEntry.reset() : this.optionalItems.clear();
-    this.form.reset({ currency: 'QAR', totalDiscount: '0', presaleNote: '' });
+    this.form.reset({ currency: DEFAULT_CURRENCY, totalDiscount: '0', presaleNote: '' });
     this.step = 1;
   }
 

@@ -212,6 +212,8 @@ interface PurchaseRequest extends Document {
     allocatedBy?: Types.ObjectId;
     allocatedAt?: Date;
     currency?: String;
+    exchangeRate?: number;
+    exchangeRateAt?: Date;
 }
 
 const purchaseRequestSchema = new Schema<PurchaseRequest>({
@@ -331,7 +333,9 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     },
     currency: {
         type: String
-    }
+    },
+    exchangeRate: { type: Number },
+    exchangeRateAt: { type: Date }
 })
 
 // Keeps the 1-minute approval tick cheap

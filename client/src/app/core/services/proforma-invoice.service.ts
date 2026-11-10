@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 
+import { DEFAULT_CURRENCY } from '../../shared/constants/currency';
 export type ProformaStatus = 'Pending' | 'Sent' | 'Accepted' | 'Received' | 'Rejected' | 'Completed';
 export const PI_STATUS_LIST: ProformaStatus[] = ['Pending', 'Sent', 'Accepted', 'Received', 'Rejected'];
 export const PAYMENT_METHODS = ['PDC', 'Bank Transfer', 'Cash', 'Open Credit', 'Other'] as const;
@@ -113,7 +114,7 @@ export function proformaToInvoice(pi: ProformaInvoice): any {
     dnNumbers: '',
     lpoRef: pi.lpoNo,
     subject: pi.subject,
-    currency: pi.currency || 'QAR',
+    currency: pi.currency || DEFAULT_CURRENCY,
     quoteCompany: pi.quoteCompany || '',
     isPreview: true,
   };

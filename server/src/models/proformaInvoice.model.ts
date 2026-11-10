@@ -1,5 +1,6 @@
 import { Schema, model } from 'mongoose';
 
+import { DEFAULT_CURRENCY } from '../common/currency';
 export const PAYMENT_METHODS = ['PDF', 'PDC', 'Bank Transfer', 'Cash', 'Open Credit', 'Other'] as const;
 
 export const PI_STATUSES = ['Pending', 'Sent', 'Accepted', 'Received', 'Rejected', 'Completed'] as const;
@@ -20,7 +21,7 @@ const proformaInvoiceSchema = new Schema({
     shipTo: { type: String, default: '' },
     lpoNo: { type: String, default: '' },
     subject: { type: String, default: '' },
-    currency: { type: String, default: 'QAR' },
+    currency: { type: String, default: DEFAULT_CURRENCY },
     // Which letterhead the PDF prints on (the security company has its own header).
     quoteCompany: { type: String, default: '' },
     items: [{

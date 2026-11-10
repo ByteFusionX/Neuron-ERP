@@ -322,6 +322,10 @@ export const quoteStatusLabel = (status: QuoteStatus | string): string => ({
 export interface dealData {
     dealId: string;
     paymentTerms: string;
+    /** The deal's own currency and the rate (QAR per 1 USD) saved with it; the quote keeps its own. */
+    currency?: string;
+    exchangeRate?: number;
+    exchangeRateAt?: string | Date;
     updatedItems: QuoteItem[];
     totalDiscount: number;
     additionalCosts: {

@@ -1,5 +1,5 @@
 <app-sf-drawer [title]="title"
-    [subtitle]="q ? ((q.quoteId || '') + ' · ' + (q.client.companyName || '') + ' · ' + q.currency) : ''"
+    [subtitle]="q ? ((q.quoteId || '') + ' · ' + (q.client.companyName || '') + ' · ' + dealCurrency) : ''"
     [width]="fullView ? '100vw' : (step === 2 ? 'min(720px, 96vw)' : 'min(1400px, 96vw)')" [open]="open" [dirty]="dirty" (closed)="onDrawerClosed()">
 
     <button sfDrawerHeader type="button"
@@ -82,7 +82,7 @@
                             <app-sf-number formControlName="value" [stepper]="false" [min]="0"
                                 [class.sm:col-span-2]="c.get('type')?.value === 'Customer Discount'"
                                 [placeholder]="c.get('type')?.value === 'Additional Cost' ? 'Cost amount' : 'Discount amount'"
-                                [suffix]="q?.currency || ''"></app-sf-number>
+                                [suffix]="dealCurrency"></app-sf-number>
                         </div>
                     </div>
 
@@ -116,7 +116,8 @@
         <!-- Step 1 owns the editable line table. Step 2 renders the same totals above the drawer footer. -->
         <div *ngIf="step === 1">
             <app-item-entry mode="deal" [dealDescriptionTextarea]="true" [optionalItems]="$any(f.get('optionalItems'))" [seedOptionalItems]="seed"
-                [currency]="q?.currency || 'QAR'" [supplierOptions]="supplierOptions"
+                [currency]="dealCurrency" [currencyChoices]="currencyCodes" [currencyRate]="dealRate"
+                (currencyChange)="dealCurrency = $event" (currencyConverted)="onCurrencyConverted($event)" [supplierOptions]="supplierOptions"
                 [itemsHidden]="false" [dealAllowAdd]="true" [costAdjustment]="costAdjustment" [discountAdjustment]="discountAdjustment"
                 [allowOptionalItems]="false" [allowCreateProduct]="false" [lineExtraTemplate]="partsTpl" (optionChanged)="onOptionChanged($event)"></app-item-entry>
         </div>
@@ -187,7 +188,7 @@
 
     <div *ngIf="step === 2 && form" sfDrawerBottom class="bg-gray-50 px-6 py-3 dark:bg-erp-surface-dark-alt">
         <app-item-entry mode="deal" [dealDescriptionTextarea]="true" [optionalItems]="$any(form.get('optionalItems'))" [seedOptionalItems]="seed"
-            [currency]="q?.currency || 'QAR'" [supplierOptions]="supplierOptions"
+            [currency]="dealCurrency" [supplierOptions]="supplierOptions"
             [itemsHidden]="true" [costAdjustment]="costAdjustment" [discountAdjustment]="discountAdjustment"
             [allowOptionalItems]="false" [allowCreateProduct]="false" (optionChanged)="onOptionChanged($event)"></app-item-entry>
     </div>

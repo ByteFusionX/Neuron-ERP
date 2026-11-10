@@ -157,7 +157,7 @@ const getRevenueAchieved = async (access: string, userId: string, filters: Filte
                                 $sum: [
                                     {
                                         $cond: [
-                                            { $eq: ['$quotation.currency', 'USD'] },
+                                            { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
                                             {
                                                 $round: [ // Round USD conversion
                                                     {
@@ -201,7 +201,7 @@ const getRevenueAchieved = async (access: string, userId: string, filters: Filte
                                 $sum: [
                                     {
                                         $cond: [
-                                            { $eq: ['$quotation.currency', 'USD'] },
+                                            { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
                                             {
                                                 $round: [ // Round USD conversion
                                                     {
@@ -357,7 +357,7 @@ const getInvoicedData = async (access: string, userId: string, filters: Filters)
                                 $subtract: [
                                     { 
                                         $cond: [
-                                            { $eq: ['$quotation.currency', 'USD'] },
+                                            { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
                                             {
                                                 $multiply: [
                                                     calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
@@ -369,7 +369,7 @@ const getInvoicedData = async (access: string, userId: string, filters: Filters)
                                     },
                                     { 
                                         $cond: [
-                                            { $eq: ['$quotation.currency', 'USD'] },
+                                            { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
                                             {
                                                 $multiply: [
                                                     calculateCostPricePipe('$quotation.dealData.updatedItems'),
@@ -767,7 +767,7 @@ const getAssignedJobs = async (access: string, userId: string, filters: Filters)
                     totalSellingPrice: {
                         $sum: {
                             $cond: [
-                                { $eq: ['$quotation.currency', 'USD'] },
+                                { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
                                 {
                                     $multiply: [
                                         calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
@@ -897,7 +897,7 @@ export const getRevenuePerSalesperson = async (req: Request, res: Response, next
                                 $add: [
                                     {
                                         $cond: [
-                                            { $eq: ['$quotation.currency', 'USD'] },
+                                            { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
                                             {
                                                 $round: [
                                                     { $multiply: [calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'), qatarUsdRates] },
@@ -1037,7 +1037,7 @@ export const getGrossProfitForLastSevenMonths = async (req: Request, res: Respon
                             totalSellingPrice: {
                                 $sum: {
                                     $cond: [
-                                        { $eq: ['$quotation.currency', 'USD'] },
+                                        { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
                                         {
                                             $multiply: [
                                                 calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
@@ -1051,7 +1051,7 @@ export const getGrossProfitForLastSevenMonths = async (req: Request, res: Respon
                             totalCostPrice: {
                                 $sum: {
                                     $cond: [
-                                        { $eq: ['$quotation.currency', 'USD'] },
+                                        { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
                                         {
                                             $multiply: [
                                                 calculateCostPricePipe('$quotation.dealData.updatedItems'),

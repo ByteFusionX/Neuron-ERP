@@ -152,8 +152,8 @@ export const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number, jobO
                         baseLpoValue: {
                             $sum: {
                                 $cond: [
-                                    { $eq: ['$quotation.currency', 'USD'] },
-                                    { $multiply: [calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'), qatarUsdRate] },
+                                    { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
+                                    { $multiply: [calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'), { $ifNull: [{ $ifNull: ['$quotation.dealData.exchangeRate', '$quotation.exchangeRate'] }, qatarUsdRate] }] },
                                     calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
                                 ],
                             },
@@ -884,11 +884,11 @@ export const oneJobSheet = async (req: Request, res: Response, next: NextFunctio
                                 baseLpoValue: {
                                     $sum: {
                                         $cond: [
-                                            { $eq: ['$quotation.currency', 'USD'] },
+                                            { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
                                             {
                                                 $multiply: [
                                                     calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
-                                                    qatarUsdRate
+                                                    { $ifNull: [{ $ifNull: ['$quotation.dealData.exchangeRate', '$quotation.exchangeRate'] }, qatarUsdRate] }
                                                 ]
                                             },
                                             calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount')

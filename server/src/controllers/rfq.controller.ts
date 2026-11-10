@@ -3,6 +3,7 @@ import Rfq, { RfqLineStatus, RfqStatus, RfqType } from "../models/rfq.model";
 import Job from "../models/job.model";
 import Quotation from "../models/quotation.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
+import { DEFAULT_CURRENCY } from '../common/currency';
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
 
@@ -121,7 +122,7 @@ const buildComparison = (rfq: any, label: string) => {
             const quantity = Number(quote.quantity) || Number(line.quantity) || 1;
             const total = Number(quote.landedCost) || Number(quote.netAmount) || Number(quote.totalCost) || 0;
             const unitLanded = total ? total / quantity : Number(quote.unitPrice) || 0;
-            const currency = quote.currency || "QAR";
+            const currency = quote.currency || DEFAULT_CURRENCY;
             column.lineCount++;
             if (quote.selected) column.wonCount++;
             return {

@@ -38,6 +38,7 @@ import { QuickAddDialogComponent, QuickAddDialogData } from 'src/app/modules/pro
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { ImageViewerComponent } from 'src/app/shared/components/image-viewer/image-viewer.component';
 
+import { DEFAULT_CURRENCY, currencyFactor } from '../../constants/currency';
 type LineFilter = 'missingPrice' | 'notInCatalogue' | 'notAwarded' | 'errors';
 
 /**
@@ -132,7 +133,63 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   @Input({ required: true }) optionalItems!: FormArray;
   /** Existing options to patch in (enquiry estimations, or an edited record). */
   @Input() seedOptionalItems: ItemEntryOptionValue[] | null = null;
-  @Input() currency = 'QAR';
+  @Input() currency = DEFAULT_CURRENCY;
+  /** Currencies offered in the toolbar picker; empty hides it. The host owns the value and applies `currencyChange`. */
+  @Input() currencyChoices: string[] = [];
+  @Output() currencyChange = new EventEmitter<string>();
+  /** QAR per USD saved on the document; empty means "use the live rate" (new documents, old records). */
+  @Input() currencyRate: number | null = null;
+  /** Fired after a switch converted the amounts, with the rate used, so the host can keep it. */
+  @Output() currencyConverted = new EventEmitter<{ from: string; to: string; rate: number }>();
+
+  /** Toolbar picker: converts every amount on the document at the saved rate, then tells the host. */
+  pickCurrency(next: string): void {
+    const prev = this.currency;
+    if (!next || next === prev) return;
+    const saved = Number(this.currencyRate);
+    const run = (rate: number) => {
+      const factor = ItemEntryComponent.conversionFactor(prev, next, rate);
+      if (factor) this.convertAmounts(factor);
+      this.currencyConverted.emit({ from: prev, to: next, rate });
+      this.currencyChange.emit(next);
+    };
+    if (saved > 0) return run(saved);
+    this._quotationService.getExchangeRate().subscribe({
+      // Keep it for the rest of this session so switching back converts at the same rate.
+      next: (r) => { this.currencyRate = Number(r.rate); run(Number(r.rate)); },
+      error: () => this.alerts.error?.('Could not get the exchange rate. Currency not changed.'),
+    });
+  }
+
+  /** Multiplier from one currency to another; rates are QAR per USD. Null when a currency is unknown. */
+  private static conversionFactor(from: string, to: string, qarPerUsd: number): number | null {
+    return currencyFactor(from, to, qarPerUsd);
+  }
+
+  private convertAmounts(factor: number): void {
+    const conv = (v: unknown) => (v == null || v === '' || !Number.isFinite(Number(v)) ? v : Number((Number(v) * factor).toFixed(2)));
+    this.deriving = true;
+    try {
+      this.optionalItems.controls.forEach((option) => {
+        const disc = option.get('totalDiscount');
+        if (disc) disc.setValue(conv(disc.value), { emitEvent: false });
+        ((option.get('items') as FormArray)?.controls ?? []).forEach((item) =>
+          ((item.get('itemDetails') as FormArray)?.controls ?? []).forEach((d) => {
+            ['unitCost', 'unitSellingPrice', 'dealUnitCost'].forEach((name) => {
+              const c = d.get(name);
+              if (c) c.setValue(conv(c.value), { emitEvent: false });
+            });
+          }));
+      });
+      this.scopeCosts.forEach((c) => c.setValue(conv(c.value) as number | null, { emitEvent: false }));
+      this.shares.forEach((list) => list.forEach((s) => (s.cost = conv(s.cost) as number)));
+    } finally {
+      this.deriving = false;
+    }
+    this.optionalItems.markAsDirty();
+    this.optionalItems.updateValueAndValidity();
+    this.emitTotals();
+  }
 
   /**
    * 'quote' authors items. 'deal' converts an existing quote: the structure is fixed, every line gets
@@ -1762,6 +1819,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       ...(this.isRfq && d.lineKey ? { lineKey: d.lineKey } : {}),
     }, { emitEvent: false });
     this.deriving = false;
+    this.linkedDesc.set(group, this.plainDesc(group.get('detail')?.value));
+    this.linkedCode.set(group, (group.get('itemCode')?.value || '').toString().trim());
     if (this.isDeal && d.dealAdded) {
       group.get('dealAdded')?.setValue(true, { emitEvent: false });
       group.get('detail')?.addValidators(Validators.required);
@@ -2067,7 +2126,21 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     const detail = this.detailsAt(i, j)?.at(k) as FormGroup | undefined;
     // Editing the description by hand means the line no longer describes the product that was
     // picked, so the link is dropped rather than left pointing at something else.
-    detail?.get('productId')?.setValue(null, { emitEvent: false });
+    // Bold / highlight markers and the Brand / Part No lines don't change what the line describes, so they keep the link.
+    if (!detail || this.plainDesc(detail.get('detail')?.value) !== this.linkedDesc.get(detail)) {
+      if (detail?.get('productId')?.value) {
+        this.codeNotes.set(detail, 'Description changed – unlinked');
+        this.clearHeaderTicks(detail, false);
+      }
+      detail?.get('productId')?.setValue(null, { emitEvent: false });
+    }
+    // Deleting the Brand / Part No line from the description by hand unticks its checkbox.
+    if (detail) {
+      const ticks = this.ticksFor(detail);
+      const head = ((detail.get('detail')?.value || '').toString().match(HEADER_LINES) || [''])[0];
+      if (ticks.brand && !/Brand: /.test(head)) ticks.brand = false;
+      if (ticks.partNo && !/Part No: /.test(head)) ticks.partNo = false;
+    }
     // The Brand / Part No header lines are inserted by the ticks, not typed, so they stay out of the lookup.
     const term = (this.detailsAt(i, j)?.at(k)?.get('detail')?.value || '').toString().replace(HEADER_LINES, '').trim();
     // Not narrowed to the group name: the description is matched against the whole catalogue.
@@ -2083,7 +2156,19 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     const code = (detail?.get(field)?.value || '').toString().trim();
     if (!detail || !this.source || code.length < 2 || detail.get('productId')?.value) return;
     const wanted = code.toLowerCase();
+    // The code of a linked line was edited: never refill the line. Matching products are only offered in the
+    // description dropdown; the warning stays until one is picked.
+    const offerOnly = this.codeNotes.has(detail);
     this.subs.add(this.source.search({ search: code, category: '', scopeIds: this.scopeIds, skip: 0, limit: 10 }).subscribe((rows) => {
+      if (offerOnly) {
+        const key = `${i}-${j}-${k}`;
+        const matches = (rows || []).filter((s) => (s[field] || '').toLowerCase().includes(wanted));
+        matches.sort((a, b) => Number((b[field] || '').toLowerCase() === wanted) - Number((a[field] || '').toLowerCase() === wanted));
+        this.suggestions[key] = matches;
+        this.highlightedIndex = matches.length ? 0 : -1;
+        this.activeSuggestionKey = matches.length ? key : (this.activeSuggestionKey === key ? null : this.activeSuggestionKey);
+        return;
+      }
       const exact = (rows || []).filter((s) => (s[field] || '').toLowerCase() === wanted);
       if (exact.length === 1) { this.applySuggestion(i, j, k, exact[0]); return; }
       if (exact.length > 1) {
@@ -2099,6 +2184,14 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
 
   /** Exact codes link automatically after typing pauses; Enter and blur still run immediately. */
   queueCodeLookup(i: number, j: number, k: number, field: 'itemCode' | 'partNo'): void {
+    const line = this.detailsAt(i, j)?.at(k) as FormGroup | undefined;
+    if (line && field === 'itemCode' && line.get('productId')?.value
+      && (line.get('itemCode')?.value || '').toString().trim() !== this.linkedCode.get(line)) {
+      // A linked line whose code was edited no longer matches its product: drop the link, then look the new code up.
+      line.get('productId')?.setValue(null, { emitEvent: false });
+      this.codeNotes.set(line, 'Code changed – unlinked');
+      this.clearHeaderTicks(line, true);
+    }
     const key = `${i}-${j}-${k}-${field}`;
     const existing = this.codeLookupTimers.get(key);
     if (existing) clearTimeout(existing);
@@ -2172,9 +2265,12 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       // The product link plus its snapshot identifiers always come from the picked row.
       // The link emits, so a parent watching the lines (e.g. last supplier prices) sees the product change.
       detail.get('productId')?.setValue(s._id);
-      if (s.brand) { this.brands.set(detail, s.brand); this.noBrand.delete(detail); } else this.noBrand.add(detail);
+      this.brands.set(detail, s.brand || '');
+      this.linkedDesc.set(detail, this.plainDesc(s.description));
       this.fillIfEmpty(detail, 'itemCode', s.itemCode);
       this.fillIfEmpty(detail, 'partNo', s.partNo);
+      this.linkedCode.set(detail, (detail.get('itemCode')?.value || '').toString().trim());
+      this.codeNotes.delete(detail);
       this.keepUnit(s.uom);
       this.fillIfEmpty(detail, 'uom', s.uom);
       // An RFQ line is priced by the supplier, so catalogue costs and vendors are not copied onto it;
@@ -2195,35 +2291,61 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   }
 
   private brands = new WeakMap<AbstractControl, string>();
-  private noBrand = new WeakSet<AbstractControl>();
+  /** Item code the line was linked with; a different code means it no longer matches the product. */
+  private linkedCode = new WeakMap<AbstractControl, string>();
+  private codeNotes = new WeakMap<AbstractControl, string>();
+  /** Short hint shown under the item code when an edit unlinked the line from the catalogue. */
+  codeNote(detail: AbstractControl): string {
+    return detail.get('productId')?.value ? '' : (this.codeNotes.get(detail) || '');
+  }
+  /** Description of the linked product with header lines, markers and spacing stripped; typing that changes it unlinks the line. */
+  private linkedDesc = new WeakMap<AbstractControl, string>();
+  private plainDesc(v: unknown): string {
+    return (v ?? '').toString().replace(HEADER_LINES, '').replace(/\*\*|[{}]/g, '').replace(/\s+/g, ' ').trim();
+  }
   private headerTicks = new WeakMap<AbstractControl, { brand: boolean; partNo: boolean }>();
 
-  /** Brand can be ticked only on a catalogue-linked line whose product has a brand. */
-  brandDisabled(i: number, j: number, k: number): boolean {
+  /** Brand / Part no can be ticked only on a catalogue-linked line (a ticked one can always be unticked). A product without a brand gets a blank Brand line. */
+  headerDisabled(i: number, j: number, k: number, what: 'brand' | 'partNo'): boolean {
     const d = this.detailsAt(i, j)?.at(k);
-    return !d || !d.get('productId')?.value || this.noBrand.has(d);
+    return !d || (!d.get('productId')?.value && !(d.get('itemCode')?.value || '').toString().trim() && !this.ticksFor(d)[what]);
   }
 
   headerTick(i: number, j: number, k: number, what: 'brand' | 'partNo'): boolean {
     const d = this.detailsAt(i, j)?.at(k);
-    return !!d && !!this.headerTicks.get(d)?.[what];
+    return !!d && !!this.ticksFor(d)[what];
+  }
+
+  /** Ticks for a line; on first sight (e.g. editing a saved quote) they are read from the Brand / Part No lines already in the description. */
+  private ticksFor(d: AbstractControl): { brand: boolean; partNo: boolean } {
+    let ticks = this.headerTicks.get(d);
+    if (ticks) return ticks;
+    ticks = { brand: false, partNo: false };
+    const head = ((d.get('detail')?.value || '').toString().match(HEADER_LINES) || [''])[0];
+    const brand = head.match(/Brand: ([^\n]*)/);
+    if (brand) {
+      ticks.brand = true;
+      this.brands.set(d, brand[1].replace(/[*{}]/g, '').trim());
+    }
+    if (/Part No: [^\n]*/.test(head)) ticks.partNo = true;
+    this.headerTicks.set(d, ticks);
+    return ticks;
   }
 
   /** Ticks "Brand" / "Part no": the value becomes the first description line. A line without that value (or not in products) is left as it is, no error. */
   toggleHeader(i: number, j: number, k: number, what: 'brand' | 'partNo', on: boolean): void {
     const d = this.detailsAt(i, j)?.at(k) as FormGroup | undefined;
     if (!d) return;
-    const ticks = this.headerTicks.get(d) ?? { brand: false, partNo: false };
+    const ticks = this.ticksFor(d);
     ticks[what] = on;
-    this.headerTicks.set(d, ticks);
-    if (what === 'brand' && on && !this.brands.has(d) && d.get('productId')?.value && this.source) {
-      const id = d.get('productId')!.value;
+    if (what === 'brand' && on && !this.brands.get(d) && this.source) {
+      const id = d.get('productId')?.value;
+      const itemCode = (d.get('itemCode')?.value || '').toString().trim();
       const code = (d.get('partNo')?.value || d.get('itemCode')?.value || '').toString().trim();
       if (code.length >= 2) {
         this.subs.add(this.source.search({ search: code, category: '', scopeIds: this.scopeIds, skip: 0, limit: 10 }).subscribe((rows) => {
-          const hit = (rows || []).find((r) => r._id === id);
-          if (hit?.brand) this.brands.set(d, hit.brand);
-          else { this.noBrand.add(d); ticks.brand = false; }
+          const hit = (rows || []).find((r) => (id ? r._id === id : r.itemCode === itemCode));
+          this.brands.set(d, hit?.brand || '');
           this.applyHeader(d);
         }));
         return;
@@ -2232,13 +2354,22 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     this.applyHeader(d);
   }
 
+  /** An unlinked line can't keep Brand / Part no ticked. `stripText` also removes the two header lines from the description (not done while the user is typing in it). */
+  private clearHeaderTicks(d: FormGroup, stripText: boolean): void {
+    const ticks = this.ticksFor(d);
+    if (!ticks.brand && !ticks.partNo) return;
+    ticks.brand = false;
+    ticks.partNo = false;
+    if (stripText) this.applyHeader(d);
+  }
+
   private applyHeader(d: FormGroup): void {
     const ticks = this.headerTicks.get(d);
     const lines: string[] = [];
     const brand = this.brands.get(d);
     const partNo = (d.get('partNo')?.value || '').toString().trim();
-    if (ticks?.brand && brand) lines.push(`Brand: ${brand}`);
-    if (ticks?.partNo && partNo) lines.push(`Part No: ${partNo}`);
+    if (ticks?.brand) lines.push(`Brand: ${brand || ''}`);
+    if (ticks?.partNo) lines.push(`Part No: ${partNo}`);
     const body = (d.get('detail')?.value || '').toString().replace(HEADER_LINES, '');
     d.get('detail')?.setValue(lines.length ? `${lines.join('\n')}\n${body}` : body);
     d.get('detail')?.markAsDirty();
@@ -3164,6 +3295,21 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       this.jumpTo(String(bad[0].j));
       return;
     }
+  }
+
+  /** Always null: the Jump to dropdown is an action picker, so it resets to its placeholder after each pick. */
+  jumpSel: string | null = null;
+
+  jumpOptions(i: number): SfOption[] {
+    return this.itemsAt(i).controls.map((it, jj) => ({
+      value: String(jj),
+      label: `${jj + 1}. ${it.get('itemName')?.value || 'Untitled item'}${this.isRfq ? '' : ' — ' + Math.round(this.itemTotal(i, jj)).toLocaleString('en-US')}`,
+    }));
+  }
+
+  onJump(value: string | null): void {
+    if (value != null && value !== '') this.jumpTo(value);
+    setTimeout(() => (this.jumpSel = null));
   }
 
   jumpTo(value: string): void {

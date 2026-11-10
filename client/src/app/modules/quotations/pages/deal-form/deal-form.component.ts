@@ -14,6 +14,7 @@ import { SupplierFormDrawerComponent } from 'src/app/modules/suppliers/pages/sup
 import { ModalService } from 'src/app/shared/components/modal';
 import { QuickAddDialogComponent, QuickAddDialogData } from 'src/app/modules/products/modals/quick-add-dialog/quick-add-dialog.component';
 import { DealCost } from 'src/app/shared/utils/deal-pricing.util';
+import { DEFAULT_CURRENCY, SUPPORTED_CURRENCIES, currencyFactor } from 'src/app/shared/constants/currency';
 
 export type CostType = 'Additional Cost' | 'Supplier Discount' | 'Customer Discount';
 
@@ -124,6 +125,23 @@ export class DealFormComponent implements OnInit, OnChanges {
 
   supplierFormOpen = false;
 
+  /** The deal's own currency and the rate (QAR per 1 USD) it converts at. Saved with the deal; the quote keeps its own. */
+  dealCurrency: string = DEFAULT_CURRENCY;
+  dealRate: number | null = null;
+  readonly currencyCodes: string[] = [...SUPPORTED_CURRENCIES];
+
+  /** A switch in the item-entry picker already converted the lines; the deal's other money follows here. */
+  onCurrencyConverted(e: { from: string; to: string; rate: number }): void {
+    this.dealRate = e.rate;
+    const factor = currencyFactor(e.from, e.to, e.rate);
+    if (!factor) return;
+    const conv = (v: unknown) => (v == null || v === '' || !Number.isFinite(Number(v)) ? v : Number((Number(v) * factor).toFixed(4)));
+    this.costs.controls.forEach((c) => { const v = c.get('value'); if (v) v.setValue(conv(v.value), { emitEvent: false }); });
+    Object.values(this.components).forEach((parts) => parts.forEach((p) => (p.unitCost = conv(p.unitCost) as number | null)));
+    this.form.markAsDirty();
+    this.recompute();
+  }
+
   /** Cost breakdown per line, keyed `itemName|detail`. Kept beside the item-entry form: it never changes a line's cost or margin. */
   components: Record<string, DealComponent[]> = {};
   breakdownLines: BreakdownLine[] = [];
@@ -230,12 +248,20 @@ export class DealFormComponent implements OnInit, OnChanges {
     // optional items the customer did not include never reach the deal.
     // Lines of the previous deal submission (a resubmit after rejection), keyed by item name + detail, so the
     // supplier and tick chosen then are carried over.
+    const prevDeal: any = (this.q as any).dealData;
+    const quoteCurrency = this.q!.currency || DEFAULT_CURRENCY;
+    // A deal saved before keeps its currency and rate; a new one starts in the quote's.
+    this.dealCurrency = prevDeal?.currency || quoteCurrency;
+    this.dealRate = Number(prevDeal?.exchangeRate) > 0 ? Number(prevDeal.exchangeRate) : (Number(this.q!.exchangeRate) > 0 ? Number(this.q!.exchangeRate) : null);
+    // The quote's lines are in the quote's currency; bring them into the deal's.
+    const qf = currencyFactor(quoteCurrency, this.dealCurrency, this.dealRate) ?? 1;
+    const toDeal = (v: any) => (v == null || !Number.isFinite(Number(v)) ? v : Number((Number(v) * qf).toFixed(4)));
     const previous = new Map<string, any>();
     ((this.q as any).dealData?.updatedItems ?? []).forEach((it: any) =>
       (it.itemDetails ?? []).forEach((d: any) => previous.set(`${it.itemName}|${d.detail}`, d)));
 
     this.seed = this.update ? this.updateSeed(this.update) : this.q!.optionalItems.map((option) => ({
-      totalDiscount: option.totalDiscount,
+      totalDiscount: toDeal(option.totalDiscount),
       items: option.items
         .filter((item) => !item.isOptional || !!item.includeInTotal)
         .map((item) => ({
@@ -249,9 +275,9 @@ export class DealFormComponent implements OnInit, OnChanges {
             partNo: d.partNo,
             detail: d.detail,
             quantity: d.quantity,
-            unitCost: d.unitCost,
+            unitCost: toDeal(d.unitCost),
             profit: d.profit,
-            unitSellingPrice: d.unitSellingPrice,
+            unitSellingPrice: toDeal(d.unitSellingPrice),
             availability: d.availability,
             // The supplier awarded in the RFQ is kept as the starting point; it can still be changed here.
             supplierId: (prevSupplier || (d as any).supplierId?._id || (d as any).supplierId) || null,
@@ -325,7 +351,7 @@ export class DealFormComponent implements OnInit, OnChanges {
     const quotedItems = new Set((quoted?.items ?? []).map((i) => i.itemName));
     const quotedLines = new Set((quoted?.items ?? []).flatMap((i) => (i.itemDetails ?? []).map((d) => `${i.itemName}|${d.detail}`)));
     return [{
-      totalDiscount: quoted?.totalDiscount,
+      totalDiscount: (data.quoteData as any).dealData?.totalDiscount ?? quoted?.totalDiscount,
       items: (saved.length ? saved : (quoted?.items ?? [])).map((item) => ({
         itemName: item.itemName,
         dealAdded: !!saved.length && !quotedItems.has(item.itemName),
@@ -689,6 +715,8 @@ export class DealFormComponent implements OnInit, OnChanges {
       }),
       ...(this.isUpdate ? { removedFiles: this.removedFiles, existingFiles: this.existingFiles } : {}),
       totalDiscount: option.totalDiscount ?? 0,
+      currency: this.dealCurrency,
+      exchangeRate: this.dealRate,
     }));
     (value.attachments as File[]).forEach((f) => formData.append('attachments', f as Blob));
     return formData;

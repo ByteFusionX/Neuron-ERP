@@ -1,5 +1,6 @@
 import { Schema, Document, model, Types } from "mongoose";
 
+import { DEFAULT_CURRENCY } from '../common/currency';
 export const CUSTOMER_STATUSES = ["Active", "Inactive", "Blacklisted", "On Hold", "Prospect"] as const;
 export type CustomerStatus = typeof CUSTOMER_STATUSES[number];
 
@@ -143,7 +144,7 @@ const customerSchema = new Schema<Customer>({
   creditLimit: { type: Number },
   creditStatus: { type: String, default: "Good Standing", trim: true },
   taxExempt: { type: Boolean, default: false },
-  currency: { type: String, default: "QAR" },
+  currency: { type: String, default: DEFAULT_CURRENCY },
   source: { type: String },
   statusHistory: [{ type: statusHistorySchema }],
   attachments: [{ type: attachmentSchema }],

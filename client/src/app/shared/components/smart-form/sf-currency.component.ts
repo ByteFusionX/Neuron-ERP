@@ -3,6 +3,7 @@ import { NG_VALUE_ACCESSOR } from '@angular/forms';
 import { SfControl } from './sf-control';
 import { SF_STYLES } from './sf.model';
 
+import { DEFAULT_CURRENCY } from '../../constants/currency';
 /** Numeric value, shown with thousand separators when not focused. */
 @Component({
   selector: 'app-sf-currency',
@@ -20,7 +21,7 @@ import { SF_STYLES } from './sf.model';
   styles: [SF_STYLES],
 })
 export class SfCurrencyComponent extends SfControl<number> {
-  @Input() currency = 'QAR';
+  @Input() currency = DEFAULT_CURRENCY;
   @Input() decimals = 2;
   display = '';
   focused = false;

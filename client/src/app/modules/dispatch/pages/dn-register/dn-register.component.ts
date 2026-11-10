@@ -33,6 +33,7 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { ConfirmDeliveryDrawerComponent } from '../../components/confirm-delivery-drawer/confirm-delivery-drawer.component';
 import { ReturnDnDrawerComponent } from '../../components/return-dn-drawer/return-dn-drawer.component';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 interface FilterParams {
   [key: string]: any;
   page: number;
@@ -468,7 +469,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
           lpoRef: inv.lpoRef,
           subject: inv.subject,
           paymentTerms: inv.paymentTerms,
-          currency: inv.currency || 'QAR',
+          currency: inv.currency || DEFAULT_CURRENCY,
           amount: inv.amount,
           discount: inv.discount || 0,
           items: (inv.items || []).map((i: any) => ({ description: i.description, quantity: i.quantity, amount: i.totalCost })),

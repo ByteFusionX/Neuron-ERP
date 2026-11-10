@@ -62,6 +62,7 @@ const statusLabel = (status: string) => status === 'Pending for Approval' ? 'Pen
 
 import { InitiateLpoComponent } from '../initiate-lpo/initiate-lpo.component';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 @Component({
   selector: 'app-lpo-approval',
   standalone: true,
@@ -628,10 +629,10 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     const formatted = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const currency =
       row?.currency ||
-      row?.quoteId?.currency ||
       row?.quoteId?.dealData?.currency ||
-      row?.purchaseId?.jobId?.quoteId?.currency ||
+      row?.quoteId?.currency ||
       row?.purchaseId?.jobId?.quoteId?.dealData?.currency ||
+      row?.purchaseId?.jobId?.quoteId?.currency ||
       '';
     return currency ? `${formatted} ${currency}` : formatted;
   }
@@ -708,7 +709,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     const lines: any[] = row?.items || [];
     const totalPrice = lines.reduce((s, l) => s + (Number(l.totalCost) || (Number(l.unitCost) || 0) * (Number(l.quantity) || 0)), 0);
     const discount = poShareDiscount(row);
-    const currency = row?.currency || row?.quoteId?.currency || 'QAR';
+    const currency = row?.currency || row?.quoteId?.currency || DEFAULT_CURRENCY;
     const fmt = (n: number) => `${currency} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     return {
       title: 'Summary',

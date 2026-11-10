@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { NgIcon } from '@ng-icons/core';
 import { SF_STYLES, SmartFormModule } from 'src/app/shared/components/smart-form';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 export interface InvoiceLine {
   description: string;
   partNo?: string;
@@ -152,7 +153,7 @@ export interface InvoiceSummary {
 export class InvoiceItemEntryComponent {
   @Input() items: InvoiceLine[] = [];
   @Input() title = 'Items to bill';
-  @Input() currency = 'QAR';
+  @Input() currency = DEFAULT_CURRENCY;
   /** Job and delivery-note totals (delivery-note invoices only). */
   @Input() summary: InvoiceSummary | null = null;
 

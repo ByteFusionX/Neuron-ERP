@@ -1,5 +1,6 @@
 import { Schema, model } from 'mongoose';
 
+import { DEFAULT_CURRENCY } from '../common/currency';
 export const CUSTOMER_INVOICE_STATUSES = ['Pending', 'Approved', 'Rejected'] as const;
 export const PDC_STATUSES = ['Pending', 'Approved', 'Rejected', 'Revoked'] as const;
 export const CUSTOMER_PAYMENT_METHODS = ['PDC', 'Cash', 'Bank Transfer', 'Open Credit', 'Other'] as const;
@@ -31,7 +32,7 @@ const schema = new Schema({
     paymentMethod: { type: String, enum: CUSTOMER_PAYMENT_METHODS },
     pdcStatus: { type: String, enum: PDC_STATUSES },
     pdcHistory: [{ status: { type: String, enum: PDC_STATUSES }, changedBy: { type: Schema.Types.ObjectId, ref: 'Employee' }, changedAt: Date }],
-    currency: { type: String, default: 'QAR' },
+    currency: { type: String, default: DEFAULT_CURRENCY },
     amount: { type: Number, required: true },
     // The DN's share of the job's customer discount; amount stays the gross total.
     discount: { type: Number, default: 0 },

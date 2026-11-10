@@ -61,6 +61,14 @@
                     <app-sf-combobox formControlName="departments" [options]="departmentOptions" multiple
                         placeholder="Select department(s)"></app-sf-combobox>
                 </app-sf-field>
+                <app-sf-field label="Owner">
+                    <app-sf-input [ngModelOptions]="{ standalone: true }" [ngModel]="quotationOwnerName" [readonly]="true"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Accounting Manager" [control]="quoteForm.controls.accountingManager"
+                    hint="Optional. Selected person becomes the quotation owner.">
+                    <app-sf-combobox formControlName="accountingManager" clearable [options]="accountingManagerOptions"
+                        placeholder="Keep under my name"></app-sf-combobox>
+                </app-sf-field>
             </app-sf-section>
 
             <app-sf-section title="Details" columns="2">
@@ -79,11 +87,6 @@
                 <app-sf-field label="Quoting Company" [control]="quoteForm.controls.quoteCompany">
                     <app-sf-select formControlName="quoteCompany" [options]="quoteCompanyOptions" placeholder="Select company"></app-sf-select>
                 </app-sf-field>
-                <app-sf-field label="Accounting Manager" [control]="quoteForm.controls.accountingManager"
-                    hint="Optional. Selected person becomes the quotation owner.">
-                    <app-sf-combobox formControlName="accountingManager" [options]="accountingManagerOptions"
-                        placeholder="Keep under my name"></app-sf-combobox>
-                </app-sf-field>
             </app-sf-section>
         </ng-container>
 
@@ -92,7 +95,9 @@
         <div [hidden]="step !== 2">
             <app-item-entry #itemEntry [paletteTargetLabel]="open ? 'Quotation' : null" [externalAddButtons]="true" [optionalItems]="optionalItems"
                 [quoteReference]="quote?.quoteId || sourceEnquiry?.enquiryId || 'draft-quote'"
-                [seedOptionalItems]="seedOptionalItems" [suggestionScopeIds]="[]" [currency]="quoteForm.controls.currency.value || 'QAR'"
+                [seedOptionalItems]="seedOptionalItems" [suggestionScopeIds]="[]" [currency]="quoteForm.controls.currency.value || defaultCurrency" [currencyChoices]="currencyCodes"
+                [currencyRate]="quote?.exchangeRate ?? null"
+                (currencyChange)="quoteForm.controls.currency.setValue($event); quoteForm.controls.currency.markAsDirty()"
                 [previousJobItemsCount]="previousJobItemsCount"
                 (totals)="onItemTotals($event)" (previousJobsClicked)="openPreviousJobsModal()"
                 (createProductRequested)="openCreateProduct($event)" [allowEditProduct]="true" (editProductRequested)="openEditProduct($event)"></app-item-entry>

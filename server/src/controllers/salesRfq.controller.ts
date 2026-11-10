@@ -12,6 +12,7 @@ import { getAvailability, getLastReceiptCosts } from "../services/stock.service"
 import Product from "../models/products.model";
 import StockMovement from "../models/stockMovement.model";
 import PurchaseOrder from "../models/purchaseOrder.model";
+import { DEFAULT_CURRENCY } from '../common/currency';
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
 
@@ -61,7 +62,7 @@ const unitLandedCost = (quote: any) => {
  * when none was captured. Null when no rate is known, so the caller can tell it apart from zero.
  */
 const toQar = (amount: number, quote: any, rates: Record<string, number>): number | null => {
-    const currency = String(quote?.currency || 'QAR').toUpperCase();
+    const currency = String(quote?.currency || DEFAULT_CURRENCY).toUpperCase();
     if (currency === 'QAR') return amount;
     const rate = toNumber(quote?.exchangeRate) || rates[currency];
     return rate ? amount * rate : null;
@@ -309,7 +310,7 @@ const fillQuote = async (target: any, body: any) => {
     QUOTE_FIELDS.forEach((field) => {
         if (body[field] !== undefined) target[field] = body[field] === '' ? undefined : body[field];
     });
-    target.currency = String(target.currency || 'QAR').toUpperCase();
+    target.currency = String(target.currency || DEFAULT_CURRENCY).toUpperCase();
     if (target.currency === 'QAR') {
         target.exchangeRate = 1;
     } else if (!target.exchangeRate || target.currency !== previousCurrency) {
@@ -1060,7 +1061,7 @@ export const submitSalesRfqSupplierReply = async (req: Request, res: Response, n
                 remarks: row.remarks ?? '',
                 modelOffered: String(row.modelOffered || '').trim(),
                 isAlternative: !!String(row.modelOffered || '').trim() && !!row.isAlternative,
-                currency: row.currency || terms.currency || 'QAR',
+                currency: row.currency || terms.currency || DEFAULT_CURRENCY,
                 // A line's own terms win over the ones given for the whole reply.
                 paymentTerms: String(row.paymentTerms || '').trim() || terms.paymentTerms || '',
                 etaTerms: String(row.deliveryTerms || '').trim() || terms.deliveryTerms || '',
@@ -1290,7 +1291,7 @@ const buildRfqComparison = async (rfqs: any[]) => {
                     unitPriceQar: quote.unitPrice != null ? toQar(Number(quote.unitPrice), quote, rates) : null,
                     unitLanded: unit,
                     unitLandedQar: unit != null ? toQar(unit, quote, rates) : null,
-                    currency: quote.currency || 'QAR',
+                    currency: quote.currency || DEFAULT_CURRENCY,
                     leadTimeDays: quote.leadTimeDays,
                     availability: quote.availability,
                     quantity: quote.quantity,
@@ -1557,12 +1558,12 @@ export const prepareQuotationFromEnquiryRfqs = async (req: Request, res: Respons
             return res.status(409).json({ success: false, message: `${open.length} product(s) still open. Award them or mark them unavailable first.` });
         }
 
-        const currency = String(rfqs[0].requestedTerms?.currency || 'QAR').toUpperCase();
+        const currency = String(rfqs[0].requestedTerms?.currency || DEFAULT_CURRENCY).toUpperCase();
         const { rates } = await getQarRates();
         const unconverted = new Set<string>();
         const costIn = (quote: any): number => {
             const unit = unitLandedCost(quote);
-            const from = String(quote.currency || 'QAR').toUpperCase();
+            const from = String(quote.currency || DEFAULT_CURRENCY).toUpperCase();
             if (from === currency) return unit;
             const qar = toQar(unit, quote, rates);
             const target = currency === 'QAR' ? 1 : rates[currency];
@@ -1662,12 +1663,12 @@ export const prepareQuotationFromSalesRfq = async (req: Request, res: Response, 
         }
 
         // Suppliers may quote in different currencies; every cost is brought into the one the customer is quoted in.
-        const currency = String(rfq.requestedTerms?.currency || 'QAR').toUpperCase();
+        const currency = String(rfq.requestedTerms?.currency || DEFAULT_CURRENCY).toUpperCase();
         const { rates } = await getQarRates();
         const unconverted = new Set<string>();
         const costIn = (quote: any): number => {
             const unit = unitLandedCost(quote);
-            const from = String(quote.currency || 'QAR').toUpperCase();
+            const from = String(quote.currency || DEFAULT_CURRENCY).toUpperCase();
             if (from === currency) return unit;
             const qar = toQar(unit, quote, rates);
             const target = rates[currency];
@@ -2293,7 +2294,7 @@ const purchaseLines = (purchase: any) => {
 /** A quote's per-unit landed cost in the request's currency (copied unconverted when no rate is known). */
 const costInCurrency = (quote: any, currency: string, rates: Record<string, number>): number => {
     const unit = unitLandedCost(quote);
-    const from = String(quote.currency || 'QAR').toUpperCase();
+    const from = String(quote.currency || DEFAULT_CURRENCY).toUpperCase();
     if (from === currency) return unit;
     const qar = toQar(unit, quote, rates);
     const target = currency === 'QAR' ? 1 : rates[currency];
@@ -2315,7 +2316,7 @@ export const syncPurchaseFromRfqs = async (purchaseId: any, force = false) => {
     if (!rfqs.length) return purchase;
 
     const { rates } = await getQarRates();
-    const currency = String(purchase.currency || 'QAR').toUpperCase();
+    const currency = String(purchase.currency || DEFAULT_CURRENCY).toUpperCase();
     let total = 0;
 
     (purchase.items || []).forEach((item: any) => (item.itemDetails || []).forEach((detail: any) => {
@@ -2424,7 +2425,7 @@ export const getPurchaseRfqs = async (req: Request, res: Response, next: NextFun
         return res.status(200).json({
             success: true,
             data: {
-                purchase: { _id: purchase._id, purchaseNo: purchase.purchaseNo, status: purchase.status, editable: PR_EDITABLE_STATUSES.includes(purchase.status), currency: purchase.currency || 'QAR', hasJob: !!purchase.jobId },
+                purchase: { _id: purchase._id, purchaseNo: purchase.purchaseNo, status: purchase.status, editable: PR_EDITABLE_STATUSES.includes(purchase.status), currency: purchase.currency || DEFAULT_CURRENCY, hasJob: !!purchase.jobId },
                 lines: purchaseLines(purchase.toObject()),
                 rfqs,
             }
@@ -2598,7 +2599,7 @@ export const getPurchaseRfqComparison = async (req: Request, res: Response, next
                     const newer = !last || new Date(quotedAt || 0).getTime() > new Date(last.quotedAt || 0).getTime();
                     if (newer) {
                         entry.last = {
-                            rfqNo: rfq.rfqNo, purchaseNo: rfq.purchaseNo, unitPrice: Number(quote.unitPrice), currency: quote.currency || 'QAR',
+                            rfqNo: rfq.rfqNo, purchaseNo: rfq.purchaseNo, unitPrice: Number(quote.unitPrice), currency: quote.currency || DEFAULT_CURRENCY,
                             quantity: toNumber(quote.quantity), quotedAt, awarded, awardedAt: awarded ? rfq.updatedAt : undefined, awardedQty: prevAwarded,
                         };
                     } else if (last) {
@@ -2787,7 +2788,7 @@ export const getPurchaseOrderStatus = async (req: Request, res: Response, next: 
     try {
         const purchase = await loadPurchase(req.params.purchaseId, res);
         if (!purchase) return;
-        return res.status(200).json({ success: true, data: { purchaseId: purchase._id, status: purchase.status, currency: purchase.currency || 'QAR', rows: await purchaseOrderState(purchase.toObject()) } });
+        return res.status(200).json({ success: true, data: { purchaseId: purchase._id, status: purchase.status, currency: purchase.currency || DEFAULT_CURRENCY, rows: await purchaseOrderState(purchase.toObject()) } });
     } catch (error) {
         next(error);
     }

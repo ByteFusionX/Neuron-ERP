@@ -14,6 +14,7 @@ import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form'
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
 
+import { CURRENCY_OPTIONS, DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 @Component({
   selector: 'app-issue-lpo',
   imports: [
@@ -69,14 +70,11 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
   subscriptions = new Subscription();
   generatedPONumber = signal<string>('');
   isCreatingPO = signal<boolean>(false);
-  currency = signal<string>('QAR');
+  currency = signal<string>(DEFAULT_CURRENCY);
   canInitiateLPO = signal<boolean>(false);
   canReissueAndRevoke = signal<boolean>(false);
 
-  currencyOptions = [
-    { label: 'QAR', value: 'QAR' },
-    { label: 'USD', value: 'USD' }
-  ];
+  currencyOptions = CURRENCY_OPTIONS;
 
   poForm!: FormGroup;
   termsAndConditions: any[] = [];
@@ -118,9 +116,8 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
       this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
         next: (response) => {
           this.purchase = response.data;
-          const currency = this.purchase?.jobId?.quoteId?.currency || 
-                         this.purchase?.jobId?.quoteId?.dealData?.currency ||
-                         'QAR';
+          const currency = this.purchase?.jobId?.quoteId?.dealData?.currency || 
+                         this.purchase?.jobId?.quoteId?.currency || DEFAULT_CURRENCY;
           this.currency.set(currency);
           this.isLoading = false;
           if (this.purchase && !this.isReissueMode) {

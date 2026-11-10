@@ -759,10 +759,10 @@ export class InitiateLpoComponent implements OnInit {
         this.setComparisonItems(this.purchase ? this.selectedComparison(this.purchase.items) : []);
         if (this.purchase?.currency) {
           this.currency.set(this.purchase.currency);
-        } else if (this.purchase?.jobId?.quoteId?.currency) {
-          this.currency.set(this.purchase.jobId.quoteId.currency);
         } else if (this.purchase?.jobId?.quoteId?.dealData?.currency) {
           this.currency.set(this.purchase.jobId.quoteId.dealData.currency);
+        } else if (this.purchase?.jobId?.quoteId?.currency) {
+          this.currency.set(this.purchase.jobId.quoteId.currency);
         }
         this.isLoading = false;
         this.checkSuppliersStatus();

@@ -39,6 +39,7 @@ import {
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { allocateStatus, JobTable } from 'src/app/shared/interfaces/job.interface';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 const JOB_STATUS_CLASSES: Record<string, string> = {
   [allocateStatus.Pending]: 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
   [allocateStatus.OnHold]: 'bg-orange-50 text-orange-700 ring-orange-200 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-900 dark:border-orange-900',
@@ -64,7 +65,7 @@ const NEW_JOB_STATUSES = [allocateStatus.OnHold];
 
 const formatDateTime = (value?: string | Date | null) =>
   value ? new Date(value).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
-const formatMoney = (value: number | undefined, currency = 'QAR') =>
+const formatMoney = (value: number | undefined, currency = DEFAULT_CURRENCY) =>
   `${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 
 const fullName = (e?: { firstName?: string; lastName?: string } | null) => (e ? `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim() : '');
@@ -237,7 +238,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
     ];
   }
 
-  advanceCurrency(row: any): string { return row.proforma?.currency || row.quotation?.currency || 'QAR'; }
+  advanceCurrency(row: any): string { return row.proforma?.currency || row.quotation?.dealData?.currency || row.quotation?.currency || DEFAULT_CURRENCY; }
 
   advanceSections(row: any): DetailOverviewSection[] {
     const d = piDefaultsFromJob(row);
@@ -544,7 +545,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
       next: (res) => {
         const inv = res?.data ?? res;
         const customer = inv?.customer && typeof inv.customer === 'object' && inv.customer.companyName ? inv.customer : { ...(typeof inv?.customer === 'object' ? inv.customer : {}), companyName: pi.client?.name };
-        const invoice = { ...inv, customer, date: inv?.createdAt || inv?.date, shipTo: inv?.shipTo || pi.shipTo, paymentTerms: inv?.paymentTerms || pi.paymentTerms, jobId: inv?.jobId?.jobId ? inv.jobId : { jobId: pi.jobId }, currency: inv?.currency || pi.currency || 'QAR', lpoRef: inv?.lpoRef || pi.lpoNo, subject: inv?.subject || pi.subject };
+        const invoice = { ...inv, customer, date: inv?.createdAt || inv?.date, shipTo: inv?.shipTo || pi.shipTo, paymentTerms: inv?.paymentTerms || pi.paymentTerms, jobId: inv?.jobId?.jobId ? inv.jobId : { jobId: pi.jobId }, currency: inv?.currency || pi.currency || DEFAULT_CURRENCY, lpoRef: inv?.lpoRef || pi.lpoNo, subject: inv?.subject || pi.subject };
         this.invoiceService.generateInvoicePDF(invoice, download)
           .then((pdf) => download
             ? pdf.download(`${String(invoice.invoiceNo || pi.piNo).replace(/\//g, '-')}.pdf`)

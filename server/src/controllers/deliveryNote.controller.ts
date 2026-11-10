@@ -22,6 +22,7 @@ import { logAudit } from '../services/audit.service';
 import { notify } from '../services/notify.service';
 import { billingRecipients, jobOwnerOf, recipientsExcluding, safely } from '../services/workflowNotify.service';
 
+import { DEFAULT_CURRENCY, dealCurrencyOf } from '../common/currency';
 const logDnAudit = (req: any, dn: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
     logAudit(req, { entityType: 'deliveryNote', entityId: dn._id, entityLabel: dn.dnNo, action, summary, changes });
 
@@ -640,7 +641,7 @@ export const getDnInvoice = async (req: Request, res: Response) => {
                 select: 'jobId quoteId',
                 populate: {
                     path: 'quoteId',
-                    select: 'client subject currency quoteCompany paymentTerms dealData.paymentTerms customerAcceptance.customerPoNumber',
+                    select: 'client subject currency exchangeRate exchangeRateAt dealData.currency dealData.exchangeRate dealData.exchangeRateAt quoteCompany paymentTerms dealData.paymentTerms customerAcceptance.customerPoNumber',
                     populate: { path: 'client', select: 'companyName address contactDetails' }
                 }
             })
@@ -667,7 +668,7 @@ export const getDnInvoice = async (req: Request, res: Response) => {
                     lpoRef: customerInvoice.lpoRef,
                     subject: customerInvoice.subject,
                     paymentTerms: customerInvoice.paymentTerms || quotation?.dealData?.paymentTerms || quotation?.paymentTerms || '',
-                    currency: quotation?.currency || 'QAR',
+                    currency: dealCurrencyOf(quotation) || DEFAULT_CURRENCY,
                     quoteCompany: quotation?.quoteCompany || '',
                     amount: customerInvoice.amount,
                     discount: customerInvoice.discount || 0,
@@ -683,7 +684,7 @@ export const getDnInvoice = async (req: Request, res: Response) => {
         })
             .sort({ createdAt: -1 })
             .populate('customer', 'companyName address contactDetails')
-            .populate({ path: 'jobId', select: 'jobId quoteId', populate: { path: 'quoteId', select: 'currency subject' } })
+            .populate({ path: 'jobId', select: 'jobId quoteId', populate: { path: 'quoteId', select: 'currency dealData.currency subject' } })
             .lean();
 
         const job = dn.jobId;
@@ -725,7 +726,7 @@ export const getDnInvoice = async (req: Request, res: Response) => {
                     dnNumbers: dn.dnNo,
                     lpoRef: customerPo,
                     subject: dn.subject || quotation?.subject || '',
-                    currency: quotation?.currency || 'QAR',
+                    currency: dealCurrencyOf(quotation) || DEFAULT_CURRENCY,
                     quoteCompany: quotation?.quoteCompany || '',
                     isPreview: true
                 }
@@ -743,7 +744,7 @@ export const getDnInvoice = async (req: Request, res: Response) => {
         invoice.lpoRef = invoice.lpoRef || customerPo;
         invoice.subject = invoice.subject || dn.subject || quotation?.subject || '';
         if (invoice.invoiceDate) invoice.date = invoice.invoiceDate;
-        invoice.currency = quotation?.currency || 'QAR';
+        invoice.currency = dealCurrencyOf(quotation) || DEFAULT_CURRENCY;
         invoice.quoteCompany = quotation?.quoteCompany || '';
         invoice.paymentTerms = invoice.paymentTerms || salesTerms;
 

@@ -1,5 +1,6 @@
 import { Schema, Document, model, Types } from "mongoose";
 
+import { DEFAULT_CURRENCY } from '../common/currency';
 export enum RfqStatus {
     Draft = 'Draft',
     Open = 'Open',
@@ -314,7 +315,7 @@ const rfqQuoteSchema = new Schema<RfqQuote>({
     },
     // Free text from the Availability master list; only "Unavailable" has meaning of its own.
     availability: { type: String, trim: true, default: RfqAvailability.Available },
-    currency: { type: String, default: 'QAR' },
+    currency: { type: String, default: DEFAULT_CURRENCY },
     exchangeRate: { type: Number, min: 0 },
     leadTimeDays: { type: Number, min: 0 },
     isSupplierApproved: { type: Boolean },

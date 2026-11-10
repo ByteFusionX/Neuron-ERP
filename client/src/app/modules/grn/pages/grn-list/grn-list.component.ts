@@ -27,6 +27,7 @@ import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 @Component({
   selector: 'app-grn-list',
   standalone: true,
@@ -436,7 +437,7 @@ export class GrnListComponent implements OnInit {
     const sum = (qty: (i: any) => number) => items.reduce((s, i) => s + qty(i) * this.poUnitCost(row, i), 0);
     const gross = (po.items || []).reduce((s: number, l: any) => s + (Number(l.totalCost) || (Number(l.unitCost) || 0) * (Number(l.quantity) || 0)), 0);
     const discount = Number(po.discount) || 0;
-    const fmt = (n: number) => `${po.currency || 'QAR'} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmt = (n: number) => `${po.currency || DEFAULT_CURRENCY} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const rejected = sum((i) => this.getRejectedQty(i));
     return {
       title: 'Cost Details',
@@ -558,7 +559,7 @@ export class GrnListComponent implements OnInit {
     const lines: any[] = po?.items || [];
     const totalPrice = lines.reduce((s, l) => s + this.linePrice(l), 0);
     const discount = poShareDiscount(po, pr);
-    const fmt = (n: number) => `${po?.currency || 'QAR'} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmt = (n: number) => `${po?.currency || DEFAULT_CURRENCY} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     return {
       title: 'Summary',
       columns: '2',

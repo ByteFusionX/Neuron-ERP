@@ -98,9 +98,9 @@
                     <p *ngIf="piStatus === 'error'" class="py-6 text-center text-[13px] text-red-600 dark:text-red-400">Could not load PI details. Reopen this tab to retry.</p>
                     <ng-container *ngIf="piStatus === 'ready'">
                         <app-detail-section title="Payment summary">
-                            <app-detail-field label="Total price" numeric>{{ piTotalPrice | currency:(quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
-                            <app-detail-field label="Received value" numeric>{{ piReceivedValue | currency:(quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
-                            <app-detail-field label="Remaining to pay" numeric>{{ piRemainingValue | currency:(quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field label="Total price" numeric>{{ piTotalPrice | currency:(quote?.dealData?.currency || quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field label="Received value" numeric>{{ piReceivedValue | currency:(quote?.dealData?.currency || quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field label="Remaining to pay" numeric>{{ piRemainingValue | currency:(quote?.dealData?.currency || quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
                         </app-detail-section>
                         <app-detail-section *ngFor="let pi of proformas" [title]="pi.piNo">
                             <app-detail-field label="PI ID">{{ pi.piNo }}</app-detail-field>
@@ -109,8 +109,8 @@
                             <app-detail-field label="Subject">{{ pi.subject || '-' }}</app-detail-field>
                             <app-detail-field label="Payment terms">{{ pi.paymentTerms || '-' }}</app-detail-field>
                             <app-detail-field label="Expected date">{{ (pi.expectedDate | date:'dd MMM yyyy') || '-' }}</app-detail-field>
-                            <app-detail-field label="Requested value" numeric>{{ piRequested(pi) | currency:(pi.currency || quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
-                            <app-detail-field label="Received value" numeric>{{ piReceived(pi) | currency:(pi.currency || quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field label="Requested value" numeric>{{ piRequested(pi) | currency:(pi.currency || quote?.dealData?.currency || quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
+                            <app-detail-field label="Received value" numeric>{{ piReceived(pi) | currency:(pi.currency || quote?.dealData?.currency || quote?.currency || 'QAR'):'code':'1.2-2' }}</app-detail-field>
                             <app-detail-field *ngIf="pi.payment?.receivedAt" label="Received date">{{ pi.payment?.receivedAt | date:'dd MMM yyyy' }}</app-detail-field>
                             <app-detail-field *ngIf="pi.payment?.method" label="Payment method">{{ pi.payment?.method === 'Other' ? pi.payment?.otherMethod : pi.payment?.method }}</app-detail-field>
                             <app-detail-field *ngIf="pi.payment?.referenceNo" label="Reference">{{ pi.payment?.referenceNo }}</app-detail-field>
@@ -126,7 +126,7 @@
                         <app-detail-table *ngIf="stages[panelTab].length"
                             [columns]="stageColumns(panelTab)"
                             [rows]="stageRows[panelTab]"
-                            [currency]="quote?.currency"
+                            [currency]="quote?.dealData?.currency || quote?.currency"
                             numbered
                             [footRows]="stageFoot[panelTab]"
                             emptyMessage="Nothing at this stage for this job yet."></app-detail-table>
@@ -160,7 +160,7 @@
             <app-detail-table class="block h-full"
                 [columns]="itemColumns"
                 [rows]="itemRows"
-                [currency]="quote?.currency"
+                [currency]="quote?.dealData?.currency || quote?.currency"
                 [footRows]="itemFootRows"
                 groupStyle="band"
                 centerGroups

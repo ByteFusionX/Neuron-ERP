@@ -25,7 +25,7 @@ export function hasDeal(quote: { dealData?: unknown } | null | undefined): boole
 
 export function buildDealView(quote: { dealData?: any; currency?: string }, fmt: DealViewFormat): DealView {
   const deal = quote.dealData;
-  const currency = quote.currency ?? '';
+  const currency = quote.dealData?.currency ?? quote.currency ?? '';
   const money = (n: number) => `${fmt.number(n)} ${currency}`.trim();
 
   const lines: DealLine[] = [];

@@ -595,7 +595,7 @@ export const getCostingDetails = async (req: Request, res: Response, next: NextF
                               baseLpoValue: {
                                  $sum: {
                                     $cond: [
-                                       { $eq: ['$quotation.currency', 'USD'] },
+                                       { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
                                        {
                                           $multiply: [
                                              calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
@@ -2285,7 +2285,7 @@ export const getBillingSummaries = async (req: Request, res: Response, next: Nex
                         baseLpoValue: {
                            $sum: {
                               $cond: [
-                                 { $eq: ['$quotation.currency', 'USD'] },
+                                 { $eq: [{ $ifNull: ['$quotation.dealData.currency', '$quotation.currency'] }, 'USD'] },
                                  {
                                     $multiply: [
                                        calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),

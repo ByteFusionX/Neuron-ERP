@@ -31,6 +31,7 @@ import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel
 import { DetailDocument, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 const STATUS_CLASSES: Record<string, string> = {
   Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200',
   Placed: 'bg-teal-50 text-teal-700 ring-teal-200 border-teal-200',
@@ -293,7 +294,7 @@ export class VendorBillsComponent implements OnInit {
   }
 
   amount(row: any): string {
-    const currency = row.currency || 'QAR';
+    const currency = row.currency || DEFAULT_CURRENCY;
     return `${Number(row.amount ?? row.totalLpoValue ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
   }
 

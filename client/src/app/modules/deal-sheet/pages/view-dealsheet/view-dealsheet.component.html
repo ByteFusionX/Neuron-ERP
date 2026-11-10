@@ -118,7 +118,7 @@
                             <p *ngIf="s.hint" class="py-1 text-[11px] text-gray-400">{{ s.hint }}</p>
                             <div class="mt-1 flex items-baseline justify-between gap-3 border-t border-gray-200 pt-2 dark:border-erp-border-dark">
                                 <dt class="font-semibold text-gray-900 dark:text-gray-100">{{ s.total.label }}</dt>
-                                <dd class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ s.total.value | number: '1.2-2' }} {{ data.quoteData.currency }}</dd>
+                                <dd class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ s.total.value | number: '1.2-2' }} {{ (data.quoteData.dealData?.currency || data.quoteData.currency) }}</dd>
                             </div>
                         </dl>
                     </app-detail-section>
@@ -128,7 +128,7 @@
                             <span class="text-gray-600 dark:text-gray-400">Selling price − cost</span>
                             <span class="tabular-nums font-semibold"
                                 [ngClass]="'text-violet-600 dark:text-violet-400'">
-                                {{ costBreakdownProfit.value | number: '1.2-2' }} {{ data.quoteData.currency }}
+                                {{ costBreakdownProfit.value | number: '1.2-2' }} {{ (data.quoteData.dealData?.currency || data.quoteData.currency) }}
                                 <span class="ml-1 text-[11px] font-normal text-gray-500">{{ costBreakdownProfit.perc | number: '1.1-1' }}%</span>
                             </span>
                         </div>
@@ -152,7 +152,7 @@
             <app-detail-table class="block h-full"
                 [columns]="itemColumns"
                 [rows]="itemRows"
-                [currency]="data.quoteData.currency"
+                [currency]="(data.quoteData.dealData?.currency || data.quoteData.currency)"
                 [footRows]="itemFootRows"
                 groupStyle="band"
                 centerGroups

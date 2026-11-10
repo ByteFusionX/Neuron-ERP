@@ -7,6 +7,7 @@ import { DataGridAutofocusDirective } from './data-grid-autofocus.directive';
 import { DetailFieldComponent } from '../detail-panel/detail-field.component';
 import { DetailPanelIconComponent } from '../detail-panel/detail-panel-icon.component';
 
+import { DEFAULT_CURRENCY } from '../../constants/currency';
 /**
  * Detail panel field bound to a grid column. Editable columns can be changed in place: click the value,
  * then Enter / blur saves and Escape cancels. The change goes through the grid, so the host receives the
@@ -49,7 +50,7 @@ import { DetailPanelIconComponent } from '../detail-panel/detail-panel-icon.comp
             <ng-template #badgeEmpty><span class="text-gray-400 dark:text-gray-600">—</span></ng-template>
           </span>
           <span *ngSwitchCase="'date'">{{ raw ? (raw | date: 'dd MMM yyyy') : '—' }}</span>
-          <span *ngSwitchCase="'currency'" class="tabular-nums">{{ raw == null ? '—' : (raw | currency: (col.currencyCode || 'QAR') : 'symbol-narrow' : '1.2-2') }}</span>
+          <span *ngSwitchCase="'currency'" class="tabular-nums">{{ raw == null ? '—' : (raw | currency: (col.currencyCode || defaultCurrency) : 'symbol-narrow' : '1.2-2') }}</span>
           <span *ngSwitchCase="'number'" class="tabular-nums">{{ raw == null ? '—' : (raw | number) }}</span>
           <span *ngSwitchDefault>{{ raw ?? '—' }}</span>
         </ng-container>
@@ -68,6 +69,7 @@ import { DetailPanelIconComponent } from '../detail-panel/detail-panel-icon.comp
   `],
 })
 export class DataGridFieldComponent<T extends Record<string, any> = any> {
+  readonly defaultCurrency = DEFAULT_CURRENCY;
   @Input({ required: true }) grid!: DataGridComponent<T>;
   @Input({ required: true }) row!: T;
   /** Column key; the column may be hidden in the table. */

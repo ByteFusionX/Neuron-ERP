@@ -164,7 +164,7 @@ export class ApprovalLimitsComponent implements OnInit {
     const data: AddApprovalLimitData = {
       employees: this.allEmployees
         .filter((e) => !listed.has(e._id))
-        .map((e) => ({ _id: e._id, label: `${e.firstName} ${e.lastName} (${e.employeeId})`, role: this.roles.get(e.category)?.categoryName ?? '-' })),
+        .map((e) => ({ _id: e._id, label: `${e.firstName} ${e.lastName}`, role: this.roles.get(e.category)?.categoryName ?? '-' })),
     };
     this.modal.open<AddApprovalLimitResult, AddApprovalLimitData>(AddApprovalLimitModalComponent, { width: '520px', data }).afterClosed().subscribe((res) => {
       if (!res) return;

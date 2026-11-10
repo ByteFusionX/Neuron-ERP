@@ -10,6 +10,7 @@ import { SfComboboxComponent } from 'src/app/shared/components/smart-form/sf-com
 import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
 import { PurchaseLineAward } from 'src/app/shared/interfaces/purchase.interface';
 
+import { DEFAULT_CURRENCY } from '../../../../../shared/constants/currency';
 export type ReviewSupplierState = 'awarded' | 'default' | 'priced' | 'waiting' | 'option';
 
 export interface ReviewSupplier {
@@ -204,7 +205,7 @@ export class PrReviewStepComponent {
   @Input() rows: ReviewRow[] = [];
   @Input() columns: ReviewColumn[] = [];
   @Input() missingFromPr: { itemName: string; detail: string; quantity: number }[] = [];
-  @Input() currency = 'QAR';
+  @Input() currency = DEFAULT_CURRENCY;
   @Input() busy = false;
   @Input() locked = false;
   @Output() awarded = new EventEmitter<ReviewAward>();

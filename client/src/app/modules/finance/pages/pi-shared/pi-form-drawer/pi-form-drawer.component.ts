@@ -11,6 +11,7 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
 import { allocateStatus, getJob } from 'src/app/shared/interfaces/job.interface';
 
+import { DEFAULT_CURRENCY } from '../../../../../shared/constants/currency';
 const SUMMARY_KEYS = ['itemsCost', 'itemsPrice', 'supplierDiscount', 'customerDiscount', 'additionalCost', 'totalCost', 'totalPrice'] as const;
 
 const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
@@ -56,7 +57,7 @@ export function piDefaultsFromJob(job: getJob) {
     shipTo: (quotation?.deliveryLocation || anyJob.clientDetails?.companyName || '') as string,
     lpoNo: (quotation?.customerAcceptance?.customerPoNumber || '') as string,
     subject: (quotation?.subject || '') as string,
-    currency: (quotation?.currency || 'QAR') as string,
+    currency: ((quotation as any)?.dealData?.currency || quotation?.currency || DEFAULT_CURRENCY) as string,
     quoteCompany: (quotation?.quoteCompany || '') as string,
     items: ((quotation?.dealData?.updatedItems ?? []) as any[]).flatMap((item) =>
       (item.itemDetails ?? [])
@@ -91,7 +92,7 @@ export class PiFormDrawerComponent implements OnInit, OnChanges {
   readonly saving = signal(false);
   readonly jobs = signal<getJob[]>([]);
   readonly jobOptions = computed(() => this.jobs().map((j) => ({ label: `${j.jobId} · ${(j as any).clientDetails?.companyName || '-'}`, value: j._id })));
-  readonly currency = signal('QAR');
+  readonly currency = signal(DEFAULT_CURRENCY);
   /** True while the form is patched from code, so the job handler doesn't overwrite what was just loaded. */
   private patching = false;
   /** Sum of the hidden item lines; the PI amount the PDF prints. */
@@ -202,7 +203,7 @@ export class PiFormDrawerComponent implements OnInit, OnChanges {
     try {
       this.form.reset({ piNo: '', job: null, clientName: '', attention: '', paymentTerms: '', shipTo: '', lpoNo: '', subject: '', itemsCost: 0, itemsPrice: 0, supplierDiscount: 0, customerDiscount: 0, additionalCost: 0, totalCost: 0, totalPrice: 0, expectedAmount: 0, expectedDate: '' });
       this.items.clear();
-      this.currency.set('QAR');
+      this.currency.set(DEFAULT_CURRENCY);
       this.customerId = undefined;
       this.quoteCompany = '';
       this.f['job'].enable({ emitEvent: false });
@@ -260,7 +261,7 @@ export class PiFormDrawerComponent implements OnInit, OnChanges {
     this.patching = true;
     try {
       this.customerId = pi.client?.customerId;
-      this.currency.set(pi.currency || 'QAR');
+      this.currency.set(pi.currency || DEFAULT_CURRENCY);
       this.quoteCompany = pi.quoteCompany || '';
       this.jobs.set([{ _id: pi.job, jobId: pi.jobId, clientDetails: { companyName: pi.client?.name } } as any]);
       this.form.patchValue({

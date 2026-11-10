@@ -22,6 +22,7 @@ import { notify, notifyByPrivilege } from "../services/notify.service";
 import { recipientsExcluding, safely, viewersOf } from "../services/workflowNotify.service";
 import { SupplierPriceSource } from "../models/supplierPrice.model";
 import { logAudit } from "../services/audit.service";
+import { currencyStampFrom, dealCurrencyStampFrom } from "../common/currency";
 
 /** Copies each line's product item code and part no onto the line, so the PO (and the GRN built from it) carries them. */
 const stampItemCodes = async (items: any[]) => {
@@ -306,22 +307,15 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       }
     }
 
-    let currency;
+    // Copy currency + saved rate from the PR, else the quote; never recompute.
+    let currencyStamp: any = {};
     if (existingPurchaseRequest.currency) {
-      currency = existingPurchaseRequest.currency;
+      currencyStamp = currencyStampFrom(existingPurchaseRequest);
     } else if (quoteId) {
-      const quotation = await Quotation.findById(quoteId);
-      if (quotation && quotation.currency) {
-        currency = quotation.currency;
-      }
+      currencyStamp = dealCurrencyStampFrom(await Quotation.findById(quoteId));
     } else if (jobId) {
       const job = await jobModel.findById(jobId);
-      if (job && job.quoteId) {
-        const quotation = await Quotation.findById(job.quoteId);
-        if (quotation && quotation.currency) {
-          currency = quotation.currency;
-        }
-      }
+      if (job && job.quoteId) currencyStamp = dealCurrencyStampFrom(await Quotation.findById(job.quoteId));
     }
 
     // Create purchase order data with validated fields
@@ -346,9 +340,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       createdBy: employee._id,
     };
 
-    if (currency) {
-      purchaseOrderData.currency = currency;
-    }
+    Object.assign(purchaseOrderData, currencyStamp);
     if (originalPoId && mongoose.Types.ObjectId.isValid(originalPoId)) {
       purchaseOrderData.originalPoId = originalPoId;
     }
@@ -484,20 +476,12 @@ export const reissuePurchaseOrder = async (req: Request, res: Response) => {
     if (!updateData.currency && !existingOrder.currency) {
       const purchaseRequestDoc = await purchaseRequest.findById(existingOrder.purchaseId);
       if (purchaseRequestDoc && purchaseRequestDoc.currency) {
-        updateData.currency = purchaseRequestDoc.currency;
+        Object.assign(updateData, currencyStampFrom(purchaseRequestDoc));
       } else if (existingOrder.quoteId) {
-        const quotation = await Quotation.findById(existingOrder.quoteId);
-        if (quotation && quotation.currency) {
-          updateData.currency = quotation.currency;
-        }
+        Object.assign(updateData, dealCurrencyStampFrom(await Quotation.findById(existingOrder.quoteId)));
       } else if (existingOrder.jobId) {
         const job = await jobModel.findById(existingOrder.jobId);
-        if (job && job.quoteId) {
-          const quotation = await Quotation.findById(job.quoteId);
-          if (quotation && quotation.currency) {
-            updateData.currency = quotation.currency;
-          }
-        }
+        if (job && job.quoteId) Object.assign(updateData, dealCurrencyStampFrom(await Quotation.findById(job.quoteId)));
       }
     }
 

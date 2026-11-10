@@ -29,6 +29,7 @@ import { SupplierFormDrawerComponent } from 'src/app/modules/suppliers/pages/sup
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 import { normalizeApiError } from 'src/app/core/errors/api-error';
 
+import { CURRENCY_OPTIONS, DEFAULT_CURRENCY, SUPPORTED_CURRENCIES } from '../../../../shared/constants/currency';
 /** Statuses before the quote has gone to the customer. Mirrors the server, which only revises past these. */
 const UNSENT_STATUSES: string[] = [QuoteStatus.Draft, QuoteStatus.WorkInProgress, QuoteStatus.ReadyForSubmission];
 
@@ -84,10 +85,9 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   customersLoading = false;
   contactsLoading = false;
   departmentOptions: SfOption[] = [];
-  currencyOptions: SfOption[] = [
-    { label: 'QAR', value: 'QAR' },
-    { label: 'USD', value: 'USD' },
-  ];
+  currencyOptions: SfOption[] = CURRENCY_OPTIONS;
+  readonly defaultCurrency = DEFAULT_CURRENCY;
+  readonly currencyCodes: string[] = [...SUPPORTED_CURRENCIES];
   quoteCompanyOptions: SfOption[] = [
     { label: 'Neuron Technologies', value: 'Neuron Technologies' },
     { label: 'Neuron Security System', value: 'Neuron Security System' },
@@ -95,6 +95,17 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   customerNoteOptions: SfOption[] = [];
   termsOptions: SfOption[] = [];
   accountingManagerOptions: SfOption[] = [];
+  currentUserName = '';
+
+  /** Shown read-only: the chosen accounting manager, else (when editing) the quote's current owner, else the signed-in user. */
+  get quotationOwnerName(): string {
+    const selectedId = this.quoteForm.controls.accountingManager.value;
+    const selected = selectedId ? this.accountingManagerOptions.find((o) => o.value === selectedId)?.label : '';
+    if (selected) return selected;
+    const owner = this.isEdit ? this.quote?.createdBy : null;
+    const ownerName = owner ? `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim() : '';
+    return ownerName || this.currentUserName;
+  }
 
   private fb = inject(FormBuilder);
   private catalogue = inject(CatalogueSuggestionSource);
@@ -129,7 +140,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     department: [null as string | null],
     departments: [[] as string[], Validators.required],
     subject: ['', Validators.required],
-    currency: ['QAR', Validators.required],
+    currency: [DEFAULT_CURRENCY, Validators.required],
     quoteCompany: [null as string | null, Validators.required],
     accountingManager: [null as string | null],
     closingDate: ['', [Validators.required, QuoteFormDrawerComponent.notBeforeQuoteDate]],
@@ -248,6 +259,11 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       })
     );
     this.subscriptions.add(
+      this.employeeService.employeeData$.subscribe((e) => {
+        this.currentUserName = `${e?.firstName ?? ''} ${e?.lastName ?? ''}`.trim();
+      })
+    );
+    this.subscriptions.add(
       this.employeeService.getAllEmployees().subscribe({
         next: (employees: getEmployee[]) => {
           this.accountingManagerOptions = employees.map((employee) => ({
@@ -321,7 +337,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       client: (enquiry.client as any)?._id ?? null,
       attention: (enquiry.contact as any)?._id ?? null,
       subject: enquiry.title ?? '',
-      currency: enquiry.preSale?.estimations?.currency ?? 'QAR',
+      currency: enquiry.preSale?.estimations?.currency ?? DEFAULT_CURRENCY,
       enqId: enquiry._id ?? null,
     });
     if (client?._id) this.customerOptions = [{ label: client.companyName || 'Selected customer', value: client._id }];
@@ -352,7 +368,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       quotedDate: day(q.quotedDate || q.date),
       closingDate: day(q.closingDate || q.validityDate),
       subject: q.subject ?? '',
-      currency: q.currency ?? 'QAR',
+      currency: q.currency ?? DEFAULT_CURRENCY,
       quoteCompany: q.quoteCompany ?? null,
       customerNote: text(q.customerNote),
       termsAndCondition: text(q.termsAndCondition),
@@ -409,7 +425,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     this.itemEntry ? this.itemEntry.reset() : this.optionalItems.clear();
     this.quoteForm.reset({
       client: null, attention: null, date: this.todayIso(), quotedDate: this.todayIso(), department: null, departments: [], subject: '',
-      currency: 'QAR', quoteCompany: null, closingDate: '', customerNote: '', termsAndCondition: '',
+      currency: DEFAULT_CURRENCY, quoteCompany: null, closingDate: '', customerNote: '', termsAndCondition: '',
       paymentTerms: '', deliveryTerms: '', deliveryLocation: '', enqId: null, accountingManager: null,
     });
     this.applyDefaultNotes();

@@ -87,6 +87,9 @@ const estimationSchema = new Schema({
     currency: {
         type: String
     },
+    // QAR per 1 USD, saved when the estimation is submitted so later modules reuse it instead of a live rate.
+    exchangeRate: { type: Number },
+    exchangeRateAt: { type: Date },
     totalDiscount: {
         type: Number
     },
@@ -109,6 +112,8 @@ const estimationHistorySchema = new Schema({
     version: { type: Number },
     optionalItems: { type: Array, default: [] },
     currency: { type: String },
+    exchangeRate: { type: Number },
+    exchangeRateAt: { type: Date },
     totalDiscount: { type: Number },
     presaleNote: { type: String },
     archivedAt: { type: Date, default: Date.now },

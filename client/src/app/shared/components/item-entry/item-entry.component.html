@@ -72,17 +72,16 @@
                 <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add optional item
               </app-action-button>
             </ng-container>
-            <select *ngIf="itemsAt(i).length > 1" aria-label="Jump to item" (change)="jumpTo($any($event.target).value); $any($event.target).value = ''"
-              class="h-8 max-w-[11rem] rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none dark:border-erp-border-dark dark:bg-gray-800 dark:text-gray-200">
-              <option value="" selected>Jump to…</option>
-              <option *ngFor="let it of itemsAt(i).controls; let jj = index" [value]="jj">
-                {{ jj + 1 }}. {{ it.get('itemName')?.value || 'Untitled item' }}<ng-container *ngIf="!isRfq"> — {{ itemTotal(i, jj) | number: '1.0-0' }}</ng-container>
-              </option>
+            <div *ngIf="itemsAt(i).length > 1" class="w-44">
+              <app-sf-combobox aria-label="Jump to item" placeholder="Jump to…" [options]="jumpOptions(i)"
+                [ngModel]="jumpSel" [ngModelOptions]="{ standalone: true }" (ngModelChange)="onJump($event)"></app-sf-combobox>
+            </div>
+            <select *ngIf="currencyChoices.length > 1" aria-label="Currency" [ngModel]="currency" [ngModelOptions]="{ standalone: true }" (ngModelChange)="pickCurrency($event)"
+              class="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-medium text-gray-700 outline-none dark:border-erp-border-dark dark:bg-gray-800 dark:text-gray-200">
+              <option *ngFor="let c of currencyChoices" [value]="c">{{ c }}</option>
             </select>
-            <button type="button" aria-label="Collapse all items" (click)="setAllCollapsed(true)"
-              class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><ng-icon name="heroChevronUp" class="h-4 w-4"></ng-icon></button>
-            <button type="button" aria-label="Expand all items" (click)="setAllCollapsed(false)"
-              class="grid h-8 w-8 place-content-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><ng-icon name="heroChevronDown" class="h-4 w-4"></ng-icon></button>
+            <span *ngIf="currency !== 'QAR' && currencyRate && +currencyRate > 0" class="whitespace-nowrap rounded-md bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 dark:bg-violet-950/50 dark:text-violet-300"
+              title="Exchange rate used for the conversion">1 {{ currency }} = {{ currencyRate | number:'1.2-4' }} QAR</span>
             <button type="button" (click)="toggleDensity()"
               class="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
               [ngClass]="compact ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300' : ''">
@@ -265,7 +264,7 @@
               <!-- Pointer-downs stop here so dragging the textarea's resize grip never starts a line reorder. -->
               <div *ngIf="!isDeal || dealAdded(detail)" class="relative" [ngClass]="compact ? 'min-[1400px]:w-[24%] min-[1400px]:shrink-0' : ''"
                 (mousedown)="$event.stopPropagation()" (touchstart)="$event.stopPropagation()">
-                <app-sf-textarea formControlName="detail" expandOnFocus [rows]="compact ? 1 : 2"
+                <app-sf-textarea formControlName="detail" expandOnFocus richText [rows]="compact ? 1 : 2"
                   placeholder="Description — **bold** and {highlight} are supported"
                   (input)="onDetailInput(i, j, k)" (keydown)="onSuggestionKeydown($event, i + '-' + j + '-' + k, i, j, k)"
                   (focusout)="closeSuggestions()"></app-sf-textarea>
@@ -276,8 +275,14 @@
                   <div class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark shadow-lg"
                     [class.pointer-events-none]="!suggestionsFor(i + '-' + j + '-' + k).length">
                     <ng-container *ngIf="suggestionsFor(i + '-' + j + '-' + k) as rows">
-                      <button *ngFor="let s of rows; let idx = index" type="button"
-                        class="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                      <div *ngFor="let s of rows; let idx = index" class="relative">
+                      <button *ngIf="allowEditProduct" type="button" aria-label="Edit product" title="Edit product"
+                        class="pointer-events-auto absolute right-1.5 top-1.5 z-10 grid h-6 w-6 place-content-center rounded-md text-gray-400 hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-950/40"
+                        (mousedown)="$event.preventDefault(); $event.stopPropagation(); requestEditProduct(i, j, k, s)">
+                        <ng-icon name="heroPencilSquare" class="h-3.5 w-3.5"></ng-icon>
+                      </button>
+                      <button type="button"
+                        class="block w-full px-3 py-2 pr-9 text-left text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
                         [class.bg-violet-50]="highlightedIndex === idx" [class.dark:bg-violet-950]="highlightedIndex === idx"
                         (mousedown)="$event.preventDefault(); applySuggestion(i, j, k, s)">
                         <span *ngIf="s.productName" class="block truncate font-medium text-gray-900 dark:text-gray-100">{{ s.productName }}</span>
@@ -292,6 +297,7 @@
                         <span *ngIf="warehouseSummary(s) as warehouses" class="mt-0.5 block truncate text-[10px] text-gray-500 dark:text-gray-500">{{ warehouses }}</span>
                         <span *ngIf="salesHistorySummary(s) as history" class="mt-0.5 block truncate text-[10px] text-sky-700 dark:text-sky-400">{{ history }}</span>
                       </button>
+                      </div>
                       <p *ngIf="!rows.length" class="px-3 py-2 text-xs text-gray-500 dark:text-gray-500">No matching products in the catalogue.</p>
                       <button *ngIf="createRowAvailable(i + '-' + j + '-' + k, k)" type="button"
                         class="pointer-events-auto block w-fit border-t border-gray-100 px-3 py-2 text-left text-xs font-medium text-violet-700 hover:bg-gray-50 dark:border-erp-border-dark dark:text-violet-400 dark:hover:bg-gray-800"
@@ -303,7 +309,10 @@
               </div>
 
               <div *ngIf="isRfq" class="ie-strip ie-strip-rfq" [class.ie-strip-rfq-priced]="rfqQuoted" [class.ie-strip-rfq-extra]="!!lineStripTemplate" [class.min-w-0]="compact" [class.flex-1]="compact">
-                <app-sf-input [class.ie-code-missing]="codeMissing(detail)" [ngClass]="codeMissing(detail) ? '[&_.sf-input]:!border-red-500' : ''" formControlName="itemCode" placeholder="Item code" (input)="queueCodeLookup(i, j, k, 'itemCode')" (focusout)="lookupByCode(i, j, k, 'itemCode')" (keydown.enter)="lookupByCode(i, j, k, 'itemCode')"></app-sf-input>
+                <div class="relative min-w-0">
+                  <app-sf-input [class.ie-code-missing]="codeMissing(detail)" [ngClass]="codeMissing(detail) ? '[&_.sf-input]:!border-red-500' : ''" formControlName="itemCode" placeholder="Item code" (input)="queueCodeLookup(i, j, k, 'itemCode')" (focusout)="lookupByCode(i, j, k, 'itemCode')" (keydown.enter)="lookupByCode(i, j, k, 'itemCode')"></app-sf-input>
+                  <span *ngIf="codeNote(detail) as note" class="pointer-events-none absolute left-1 top-full z-10 whitespace-nowrap text-[10px] leading-tight text-amber-600">{{ note }}</span>
+                </div>
                 <app-sf-input formControlName="partNo" placeholder="Part no" (input)="queueCodeLookup(i, j, k, 'partNo')" (focusout)="lookupByCode(i, j, k, 'partNo')" (keydown.enter)="lookupByCode(i, j, k, 'partNo')"></app-sf-input>
                 <app-sf-number formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
                 <app-sf-combobox formControlName="uom" [options]="resolvedUomOptions" placeholder="UoM" footerLabel="Add unit" (footerAction)="openAddMasterOption('unit', detail.get('uom'))"></app-sf-combobox>
@@ -319,7 +328,10 @@
               <div *ngIf="!isRfq" class="ie-strip"[class.min-w-0]="compact" [class.flex-1]="compact" [class.opacity-60]="isDeal && !detail.get('dealSelected')?.value" [class.ie-strip-purchase]="dropsMargin">
                 <span *ngIf="isDeal && !dealAdded(detail)" class="ie-cell ie-x">{{ detail.get('itemCode')?.value || '—' }}</span>
                 <span *ngIf="isDeal && !dealAdded(detail)" class="ie-cell ie-x">{{ detail.get('partNo')?.value || '—' }}</span>
-                <app-sf-input *ngIf="(!isDeal || dealAdded(detail)) && !dropsMargin" class="ie-x" [class.ie-code-missing]="codeMissing(detail)" [ngClass]="codeMissing(detail) ? '[&_.sf-input]:!border-red-500' : ''" formControlName="itemCode" placeholder="Item code" (input)="queueCodeLookup(i, j, k, 'itemCode')" (focusout)="lookupByCode(i, j, k, 'itemCode')" (keydown.enter)="lookupByCode(i, j, k, 'itemCode')"></app-sf-input>
+                <div *ngIf="(!isDeal || dealAdded(detail)) && !dropsMargin" class="ie-x relative min-w-0">
+                  <app-sf-input [class.ie-code-missing]="codeMissing(detail)" [ngClass]="codeMissing(detail) ? '[&_.sf-input]:!border-red-500' : ''" formControlName="itemCode" placeholder="Item code" (input)="queueCodeLookup(i, j, k, 'itemCode')" (focusout)="lookupByCode(i, j, k, 'itemCode')" (keydown.enter)="lookupByCode(i, j, k, 'itemCode')"></app-sf-input>
+                  <span *ngIf="codeNote(detail) as note" class="pointer-events-none absolute left-1 top-full z-10 whitespace-nowrap text-[10px] leading-tight text-amber-600">{{ note }}</span>
+                </div>
                 <app-sf-input *ngIf="(!isDeal || dealAdded(detail)) && !dropsMargin" class="ie-x" formControlName="partNo" placeholder="Part no" (input)="queueCodeLookup(i, j, k, 'partNo')" (focusout)="lookupByCode(i, j, k, 'partNo')" (keydown.enter)="lookupByCode(i, j, k, 'partNo')"></app-sf-input>
                 <span *ngIf="dropsMargin" class="ie-cell ie-x ie-code-cell" tabindex="0" [attr.title]="detail.get('itemCode')?.value">{{ detail.get('itemCode')?.value || '—' }}</span>
                 <div *ngIf="dropsMargin" class="ie-x flex min-w-0 gap-1">
@@ -424,6 +436,8 @@
                   </label>
                 </ng-template>
                 <span class="text-[10px] text-gray-400">PNG, JPG or WebP · max 5 MB</span>
+                <app-sf-checkbox class="ml-2" label="Brand" [disabled]="headerDisabled(i, j, k, 'brand')" [ngModel]="headerTick(i, j, k, 'brand')" (ngModelChange)="toggleHeader(i, j, k, 'brand', $event)" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
+                <app-sf-checkbox class="" label="Part no" [disabled]="headerDisabled(i, j, k, 'partNo')" [ngModel]="headerTick(i, j, k, 'partNo')" (ngModelChange)="toggleHeader(i, j, k, 'partNo', $event)" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
                 <span *ngIf="imageErrors[imageKey(i, j, k)]" class="text-[11px] text-red-600 dark:text-red-400">{{ imageErrors[imageKey(i, j, k)] }}</span>
               </div>
               <app-image-viewer *ngIf="isQuote && imagePreviews[imageKey(i, j, k)]" [src]="imagePreviews[imageKey(i, j, k)]" alt="Item image preview"

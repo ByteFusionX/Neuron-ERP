@@ -9,7 +9,7 @@ import { Enquiry } from "../interface/enquiry.interface";
 import quotationModel, { quoteStatus } from "../models/quotation.model";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { newTrash } from '../controllers/trash.controller'
-import { getReportedEmployeesWithDepartments, widenAccessForDepartmentHead, getEmployeeData } from "../common/utils/util";
+import { getReportedEmployeesWithDepartments, widenAccessForDepartmentHead, getEmployeeData, getUSDRated } from "../common/utils/util";
 import { cancelInBlock, completeInBlock, followUpViewFilter, readCompleteBody, readScheduleBody, scheduleInBlock } from "../services/followUpTasks.service";
 import { notifyByPrivilege } from "../services/notify.service";
 import { getNextSequence } from "../models/counter.model";
@@ -2290,8 +2290,21 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
             ? (isNewVersion ? (existing.version || historyCount + 1) + 1 : (existing.version || historyCount + 1))
             : historyCount + 1;
 
+        // Keep the rate saved with this version; only stamp a rate when none is saved yet or a new version starts.
+        let rateFields: { exchangeRate?: number; exchangeRateAt?: Date } = {};
+        if (!hasExisting || isNewVersion || !existing?.exchangeRate) {
+            try {
+                const rate = Number(await getUSDRated());
+                if (rate > 0) rateFields = { exchangeRate: rate, exchangeRateAt: new Date() };
+            } catch { /* no rate available; leave unset */ }
+        }
+
         const update: any = {
             $set: {
+                ...(rateFields.exchangeRate ? {
+                    'preSale.estimations.exchangeRate': rateFields.exchangeRate,
+                    'preSale.estimations.exchangeRateAt': rateFields.exchangeRateAt,
+                } : {}),
                 'preSale.estimations.optionalItems': optionalItems,
                 'preSale.estimations.currency': currency,
                 'preSale.estimations.presaleNote': preSaleNote,
@@ -2310,6 +2323,8 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
                     version: existing.version || historyCount + 1,
                     optionalItems: existing.optionalItems,
                     currency: existing.currency,
+                    exchangeRate: existing.exchangeRate,
+                    exchangeRateAt: existing.exchangeRateAt,
                     totalDiscount: existing.totalDiscount,
                     presaleNote: existing.presaleNote,
                     archivedAt: new Date(),

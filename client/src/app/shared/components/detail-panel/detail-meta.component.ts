@@ -3,6 +3,7 @@ import { CommonModule, CurrencyPipe, DatePipe } from '@angular/common';
 import { DetailMetaItem } from './detail-panel.model';
 import { toneClasses } from './detail-tone';
 
+import { DEFAULT_CURRENCY } from '../../constants/currency';
 /**
  * The key-facts strip under the panel header. Projected into <app-detail-panel>'s `[panelMeta]` slot,
  * whose `.dp-meta` grid owns the border and column sizing — so this host is `display: contents`
@@ -38,7 +39,7 @@ import { toneClasses } from './detail-tone';
 export class DetailMetaComponent {
   @Input() items: DetailMetaItem[] = [];
   /** Currency code used by items with `format: 'currency'`. */
-  @Input() currency = 'QAR';
+  @Input() currency = DEFAULT_CURRENCY;
 
   constructor(private readonly currencyPipe: CurrencyPipe, private readonly datePipe: DatePipe) {}
 

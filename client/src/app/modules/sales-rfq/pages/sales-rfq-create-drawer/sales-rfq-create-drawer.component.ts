@@ -35,6 +35,7 @@ import {
   PurchaseRfqData,
 } from 'src/app/shared/interfaces/sales-rfq.interface';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 /** The supplier of one editor tab (kept in the option's `meta`). Each tab becomes its own RFQ with only that tab's lines. */
 interface DraftSupplier {
   supplierId: string;
@@ -312,7 +313,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
     this.enquiry = rfq.enquiryId;
     this.invite = rfq.suppliers?.[0] ?? null;
     if (this.invite?.supplierId) this.loadSupplierInfo(this.invite.supplierId);
-    this.terms = { currency: 'QAR', ...(rfq.requestedTerms || {}) };
+    this.terms = { currency: DEFAULT_CURRENCY, ...(rfq.requestedTerms || {}) };
     this.deadline = rfq.deadline ? rfq.deadline.slice(0, 10) : null;
     this.requiredBy = rfq.requiredBy ? rfq.requiredBy.slice(0, 10) : null;
     this.notes = rfq.notes || '';
@@ -468,7 +469,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
     this.rfq = null;
     this.invite = null;
     this.activeOption = 0;
-    this.terms = { currency: 'QAR' };
+    this.terms = { currency: DEFAULT_CURRENCY };
     this.deadline = this.defaultDeadline();
     this.requiredBy = null;
     this.notes = '';
@@ -583,7 +584,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   private fillLastPrices(supplierId: string): void {
     const tab = this.suppliers.find((s) => s.supplierId === supplierId);
     if (!tab) return;
-    const currency = this.terms.currency || 'QAR';
+    const currency = this.terms.currency || DEFAULT_CURRENCY;
     this.filledLines
       .filter((l) => l.option === tab.option && l.productId)
       .forEach((l) => {

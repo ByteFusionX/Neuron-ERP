@@ -10,6 +10,7 @@ import { logAudit } from '../services/audit.service';
 import { notify } from '../services/notify.service';
 import { billingRecipients, jobOwnerOf, recipientsExcluding, safely } from '../services/workflowNotify.service';
 
+import { DEFAULT_CURRENCY } from '../common/currency';
 const clean = (v: any) => String(v ?? '').trim();
 const scope = async (req: Request, forPo = false) => {
     const employee = await getEmployeeData(req.user);
@@ -165,7 +166,7 @@ export const createCustomerInvoice = async (req: Request, res: Response) => {
             if (!req.body.receivedDate || isNaN(receivedDate.getTime())) return res.status(400).json({ message: 'Enter the received date' });
             const items = (pi.items || []).map((item: any) => ({ itemCode: item.itemCode, partNo: item.partNo, description: item.description, quantity: item.quantity, unitCost: item.unitPrice, totalCost: item.amount }));
             source = {
-                proformaInvoice: pi._id, piNo: pi.piNo, job: pi.job, jobNo: pi.jobId, currency: pi.currency || 'QAR',
+                proformaInvoice: pi._id, piNo: pi.piNo, job: pi.job, jobNo: pi.jobId, currency: pi.currency || DEFAULT_CURRENCY,
                 amount: pi.amount, discount: Number(pi.summary?.customerDiscount || 0), items, receivedAmount, receivedDate,
             };
             label = pi.piNo;
@@ -191,7 +192,7 @@ export const createCustomerInvoice = async (req: Request, res: Response) => {
             const amount = Math.round((items.reduce((sum: number, item: any) => sum + Number(item.totalCost || 0), 0) - Number(po.discount || 0)) * 100) / 100;
             source = {
                 purchaseOrder: po._id, poNo: po.poNo, supplier: po.supplierId._id, supplierName: po.supplierId.supplierName,
-                dnNo: clean(req.body.dnNo), job: job?._id, jobNo: job?.jobId || '', currency: po.currency || 'QAR', amount, items,
+                dnNo: clean(req.body.dnNo), job: job?._id, jobNo: job?.jobId || '', currency: po.currency || DEFAULT_CURRENCY, amount, items,
             };
             label = po.poNo;
         }

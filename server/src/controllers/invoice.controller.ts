@@ -11,6 +11,7 @@ import { createNotificationWithPrivileges } from './notification.controller';
 import { Server } from 'socket.io';
 import { getCustomerCommercialGuard, normalizeTaxForCustomer } from '../common/customer-commercial-guards';
 
+import { DEFAULT_CURRENCY, dealCurrencyOf } from '../common/currency';
 export const getInvoices = async (req: Request, res: Response) => {
     try {
         const page = parseInt(req.query.page as string) || 1;
@@ -55,7 +56,7 @@ export const getInvoices = async (req: Request, res: Response) => {
                 select: 'jobId quoteId',
                 populate: {
                     path: 'quoteId',
-                    select: 'createdBy currency',
+                    select: 'createdBy currency dealData.currency',
                     populate: { path: 'createdBy', select: 'firstName lastName' }
                 }
             })
@@ -70,7 +71,7 @@ export const getInvoices = async (req: Request, res: Response) => {
         const invoicesWithSalesperson = (invoices as any[]).map((inv) => {
             const job = inv.jobId;
             const salesperson = job?.quoteId?.createdBy || inv.salesperson;
-            const currency = job?.quoteId?.currency || 'QAR';
+            const currency = dealCurrencyOf(job?.quoteId) || DEFAULT_CURRENCY;
             const legacyPaymentStatusMap: Record<string, string> = {
                 Paid: 'Paid',
                 Unpaid: 'Pending',
@@ -213,7 +214,7 @@ export const getInvoiceById = async (req: Request, res: Response) => {
                 select: 'jobId quoteId',
                 populate: {
                     path: 'quoteId',
-                    select: 'createdBy currency',
+                    select: 'createdBy currency dealData.currency',
                     populate: { path: 'createdBy', select: 'firstName lastName' }
                 }
             })
@@ -227,7 +228,7 @@ export const getInvoiceById = async (req: Request, res: Response) => {
 
         const inv = invoice as any;
         const salesperson = inv.jobId?.quoteId?.createdBy || inv.salesperson;
-        const currency = inv.jobId?.quoteId?.currency || 'QAR';
+        const currency = dealCurrencyOf(inv.jobId?.quoteId) || DEFAULT_CURRENCY;
         const legacyPaymentStatusMap: Record<string, string> = {
             Paid: 'Paid',
             Unpaid: 'Pending',
@@ -1014,7 +1015,7 @@ export const getCancelledAdjustedInvoices = async (req: Request, res: Response) 
                     invoiceDate: 1,
                     customerName: '$customerDoc.companyName',
                     jobId: '$jobDoc.jobId',
-                    currency: '$quoteDoc.currency',
+                    currency: { $ifNull: ['$quoteDoc.dealData.currency', '$quoteDoc.currency'] },
                     originalAmount: 1,
                     adjustedAmount: 1,
                     reason: 1,
@@ -1150,7 +1151,7 @@ export const getCancelledAndReissuedInvoices = async (req: Request, res: Respons
                     oldInvoiceDate: '$date',
                     customerName: '$customerDoc.companyName',
                     jobId: '$jobDoc.jobId',
-                    currency: '$quoteDoc.currency',
+                    currency: { $ifNull: ['$quoteDoc.dealData.currency', '$quoteDoc.currency'] },
                     originalAmount: '$amount',
                     cancellationReason: 1,
                     cancelledBy: { $concat: ['$cancelledByDoc.firstName', ' ', '$cancelledByDoc.lastName'] },

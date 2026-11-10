@@ -1,5 +1,6 @@
 import { Schema, Document, model, Types } from "mongoose";
 
+import { DEFAULT_CURRENCY } from '../common/currency';
 export enum SupplierPriceSource {
     PR = 'PR',
     PO = 'PO'
@@ -33,7 +34,7 @@ const supplierPriceSchema = new Schema<SupplierPrice>({
     currency: {
         type: String,
         required: true,
-        default: 'QAR'
+        default: DEFAULT_CURRENCY
     },
     lastPrice: {
         type: Number,

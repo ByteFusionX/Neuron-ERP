@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, ElementRef, EventEmitter, Input, OnDestroy, Output, ViewChild, inject } from '@angular/core';
 import { FormArray, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { NgIcon } from '@ng-icons/core';
+import { DEFAULT_CURRENCY, SUPPORTED_CURRENCIES } from 'src/app/shared/constants/currency';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { CatalogueSuggestionSource, CreateProductRequest, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
@@ -241,6 +242,9 @@ export class PrFormComponent implements OnDestroy {
   @Output() materialRequestsClicked = new EventEmitter<void>();
   /** Ticked lines to ask a supplier about, with the supplier picked in the selection bar if any. */
   @Output() createProductRequested = new EventEmitter<CreateProductRequest>();
+  @Output() currencyChange = new EventEmitter<string>();
+  readonly currencyCodes: string[] = [...SUPPORTED_CURRENCIES];
+  readonly defaultCurrency = DEFAULT_CURRENCY;
   get f() {
     return this.purchaseForm.controls;
   }

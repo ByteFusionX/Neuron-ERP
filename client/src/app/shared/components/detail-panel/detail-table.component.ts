@@ -8,6 +8,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { FormsModule } from '@angular/forms';
 import { SfInputComponent } from '../smart-form/sf-input.component';
 
+import { DEFAULT_CURRENCY } from '../../constants/currency';
 /** One rendered line of the table: a group heading, a data row, or a per-group subtotal. */
 interface DetailTableLine {
   kind: 'group' | 'data' | 'subtotal';
@@ -423,7 +424,7 @@ export class DetailTableComponent implements OnInit {
     return this._rows;
   }
 
-  @Input() currency = 'QAR';
+  @Input() currency = DEFAULT_CURRENCY;
   @Input() emptyMessage = 'No items.';
   @Input({ transform: booleanAttribute }) showTotals = false;
   /** Centers the `_group` sub-heading rows. */

@@ -4,6 +4,7 @@ import {
     getApprovedDealSheet,
     getDealSheet,
     getNextQuoteId,
+    getLiveExchangeRate,
     getProductSuggestions,
     getQuotations,
     getQuotationById,
@@ -41,6 +42,9 @@ const upload = require("../common/multer.storage")
 
 // Product picker used by item entry (presale estimation, quotation, deal sheet, purchase).
 quoteRouter.get('/product-suggestions', requireAnyPrivilege("quotation", "assignedJob", "dealSheet", "purchase"), getProductSuggestions)
+
+// Live QAR-per-USD rate: lets a form convert its lines when the user switches currency.
+quoteRouter.get('/exchange-rate', requireAnyPrivilege("quotation", "assignedJob", "dealSheet", "purchase"), getLiveExchangeRate)
 
 // Converting a won quote into a deal sheet is done by the quote's own owner,
 // so it's gated by the same `quotation.create` privilege as creating the

@@ -43,6 +43,7 @@ type LpoPanelTab = 'pricing' | 'grn' | 'terms' | 'documents' | 'approval' | 'his
 
 import { InitiateLpoComponent } from '../initiate-lpo/initiate-lpo.component';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 @Component({
   selector: 'app-view-lpo',
   standalone: true,
@@ -349,7 +350,7 @@ export class ViewLpoComponent implements OnInit {
   isLoading = signal<boolean>(true);
   supplier: any = null;
   items = signal<any[]>([]);
-  currency = signal<string>('QAR');
+  currency = signal<string>(DEFAULT_CURRENCY);
   isApproving = false;
   isRejecting = false;
   isPlacing = false;
@@ -418,11 +419,10 @@ export class ViewLpoComponent implements OnInit {
           this.supplier = lpoData.supplierId;
           this.items.set(lpoData.items || []);
           
-          const currency = lpoData.quoteId?.currency || 
-                          lpoData.quoteId?.dealData?.currency || 
-                          lpoData.purchaseId?.jobId?.quoteId?.currency ||
+          const currency = lpoData.quoteId?.dealData?.currency || 
+                          lpoData.quoteId?.currency || 
                           lpoData.purchaseId?.jobId?.quoteId?.dealData?.currency ||
-                          'QAR';
+                          lpoData.purchaseId?.jobId?.quoteId?.currency || DEFAULT_CURRENCY;
           this.currency.set(currency);
           
           if (lpoData.purchaseId) {
@@ -459,7 +459,7 @@ export class ViewLpoComponent implements OnInit {
         this.purchase = response.data;
         if (this.purchase?.jobId?.quoteId && !this.currency() || this.currency() === 'QAR') {
           const quoteId = this.purchase.jobId.quoteId;
-          const currency = quoteId?.currency || quoteId?.dealData?.currency || 'QAR';
+          const currency = quoteId?.dealData?.currency || quoteId?.currency || DEFAULT_CURRENCY;
           this.currency.set(currency);
         }
         this.buildView();

@@ -152,6 +152,10 @@ interface Deal {
     attachments: [];
     updatedItems: QuoteItem[];
     totalDiscount:number;
+    /** The deal's own currency and the rate (QAR per 1 USD) saved with it; downstream modules copy these, not the quote's. */
+    currency?: string;
+    exchangeRate?: number;
+    exchangeRateAt?: Date;
     /** Employee who submitted the deal; they cannot approve it themselves when a workflow routes it. */
     requestedBy?: Types.ObjectId;
     /** Stages from the Deal Sheet approval workflow. Empty = no workflow was configured, any dealSheet approver may decide. */
@@ -423,6 +427,9 @@ const dealDatas = new Schema<Deal>({
         type: String,
         required: false,
     },
+    currency: { type: String, required: false },
+    exchangeRate: { type: Number, required: false },
+    exchangeRateAt: { type: Date, required: false },
     additionalCosts: {
         type: [additionalCostSchema],
         required: false,

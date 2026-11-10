@@ -20,7 +20,7 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { StatusChangeModalComponent, StatusChangeResult } from 'src/app/shared/components/status-change-modal/status-change-modal.component';
 import { quoteStatusModalData } from '../status-update-modal/quote-status-modal.config';
-import { QuotationService, QuoteStockHold, QuoteViewer } from 'src/app/core/services/quotation/quotation.service';
+import { QuotationService, QuoteStockHold } from 'src/app/core/services/quotation/quotation.service';
 import { AuditLogEntry, AuditLogService } from 'src/app/core/services/audit-log.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -389,6 +389,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       items.push({ id: 'stamped', label: this.isDownloadingStamped ? 'Generating…' : 'Download stamped PDF', disabled: this.isDownloadingStamped });
     }
     items.push({ id: 'pdf', label: this.isDownloading ? 'Generating…' : 'Download PDF', disabled: this.isDownloading });
+    items.push({ id: 'technical', label: this.isDownloadingTechnical ? 'Generating…' : 'Download technical PDF', disabled: this.isDownloadingTechnical });
     return items;
   }
 
@@ -404,6 +405,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       case 'preview': this.onPreviewPdf(); break;
       case 'stamped': this.onDownloadPdf(true); break;
       case 'pdf': this.onDownloadPdf(false); break;
+      case 'technical': this.onDownloadTechnicalPdf(); break;
     }
   }
 
@@ -787,6 +789,22 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       });
   }
 
+  isDownloadingTechnical = false;
+
+  /** Same items and details as the quotation, with no prices, totals or commercial terms. */
+  onDownloadTechnicalPdf(): void {
+    this.isDownloadingTechnical = true;
+    const quoteData = this.quoteForActiveRevision();
+    this.quotationService
+      .generatePDF(quoteData, false, undefined, true)
+      .then((pdf) => pdf.download(`${String(quoteData.quoteId || 'quotation').replace(/[^a-zA-Z0-9._-]+/g, '_')}-technical.pdf`))
+      .catch((error) => {
+        console.error('Error generating PDF:', error);
+        this.toast.error('Error generating PDF. Please try again.');
+      })
+      .finally(() => (this.isDownloadingTechnical = false));
+  }
+
   onPreviewPdf(): void {
     this.isPreviewing = true;
     const quoteData = this.quoteForActiveRevision();
@@ -1066,10 +1084,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Who can open this quote; shown at the top of the History tab. */
-  viewers: QuoteViewer[] = [];
-  private globalLoadedFor = '';
-
   /**
    * The History tab combines the quote's own edit history with the global audit log (deal submitted, stage
    * approved, workflow reset…). Deal approve/reject/revoke are already in editHistory, so they're not repeated.
@@ -1085,10 +1099,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
         this.historyLog = [...editLog, ...extra].sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
       },
     });
-    if (this.globalLoadedFor !== id) {
-      this.globalLoadedFor = id;
-      this.quotationService.getQuoteViewers(id).subscribe({ next: (v) => (this.viewers = v), error: () => (this.globalLoadedFor = '') });
-    }
   }
 
   private auditToHistory(r: AuditLogEntry): QvHistoryEntry {
