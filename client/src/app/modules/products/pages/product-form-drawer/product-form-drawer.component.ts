@@ -4,6 +4,7 @@ import { ToastrService } from 'ngx-toastr';
 import { Observable, Subscription, debounceTime, distinctUntilChanged, map, of, switchMap, catchError } from 'rxjs';
 import { ProductService, Product, DuplicateMatch, PRODUCT_ALIAS_TYPES, ProductAliasType } from 'src/app/core/services/product/product.service';
 import { ProductCategoryService } from 'src/app/core/services/product-category/product-category.service';
+import { ProductSubCategoryService } from 'src/app/core/services/product-category/product-sub-category.service';
 import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.service';
 import { MasterListService } from 'src/app/core/services/master-list.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
@@ -44,6 +45,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   private toastr = inject(ToastrService);
   private productService = inject(ProductService);
   private productCategoryService = inject(ProductCategoryService);
+  private productSubCategoryService = inject(ProductSubCategoryService);
   private warehouseService = inject(WarehouseService);
   private profileService = inject(ProfileService);
   private masterList = inject(MasterListService);
@@ -54,6 +56,8 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   typeOptions: SfOption[] = PRODUCT_TYPES.map((t) => ({ label: t, value: t }));
   categoryOptions: SfOption[] = [];
   private allCategories: any[] = [];
+  subCategoryOptions: SfOption[] = [];
+  private allSubCategories: any[] = [];
   segmentOptions: SfOption[] = [];
   warehouseOptions: SfOption[] = [];
   unitOptions: SfOption[] = [];
@@ -71,13 +75,14 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     nickName: ['', [Validators.maxLength(100)]],
     aliases: this.fb.array<FormGroup<{ value: FormControl<string | null>; type: FormControl<string | null> }>>([]),
     partNo: ['', [Validators.required, notBlank, Validators.maxLength(100)]],
-    itemCode: [{ value: '', disabled: true }],
+    itemCode: [''],
     productName: ['', [Validators.required, notBlank, Validators.maxLength(200)]],
     productDescription: ['', [Validators.required, notBlank, Validators.maxLength(2000)]],
     type: ['' as string, Validators.required],
     productSegment: ['', Validators.required],
     productCategory: ['', Validators.required],
     otherCategory: ['', [Validators.maxLength(60)]],
+    productSubCategory: ['', [Validators.required, Validators.maxLength(100)]],
     warehouse: [''],
     brand: ['', [Validators.required, notBlank]],
     unitOfMeasure: ['', Validators.required],
@@ -130,6 +135,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     this.optionsLoaded = true;
 
     this.loadCategories();
+    this.loadSubCategories();
     this.loadWarehouses();
 
     this.subscriptions.add(
@@ -177,6 +183,10 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
 
     this.subscriptions.add(
       this.productForm.controls.productSegment.valueChanges.subscribe((departmentId) => {
+        const sub = this.productForm.controls.productSubCategory;
+        const valid = this.allSubCategories.some((s) => s.subCategoryName === sub.value && (!departmentId || (s.department?._id ?? s.department) === departmentId));
+        if (sub.value && this.allSubCategories.length && !valid) sub.setValue("");
+        this.refreshSubCategoryOptions();
         if (!this.isEdit) departmentId ? this.generateItemCode(departmentId) : this.productForm.controls.itemCode.setValue('');
       })
     );
@@ -192,6 +202,27 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       },
       error: () => this.toastr.error('Failed to load product categories'),
     });
+  }
+
+  private loadSubCategories(): void {
+    this.productSubCategoryService.getProductSubCategories().subscribe({
+      next: (items) => {
+        this.allSubCategories = items ?? [];
+        this.refreshSubCategoryOptions();
+      },
+      error: () => this.toastr.error('Failed to load sub departments'),
+    });
+  }
+
+  /** Active sub departments of the chosen sales department (all when none is chosen), plus the value this product already holds. */
+  private refreshSubCategoryOptions(): void {
+    const segment = this.productForm.controls.productSegment.value;
+    const current = this.productForm.controls.productSubCategory.value ?? '';
+    const names = this.allSubCategories
+      .filter((s) => !!segment && (s.department?._id ?? s.department) === segment &&(s.isActive !== false || s.subCategoryName === current))
+      .map((s) => s.subCategoryName as string);
+    if (current && !names.includes(current)) names.push(current);
+    this.subCategoryOptions = names.map((n) => ({ label: n, value: n }));
   }
 
   /** Active categories only, plus the one this product already uses, then "Other". */
@@ -253,6 +284,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       type: product.type || '',
       productSegment: id(product.productSegment),
       productCategory: id(product.productCategory),
+      productSubCategory: product.productSubCategory || '',
       warehouse: id(product.warehouse),
       brand: product.brand || '',
       unitOfMeasure: product.unitOfMeasure || '',
@@ -263,8 +295,8 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     });
     this.seedAliases(product.aliases);
     this.refreshCategoryOptions();
+    this.refreshSubCategoryOptions();
     this.duplicateMatches = [];
-    this.productForm.controls.itemCode.disable();
     // Identity fields are locked once the product exists.
     this.productForm.controls.partNo.disable();
     this.productForm.controls.isGeneric.disable();
@@ -290,7 +322,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   private resetForm(): void {
     this.productForm.reset({
       partNo: '', itemCode: '', productName: '', productDescription: '', type: '',
-      productSegment: '', productCategory: '', otherCategory: '', warehouse: '', brand: '', unitOfMeasure: '',
+      productSegment: '', productCategory: '', otherCategory: '', productSubCategory: '', warehouse: '', brand: '', unitOfMeasure: '',
       isActive: true, isGeneric: false, parentModel: '', nickName: '',
     });
     this.productForm.controls.partNo.enable({ emitEvent: false });
@@ -389,6 +421,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       type: raw.type ?? '',
       productSegment: raw.productSegment ?? '',
       productCategory: categoryId,
+      productSubCategory: (raw.productSubCategory ?? '').trim(),
       warehouse: raw.warehouse ?? '',
       brand: raw.brand ?? '',
       unitOfMeasure: raw.unitOfMeasure ?? '',
@@ -420,7 +453,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   get invalidFieldLabels(): string[] {
     const labels: Record<string, string> = {
       partNo: 'Part No', productName: 'Product Name', productDescription: 'Description', type: 'Type',
-      productSegment: 'Department', productCategory: 'Category', otherCategory: 'New category', brand: 'Brand', unitOfMeasure: 'Unit of Measure',
+      productSegment: 'Department', productCategory: 'Category', otherCategory: 'New category', productSubCategory: 'Sub Department', brand: 'Brand', unitOfMeasure: 'Unit of Measure',
     };
     return Object.entries(labels).filter(([key]) => this.productForm.get(key)?.invalid).map(([, label]) => label);
   }

@@ -17,6 +17,8 @@ export interface MasterRow {
   name: string;
   /** Shown in the Type column when the section's tabs hold more than one kind of entry. */
   type?: string;
+  /** Parent category name, shown in the Parent Category column of sub department tabs. */
+  parent?: string;
   createdBy: string;
   createdAt: string;
   status: string;
@@ -40,6 +42,8 @@ export interface MasterTab {
   hideStyle?: boolean;
   /** Adds a Type column to the grid (rows set `type`). */
   typeColumn?: boolean;
+  /** Adds a Parent Category column to the grid (rows set `parent`). */
+  parentColumn?: boolean;
   /** Backed by another API: the host supplies rows and the add/edit/delete flows (resolve true when data changed). */
   custom?: {
     load: () => Observable<MasterCustomRow[]>;
@@ -174,6 +178,7 @@ export class MasterDataGridComponent implements OnInit {
       {
         title: 'General', columns: '2', fields: [
           { type: 'field', label: 'Type', value: this.typeOf(row) },
+          ...(row.parent ? [{ type: 'field' as const, label: 'Parent Category', value: row.parent }] : []),
           { type: 'field', label: 'Status', value: row.status },
           { type: 'field', label: 'Created By', value: row.createdBy || '—' },
           { type: 'field', label: 'Created At', value: this.displayDate(row.createdAt) },
@@ -194,6 +199,13 @@ export class MasterDataGridComponent implements OnInit {
       this.columns = [
         this.columns[0],
         { key: 'type', label: 'Type', sortable: true, width: '180px', valueGetter: (r) => r.type || '—' },
+        ...this.columns.slice(1),
+      ];
+    }
+    if (this.tabs.some((t) => t.parentColumn)) {
+      this.columns = [
+        this.columns[0],
+        { key: 'parent', label: 'Parent Category', sortable: true, width: '200px', valueGetter: (r) => r.parent || '—' },
         ...this.columns.slice(1),
       ];
     }

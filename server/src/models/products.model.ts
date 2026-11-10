@@ -31,6 +31,7 @@ interface Product {
     parentModel?: string;
     /** Short user-friendly name or code used to find the product quickly. */
     nickName?: string;
+    productSubCategory?: string;
     /** Services and generic items: brand and part number are optional. */
     isGeneric?: boolean;
     itemCode: string;
@@ -106,6 +107,10 @@ const productSchema = new Schema<Product>({
         type: String,
         trim: true,
         index: true,
+    },
+    productSubCategory: {
+        type: String,
+        trim: true,
     },
     nickName: {
         type: String,

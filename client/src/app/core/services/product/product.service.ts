@@ -71,6 +71,7 @@ export interface Product {
   source?: 'Manual' | 'RFQ' | 'Import';
   parentModel?: string;
   nickName?: string;
+  productSubCategory?: string;
   isGeneric?: boolean;
   itemCode: string;
   productName?: string;

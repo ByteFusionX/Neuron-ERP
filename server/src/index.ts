@@ -56,6 +56,7 @@ import { emailQueue } from './common/queues/email.queue';
 import claimRouter from './routes/claim.router';
 import productRouter from './routes/product.router';
 import productCategoryRouter from './routes/productCategory.router';
+import productSubCategoryRouter from './routes/productSubCategory.router';
 import warehouseRouter from './routes/warehouse.router';
 import stockRouter from './routes/stock.router';
 import grnRouter from './routes/grn.router';
@@ -168,6 +169,7 @@ app.use('/claim', claimRouter)
 app.use("/purchase-orders", purchaseOrderRouter);
 app.use('/product', productRouter);
 app.use('/productCategory', productCategoryRouter);
+app.use('/productSubCategory', productSubCategoryRouter);
 app.use('/warehouse', warehouseRouter);
 app.use('/stock', stockRouter);
 app.use('/grn', grnRouter);
