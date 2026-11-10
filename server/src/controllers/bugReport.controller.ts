@@ -2,10 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { getPresignedUploadUrl, getFileUrlFromAws } from "../common/aws-connect";
 import { getEmployeeData } from "../common/utils/util";
 import BugReport from "../models/bugReport.model";
-import Employee from "../models/employee.model";
 import { notifyEmployee } from "../common/bugReportNotify";
-
-const DEFAULT_REPORTING_TO_EMPLOYEE_ID = "NT-1101";
 
 export const getBugReportUploadUrl = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -47,11 +44,7 @@ export const createBugReport = async (req: Request, res: Response, next: NextFun
             return res.status(401).json({ message: 'Unauthorized' });
         }
 
-        let reportingToId = reportingTo || null;
-        if (!reportingToId) {
-            const defaultAssignee = await Employee.findOne({ employeeId: DEFAULT_REPORTING_TO_EMPLOYEE_ID });
-            reportingToId = defaultAssignee?._id || null;
-        }
+        const reportingToId = reportingTo || null;
 
         const bugReport = new BugReport({
             reporterId: employeeData._id,
