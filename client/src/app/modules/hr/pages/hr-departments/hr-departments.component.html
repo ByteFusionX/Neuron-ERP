@@ -31,7 +31,7 @@
             <ng-template #detailMetaTemplate let-row>
                 <div class="qt-meta">
                     <p class="qt-meta-label">Type</p>
-                    <p class="qt-meta-value">{{ row.kind === 'internal' ? 'Internal HR' : row.kind === 'department' ? 'Sales Department' : 'Activity' }}</p>
+                    <p class="qt-meta-value">{{ row.kind === 'internal' ? 'Internal HR' : row.kind === 'department' ? 'Sales Department' : row.kind === 'subDepartment' ? 'Sub Department' : 'Activity' }}</p>
                 </div>
                 <div class="qt-meta">
                     <p class="qt-meta-label">Status</p>
@@ -49,7 +49,7 @@
 
             <ng-template #detailTemplate let-row let-tab="tab">
                 <div *ngIf="tab === 'details'" class="space-y-5">
-                    <section class="rounded-xl border border-gray-100 bg-white p-4 dark:border-erp-border-dark dark:bg-erp-surface-dark">
+                    <section>
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Summary</h3>
                         <dl class="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                             <div>
@@ -72,28 +72,30 @@
                         <p *ngIf="row.description" class="mt-3 text-sm text-gray-500 dark:text-gray-400">{{ row.description }}</p>
                     </section>
 
-                    <section *ngIf="row.kind === 'internal'" class="rounded-xl border border-gray-100 bg-white p-4 dark:border-erp-border-dark dark:bg-erp-surface-dark">
-                        <div class="flex items-center justify-between gap-3">
-                            <div>
-                                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Org chart</h3>
-                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Reporting structure for this internal department.</p>
-                            </div>
-                            <span class="shrink-0 rounded-full bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700">
-                                {{ selectedOverview?.headcount ?? row.headcount ?? 0 }} employees
-                            </span>
-                        </div>
-
-                        <app-skelton-loading *ngIf="selectedOverview?._id !== row._id" [lineLength]="3" class="block py-5"></app-skelton-loading>
-
-                        <div *ngIf="selectedOverview?._id === row._id" class="mt-4">
-                            <p *ngIf="!selectedOverview.orgChart?.length" class="rounded-lg bg-gray-50 px-4 py-5 text-center text-sm text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
-                                No employees assigned to this org chart yet.
-                            </p>
-                            <ul *ngIf="selectedOverview.orgChart?.length" class="list-none m-0 p-0 space-y-2">
-                                <ng-container *ngTemplateOutlet="orgNode; context: { $implicit: selectedOverview.orgChart }"></ng-container>
-                            </ul>
-                        </div>
+                    <section *ngIf="row.kind === 'department'">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Sub departments</h3>
+                        <p *ngIf="!subDepartmentsOf(row).length" class="mt-3 text-sm text-gray-500 dark:text-gray-400">No sub departments under this department.</p>
+                        <ul *ngIf="subDepartmentsOf(row).length" class="list-none m-0 mt-3 p-0 divide-y divide-gray-100 dark:divide-erp-border-dark">
+                            <li *ngFor="let s of subDepartmentsOf(row)" class="flex items-center justify-between gap-3 py-2 text-sm">
+                                <span class="text-gray-900 dark:text-gray-100">{{ s.subCategoryName }}</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400">{{ s.isActive === false ? 'Inactive' : 'Active' }}</span>
+                            </li>
+                        </ul>
                     </section>
+
+                </div>
+
+                <div *ngIf="tab === 'orgchart' && row.kind === 'internal'">
+                    <app-skelton-loading *ngIf="selectedOverview?._id !== row._id" [lineLength]="3" class="block py-5"></app-skelton-loading>
+
+                    <ng-container *ngIf="selectedOverview?._id === row._id">
+                        <p *ngIf="!selectedOverview.orgChart?.length" class="text-sm text-gray-500 dark:text-gray-400">
+                            No employees assigned to this org chart yet.
+                        </p>
+                        <ul *ngIf="selectedOverview.orgChart?.length" class="list-none m-0 p-0 space-y-2">
+                            <ng-container *ngTemplateOutlet="orgNode; context: { $implicit: selectedOverview.orgChart }"></ng-container>
+                        </ul>
+                    </ng-container>
                 </div>
             </ng-template>
         </app-data-grid>

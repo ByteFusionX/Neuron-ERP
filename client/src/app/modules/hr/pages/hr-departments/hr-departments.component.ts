@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { NgIf, NgFor, DatePipe, NgTemplateOutlet } from '@angular/common';
-import { Subscription, filter, take } from 'rxjs';
+import { Subscription, filter, firstValueFrom, take } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
@@ -11,11 +11,14 @@ import { MatTableDataSource } from '@angular/material/table';
 import { CreateDepartmentDialog } from 'src/app/modules/hr/pages/create-department/create-department.component';
 import { InternalDepartmentComponent } from 'src/app/modules/hr/pages/internal-department/internal-department.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { ModalService } from 'src/app/shared/components/modal';
+import { ProductSubCategoryService } from 'src/app/core/services/product-category/product-sub-category.service';
+import { SubCategoryDialogComponent, SubCategoryDialogData } from './sub-department-dialog.component';
 import { SkeltonLoadingComponent } from 'src/app/shared/components/skelton-loading/skelton-loading.component';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 
-type DepartmentTab = 'department' | 'internal' | 'activity';
+type DepartmentTab = 'department' | 'subDepartment' | 'internal' | 'activity';
 type DepartmentGridRow = {
   _id: string;
   kind: DepartmentTab;
@@ -53,8 +56,13 @@ export class HrDepartmentsComponent implements OnInit, OnDestroy {
   auditRows: any[] = [];
   isAuditLoading = false;
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'HR' }];
-  detailTabs: DataGridDetailTab[] = [{ id: 'details', label: 'Details', icon: 'info' }];
-  departmentColumns: DataGridColumn<DepartmentGridRow>[] = [
+  private readonly baseDetailTabs: DataGridDetailTab[] = [{ id: 'details', label: 'Details', icon: 'info' }];
+  private readonly internalDetailTabs: DataGridDetailTab[] = [
+    { id: 'details', label: 'Details', icon: 'info' },
+    { id: 'orgchart', label: 'Org chart', icon: 'account_tree' },
+  ];
+  detailTabs: DataGridDetailTab[] = this.baseDetailTabs;
+  allDepartmentColumns: DataGridColumn<DepartmentGridRow>[] = [
     { key: 'name', label: 'Name', sortable: true, locked: true, valueGetter: (row) => row.name },
     {
       key: 'kind',
@@ -62,22 +70,40 @@ export class HrDepartmentsComponent implements OnInit, OnDestroy {
       type: 'badge',
       sortable: true,
       width: '150px',
-      badgeLabel: (value) => value === 'internal' ? 'Internal' : value === 'department' ? 'Sales' : 'Activity',
+      badgeLabel: (value) => value === 'internal' ? 'Internal' : value === 'department' ? 'Sales' : value === 'subDepartment' ? 'Sub' : 'Activity',
       badgeClasses: {
         internal: 'bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/30',
         department: 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/30',
+        subDepartment: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30',
         activity: 'bg-gray-50 text-gray-700 border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
       },
       valueGetter: (row) => row.kind,
     },
     { key: 'head', label: 'Head / Actor', sortable: true, valueGetter: (row) => row.head || '—' },
     { key: 'usage', label: 'Usage / Details', sortable: false, valueGetter: (row) => row.usage || row.description || '—' },
-    { key: 'status', label: 'Status', sortable: true, width: '120px', valueGetter: (row) => row.status || 'Active' },
+    {
+      key: 'status',
+      label: 'Status',
+      type: 'badge',
+      sortable: true,
+      width: '120px',
+      badgeClasses: {
+        Active: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30',
+        Inactive: 'bg-gray-50 text-gray-700 border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
+      },
+      valueGetter: (row) => row.status || 'Active',
+    },
     { key: 'createdAt', label: 'Created / Time', type: 'date', sortable: true, width: '150px', valueGetter: (row) => row.createdAt },
   ];
+  private salesColumns = this.allDepartmentColumns.filter((c) => c.key !== 'usage');
+  /** The Sales Departments view drops the Usage / Details column. */
+  get departmentColumns(): DataGridColumn<DepartmentGridRow>[] {
+    return this.activeTab === 'department' ? this.salesColumns : this.allDepartmentColumns;
+  }
   departmentViews: DataGridView<DepartmentGridRow>[] = [
     { id: 'internal', label: 'Internal Departments', predicate: (row) => row.kind === 'internal' },
     { id: 'department', label: 'Sales Departments', predicate: (row) => row.kind === 'department' },
+    { id: 'subDepartment', label: 'Sub Departments', predicate: (row) => row.kind === 'subDepartment' },
     { id: 'activity', label: 'Activity', predicate: (row) => row.kind === 'activity' },
   ];
   rowActions: DataGridRowAction<DepartmentGridRow>[] = [
@@ -104,6 +130,10 @@ export class HrDepartmentsComponent implements OnInit, OnDestroy {
 
   private subscriptions = new Subscription();
   private confirm = inject(ConfirmDialogService);
+  private modal = inject(ModalService);
+  private subDepartmentService = inject(ProductSubCategoryService);
+  subDepartments: any[] = [];
+  isSubDepartmentLoading = true;
 
   constructor(
     private _profileService: ProfileService,
@@ -136,20 +166,28 @@ export class HrDepartmentsComponent implements OnInit, OnDestroy {
     }));
     const salesRows = (this.departmentDataSource.data ?? []).map((d: any) => {
       const id = d?._id;
-      const customerCount = this.deptUsage.customers[id] ?? 0;
-      const enquiryCount = this.deptUsage.enquiries[id] ?? 0;
       return {
         _id: id,
         kind: 'department' as DepartmentTab,
         name: d.departmentName,
         description: d.description,
         head: d.departmentHead?.[0] ? `${d.departmentHead[0].firstName} ${d.departmentHead[0].lastName}` : '—',
-        usage: `${customerCount} customer${customerCount === 1 ? '' : 's'} · ${enquiryCount} ${enquiryCount === 1 ? 'enquiry' : 'enquiries'}`,
         status: d.isActive === false ? 'Inactive' : 'Active',
         createdAt: d.createdDate ?? d.createdAt,
         source: d,
       };
     });
+    const subRows = (this.subDepartments ?? []).map((s: any) => ({
+      _id: s._id,
+      kind: 'subDepartment' as DepartmentTab,
+      name: s.subCategoryName,
+      parent: s.department?.departmentName ?? '—',
+      head: s.departmentHead ? `${s.departmentHead.firstName} ${s.departmentHead.lastName}` : '—',
+      usage: `Parent: ${s.department?.departmentName ?? '—'}`,
+      status: s.isActive === false ? 'Inactive' : 'Active',
+      createdAt: s.createdDate,
+      source: s,
+    }));
     const activityRows = (this.auditRows ?? []).map((a, index) => ({
       _id: a._id ?? `activity-${index}`,
       kind: 'activity' as DepartmentTab,
@@ -161,11 +199,15 @@ export class HrDepartmentsComponent implements OnInit, OnDestroy {
       createdAt: a.at,
       source: a,
     }));
-    return [...internalRows, ...salesRows, ...activityRows];
+    return [...internalRows, ...salesRows, ...subRows, ...activityRows];
+  }
+
+  subDepartmentsOf(row: DepartmentGridRow): any[] {
+    return (this.subDepartments ?? []).filter((s: any) => (s.department?._id ?? s.department) === row._id);
   }
 
   get gridLoading(): boolean {
-    return this.isOverviewLoading || this.isDepartmentLoading || (this.activeTab === 'activity' && this.isAuditLoading);
+    return this.isOverviewLoading || this.isDepartmentLoading || this.isSubDepartmentLoading || (this.activeTab === 'activity' && this.isAuditLoading);
   }
 
   get deptPrivileges() {
@@ -176,6 +218,7 @@ export class HrDepartmentsComponent implements OnInit, OnDestroy {
     if (!this.deptPrivileges.create) return '';
     if (this.activeTab === 'internal') return 'Add Internal Department';
     if (this.activeTab === 'department') return 'Add Sales Department';
+    if (this.activeTab === 'subDepartment') return 'Add Sub Department';
     return '';
   }
 
@@ -188,14 +231,21 @@ export class HrDepartmentsComponent implements OnInit, OnDestroy {
   onGridCreate() {
     if (this.activeTab === 'internal') this.onCreateInternalDepartment();
     else if (this.activeTab === 'department') this.onCreateDepartment();
+    else if (this.activeTab === 'subDepartment') this.onCreateSubDepartment();
   }
 
   onGridRowOpen(row: DepartmentGridRow) {
     this.activeTab = row.kind;
+    this.detailTabs = row.kind === 'internal' ? this.internalDetailTabs : this.baseDetailTabs;
     if (row.kind === 'internal') this.selectOverview(row._id);
   }
 
   onGridRowAction(event: DataGridRowActionEvent<DepartmentGridRow>) {
+    if (event.row.kind === 'subDepartment') {
+      if (event.action.id === 'edit') this.onEditSubDepartment(event.row.source);
+      if (event.action.id === 'delete') this.onDeleteSubDepartment(event.row.source);
+      return;
+    }
     const index = event.row.kind === 'internal'
       ? this.internalIndex(event.row._id)
       : this.departmentDataSource.data.findIndex((d: any) => d._id === event.row._id);
@@ -211,11 +261,13 @@ export class HrDepartmentsComponent implements OnInit, OnDestroy {
   detailSubtitle(row: DepartmentGridRow): string {
     if (row.kind === 'internal') return 'Internal department org chart and reporting view';
     if (row.kind === 'department') return 'Sales department usage and ownership';
+    if (row.kind === 'subDepartment') return 'Sub department under a sales department';
     return 'Department master-data audit activity';
   }
 
   ngOnInit(): void {
     this.loadUsage();
+    this.loadSubDepartments();
     this.subscriptions.add(
       this._employeeService.employeeData$.pipe(filter((e) => !!e), take(1)).subscribe((employee) => {
         this.employeeId = employee?._id!;
@@ -465,6 +517,60 @@ export class HrDepartmentsComponent implements OnInit, OnDestroy {
             }
           });
       }
+    }
+  }
+
+  loadSubDepartments() {
+    this.subscriptions.add(this.subDepartmentService.getProductSubCategories().subscribe({
+      next: (items) => { this.subDepartments = items ?? []; this.isSubDepartmentLoading = false; },
+      error: () => { this.isSubDepartmentLoading = false; },
+    }));
+  }
+
+  private async openSubDepartmentDialog(data: Omit<SubCategoryDialogData, 'departments' | 'employees'>, current?: string) {
+    const employeeList = (await firstValueFrom(this._employeeService.getAllEmployees()).catch(() => [])) ?? [];
+    const employees = (Array.isArray(employeeList) ? employeeList : [])
+      .map((e: any) => ({ label: `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim(), value: e._id }))
+      .filter((o) => o.label)
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+    const departments = this.departmentDataSource.data ?? [];
+    const options = departments
+      .filter((d: any) => d.isActive !== false || d._id === current)
+      .map((d: any) => ({ label: d.departmentName, value: d._id }));
+    const result = await firstValueFrom(this.modal.open<any, SubCategoryDialogData>(SubCategoryDialogComponent, { width: '480px', data: { ...data, departments: options, employees } }).afterClosed());
+    if (result) this.loadSubDepartments();
+  }
+
+  onCreateSubDepartment() {
+    return this.openSubDepartmentDialog({
+      save: (name, department, isActive, departmentHead) => this.subDepartmentService.createProductSubCategory({ subCategoryName: name, department, departmentHead, createdDate: new Date(), isActive }),
+    });
+  }
+
+  onEditSubDepartment(item: any) {
+    const parent = item.department?._id ?? item.department ?? '';
+    return this.openSubDepartmentDialog({
+      initialName: item.subCategoryName, initialDepartment: parent, initialActive: item.isActive !== false,
+      initialHead: item.departmentHead?._id ?? item.departmentHead ?? '',
+      save: (name, department, isActive, departmentHead) => this.subDepartmentService.updateProductSubCategory(item._id, { subCategoryName: name, department, departmentHead, isActive }),
+    }, parent);
+  }
+
+  async onDeleteSubDepartment(item: any) {
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Delete Sub Department?',
+      message: `Delete "${item.subCategoryName}"?`,
+      consequence: 'Products already using this sub department may block the delete.',
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
+    try {
+      await firstValueFrom(this.subDepartmentService.deleteProductSubCategory(item._id));
+      this._toast.success('Sub Department deleted successfully');
+      this.loadSubDepartments();
+    } catch (e: any) {
+      this._toast.error(e?.error?.message || 'Failed to delete sub department');
     }
   }
 

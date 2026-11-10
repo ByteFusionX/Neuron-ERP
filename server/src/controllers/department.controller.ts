@@ -610,7 +610,7 @@ export const getInternalDepartmentOrgChart = async (req: Request, res: Response,
         if (!dept) return res.status(404).json({ message: 'Department not found' })
 
         const employees: any[] = await Employee.find(
-            { department: dept._id, isDeleted: { $ne: true } },
+            { department: dept._id, isDeleted: { $ne: true }, isBlocked: { $ne: true } },
             'employeeId firstName lastName designation reportingTo'
         ).lean()
 
