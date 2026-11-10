@@ -8,7 +8,7 @@ import { disconnectUserSockets } from "./socket-io.service";
 
 // Session model: a short-lived access JWT {id, employeeId} (sent as Bearer, kept in localStorage as
 // `employeeToken`) plus a rotating refresh token held only in an httpOnly cookie and, hashed, in Mongo.
-export const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || "15m";
+export const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || "1d";
 // REFRESH_TOKEN_MINUTES (testing only) overrides REFRESH_TOKEN_DAYS so expiry can be exercised quickly.
 const REFRESH_TTL_MS = process.env.REFRESH_TOKEN_MINUTES
   ? Number(process.env.REFRESH_TOKEN_MINUTES) * 60 * 1000
