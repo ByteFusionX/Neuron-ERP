@@ -103,6 +103,9 @@
 <app-create-purchase *ngIf="createDrawerOpen" [drawer]="true" [withoutJob]="false" [sourceLocked]="true" [initialJobId]="createDrawerJobId"
     (saved)="onCreateDrawerSaved()" (submitted)="onDrawerSubmitted($event)" (closed)="onCreateDrawerClosed()"></app-create-purchase>
 
+<app-create-purchase *ngIf="posDrawerOpen" [drawer]="true" [editPurchaseId]="editDrawerPurchaseId" [sourceLocked]="true" [posOnly]="true"
+    (saved)="onEditDrawerSaved()" (closed)="onPosDrawerClosed()"></app-create-purchase>
+
 <!-- Mounted only while open, so each opening starts from a fresh load of that PR. -->
 <app-create-purchase *ngIf="editDrawerOpen" [drawer]="true" [editPurchaseId]="editDrawerPurchaseId" [sourceLocked]="true"
     [viewOnly]="editDrawerViewOnly" [initialStep]="editDrawerViewOnly ? 2 : null"

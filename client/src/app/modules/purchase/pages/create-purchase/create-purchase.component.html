@@ -85,7 +85,7 @@
     <ng-icon [name]="fullView ? 'heroArrowsPointingIn' : 'heroArrowsPointingOut'" class="h-4 w-4"></ng-icon>
   </button>
 
-  <app-sf-stepper [labels]="shownLabels" [ids]="shownIds" [current]="step" [isComplete]="stepDoneFn" [isLocked]="stepLockedFn" [tickAhead]="true" (stepClick)="goToStep($any($event))"></app-sf-stepper>
+  <app-sf-stepper *ngIf="!posOnly" [labels]="shownLabels" [ids]="shownIds" [current]="step" [isComplete]="stepDoneFn" [isLocked]="stepLockedFn" [tickAhead]="true" (stepClick)="goToStep($any($event))"></app-sf-stepper>
 
   <p *ngIf="!canSaveDraft && step < 5" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
     This request is {{ f['status'].value }}: lines, prices and suppliers can no longer change.
@@ -107,6 +107,7 @@
     [itemCount]="itemCount"
     [liveTotalLpo]="liveTotalLpo"
     [currency]="currency"
+    (currencyChange)="currency.set($event)"
     [isEditing]="isEditing"
     [sourceLocked]="sourceLocked"
     [isJobLess]="isJobLess"
@@ -297,7 +298,8 @@
     </div>
 
     <article *ngFor="let c of poCards()" class="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-erp-border-dark dark:bg-erp-surface-dark">
-      <div *ngIf="poCardTotals(c.supplierId) as t" class="flex flex-wrap items-center gap-3 px-4 py-3">
+      <div *ngIf="poCardTotals(c.supplierId) as t" class="flex flex-wrap items-center gap-3 px-4 py-3" [class.cursor-pointer]="c.lpos.length"
+        (click)="c.lpos.length && togglePoCard(c.supplierId)">
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{{ c.name }}</p>
           <p class="text-xs text-gray-500">
@@ -308,7 +310,7 @@
             <span class="font-medium" [ngClass]="t.toOrder ? 'text-amber-700 dark:text-amber-400' : 'text-gray-400'"> · {{ t.toOrder || 0 }} to order</span>
           </p>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2" (click)="$event.stopPropagation()">
           <ng-container *ngFor="let l of c.lpos">
             <span class="inline-flex items-center gap-1">
               <span class="rounded-full px-2.5 py-0.5 text-[11px] font-medium" [ngClass]="poTone(l.poStatus)" [title]="'LPO ' + l.poNo">{{ l.poNo }} · {{ l.poStatus }}</span>
@@ -374,14 +376,13 @@
       </ng-container>
     </div>
     <span *ngIf="step === 4 && canSaveDraft && submitBlockedReason" class="text-xs text-amber-600 dark:text-amber-400">{{ submitBlockedReason }}</span>
-    <app-action-button variant="secondary" (click)="prDrawer.requestClose()"><ng-icon name="heroXMark" class="h-3.5 w-3.5"></ng-icon> {{ canSaveDraft ? 'Cancel' : 'Close' }}</app-action-button>
+    <app-action-button variant="secondary" (click)="prDrawer.requestClose()"><ng-icon name="heroXMark" class="h-3.5 w-3.5"></ng-icon> {{ canSaveDraft && !posOnly ? 'Cancel' : 'Close' }}</app-action-button>
     <!-- view-only: the stepper moves between tabs, so the footer carries just Close -->
-    <ng-container *ngIf="!viewOnly">
+    <ng-container *ngIf="!viewOnly && !posOnly">
       <app-action-button *ngIf="step > 2" variant="secondary" (click)="onBackClicks()"><ng-icon name="heroArrowLeft" class="h-3.5 w-3.5"></ng-icon> Back</app-action-button>
       <app-action-button *ngIf="canSaveDraft" variant="tool" (click)="onDraftClicks()"><ng-icon name="heroArrowDownTray" class="h-3.5 w-3.5"></ng-icon> Save</app-action-button>
       <app-action-button *ngIf="step === 2" variant="primary" (click)="onNextClicks()" [title]="canSaveDraft ? 'Saves the items, then opens Compare & award' : ''"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> {{ canSaveDraft ? 'Save & compare' : 'Next' }}</app-action-button>
       <app-action-button *ngIf="step === 3" variant="primary" (click)="goToStep(4)"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Next</app-action-button>
-      <app-action-button *ngIf="step === 4 && isApproved" variant="primary" (click)="goToStep(5)"><ng-icon name="heroArrowRight" class="h-3.5 w-3.5"></ng-icon> Next</app-action-button>
     </ng-container>
     <span *ngIf="step === 4 && canSaveDraft">
       <app-action-button variant="primary" [disabled]="!!submitBlockedReason" (click)="onSubmit()">

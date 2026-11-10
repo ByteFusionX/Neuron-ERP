@@ -553,7 +553,8 @@ export class PurchaseRequestListComponent {
         this.onEditPr(row);
         break;
       case 'pos':
-        this.onEditPr(row);
+        this.posDrawerOpen = true;
+        this.editDrawerPurchaseId = row._id;
         break;
       case 'viewDetails':
         this.onEditPr(row, undefined, true);
@@ -1165,6 +1166,14 @@ export class PurchaseRequestListComponent {
 
   onEditDrawerSaved(): void {
     this.getPurchases();
+  }
+
+  /** Separate POs drawer, opened from the row's POs button. */
+  posDrawerOpen = false;
+
+  onPosDrawerClosed(): void {
+    this.posDrawerOpen = false;
+    this.editDrawerPurchaseId = null;
   }
 
   onEditDrawerClosed(): void {

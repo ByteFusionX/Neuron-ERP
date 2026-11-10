@@ -157,4 +157,4 @@
   [viewOnly]="true" [initialStep]="2" (closed)="viewDrawerOpen = false"></app-create-purchase>
 <!-- POs step of an approved PR; an overlay on this page, so closing it leaves the user here -->
 <app-create-purchase *ngIf="posDrawerOpen" [drawer]="true" [editPurchaseId]="purchase?._id ?? null" [sourceLocked]="true"
-  [initialStep]="5" (saved)="onEditDrawerSaved()" (closed)="posDrawerOpen = false"></app-create-purchase>
+  [posOnly]="true" (saved)="onEditDrawerSaved()" (closed)="posDrawerOpen = false"></app-create-purchase>

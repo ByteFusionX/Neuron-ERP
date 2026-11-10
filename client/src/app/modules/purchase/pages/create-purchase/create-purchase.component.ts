@@ -41,6 +41,7 @@ import {
   DetailViewStat,
 } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
 
+import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 interface PartNumberDropdownOption {
   label: string;
   value: string;
@@ -83,6 +84,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   @Input() initialStep: 1 | 2 | 3 | 4 | 5 | null = null;
   /** Drawer mode: look-only view of items, compare & award and additional costs, with just a Close button. */
   @Input() viewOnly = false;
+  /** Opens just the POs of an approved request, as its own drawer apart from the create/edit steps. */
+  @Input() posOnly = false;
   /** Drawer mode: a PR was created or saved as a draft, so the list should reload. */
   @Output() saved = new EventEmitter<void>();
   /** Drawer mode: the slide-out animation finished; the host can unmount. */
@@ -287,7 +290,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     ].filter(Boolean))];
     this.lastPricesFor = ids.slice().sort().join(',');
     if (!ids.length) { this.lastPrices.set([]); return; }
-    this.subscriptions.add(this.purchaseService.getSupplierPrices(ids, [], this.currency() || 'QAR').subscribe({
+    this.subscriptions.add(this.purchaseService.getSupplierPrices(ids, [], this.currency() || DEFAULT_CURRENCY).subscribe({
       next: (res) => this.lastPrices.set(res?.data || []),
       error: () => this.lastPrices.set([]),
     }));
@@ -847,8 +850,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   formTitle(): string {
+    if (this.posOnly) return 'Purchase orders';
     if (this.viewOnly) return this.isJobLess ? 'View general purchase' : 'View purchase requisition';
-    if (this.isEditing && this.isApproved) return 'Initiate POs';
     if (this.isJobLess) return this.isEditing ? 'Edit general purchase' : 'New general purchase';
     return this.isEditing ? 'Edit purchase requisition' : 'New purchase requisition';
   }
@@ -1277,7 +1280,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       job: job._id
     })
 
-    const currency = (job?.quotation as any)?.currency || (job?.quotation as any)?.dealData?.currency || '';
+    const currency = (job?.quotation as any)?.dealData?.currency || (job?.quotation as any)?.currency || '';
     if (currency) {
       this.currency.set(currency);
     }
@@ -1563,7 +1566,6 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   step: 1 | 2 | 3 | 4 | 5 = 2;
   /** The view-only drawer shows items, compare & award and additional costs; its POs are a tab on Items. */
   get shownSteps(): { n: 1 | 2 | 3 | 4 | 5; label: string }[] {
-    if (!this.viewOnly) return this.steps;
     return this.steps.filter((s) => s.n >= 2 && s.n <= 4);
   }
 
@@ -1667,7 +1669,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       if (status === 'Approved') this.loadPos();
       return;
     }
-    const step = this.initialStep ?? (status === 'Approved' ? 5 : status === 'Pending' ? 3 : null);
+    if (this.posOnly) { if (status === 'Approved') this.openStep(5); return; }
+    const step = this.initialStep ?? (status === 'Pending' ? 3 : null);
     if (step) this.goToStep(step === 1 ? 2 : step);
   }
 
@@ -1688,10 +1691,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   readonly stepDoneFn = (n: number): boolean => this.stepDone(n);
   readonly stepLockedFn = (n: number): boolean => this.stepLocked(n);
   /** Stable arrays for the stepper: the view-only drawer hides the POs step. */
-  get shownLabels(): string[] { return this.viewOnly ? this.viewLabels : this.fullLabels; }
-  get shownIds(): number[] { return this.viewOnly ? this.viewIds : this.fullIds; }
-  private readonly fullLabels = this.steps.map((x) => x.label);
-  private readonly fullIds: number[] = this.steps.map((x) => x.n);
+  get shownLabels(): string[] { return this.viewLabels; }
+  get shownIds(): number[] { return this.viewIds; }
   private readonly viewLabels = this.steps.filter((x) => x.n <= 4).map((x) => x.label);
   private readonly viewIds: number[] = this.steps.filter((x) => x.n <= 4).map((x) => x.n);
 
@@ -1700,7 +1701,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   }
 
   goToStep(n: 1 | 2 | 3 | 4 | 5): void {
-    if (this.stepLocked(n) || n === this.step) return;
+    if (this.posOnly || this.stepLocked(n) || n === this.step) return;
     if (n === 1 || n === 2) {
       this.activeTab = 'items';
       this.step = 2;
@@ -2125,7 +2126,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       width: '560px',
       closeOnBackdrop: false,
       data: {
-        purchaseId: this.purchaseId, lineKey: row.lineKey, detail: row.detail, uom: row.uom, currency: this.currency() || 'QAR',
+        purchaseId: this.purchaseId, lineKey: row.lineKey, detail: row.detail, uom: row.uom, currency: this.currency() || DEFAULT_CURRENCY,
         from: { supplierId: s.supplierId, supplierName: s.supplierName, freeQty: s.freeQty, unitPrice: s.unitPrice },
         quoted, suppliers: this.supplierOptions(),
       },
