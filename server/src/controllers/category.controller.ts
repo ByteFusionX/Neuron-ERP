@@ -26,7 +26,11 @@ export const getCategory = async (req: Request, res: Response, next: NextFunctio
             },
             {
                 $addFields: {
-                    employeeCount: { $size: '$employees' }
+                    employeeCount: {
+                        $size: {
+                            $filter: { input: '$employees', as: 'e', cond: { $ne: ['$$e.isBlocked', true] } }
+                        }
+                    }
                 }
             },
             {

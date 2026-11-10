@@ -759,6 +759,10 @@ export class RoleFormDrawerComponent implements OnChanges {
       .filter((g) => g.modules.length);
   }
 
+  get activeEmployees(): any[] {
+    return (this.category?.employees ?? []).filter((e: any) => !e.isBlocked);
+  }
+
   get enabledModuleCount(): number {
     return this.privilegeModules.filter((m) => this.hasAccess(m)).length;
   }

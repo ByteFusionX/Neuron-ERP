@@ -15,13 +15,11 @@
     </app-sf-section>
 
     <app-sf-section *ngIf="category?._id" title="Employees in this role"
-      [description]="(category?.employees?.length || 0) + ' employee(s) currently assigned'">
-      <div *ngIf="category?.employees?.length; else noEmployees" class="flex flex-wrap gap-2">
-        <span *ngFor="let e of category?.employees" class="inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-700 dark:border-white/10 dark:text-gray-200"
-          [class.opacity-60]="e.isBlocked">
+      [description]="activeEmployees.length + ' employee(s) currently assigned'">
+      <div *ngIf="activeEmployees.length; else noEmployees" class="flex flex-wrap gap-2">
+        <span *ngFor="let e of activeEmployees" class="inline-flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-700 dark:border-white/10 dark:text-gray-200">
           <span class="font-semibold">{{ e.firstName }} {{ e.lastName }}</span>
           <span class="text-gray-400">{{ e.employeeId }}<ng-container *ngIf="e.designation"> · {{ e.designation }}</ng-container></span>
-          <span *ngIf="e.isBlocked" class="text-red-600">Blocked</span>
         </span>
       </div>
       <ng-template #noEmployees><p class="text-sm text-gray-500 dark:text-gray-400">No employees are assigned to this role.</p></ng-template>
