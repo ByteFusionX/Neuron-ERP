@@ -46,7 +46,9 @@ export function MSALInstanceFactory(): IPublicClientApplication {
     auth: {
       clientId: environment.microsoftClientId,
       authority: `https://login.microsoftonline.com/${environment.microsoftTenantId}`,
-      redirectUri: environment.redirectUri,
+      // Use the origin the app is actually served from so Vercel/preview deploys
+      // return to themselves instead of the hardcoded environment URL.
+      redirectUri: window.location.origin,
     },
     cache: {
       cacheLocation: BrowserCacheLocation.LocalStorage,
