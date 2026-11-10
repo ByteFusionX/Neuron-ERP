@@ -1,4 +1,4 @@
-import { Component, Input, booleanAttribute, forwardRef } from '@angular/core';
+import { Component, ElementRef, Input, ViewChild, booleanAttribute, forwardRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NG_VALUE_ACCESSOR } from '@angular/forms';
 import { SfControl } from './sf-control';
@@ -14,18 +14,20 @@ import { SF_STYLES } from './sf.model';
     <!-- Floating format bar: shows while the box is focused. Pointer-down is cancelled so the selection and focus survive the click. -->
     <div *ngIf="richText && focused && !disabled && !readonly" (pointerdown)="$event.preventDefault()" (mousedown)="$event.preventDefault()"
       class="absolute -top-8 right-0 z-20 flex items-center gap-0.5 rounded-lg border border-gray-200 bg-white p-0.5 shadow-md dark:border-gray-700 dark:bg-gray-900">
-      <button type="button" tabindex="-1" (click)="wrap(ta, '**', '**')" title="Bold (Ctrl+Shift+B)" aria-label="Bold"
-        class="flex h-6 w-6 items-center justify-center rounded-md text-[13px] font-bold text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">B</button>
-      <button type="button" tabindex="-1" (click)="wrap(ta, '{', '}')" title="Highlight (Ctrl+Shift+H)" aria-label="Highlight"
-        class="flex h-6 w-6 flex-col items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
+      <button type="button" tabindex="-1" (click)="wrap(ta, '**', '**'); markFormats(ta)" title="Bold (Ctrl+Shift+B)" aria-label="Bold" [attr.aria-pressed]="boldOn"
+        [ngClass]="boldOn ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800'"
+        class="flex h-6 w-6 items-center justify-center rounded-md text-[13px] font-bold">B</button>
+      <button type="button" tabindex="-1" (click)="wrap(ta, '{', '}'); markFormats(ta)" title="Highlight (Ctrl+Shift+H)" aria-label="Highlight" [attr.aria-pressed]="hlOn"
+        [ngClass]="hlOn ? 'bg-violet-100 dark:bg-violet-900/50' : 'hover:bg-gray-100 dark:hover:bg-gray-800'"
+        class="flex h-6 w-6 flex-col items-center justify-center rounded-md">
         <span class="text-[12px] font-semibold leading-none text-gray-700 dark:text-gray-200">H</span>
         <span class="mt-0.5 h-[3px] w-3.5 rounded-full bg-orange-500"></span>
       </button>
     </div>
-    <textarea #ta class="sf-input block py-2 leading-5" [style.resize]="autoresize ? 'none' : 'vertical'"
-      [style.color]="richText ? 'transparent' : null" [style.caret-color]="richText ? '#7c3aed' : null" (scroll)="syncScroll(ta)"
+    <textarea #ta class="sf-input block py-2 leading-5" (select)="markFormats(ta)" (keyup)="markFormats(ta)" (mouseup)="markFormats(ta)" [style.resize]="autoresize ? 'none' : 'vertical'" [style.padding]="richText ? '0.5rem 0.75rem' : null" [style.line-height]="richText ? '1.25rem' : null"
+      [style.color]="richText ? 'transparent' : null" [style.caret-color]="richText ? '#7c3aed' : null" (scroll)="syncScroll(ta)" (click)="syncScroll(ta)"
       [id]="inputId" [rows]="rows" [value]="value ?? ''" [placeholder]="placeholder" [disabled]="disabled" [readOnly]="readonly"
-      [attr.maxlength]="maxlength" (input)="duplicateNotice = ''; update(ta.value); resize(ta); fit(ta)" (focus)="focused = true; fit(ta)" (blur)="focused = false; touch(); collapse(ta)"
+      [attr.maxlength]="maxlength" (input)="duplicateNotice = ''; update(ta.value); resize(ta); fit(ta)" (focus)="focused = true; fit(ta); markFormats(ta)" (blur)="focused = false; touch(); collapse(ta)"
       (keydown)="onFormatKey($event, ta)"
       (keydown.enter)="onEnter($event, ta)"></textarea>
     <!-- Live preview drawn over the transparent textarea text: bold and orange show while typing; the ** and { } markers stay faint so offsets match. -->
@@ -54,6 +56,39 @@ export class SfTextareaComponent extends SfControl<string> {
   @Input({ transform: booleanAttribute }) richText = false;
   focused = false;
   scroll = 0;
+  boldOn = false;
+  hlOn = false;
+  @ViewChild('ta') private taRef?: ElementRef<HTMLTextAreaElement>;
+
+  /** Lights the Bold / Highlight buttons when the selection (or caret) sits inside, or covers, a ** ** / { } pair. */
+  markFormats(ta: HTMLTextAreaElement): void {
+    const v = ta.value;
+    const a = ta.selectionStart ?? 0, b = ta.selectionEnd ?? 0;
+    // Bold and highlight are scanned separately so one nested in the other is still seen.
+    const inside = (open: string, close: string): boolean => {
+      for (let i = v.indexOf(open); i >= 0; ) {
+        const end = v.indexOf(close, i + open.length);
+        if (end < 0) return false;
+        if (a >= i && b <= end + close.length && (a !== b || (a > i && a < end + close.length))) return true;
+        i = v.indexOf(open, end + close.length);
+      }
+      return false;
+    };
+    const bold = inside('**', '**'), hl = inside('{', '}');
+    this.boldOn = bold;
+    this.hlOn = hl;
+  }
+
+  /** Text written from outside (e.g. Brand / Part no lines) changes the height and scroll; resync so the caret lines up with the drawn text. */
+  protected override valueWritten(): void {
+    queueMicrotask(() => {
+      const ta = this.taRef?.nativeElement;
+      if (!ta) return;
+      if (this.focused) this.fit(ta);
+      this.scroll = ta.scrollTop;
+      this.cdr.markForCheck();
+    });
+  }
 
   private segKey: string | null = null;
   private segCache: { text: string; bold: boolean; hl: boolean; marker: boolean }[] = [];

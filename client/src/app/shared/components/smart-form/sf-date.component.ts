@@ -18,7 +18,7 @@ import { SF_STYLES } from './sf.model';
         @if (typeable && !readonly) {
           <!-- Typed dates: dd/mm/yyyy is parsed as you type; the calendar opens from the icon. -->
           <input class="sf-input tabular-nums pr-9" type="text" inputmode="numeric" autocomplete="off" [id]="inputId" [value]="editing ? text : display" [disabled]="disabled"
-            [placeholder]="displayFormat.toLowerCase()" (focus)="startEdit()" (input)="onType($any($event.target).value)" (keydown)="onTypedKeydown($event, picker)" (blur)="endEdit()" />
+            [placeholder]="displayFormat.toLowerCase()" (focus)="startEdit()" (click)="openPicker(picker)" (input)="onType($any($event.target).value)" (keydown)="onTypedKeydown($event, picker)" (blur)="endEdit()" />
           <button type="button" tabindex="-1" class="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-content-center rounded text-gray-500 hover:text-violet-600 dark:text-gray-400" aria-label="Open calendar" [disabled]="disabled" (click)="openPicker(picker)">
             <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm10 6H4v8h12V8z" clip-rule="evenodd" />
