@@ -281,6 +281,8 @@ export interface Privileges {
     transferProcurementPerson: boolean;
     /** Unset means allowed; only an explicit false hides the Update status action. */
     statusUpdate?: boolean;
+    /** Unset means allowed; only an explicit false hides the PI/PR/PO/GRN/DN/Invoice tabs of the job view. */
+    viewOtherModules?: boolean;
   };
   /** Roles saved before the split hold a bare boolean (true = view + approve + reject + revoke). */
   dealSheet: boolean | { viewReport: string; approve?: boolean; reject?: boolean; revoke?: boolean; update?: boolean };

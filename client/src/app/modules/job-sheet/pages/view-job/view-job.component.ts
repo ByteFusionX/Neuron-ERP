@@ -123,7 +123,10 @@ export class ViewJobComponent implements OnInit {
 
   panelOpen = true;
   panelTab: PanelTab = 'costs';
-  readonly panelTabs: { id: PanelTab; label: string }[] = [
+  get panelTabs(): { id: PanelTab; label: string }[] {
+    return this.canViewOtherModules ? this.allPanelTabs : this.allPanelTabs.filter((t) => t.id !== 'pi' && !this.isStageTab(t.id));
+  }
+  private readonly allPanelTabs: { id: PanelTab; label: string }[] = [
     { id: 'costs', label: 'Pricing' },
     { id: 'documents', label: 'Documents' },
     { id: 'workflow', label: 'Workflow' },
@@ -364,6 +367,8 @@ export class ViewJobComponent implements OnInit {
   private isSuperAdmin = false;
   private canAllocateJobs = false;
   private canUpdateJobStatus = false;
+  /** One privilege covers the PI, PR, PO, GRN, DN and Invoice tabs; unset means allowed. */
+  private canViewOtherModules = true;
 
   ngOnInit(): void {
     const state = history.state as { returnUrl?: string };
@@ -374,6 +379,8 @@ export class ViewJobComponent implements OnInit {
       this.isSuperAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
       this.canAllocateJobs = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.allocateJobs || false;
       this.canUpdateJobStatus = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.statusUpdate !== false;
+      this.canViewOtherModules = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.viewOtherModules !== false;
+      if (!this.canViewOtherModules && (this.panelTab === 'pi' || this.isStageTab(this.panelTab))) this.panelTab = 'costs';
     });
 
     this.load();

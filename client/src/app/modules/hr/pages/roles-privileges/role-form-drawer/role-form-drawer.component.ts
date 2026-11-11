@@ -216,7 +216,7 @@ export class RoleFormDrawerComponent implements OnChanges {
     {
       key: 'jobSheet', label: 'Job Sheet', abbr: 'JS', description: 'Jobs and allocation', master: 'jobSheetChecked', group: 'jobSheet',
       scopes: [scope('jobSheet.viewReport')],
-      flags: [{ path: 'jobSheet.allocateJobs', label: 'Allocate jobs' }, { path: 'jobSheet.transferProcurementPerson', label: 'Transfer procurement person' }, { path: 'jobSheet.statusUpdate', label: 'Update job status' }],
+      flags: [{ path: 'jobSheet.allocateJobs', label: 'Allocate jobs' }, { path: 'jobSheet.transferProcurementPerson', label: 'Transfer procurement person' }, { path: 'jobSheet.statusUpdate', label: 'Update job status' }, { path: 'jobSheet.viewOtherModules', label: 'View PI, PR, PO, GRN, DN & Invoice tabs' }],
     },
     {
       key: 'purchase', label: 'Purchase', abbr: 'PR', description: 'Purchase requisitions', master: 'purchaseChecked', group: 'purchase',
@@ -481,6 +481,7 @@ export class RoleFormDrawerComponent implements OnChanges {
         allocateJobs: [false],
         transferProcurementPerson: [false],
         statusUpdate: [true],
+        viewOtherModules: [true],
       }),
       purchase: this._fb.group({
         viewReport: 'none',

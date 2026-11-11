@@ -75,6 +75,7 @@ const PRIVILEGE_MODULES: PrivilegeModule[] = [
     { path: 'jobSheet.allocateJobs', label: 'Allocate jobs' },
     { path: 'jobSheet.transferProcurementPerson', label: 'Transfer procurement person' },
     { path: 'jobSheet.statusUpdate', label: 'Update job status' },
+    { path: 'jobSheet.viewOtherModules', label: 'View PI, PR, PO, GRN, DN & Invoice tabs' },
   ]},
   { key: 'purchase', label: 'Purchase', flags: [
     { path: 'purchase.create', label: 'Create purchases' },
