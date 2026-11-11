@@ -24,6 +24,8 @@ export interface SalesPeriodKpis {
   won: number;
   wonValue: number;
   wonCost: number;
+  wonGross: number;
+  wonDiscount: number;
   lost: number;
   lostValue: number;
   winRate: number | null;

@@ -109,7 +109,7 @@ export class SalesDashboardComponent implements OnInit, OnDestroy {
   ];
 
   kpis: Kpi[] = [];
-  hero: { value: string; count: number; delta: Kpi['delta']; prev: string; gp: string; gpPct: string; gpDelta: Kpi['delta'] } | null = null;
+  hero: { value: string; count: number; delta: Kpi['delta']; prev: string; gp: string; gpPct: string; gpDelta: Kpi['delta']; gross: string; discount: string; scoped: boolean } | null = null;
   spark: SparkChart | null = null;
   trendChart: TrendChart | null = null;
   openGroup: string | null = null;
@@ -588,6 +588,13 @@ export class SalesDashboardComponent implements OnInit, OnDestroy {
     return pct >= 10 ? 'bad' : pct >= 5 ? 'mid' : 'good';
   }
 
+  /** Won revenue card: open the approved deals it is made of, for the same period, person and customer. */
+  openWonDeals(person?: string, customer?: string): void {
+    this._router.navigate(['/deal-sheet/approved'], {
+      queryParams: { wonFrom: this.from || null, wonTo: this.to || null, person: person || this.salesPerson || null, customer: customer || this.customer || null },
+    });
+  }
+
   trackKey(_: number, x: { key?: string; id?: string; label?: string }) {
     return x.key ?? x.id ?? x.label;
   }
@@ -607,12 +614,15 @@ export class SalesDashboardComponent implements OnInit, OnDestroy {
       gp: this.money(c.wonValue - c.wonCost, false),
       gpPct: c.wonValue > 0 ? this.pct(Math.round(((c.wonValue - c.wonCost) / c.wonValue) * 1000) / 10) : '—',
       gpDelta: this.delta(c.wonValue - c.wonCost, p.wonValue - p.wonCost),
+      gross: this.money(c.wonGross, false),
+      discount: this.money(c.wonDiscount, false),
+      scoped: d.scope.label !== 'Whole sales team',
     };
 
     this.kpis = [
       { key: 'enq', label: 'New enquiries', value: String(c.enquiries), icon: 'heroInboxArrowDown', delta: this.delta(c.enquiries, p.enquiries), sub: `${p.enquiries} last period`, hint: 'Enquiries created in the period. Shows whether demand is rising or falling.' },
-      { key: 'sent', label: 'Quotes sent', value: String(c.quotesSent), sub: `${this.money(c.quotesSentValue)} ${this.currency}`, icon: 'heroPaperAirplane', delta: this.delta(c.quotesSent, p.quotesSent), hint: 'Quotes that went to the customer in the period, and what they were worth.' },
-      { key: 'rate', label: 'Win rate', value: this.pct(c.winRate), sub: `${c.won} won · ${c.lost} lost`, icon: 'heroCheckBadge', delta: this.pointDelta(c.winRate, p.winRate), hint: 'Approved deal sheets ÷ (approved deal sheets + lost quotes) decided in the period.' },
+      { key: 'sent', label: 'Quotes created', value: String(c.quotesCreated), sub: `${this.money(c.quotesCreatedValue)} ${this.currency}`, icon: 'heroPaperAirplane', delta: this.delta(c.quotesCreated, p.quotesCreated), hint: 'Quotes created in the period, and what they were worth. The win rate is measured against this number.' },
+      { key: 'rate', label: 'Win rate', value: this.pct(c.winRate), sub: `${c.won} won ÷ ${c.quotesCreated} quotes created`, icon: 'heroCheckBadge', delta: this.pointDelta(c.winRate, p.winRate), hint: 'Quotes won (approved deal sheets) in the period ÷ quotes created in the period.' },
       { key: 'pipe', label: 'Open pipeline', value: this.money(d.kpis.pipeline.value), unit: this.currency, sub: `${this.plural(d.kpis.pipeline.count, 'quote')} with customers`, icon: 'heroCircleStack', delta: null, hint: 'Sent quotes still waiting for a customer decision, right now.' },
       { key: 'avg', label: 'Average deal', value: this.money(c.avgDeal), unit: c.avgDeal == null ? '' : this.currency, sub: `Last period ${this.money(p.avgDeal)}`, icon: 'heroScale', delta: this.delta(c.avgDeal, p.avgDeal), hint: 'Won value ÷ number of wins in the period.' },
       { key: 'tat', label: 'Quote turnaround', value: this.daysText(c.turnaround), unit: this.daysUnit(c.turnaround), sub: 'Enquiry → quote sent', icon: 'heroClock', delta: this.delta(c.turnaround, p.turnaround, true), hint: 'Average days from enquiry to sending the quote. Lower is better.' },

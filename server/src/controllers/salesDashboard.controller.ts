@@ -114,8 +114,8 @@ const quoteMoney = (quote: any, usdToQar: number) => {
 
 /**
  * What a job's deal sheet is worth in QAR, calculated exactly as the main dashboard's Revenue Achieved:
- * selling price of the deal-selected lines (the deal's totalDiscount is ignored), less "Customer Discount" costs;
- * on USD quotes only the line total is converted, the discount is subtracted as is.
+ * selling price of the deal-selected lines, less the deal's totalDiscount and "Customer Discount" costs;
+ * on USD quotes the line total and the discounts are all converted to QAR.
  * Cost is the selected lines (each rounded) plus additional costs, less supplier discounts, converted whole.
  */
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -136,7 +136,7 @@ const dealMoney = (quote: any, usdToQar: number) => {
         gross += sell; cost += buy;
         if (sell || buy) lines.push({ name: String(item?.itemName ?? '').trim() || 'Unnamed item', sell: sell * fx, cost: buy * fx });
     }
-    let discount = 0;
+    let discount = Number(deal.totalDiscount) || 0;
     for (const c of deal.additionalCosts ?? []) {
         const v = Number(c?.value) || 0;
         if (c?.type === 'Customer Discount') discount += v;
@@ -144,7 +144,8 @@ const dealMoney = (quote: any, usdToQar: number) => {
         else cost = r2(cost + v);
     }
     const grossQar = usd ? r2(gross * fx) : gross;
-    return { gross: grossQar, discount, value: r2(grossQar - discount), cost: r2(usd ? r2(r2(cost) * fx) : r2(cost)), lines };
+    const discountQar = usd ? r2(discount * fx) : discount;
+    return { gross: grossQar, discount: discountQar, value: r2(grossQar - discountQar), cost: r2(usd ? r2(r2(cost) * fx) : r2(cost)), lines };
 };
 
 /** Below this margin a won or sent quote is flagged. */
@@ -227,7 +228,9 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
         const trendStart = new Date(to.getFullYear(), to.getMonth() - 11, 1);
         const earliest = new Date(Math.min(trendStart.getTime(), prevFrom.getTime()));
 
-        const usdToQar = Number(await getUSDRated()) || 3.64;
+        const liveRate = Number(await getUSDRated());
+        if (!liveRate) console.warn('[sales-dashboard] USD rate unavailable, using fallback 3.64 for revenue conversion');
+        const usdToQar = liveRate || 3.64;
 
         const [quotes, enquiries] = await Promise.all([
             Quotation.find({
@@ -281,6 +284,7 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
         }
 
         // Won = a deal sheet that is approved, dated by the deal's savedDate.
+        // Job holds are operational and don't un-win a deal; a revoke returns the deal to pending.
         const dealWonAt = (q: any): Date | null => {
             const d = q.dealData;
             if (!d?.savedDate) return null;
@@ -343,9 +347,11 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
                 won: won.length,
                 wonValue,
                 wonCost: won.reduce((s, q) => s + q.w.cost, 0),
+                wonGross: won.reduce((s, q) => s + q.w.gross, 0),
+                wonDiscount: won.reduce((s, q) => s + q.w.discount, 0),
                 lost: lost.length,
                 lostValue: lost.reduce((s, q) => s + q.value, 0),
-                winRate: decided ? round((won.length / decided) * 100, 1) : null,
+                winRate: created.length ? round((won.length / created.length) * 100, 1) : null,
                 avgDeal: won.length ? wonValue / won.length : null,
                 turnaround: avg(sentQ.map((q) => q.turnaround).filter((x): x is number => x != null)),
             };
@@ -467,8 +473,8 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
             won: months.map((m) => round(Q.filter((q) => inRange(q.won, m.start, m.end)).reduce((s, q) => s + q.w.value, 0))),
             winRate: months.map((m) => {
                 const w = Q.filter((q) => inRange(q.won, m.start, m.end)).length;
-                const l = Q.filter((q) => inRange(q.lost, m.start, m.end)).length;
-                return w + l ? round((w / (w + l)) * 100, 1) : null;
+                const c = Q.filter((q) => inRange(q.created, m.start, m.end)).length;
+                return c ? round((w / c) * 100, 1) : null;
             }),
         };
 
@@ -585,13 +591,15 @@ export const getSalesDashboard = async (req: Request, res: Response, next: NextF
         const lostReasons = [...reasons.values()].map((r) => ({ reason: r.reason, count: r.count, value: r.value, competitors: [...r.competitors] }))
             .sort((a, b) => b.value - a.value || b.count - a.count);
 
-        // ---- Pipeline aging (open quotes by days since sent) ------------------------------
+        // ---- Pipeline aging (open quotes by days since last sent) ------------------------------
         const bands = [
             { label: '0–7 days', max: 7 }, { label: '8–14 days', max: 14 }, { label: '15–30 days', max: 30 },
             { label: '31–60 days', max: 60 }, { label: '60+ days', max: Infinity },
         ].map((b) => ({ ...b, count: 0, value: 0 }));
         open.forEach((q) => {
-            const age = days(q.sent ?? q.created ?? now, now);
+            // Age from the latest send, so a quote re-sent after a revision starts again rather than looking stale.
+            const latestSend = (q.raw.sendHistory ?? []).map((s: any) => s.sentAt).filter(Boolean).map((s: any) => new Date(s)).sort((a: Date, b: Date) => b.getTime() - a.getTime())[0];
+            const age = days(latestSend ?? q.sent ?? q.created ?? now, now);
             const band = bands.find((b) => age <= b.max)!;
             band.count++; band.value += q.value;
         });

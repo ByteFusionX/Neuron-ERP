@@ -140,7 +140,8 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     | 'pending'
     | 'approved'
     | 'rejected'
-    | 'revoked' = 'pending';
+    | 'revoked'
+    | 'revenue' = 'pending';
 
   detailLoading = false;
   detailTabs: DataGridDetailTab[] = [
@@ -211,6 +212,8 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       ) {
         const changed = this.activeViewId !== data['view'];
         this.activeViewId = data['view'];
+        // The route data can land after the query params; a dashboard drill-down must stay on its Revenue tab.
+        this.ensureRevenueView();
         if (this.grid) this.grid.activeViewId = this.activeViewId;
         // Same component is reused when the URL segment changes (sidebar link, back button).
         if (changed && this.grid) {
@@ -226,6 +229,11 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       this.row = params['row'] ? parseInt(params['row'], 10) || DEFAULT_PAGE_SIZE : DEFAULT_PAGE_SIZE;
       this.searchQuery = params['search'] || '';
       this.searchCriteria = params['searchCriteria'] || 'all';
+      this.wonFrom = params['wonFrom'] || null;
+      this.wonTo = params['wonTo'] || null;
+      this.wonPerson = params['person'] || null;
+      this.wonCustomer = params['customer'] || null;
+      this.ensureRevenueView();
       this.gridFilters = this.parseGridFilters(params['filters']);
       this.sortKey = params['sortKey'] || null;
       this.sortDir = params['sortDir'] === 'asc' || params['sortDir'] === 'desc' ? params['sortDir'] : null;
@@ -317,6 +325,11 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         valueGetter: (r) => this.formatAmount(r),
       },
       {
+        key: 'discount',
+        label: 'Discount',
+        valueGetter: (r) => this.formatDiscount(r),
+      },
+      {
         key: 'dealStatus',
         sortable: true,
         label: 'Status',
@@ -366,7 +379,6 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         id: 'resetWorkflow',
         label: 'Reset Workflow',
         icon: 'refresh',
-        quick: true,
         hidden: (r) => r.dealData?.status !== 'pending' || !this.isSuperAdmin,
       },
       {
@@ -394,7 +406,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     this.searchQuery = query.search;
     this.page = query.page;
     this.row = query.pageSize;
-    this.gridFilters = (query.filters ?? []).map((f) => ({ key: f.key, op: f.op, value: f.value }));
+    this.gridFilters = (query.filters ?? []).map((f) => ({ key: f.key, op: f.op, value: f.value, or: f.or }));
     this.sortKey = query.sort?.key ?? null;
     this.sortDir = query.sort?.direction ?? null;
     this.getDeals();
@@ -402,12 +414,13 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   }
 
   private static readonly viewSegments: Record<
-    'all' | 'pending' | 'approved' | 'rejected' | 'revoked',
+    'all' | 'pending' | 'approved' | 'rejected' | 'revoked' | 'revenue',
     string
   > = {
     all: 'dealsheets',
     pending: 'pendings',
     approved: 'approved',
+    revenue: 'approved',
     rejected: 'rejected',
     revoked: 'revokeds',
   };
@@ -418,7 +431,8 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       | 'pending'
       | 'approved'
       | 'rejected'
-      | 'revoked';
+      | 'revoked'
+      | 'revenue';
     this.page = 1;
     if (this.grid) this.grid.page = 1;
     // The grid emits queryChange right after viewChange, which reloads the data and syncs the URL once.
@@ -445,6 +459,10 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         filters: this.gridFilters.length ? JSON.stringify(this.gridFilters) : null,
         sortKey: this.sortKey || null,
         sortDir: this.sortDir || null,
+        wonFrom: this.wonFrom,
+        wonTo: this.wonTo,
+        person: this.wonPerson,
+        customer: this.wonCustomer,
       },
       replaceUrl: true,
     });
@@ -453,8 +471,42 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   /** Skips a reload when the URL-driven and grid-driven triggers ask for the same query back to back. */
   private lastQueryKey = '';
 
+  /** Set when opened from the sales dashboard Won revenue card: narrows Approved to that card's deals. */
+  wonFrom: string | null = null;
+  wonTo: string | null = null;
+  wonPerson: string | null = null;
+  wonCustomer: string | null = null;
+
+  get hasDashboardFilter(): boolean {
+    return !!(this.wonFrom || this.wonTo || this.wonPerson || this.wonCustomer);
+  }
+
+  /** Adds the closable "Revenue" tab for deals opened from the dashboard, and opens it when the Approved list was requested. */
+  private ensureRevenueView(): void {
+    if (!this.hasDashboardFilter) return;
+    if (!this.views.some((v) => v.id === 'revenue')) {
+      this.views = [...this.views, { id: 'revenue', label: 'Revenue', closable: true, hidePill: true }];
+    }
+    if (this.activeViewId === 'approved') {
+      this.activeViewId = 'revenue';
+      if (this.grid) this.grid.activeViewId = 'revenue';
+    }
+  }
+
+  closeRevenueView(): void {
+    this.wonFrom = this.wonTo = this.wonPerson = this.wonCustomer = null;
+    this.views = this.views.filter((v) => v.id !== 'revenue');
+    if (this.activeViewId === 'revenue') {
+      this.activeViewId = 'approved';
+      if (this.grid) this.grid.activeViewId = 'approved';
+    }
+    this.page = 1;
+    this.getDeals(true);
+    this.updateUrlParams();
+  }
+
   getDeals(force = false): void {
-    const queryKey = [this.activeViewId, this.page, this.row, this.searchQuery, this.searchCriteria, JSON.stringify(this.gridFilters), this.sortKey, this.sortDir].join('|');
+    const queryKey = [this.activeViewId, this.page, this.row, this.searchQuery, this.searchCriteria, JSON.stringify(this.gridFilters), this.sortKey, this.sortDir, this.wonFrom, this.wonTo, this.wonPerson, this.wonCustomer].join('|');
     if (!force && queryKey === this.lastQueryKey) return;
     this.lastQueryKey = queryKey;
     this.isLoading = true;
@@ -476,14 +528,15 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       role,
       searchQuery: this.searchQuery,
       searchCriteria: this.searchCriteria,
-      view: this.activeViewId,
+      view: this.activeViewId === 'revenue' ? 'approved' : this.activeViewId,
       filters: this.gridFilters,
       sortKey: this.sortKey,
       sortDir: this.sortDir,
+      ...(this.activeViewId === 'revenue' ? { wonFrom: this.wonFrom, wonTo: this.wonTo, salesPerson: this.wonPerson, customer: this.wonCustomer } : {}),
     };
 
     const request =
-      this.activeViewId === 'approved'
+      this.activeViewId === 'approved' || this.activeViewId === 'revenue'
         ? this._quoteService.getApprovedDealSheet(filterData)
         : this._quoteService.getDealSheet(filterData);
 
@@ -866,6 +919,16 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     return `${this.numberFormat.transform(this.sellingPrice(row))} ${row.currency}`;
   }
 
+  /** Total discount given to the customer (quotation discount + Customer Discount costs); Amount is already net of it. */
+  formatDiscount(row: Quotatation): string {
+    if (!row.dealData) return '';
+    const customerDiscount = (row.dealData.additionalCosts ?? [])
+      .filter((c) => c.type === 'Customer Discount')
+      .reduce((sum, c) => sum + (Number(c.value) || 0), 0);
+    const total = (Number(row.dealData.totalDiscount) || 0) + customerDiscount;
+    return total ? `${this.numberFormat.transform(total)} ${row.currency}` : '—';
+  }
+
   approverName(row: Quotatation): string {
     const approver = row.dealData?.approvedBy;
     if (approver && typeof approver === 'object')
@@ -927,7 +990,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       if (!Array.isArray(parsed)) return [];
       return parsed
         .filter((f) => f && typeof f.key === 'string' && typeof f.op === 'string')
-        .map((f) => ({ key: f.key, op: f.op as DataGridFilter['op'], value: f.value }));
+        .map((f) => ({ key: f.key, op: f.op as DataGridFilter['op'], value: f.value, or: f.or === true ? true : undefined }));
     } catch {
       return [];
     }

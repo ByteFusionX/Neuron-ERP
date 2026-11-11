@@ -77,7 +77,7 @@
 
       <!-- KPI strip: one hero (won revenue) + the supporting tiles the user kept -->
       <section *ngSwitchCase="'kpis'" class="sd-grid-kpi" [class.sd-hero-only]="!visibleKpis.length" [style.--kpi-cols]="2 + Math.ceil(visibleKpis.length / 2)">
-        <article class="sd-hero sd-hero-span" *ngIf="hero">
+        <article class="sd-hero sd-hero-span cursor-pointer" *ngIf="hero" role="link" tabindex="0" title="View the deals behind this revenue" (click)="openWonDeals()" (keydown.enter)="openWonDeals()">
           <div class="flex items-start justify-between gap-3">
             <div>
               <p class="sd-hero-label">Won revenue</p>
@@ -88,6 +88,12 @@
                   <ng-icon [name]="hero.delta.tone === 'down' ? 'heroArrowDown' : 'heroArrowUp'" *ngIf="hero.delta.tone !== 'flat'" class="h-3 w-3"></ng-icon>
                   {{ hero.delta.text }}
                 </span>
+              </p>
+              <p class="sd-hero-meta" title="List price of the approved deals, less the customer discount, gives won revenue">
+                List {{ hero.gross }} − discount {{ hero.discount }} {{ currency }}
+              </p>
+              <p *ngIf="hero.scoped" class="sd-hero-meta" title="This page counts the deals you can report on. The deal sheet list follows your deal sheet access, so its count can differ.">
+                Your scope only
               </p>
               <p class="sd-hero-meta" title="Gross profit = approved deal revenue − deal cost">
                 GP {{ hero.gp }} {{ currency }} · {{ hero.gpPct }}
@@ -247,7 +253,7 @@
                       <div class="sd-minibar"><span [style.width.%]="(p.wonValue / peopleMaxWon) * 100"></span></div>
                       <span class="tabular-nums text-xs font-semibold whitespace-nowrap">{{ money(p.wonValue) }}</span>
                     </div>
-                    <span class="text-[11px] text-gray-400">{{ p.won }} won · {{ p.lost }} lost</span>
+                    <span class="text-[11px] text-gray-400"><a *ngIf="p.won; else noWon" class="underline cursor-pointer hover:text-gray-600" title="View these deals" (click)="$event.stopPropagation(); openWonDeals(p.id)">{{ p.won }} won</a><ng-template #noWon>0 won</ng-template> · {{ p.lost }} lost</span>
                   </td>
                   <td class="num"><span class="sd-pill" [ngClass]="winTone(p.winRate)">{{ pct(p.winRate) }}</span></td>
                   <td class="num">{{ money(p.pipeline) }}<span class="block text-[11px] text-gray-400">{{ p.pipelineCount }} open</span></td>
@@ -304,9 +310,8 @@
                 <span class="won" [style.width.%]="(c.wonValue / customersMax) * 100"></span>
                 <span class="pipe" [style.width.%]="(c.pipeline / customersMax) * 100"></span>
               </span>
-              <span class="sd-cust-val">{{ money(c.wonValue + c.pipeline) }}<small *ngIf="c.share" title="Share of won revenue">{{ pct(c.share) }} of won</small></span>
-              <span class="sd-pill" [ngClass]="winTone(c.winRate)" title="Win rate: {{ c.won }} won · {{ c.lost }} lost">{{ pct(c.winRate) }}</span>
-            </button>
+              <span class="sd-cust-val">{{ money(c.wonValue + c.pipeline) }}<small *ngIf="c.share" title="Share of won revenue">{{ pct(c.share) }} of won</small><small *ngIf="c.won" class="underline cursor-pointer" title="View these deals" (click)="$event.stopPropagation(); openWonDeals(undefined, c.id)">{{ c.won }} won</small></span>
+              <span class="sd-pill" [ngClass]="winTone(c.winRate)" title="Win rate: {{ c.won }} won · {{ c.lost }} lost">{{ pct(c.winRate) }}</span>            </button>
             <p *ngIf="!data.customers.length" class="sd-empty">No customer activity in this period.</p>
           </div>
         </article>

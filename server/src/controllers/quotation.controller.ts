@@ -938,14 +938,17 @@ const dealComputedFieldsStage = {
 const buildDealGridQuery = (filters: unknown, sortKey: unknown, sortDir: unknown) => {
     const clauses: Record<string, any>[] = [];
     const list = Array.isArray(filters) ? filters : [];
+    // Consecutive `or` filters form a group; groups are AND'd together (same rule as the grid).
+    const groups: Record<string, any>[][] = [];
     for (const f of list) {
+        const add = (c: Record<string, any>) => (f?.or && groups.length ? groups[groups.length - 1].push(c) : groups.push([c]));
         const key = String(f?.key ?? '');
         const op = String(f?.op ?? 'contains');
         const raw = f?.value;
         const field = DEAL_SORT_FIELDS[key];
         if (!field) continue;
         if (op === 'empty') {
-            clauses.push({ [field]: { $in: [null, ''] } });
+            add({ [field]: { $in: [null, ''] } });
             continue;
         }
         if (raw === undefined || raw === null || raw === '') continue;
@@ -953,20 +956,20 @@ const buildDealGridQuery = (filters: unknown, sortKey: unknown, sortDir: unknown
             const day = new Date(String(raw));
             if (isNaN(day.getTime())) continue;
             const next = new Date(day.getTime() + 24 * 60 * 60 * 1000);
-            if (op === 'on') clauses.push({ [field]: { $gte: day, $lt: next } });
-            else if (op === 'before') clauses.push({ [field]: { $lt: day } });
-            else if (op === 'after') clauses.push({ [field]: { $gte: next } });
+            if (op === 'on') add({ [field]: { $gte: day, $lt: next } });
+            else if (op === 'before') add({ [field]: { $lt: day } });
+            else if (op === 'after') add({ [field]: { $gte: next } });
             continue;
         }
         if (key === 'amount') {
             const value = Number(raw);
             if (Number.isNaN(value)) continue;
-            if (op === 'gt') clauses.push({ [field]: { $gt: value } });
-            else if (op === 'gte') clauses.push({ [field]: { $gte: value } });
-            else if (op === 'lt') clauses.push({ [field]: { $lt: value } });
-            else if (op === 'lte') clauses.push({ [field]: { $lte: value } });
-            else if (op === 'isNot') clauses.push({ [field]: { $ne: value } });
-            else clauses.push({ [field]: value });
+            if (op === 'gt') add({ [field]: { $gt: value } });
+            else if (op === 'gte') add({ [field]: { $gte: value } });
+            else if (op === 'lt') add({ [field]: { $lt: value } });
+            else if (op === 'lte') add({ [field]: { $lte: value } });
+            else if (op === 'isNot') add({ [field]: { $ne: value } });
+            else add({ [field]: value });
             continue;
         }
         const text = escapeRegex(String(raw).trim());
@@ -976,21 +979,22 @@ const buildDealGridQuery = (filters: unknown, sortKey: unknown, sortDir: unknown
         const exact = op === 'is' || op === 'eq';
         const negate = op === 'isNot' || op === 'notContains';
         if (target) {
-            clauses.push(negate ? { $nor: [target] } : target);
+            add(negate ? { $nor: [target] } : target);
             continue;
         }
         const re = { $regex: exact || op === 'isNot' ? `^${text}$` : text, $options: 'i' };
-        clauses.push(negate ? { [field]: { $not: re } } : { [field]: re });
+        add(negate ? { [field]: { $not: re } } : { [field]: re });
     }
     const sortField = DEAL_SORT_FIELDS[String(sortKey ?? '')];
     const sort: Record<string, 1 | -1> = sortField
         ? { [sortField]: sortDir === 'desc' ? -1 : 1, _id: -1 }
         : { 'dealData.savedDate': -1, _id: -1 };
+    clauses.push(...groups.map((g) => (g.length > 1 ? { $or: g } : g[0])));
     return { filter: clauses.length ? { $and: clauses } : {}, sort };
 };
 
 /** Per-tab totals for the deal sheet list, using the same access scope and search as the page query. */
-const dealViewCounts = async (accessFilter: Record<string, any>, searchFilter: Record<string, any>) => {
+const dealViewCounts = async (accessFilter: Record<string, any>, searchFilter: Record<string, any>, revenueFilter?: Record<string, any>) => {
     const base = { isDeleted: { $ne: true }, dealData: { $exists: true }, ...validDealSheetFilter };
     const open = { 'dealData.status': { $nin: ['rejected', 'approved'] } };
     const byView: Record<string, Record<string, any>> = {
@@ -999,6 +1003,8 @@ const dealViewCounts = async (accessFilter: Record<string, any>, searchFilter: R
         approved: { 'dealData.status': 'approved' },
         rejected: { 'dealData.status': 'rejected' },
         revoked: { ...open, 'editHistory.action': 'DealRevoked' },
+        // Approved deals narrowed to the dashboard's Won revenue drill-down (filters apply after the lookups).
+        ...(revenueFilter ? { revenue: { 'dealData.status': 'approved', ...revenueFilter } } : {}),
     };
     const keys = Object.keys(byView);
     // One pass through the lookups, split into the tab counts afterwards, instead of one full pipeline per tab.
@@ -1306,6 +1312,33 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
             };
         }
 
+        // Drill-down from the sales dashboard's Won revenue card: same savedDate window, salesperson and customer.
+        const { wonFrom, wonTo, salesPerson, customer } = req.body;
+        const dayEdge = (raw: any, end: boolean) => {
+            if (!raw) return null;
+            const d = new Date(raw);
+            if (Number.isNaN(d.getTime())) return null;
+            if (end) d.setHours(23, 59, 59, 999); else d.setHours(0, 0, 0, 0);
+            return d;
+        };
+        const wf = dayEdge(wonFrom, false);
+        const wt = dayEdge(wonTo, true);
+        const revenueFilter: Record<string, any> = {};
+        if (wf || wt) {
+            const window = { ...(wf ? { $gte: wf } : {}), ...(wt ? { $lte: wt } : {}) };
+            (matchFilters as any)['dealData.savedDate'] = window;
+            revenueFilter['dealData.savedDate'] = window;
+        }
+        if (typeof salesPerson === 'string' && ObjectId.isValid(salesPerson)) {
+            (matchFilters as any).createdBy = new ObjectId(salesPerson);
+            revenueFilter['createdBy._id'] = new ObjectId(salesPerson);
+        }
+        if (typeof customer === 'string' && ObjectId.isValid(customer)) {
+            (matchFilters as any).client = new ObjectId(customer);
+            revenueFilter['client._id'] = new ObjectId(customer);
+        }
+        const hasRevenueFilter = Object.keys(revenueFilter).length > 0;
+
         const gridQuery = buildDealGridQuery(gridFilters, sortKey, sortDir);
         searchFilter = { $and: [buildDealSearchFilter(searchQuery, searchCriteria), gridQuery.filter] };
 
@@ -1508,9 +1541,9 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
                     }
                 }
             }
-        ]), dealViewCounts(accessFilter, searchFilter)]);
+        ]), dealViewCounts(accessFilter, searchFilter, hasRevenueFilter ? revenueFilter : undefined)]);
 
-        const total: number = viewCounts['approved'] ?? 0;
+        const total: number = viewCounts[hasRevenueFilter ? 'revenue' : 'approved'] ?? 0;
         if (!dealData || !total) return res.status(200).json({ total: 0, dealSheet: [], viewCounts })
         await withDealStageNames(dealData);
         return res.status(200).json({ total: total, dealSheet: dealData, viewCounts })
@@ -2098,10 +2131,17 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
             if (existingQuote.dealData?.status === 'approved') {
                 return res.status(400).json({ message: "The deal sheet is approved, so this quote can no longer be edited" });
             }
-            // Editing a quote whose deal sheet was rejected sends it back to review; no other edit changes the status this way.
+            // A quote whose deal sheet was rejected can be corrected by its owner or a Super Admin. It stays Won so the
+            // deal sheet can be resubmitted from the corrected quote.
             const dealRejected = existingQuote.dealData?.status === 'rejected';
             if (dealRejected) {
-                quoteData.status = quoteStatus.UnderReview;
+                const editor = await getEmployeeData(req.user);
+                const isOwner = !!editor?._id && String(existingQuote.createdBy) === String(editor._id);
+                const isAdmin = /^superadmin$/i.test((editor?.category as any)?.role || '');
+                if (!isOwner && !isAdmin) {
+                    return res.status(403).json({ message: "Only the quote owner or a Super Admin can edit a quote whose deal sheet was rejected" });
+                }
+                quoteData.status = existingQuote.status;
             }
             // Status moves go through the same rules as the status endpoint, so an edit cannot skip them.
             if (!dealRejected && !reopened && quoteData.status && quoteData.status !== existingQuote.status) {
@@ -2478,6 +2518,7 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         }
         parsedDealData = normalizeTaxForCustomer(parsedDealData, customerGuard.customer);
         const { paymentTerms, items, removedFiles, existingFiles, costs } = parsedDealData;
+        const submitNote = String(parsedDealData.submitNote ?? '').trim().slice(0, 500);
         // Unselected lines come back from the form with supplierId '' which can't cast to an ObjectId.
         for (const item of Array.isArray(items) ? items : []) {
             for (const line of Array.isArray(item?.itemDetails) ? item.itemDetails : []) {
@@ -2591,6 +2632,10 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
                 reapprovedDate: quote.dealData?.reapprovedDate,
                 revokeResubmittedDate: quote.dealData?.revokedDate ? createdDate : quote.dealData?.revokeResubmittedDate,
                 status: 'pending',
+                // Earlier comments (e.g. the rejection reason) stay; the submission note is added after them.
+                comments: submitNote
+                    ? [...(quote.dealData?.comments ?? []), `Submission note${userData?.firstName ? ` (${userData.firstName} ${userData.lastName ?? ''})`.replace(/\s+\)/, ')') : ''}: ${submitNote}`]
+                    : (quote.dealData?.comments ?? []),
                 attachments: files,
                 updatedItems: items,
                 totalDiscount: totalDiscount,
