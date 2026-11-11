@@ -374,7 +374,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
         hidden: (r) => this.rowStage(r) !== 'new' || !this.canAssign,
       },
       {
-        id: 'restartWorkflow', label: 'Reset Workflow', icon: 'refresh', quick: true,
+        id: 'restartWorkflow', label: 'Reset Workflow', icon: 'refresh',
         hidden: (r) => this.rowStage(r) !== 'new' || !this.isSuperAdmin || !r.preSale?.assignApproval || !!r.preSale?.presalePerson?.length,
       },
       {

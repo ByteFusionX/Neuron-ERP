@@ -210,15 +210,15 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
 
   private buildRowActions(): void {
     this.rowActions = [
-      { id: 'openFullLpo', label: 'Details View', icon: 'eye', quick: true, panel: true },
+      { id: 'openFullLpo', label: 'PO View', icon: 'eye', quick: true, panel: true },
       { id: 'approve', label: 'Approve', icon: 'check', quick: true, hidden: (r) => !this.canApproveOrReject(r) },
       { id: 'reject', label: 'Reject', icon: 'close', quick: true, hidden: (r) => !this.canApproveOrReject(r) },
       { id: 'edit', label: 'Edit PO', icon: 'edit', quick: true, hidden: (r) => !this.canResend(r) },
       { id: 'resend', label: 'Resend for approval', icon: 'refresh', quick: true, hidden: (r) => !this.canResend(r) },
-      { id: 'viewGrn', label: 'View GRN', icon: 'eye', quick: true, hidden: (r) => !r.grns?.length },
+      { id: 'viewGrn', label: 'View GRN', icon: 'receipt', quick: true, hidden: (r) => !r.grns?.length },
       { id: 'previewPdf', label: 'Preview PDF', icon: 'eye' },
       { id: 'downloadPdf', label: 'Download PDF', icon: 'download' },
-      { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', quick: true, hidden: (r) => r.poStatus !== 'Pending for Approval' || !this.isSuperAdmin },
+      { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', hidden: (r) => r.poStatus !== 'Pending for Approval' || !this.isSuperAdmin },
       { id: 'place', label: 'Place order', icon: 'check', quick: true, hidden: (r) => r.poStatus !== 'Approved' || !this.canInitiateLPO },
       { id: 'uploadDocuments', label: 'Upload documents', icon: 'upload', quick: true, hidden: (r) => !['Approved', 'Placed'].includes(r.poStatus) || !(this.isSuperAdmin || this.canInitiateLPO) },
       { id: 'cancelOrder', label: 'Revoke PO', variant: 'danger', icon: 'close', quick: true, hidden: (r) => r.poStatus !== 'Placed' || !!r.grns?.length || !this.canCancelPo },

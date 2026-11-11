@@ -76,7 +76,7 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
   Revoked: 'bg-orange-50 text-orange-700 ring-orange-200 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-900 dark:border-orange-900',
 };
 
-const PR_VIEW_IDS = ['followUp', 'new', 'inProgress', 'rejected', 'revoked', 'all', 'pending', 'readyToPo', 'remainingPo', 'completed'];
+const PR_VIEW_IDS = ['followUp', 'new', 'remainingJobs','inProgress', 'rejected', 'revoked', 'all', 'pending', 'readyToPo', 'remainingPo', 'completed'];
 
 @Component({
   selector: 'app-purchase-request-list',
@@ -149,7 +149,7 @@ export class PurchaseRequestListComponent {
 
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'PR' }];
   /** Jobs allocated to the signed-in buyer, waiting for their PR; the tab shows only while there are some. */
-  private readonly newView: DataGridView<any> = { id: 'new', label: 'New' };
+  private readonly newView: DataGridView<any> = { id: 'new', label: 'New Jobs' };
   private baseViews: DataGridView<any>[] = [
     { id: 'all', label: 'All', hidePill: true },
     { id: 'followUp', label: 'Follow Up' },
@@ -450,6 +450,13 @@ export class PurchaseRequestListComponent {
   }
 
   getPurchases(): void {
+    // Remaining Jobs is a placeholder tab for now: nothing to load yet.
+    if (this.activeViewId === 'remainingJobs') {
+      this.rows = [];
+      this.total = 0;
+      this.isLoading = false;
+      return;
+    }
     this.isLoading = true;
 
     const filterParams = {
@@ -516,6 +523,7 @@ export class PurchaseRequestListComponent {
     const showNew = true;
     this.views = [
       ...(showNew ? [{ ...this.newView, count: this.newCount }] : []),
+      { id: 'remainingJobs', label: 'Remaining Jobs', count: 0 },
       ...this.baseViews,
     ];
   }

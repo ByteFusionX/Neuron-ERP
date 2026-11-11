@@ -189,7 +189,7 @@ export class GrnService {
               infoRow('Supplier Invoice No:', grnData.supplierInvoiceNo, 'GRN Date:', formatDate(grnData.grnDate)),
               infoRow('Invoice Date:', formatDate(grnData.supplierInvoiceDate), 'PO No:', po.poNo),
               infoRow('Delivery Note No:', grnData.supplierDeliveryNoteNo, 'Job No:', po.jobId?.jobId || po.purchaseId?.jobId?.jobId),
-              infoRow('Warehouse:', grnData.warehouse?.wareHouseName, 'Status:', grnData.status),
+              infoRow('Warehouse:', grnData.warehouse?.wareHouseName, '', ''),
             ]
           }
         },

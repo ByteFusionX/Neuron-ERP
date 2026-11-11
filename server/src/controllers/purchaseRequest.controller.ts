@@ -293,12 +293,14 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
                 // Quoted lines that are not part of the deal are left out.
                 itemDetails: (item.itemDetails ?? []).filter((d: any) => d.dealSelected).flatMap((d: any) => {
                     const parts = (d.components ?? []).filter((c: any) => Number(c.quantity) > 0);
-                    if (!parts.length) return [{ detail: d.detail, quantity: d.quantity, unitCost: d.unitCost }];
+                    if (!parts.length) return [{ detail: d.detail, quantity: d.quantity, unitCost: d.unitCost, unitSellingPrice: d.unitSellingPrice }];
                     const rest = (Number(d.unitCost) || 0) - parts.reduce((s: number, c: any) => s + Number(c.quantity) * (Number(c.unitCost) || 0), 0);
-                    return [
+                    // The deal's selling price belongs to the whole line, so it shows once, on the first row.
+                    const rows = [
                         ...(rest > 0.005 ? [{ detail: d.detail, quantity: d.quantity, unitCost: rest }] : []),
                         ...parts.map((c: any) => ({ detail: c.description, quantity: Number(c.quantity) * (Number(d.quantity) || 0), unitCost: c.unitCost })),
                     ];
+                    return rows.map((r: any, i: number) => (i === 0 ? { ...r, unitSellingPrice: d.unitSellingPrice } : r));
                 }),
             })).filter((item: any) => item.itemDetails.length > 0),
             jobId: job,

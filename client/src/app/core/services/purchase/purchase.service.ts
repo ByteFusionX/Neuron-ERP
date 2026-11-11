@@ -186,7 +186,8 @@ export class PurchaseService {
     // entered on the PO, otherwise the terms agreed on the job's quotation ("Not specified" is a placeholder, not a term)
     const usable = (t: any) => { const s = String(t ?? '').trim(); return s && !/^(not specified|n\/a|-)$/i.test(s) ? s : ''; };
     const quote = data.quoteId || data.purchaseId?.jobId?.quoteId || {};
-    const paymentTerms = usable(purchaseData.paymentTerms) || usable(quote.dealData?.paymentTerms) || usable(quote.paymentTerms);
+    // exactly what was entered when the PO was created: no fallback to the quotation terms
+    const paymentTerms = String(purchaseData.paymentTerms ?? '').trim();
     const creator = data.createdBy || {};
     const creatorName = `${creator.firstName || ''} ${creator.lastName || ''}`.trim();
     const creatorPhone = this.qatarPhone(creator.contactNo);
@@ -202,7 +203,7 @@ export class PurchaseService {
         { text: serialNumber++, style: 'tableText', alignment: 'center' },
         { text: item.detail || '', style: 'tableText' },
         { text: item.quantity, style: 'tableText', alignment: 'center' },
-        { text: money(item.unitCost), style: 'tableText', alignment: 'right' },
+        { text: plain(item.unitCost), style: 'tableText', alignment: 'right' },
         { text: plain(item.totalCost), style: 'tableText', alignment: 'right' },
       ]);
     });
