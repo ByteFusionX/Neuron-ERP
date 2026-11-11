@@ -70,14 +70,17 @@ const buildJobGridQuery = (search: unknown, filters: unknown, sortKey: unknown, 
         });
     }
 
+    // Consecutive `or` filters form a group; groups are AND'd together (same rule as the grid).
+    const groups: Record<string, any>[][] = [];
     for (const f of Array.isArray(filters) ? filters : []) {
+        const add = (c: Record<string, any>) => (f?.or && groups.length ? groups[groups.length - 1].push(c) : groups.push([c]));
         const key = String(f?.key ?? '');
         const op = String(f?.op ?? 'contains');
         const raw = f?.value;
         const field = JOB_GRID_FIELDS[key];
         if (!field) continue;
         if (op === 'empty') {
-            clauses.push({ [field]: { $in: [null, ''] } });
+            add({ [field]: { $in: [null, ''] } });
             continue;
         }
         if (raw === undefined || raw === null || raw === '') continue;
@@ -85,24 +88,24 @@ const buildJobGridQuery = (search: unknown, filters: unknown, sortKey: unknown, 
             const day = new Date(String(raw));
             if (isNaN(day.getTime())) continue;
             const next = new Date(day.getTime() + 24 * 60 * 60 * 1000);
-            if (op === 'on') clauses.push({ [field]: { $gte: day, $lt: next } });
-            else if (op === 'before') clauses.push({ [field]: { $lt: day } });
-            else if (op === 'after') clauses.push({ [field]: { $gte: next } });
+            if (op === 'on') add({ [field]: { $gte: day, $lt: next } });
+            else if (op === 'before') add({ [field]: { $lt: day } });
+            else if (op === 'after') add({ [field]: { $gte: next } });
             continue;
         }
         if (key === 'lpoValue') {
             const n = Number(raw);
             if (isNaN(n)) continue;
-            if (op === 'gt') clauses.push({ [field]: { $gt: n } });
-            else if (op === 'lt') clauses.push({ [field]: { $lt: n } });
-            else clauses.push({ [field]: n });
+            if (op === 'gt') add({ [field]: { $gt: n } });
+            else if (op === 'lt') add({ [field]: { $lt: n } });
+            else add({ [field]: n });
             continue;
         }
         const value = escapeRegex(String(raw).trim());
         const exact = op === 'is' || op === 'eq' || op === 'isNot';
         const negate = op === 'isNot' || op === 'notContains';
         const re = { $regex: exact ? `^${value}$` : value, $options: 'i' };
-        clauses.push(negate ? { [field]: { $not: re } } : { [field]: re });
+        add(negate ? { [field]: { $not: re } } : { [field]: re });
     }
 
     const sortField = JOB_GRID_FIELDS[String(sortKey ?? '')];
@@ -110,6 +113,7 @@ const buildJobGridQuery = (search: unknown, filters: unknown, sortKey: unknown, 
     const sort: Record<string, 1 | -1> = sortField
         ? { [sortField]: sortDir === 'desc' ? -1 : 1, _id: -1 }
         : { updatedDate: -1, _id: -1 };
+    clauses.push(...groups.map((g) => (g.length > 1 ? { $or: g } : g[0])));
     return { filter: clauses.length ? { $and: clauses } : {}, sort };
 };
 
