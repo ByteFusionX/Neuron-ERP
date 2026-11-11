@@ -72,6 +72,12 @@
                 }
               ]
             },
+            "local": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "namedChunks": true
+            },
             "development": {
               "optimization": false,
               "extractLicenses": false,
@@ -116,9 +122,12 @@
             },
             "development": {
               "buildTarget": "client:build:development"
+            },
+            "local": {
+              "buildTarget": "client:build:local"
             }
           },
-          "defaultConfiguration": "development",
+          "defaultConfiguration": "local",
           "options": {
             "proxyConfig": "proxy.conf.json"
           }
