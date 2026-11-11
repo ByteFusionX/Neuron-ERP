@@ -15,6 +15,7 @@ import {
 import { DataGridAutofocusDirective } from './data-grid-autofocus.directive';
 import { SfInputComponent } from '../smart-form/sf-input.component';
 import { SfSelectComponent } from '../smart-form/sf-select.component';
+import { SfComboboxComponent } from '../smart-form/sf-combobox.component';
 import { SfNumberComponent } from '../smart-form/sf-number.component';
 import { SfDateComponent } from '../smart-form/sf-date.component';
 import { SfOption } from '../smart-form/sf.model';
@@ -50,7 +51,7 @@ interface DataGridPrefs {
   // A `title` input must not leak onto the host as a native browser tooltip.
   host: { '[attr.title]': 'null' },
   standalone: true,
-  imports: [CommonModule, FormsModule,DataGridAutofocusDirective, DetailPanelComponent, DetailPanelIconComponent, MatTooltipModule, SfInputComponent, SfSelectComponent, SfNumberComponent, SfDateComponent],
+  imports: [CommonModule, FormsModule,DataGridAutofocusDirective, DetailPanelComponent, DetailPanelIconComponent, MatTooltipModule, SfInputComponent, SfSelectComponent, SfComboboxComponent, SfNumberComponent, SfDateComponent],
   templateUrl: './data-grid.component.html',
   styleUrls: ['./data-grid.component.css'],
 })
@@ -121,6 +122,14 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input({ transform: booleanAttribute }) serverSide = false;
   /** Total row count for the current query, used for pagination when `serverSide` is true. */
   @Input() totalCount = 0;
+  /** Server-side only: the host's API understands every operator and "OR with last". Without it the grid offers AND only,
+   *  because hosts that map filters to single request params silently ignore the OR connector. */
+  @Input({ transform: booleanAttribute }) fullFilters = false;
+
+  /** AND/OR connector is only offered where the filters are evaluated with it. */
+  get orSupported(): boolean {
+    return !this.serverSide || this.fullFilters;
+  }
 
   /** Higher-contrast palette (darker text, stronger borders, tinted header). Opt-in per module. */
   @Input({ transform: booleanAttribute }) strong = false;
@@ -139,6 +148,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Output() create = new EventEmitter<void>();
   /** Fires when the user switches view; server-paged hosts reload their data here. */
   @Output() viewChange = new EventEmitter<DataGridView<T>>();
+  @Output() viewClose = new EventEmitter<DataGridView<T>>();
   /** Fires with the current search/filter/sort/page state whenever any of them change and `serverSide` is true. */
   @Output() queryChange = new EventEmitter<DataGridQuery>();
 
@@ -502,6 +512,10 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   deleteView(view: DataGridView<T>, event: Event): void {
     event.stopPropagation();
+    if (view.closable && !view.custom) {
+      this.viewClose.emit(view);
+      return;
+    }
     this.customViews = this.customViews.filter((v) => v.id !== view.id);
     if (this.activeViewId === view.id) {
       const fallback = this.views.find((v) => v.id === view.baseViewId) ?? this.allViews[0];
@@ -661,10 +675,45 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
       case 'date':
         return [{ value: 'on', label: 'on' }, { value: 'before', label: 'before' }, { value: 'after', label: 'after' }, { value: 'empty', label: 'is empty' }];
       default:
-        return this.optionsFor(col).length
-          ? [{ value: 'is', label: 'is' }, { value: 'isNot', label: 'is not' }]
-          : [{ value: 'contains', label: 'contains' }, { value: 'notContains', label: 'does not contain' }, { value: 'is', label: 'is' }, { value: 'empty', label: 'is empty' }];
+        if (this.optionsFor(col).length) return [{ value: 'is', label: 'is' }, { value: 'isNot', label: 'is not' }];
+        // Short lists of distinct values (sales person, customer, department…) read as a dropdown: "is" first.
+        if (this.suggestionsFor(col).length) {
+          return [{ value: 'is', label: 'is' }, { value: 'isNot', label: 'is not' }, { value: 'contains', label: 'contains' }, { value: 'notContains', label: 'does not contain' }, { value: 'empty', label: 'is empty' }];
+        }
+        return [{ value: 'contains', label: 'contains' }, { value: 'notContains', label: 'does not contain' }, { value: 'is', label: 'is' }, { value: 'isNot', label: 'is not' }, { value: 'empty', label: 'is empty' }];
     }
+  }
+
+  private suggestionCache = new Map<string, { data: T[]; len: number; out: { label: string; value: any }[] }>();
+
+  /** Distinct values already loaded for a plain text column, offered as a searchable dropdown for "is" / "is not". */
+  suggestionsFor(col?: DataGridColumn<T>): { label: string; value: any }[] {
+    // A server-paged grid only holds one page, so its values would be an incomplete list.
+    if (!col || this.serverSide || col.type === 'number' || col.type === 'currency' || col.type === 'date') return [];
+    if (col.filterOptions?.length || col.editorOptions?.length || col.type === 'badge') return [];
+    const hit = this.suggestionCache.get(col.key);
+    if (hit && hit.data === this.data && hit.len === this.data.length) return hit.out;
+    const seen = new Map<string, string>();
+    for (const row of this.data) {
+      const v = this.rawValue(row, col);
+      if (v == null || typeof v === 'object') continue;
+      const text = String(v).trim();
+      if (text && !seen.has(text.toLowerCase())) seen.set(text.toLowerCase(), text);
+      if (seen.size > 300) break;
+    }
+    // Too many distinct values (ids, free text, emails): a dropdown would be noise, keep the plain input.
+    const out = seen.size > 300 ? [] : Array.from(seen.values())
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+      .map((v) => ({ label: v, value: v }));
+    this.suggestionCache.set(col.key, { data: this.data, len: this.data.length, out });
+    return out;
+  }
+
+  /** True when the filter value should be picked from a searchable list rather than typed. */
+  get draftUsesList(): boolean {
+    const col = this.draftColumn;
+    if (this.optionsFor(col).length) return true;
+    return (this.draftFilter.op === 'is' || this.draftFilter.op === 'isNot') && this.suggestionsFor(col).length > 0;
   }
 
   /** Shows a query state that was restored from outside (URL) without emitting a query. */
@@ -730,7 +779,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   get valueSelectOptions(): SfOption[] {
-    const opts = this.optionsFor(this.draftColumn);
+    const opts = this.optionsFor(this.draftColumn).length ? this.optionsFor(this.draftColumn) : this.suggestionsFor(this.draftColumn);
     return this.cachedOptions('values', opts.map((o) => o.value + ':' + o.label).join('|'), () => opts);
   }
 
@@ -751,8 +800,12 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
       const id = this.editingFilterId;
       this.filters = this.filters.map((f) => (f.id === id ? { ...f, ...this.draftFilter, or: f.or } : f));
     } else {
-      this.filters = [...this.filters, { ...this.draftFilter, id: this.nextId++, or: this.filters.length ? !!this.draftFilter.or : undefined }];
+      const draft = { ...this.draftFilter };
+      // Single-param server hosts keep one value per column and operator, so a second one would silently override the first.
+      const base = this.orSupported ? this.filters : this.filters.filter((f) => !(f.key === draft.key && f.op === draft.op));
+      this.filters = [...base, { ...draft, id: this.nextId++, or: base.length && this.orSupported ? !!draft.or : undefined }];
     }
+    if (this.filters.length) this.filters[0] = { ...this.filters[0], or: undefined };
     this.editingFilterId = null;
     this.filterMenuOpen = false;
     this.page = 1;
@@ -831,9 +884,15 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     const raw = this.rawValue(row, col);
     if (f.op === 'empty') return raw == null || raw === '';
     if (raw == null || raw === '') return f.op === 'isNot' || f.op === 'notContains';
-    const text = String(raw).toLowerCase();
-    const needle = String(f.value).toLowerCase();
-    const day = () => new Date(raw).toISOString().slice(0, 10);
+    const text = String(raw).trim().toLowerCase();
+    const needle = String(f.value ?? '').trim().toLowerCase();
+    // Local calendar day, so a record dated late/early in the day is not shifted by the UTC offset.
+    const day = () => {
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return '';
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    if ((f.op === 'on' || f.op === 'before' || f.op === 'after') && !day()) return false;
     switch (f.op) {
       case 'contains': return text.includes(needle);
       case 'notContains': return !text.includes(needle);

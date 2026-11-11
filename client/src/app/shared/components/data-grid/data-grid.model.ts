@@ -133,6 +133,8 @@ export interface DataGridView<T = any> {
   hideCount?: boolean;
   /** Never show the "View" filter pill when this view is active. */
   hidePill?: boolean;
+  /** Host-managed tab that shows a close button; the host removes it on `viewClose`. */
+  closable?: boolean;
   sort?: DataGridSortState;
   custom?: boolean;
   /** Built-in view a custom view was saved from; its predicate still applies. */

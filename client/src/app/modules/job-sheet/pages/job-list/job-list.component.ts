@@ -193,7 +193,7 @@ export class JobListComponent {
   activeViewId = 'all';
   page = 1;
   row = DEFAULT_PAGE_SIZE;
-  gridFilters: { key: string; op: string; value?: unknown }[] = [];
+  gridFilters: { key: string; op: string; value?: unknown; or?: boolean }[] = [];
   searchQuery = '';
   sortKey: string | null = null;
   sortDir: 'asc' | 'desc' | null = null;
@@ -349,7 +349,7 @@ export class JobListComponent {
     this.searchQuery = query.search;
     this.page = query.page;
     this.row = query.pageSize;
-    this.gridFilters = (query.filters ?? []).map((f) => ({ key: f.key, op: f.op, value: f.value }));
+    this.gridFilters = (query.filters ?? []).map((f) => ({ key: f.key, op: f.op, value: f.value, or: f.or }));
     this.sortKey = query.sort?.key ?? null;
     this.sortDir = query.sort?.direction ?? null;
     this.isFiltered = !!(this.searchQuery || this.selectedEmployee);
