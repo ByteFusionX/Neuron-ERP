@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import { getPresignedUploadUrl, getFileUrlFromAws } from "../common/aws-connect";
+import fetch from "node-fetch";
+import { getPresignedUploadUrl, getFileUrlFromAws, resolveContentType } from "../common/aws-connect";
 import { getEmployeeData } from "../common/utils/util";
 import BugReport from "../models/bugReport.model";
 import { notifyEmployee } from "../common/bugReportNotify";
@@ -88,19 +89,30 @@ export const getBugReports = async (req: Request, res: Response, next: NextFunct
             .sort({ createdAt: -1 })
             .lean();
 
-        const withScreenshotUrls = await Promise.all(
-            reports.map(async (report) => {
-                const screenshotUrls = await Promise.all(
-                    (report.screenshotKeys || []).map(async (key: string) => {
-                        const url = await getFileUrlFromAws(key, 300);
-                        return url === 'error' ? null : url;
-                    })
-                );
-                return { ...report, screenshotUrls: screenshotUrls.filter(Boolean) };
-            })
-        );
+        // Screenshots are served by getBugReportScreenshot, so no expiring links are issued here.
+        return res.status(200).json(reports);
+    } catch (error) {
+        console.log(error);
+        next(error);
+    }
+};
 
-        return res.status(200).json(withScreenshotUrls);
+export const getBugReportScreenshot = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const key = req.query.key as string;
+        if (!key || !key.startsWith('bug-reports/') || key.includes('..')) {
+            return res.status(400).json({ message: 'Invalid key' });
+        }
+
+        const url = await getFileUrlFromAws(key, 60);
+        if (!url || url === 'error') return res.status(404).json({ message: 'Screenshot not found' });
+
+        const response = await fetch(url);
+        if (!response.ok || !response.body) return res.status(404).json({ message: 'Screenshot not found' });
+
+        res.setHeader('Content-Type', resolveContentType(key, response.headers.get('content-type')));
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        response.body.pipe(res);
     } catch (error) {
         console.log(error);
         next(error);

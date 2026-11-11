@@ -39,7 +39,7 @@ interface BugReportListItem {
   status: string;
   userAgent: string;
   viewport: string;
-  screenshotUrls: string[];
+  screenshotKeys: string[];
   consoleLog: unknown[];
   networkErrors: unknown[];
   actionTrail: unknown[];
@@ -118,13 +118,13 @@ export class BugReportsComponent implements OnInit, OnDestroy {
       },
     },
     { key: 'reporter', label: 'Reported By', valueGetter: (row) => this.personName(row.reporterId) },
-    { key: 'screenshots', label: 'Screenshots', type: 'number', align: 'center', valueGetter: (row) => row.screenshotUrls?.length ?? 0 },
+    { key: 'screenshots', label: 'Screenshots', type: 'number', align: 'center', valueGetter: (row) => row.screenshotKeys?.length ?? 0 },
     { key: 'consoleErrors', label: 'Console Errors', type: 'number', align: 'center', valueGetter: (row) => row.consoleLog?.length ?? 0 },
     { key: 'networkErrors', label: 'Network Errors', type: 'number', align: 'center', valueGetter: (row) => row.networkErrors?.length ?? 0 },
   ];
 
   readonly rowActions: DataGridRowAction<BugReportListItem>[] = [
-    { id: 'screenshots', label: 'View Screenshots', icon: 'eye', quick: true, hidden: (row) => !row.screenshotUrls?.length },
+    { id: 'screenshots', label: 'View Screenshots', icon: 'eye', quick: true, hidden: (row) => !row.screenshotKeys?.length },
     { id: 'resolve', label: 'Mark as Resolved', icon: 'check', quick: true, hidden: (row) => row.status === 'resolved' },
   ];
 
@@ -190,7 +190,7 @@ export class BugReportsComponent implements OnInit, OnDestroy {
   }
 
   onRowAction({ action, row }: DataGridRowActionEvent<BugReportListItem>): void {
-    if (action.id === 'screenshots') this.openScreenshot(row.screenshotUrls[0]);
+    if (action.id === 'screenshots') this.openScreenshot(row.screenshotKeys[0]);
     if (action.id === 'resolve') this.changeStatus(row, 'resolved', row.status);
   }
 
@@ -204,12 +204,24 @@ export class BugReportsComponent implements OnInit, OnDestroy {
     }
   }
 
-  openScreenshot(url: string): void {
-    this.previewUrl = url;
+  // The image is streamed through the API (no expiring S3 link), so it works however long the page stays open.
+  openScreenshot(key: string): void {
+    this.http.get(`${this.api}/bug-reports/screenshot`, { params: { key }, responseType: 'blob' }).subscribe({
+      next: (blob) => {
+        this.revokePreview();
+        this.previewUrl = URL.createObjectURL(blob);
+      },
+      error: () => this.toastr.error('Could not load the screenshot'),
+    });
   }
 
   closeScreenshot(): void {
+    this.revokePreview();
     this.previewUrl = null;
+  }
+
+  private revokePreview(): void {
+    if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
   }
 
   @HostListener('document:keydown.escape')

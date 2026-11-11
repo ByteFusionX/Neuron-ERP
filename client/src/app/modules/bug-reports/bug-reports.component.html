@@ -40,8 +40,8 @@
     </ng-template>
 
     <ng-template #detailFooterLeftTemplate let-row>
-      <app-action-button *ngFor="let url of row.screenshotUrls; let index = index" variant="outline" icon="view"
-        (click)="openScreenshot(url)">Screenshot {{ index + 1 }}</app-action-button>
+      <app-action-button *ngFor="let key of row.screenshotKeys; let index = index" variant="outline" icon="view"
+        (click)="openScreenshot(key)">Screenshot {{ index + 1 }}</app-action-button>
     </ng-template>
 
     <ng-template #detailFooterTemplate let-row>
@@ -62,7 +62,7 @@
             <div><span>Console errors</span><strong>{{ row.consoleLog?.length || 0 }}</strong></div>
             <div><span>Network errors</span><strong>{{ row.networkErrors?.length || 0 }}</strong></div>
             <div><span>Actions captured</span><strong>{{ row.actionTrail?.length || 0 }}</strong></div>
-            <div><span>Screenshots</span><strong>{{ row.screenshotUrls?.length || 0 }}</strong></div>
+            <div><span>Screenshots</span><strong>{{ row.screenshotKeys?.length || 0 }}</strong></div>
           </section>
 
           <section class="diagnostic-block">
