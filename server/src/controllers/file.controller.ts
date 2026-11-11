@@ -8,6 +8,7 @@ import {
     deleteFileFromAws,
     isFileAvailableInAwsBucket,
     getFileUrlFromAws,
+    resolveContentType,
 } from "../common/aws-connect";
 import fetch from "node-fetch";
 const { ObjectId } = require("mongodb");
@@ -38,10 +39,7 @@ export const DownloadFile = async (
             return res.status(404).json({ message: "File not found" });
         }
 
-        const contentType = response.headers.get("content-type");
-        if (contentType) {
-            res.setHeader("Content-Type", contentType);
-        }
+        res.setHeader("Content-Type", resolveContentType(fileName, response.headers.get("content-type")));
         res.setHeader(
             "Content-Disposition",
             `attachment; filename="${fileName}"`
@@ -78,10 +76,9 @@ export const fetchFile = async (
             return res.status(404).json({ message: "File not found" });
         }
 
-        const contentType = response.headers.get("content-type");
-        if (contentType) {
-            res.setHeader("Content-Type", contentType);
-        }
+        // Older uploads were stored without a MIME type (S3 serves them as octet-stream),
+        // which makes the browser show a PDF as raw text, so derive it from the extension.
+        res.setHeader("Content-Type", resolveContentType(filename, response.headers.get("content-type")));
         res.setHeader(
             "Content-Disposition",
             `inline; filename="${filename}"`
