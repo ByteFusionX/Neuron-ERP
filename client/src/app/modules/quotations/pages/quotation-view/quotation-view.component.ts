@@ -322,14 +322,30 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     return (this.quoteData?.departments || []).map((d: any) => d.departmentName).join(', ');
   }
 
+  get isDealRejected(): boolean {
+    return this.quoteData?.dealData?.status?.toLowerCase() === 'rejected';
+  }
+
+  /** A rejected deal reopens the quote for its owner (or a Super Admin) so it can be corrected and the deal resubmitted. */
+  private get isQuoteOwner(): boolean {
+    const owner: any = this.quoteData?.createdBy;
+    return !!this.employeeId && (owner?._id ?? owner) === this.employeeId;
+  }
+
   get isEditDisabled(): boolean {
-    return this.isDealApproved || (this.quoteData?.status === 'Won' && !this.isSuperAdmin);
+    if (this.isDealApproved) return true;
+    if (this.isDealRejected) return !(this.isSuperAdmin || this.isQuoteOwner);
+    return this.quoteData?.status === 'Won' && !this.isSuperAdmin;
   }
 
   /** Why Edit is greyed out, shown as its tooltip; empty when it is available. */
   get editDisabledReason(): string {
     if (this.isDealApproved) return 'The deal sheet is approved, so the quotation is locked.';
-    if (this.isEditDisabled) return 'A Won quotation can only be edited by a super admin.';
+    if (this.isEditDisabled) {
+      return this.isDealRejected
+        ? 'Only the quotation owner or a super admin can edit a quotation whose deal sheet was rejected.'
+        : 'A Won quotation can only be edited by a super admin.';
+    }
     return '';
   }
 

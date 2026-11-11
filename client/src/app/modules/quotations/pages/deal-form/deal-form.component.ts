@@ -12,6 +12,7 @@ import { ItemEntryComponent, ItemEntryOptionValue, ItemSuggestion, toCatalogueSu
 import { SfDrawerComponent, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { SupplierFormDrawerComponent } from 'src/app/modules/suppliers/pages/supplier-form-drawer/supplier-form-drawer.component';
 import { ModalService } from 'src/app/shared/components/modal';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { QuickAddDialogComponent, QuickAddDialogData } from 'src/app/modules/products/modals/quick-add-dialog/quick-add-dialog.component';
 import { DealCost } from 'src/app/shared/utils/deal-pricing.util';
 import { DEFAULT_CURRENCY, SUPPORTED_CURRENCIES, currencyFactor } from 'src/app/shared/constants/currency';
@@ -89,6 +90,9 @@ export class DealFormComponent implements OnInit, OnChanges {
   seed: ItemEntryOptionValue[] = [];
   selectedOption = 0;
   saving = false;
+  /** Note typed in the submit confirmation; saved as a deal comment. */
+  private submitNote = '';
+  private confirmDialog = inject(ConfirmDialogService);
   bulkSupplier: string | null = null;
   step: 1 | 2 = 1;
   /** Stretches the drawer to the full viewport width. */
@@ -659,12 +663,24 @@ export class DealFormComponent implements OnInit, OnChanges {
     else this.back();
   }
 
-  onSubmit(): void {
+  async onSubmit(): Promise<void> {
     this.form.markAllAsTouched();
     this.recompute();
     const blocking = [...this.lineIssues, ...this.termIssues];
     if (blocking.length && !this.saving) this.toastr.warning(blocking[0]);
     if (blocking.length || this.saving || !this.q?._id) return;
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: this.isResubmit ? 'Resubmit deal sheet for approval?' : 'Submit deal sheet for approval?',
+      message: 'The deal sheet will be sent to the approvers. Add a note for them if needed; it is shown in the deal sheet comments.',
+      details: [{ label: 'Quotation', value: String(this.q?.quoteId ?? '') }],
+      confirmLabel: this.isResubmit ? 'Resubmit' : 'Submit',
+      reason: 'optional',
+      reasonLabel: 'Note for approvers',
+      reasonMaxLength: 500,
+    });
+    if (!confirmed) return;
+    this.submitNote = (reason ?? '').trim();
     if (this.isUpdate) {
       this.updated.emit(this.buildFormData());
       return;
@@ -715,6 +731,7 @@ export class DealFormComponent implements OnInit, OnChanges {
       }),
       ...(this.isUpdate ? { removedFiles: this.removedFiles, existingFiles: this.existingFiles } : {}),
       totalDiscount: option.totalDiscount ?? 0,
+      submitNote: this.submitNote,
       currency: this.dealCurrency,
       exchangeRate: this.dealRate,
     }));

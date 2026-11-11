@@ -498,7 +498,10 @@ export class QuotationListComponent implements AfterViewInit {
   }
 
   private isEditLocked(r: Quotatation): boolean {
-    return (r.dealData as any)?.status?.toLowerCase() === 'approved' || (r.status === 'Won' && !this.isSuperAdmin && !this.isDealRejected(r));
+    if ((r.dealData as any)?.status?.toLowerCase() === 'approved') return true;
+    // A rejected deal reopens the quote for its owner or a Super Admin only.
+    if (this.isDealRejected(r)) return !(this.isSuperAdmin || this.personId(r.createdBy) === this.userId);
+    return r.status === 'Won' && !this.isSuperAdmin;
   }
 
   onRowAction(event: DataGridRowActionEvent<Quotatation>): void {
