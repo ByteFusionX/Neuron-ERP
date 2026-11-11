@@ -19,7 +19,7 @@ import Employee from "../models/employee.model";
 import { getWorkflowSteps, updateApprovalStatus, rebuildPendingRoute } from "../services/workflow.service";
 import { recordPrices } from "../services/supplierPrice.service";
 import { notify, notifyByPrivilege } from "../services/notify.service";
-import { recipientsExcluding, safely, viewersOf } from "../services/workflowNotify.service";
+import { onlyViewers, recipientsExcluding, safely, viewersOf } from "../services/workflowNotify.service";
 import { SupplierPriceSource } from "../models/supplierPrice.model";
 import { logAudit } from "../services/audit.service";
 import { currencyStampFrom, dealCurrencyStampFrom } from "../common/currency";
@@ -1665,7 +1665,7 @@ export const cancelPurchaseOrder = async (req: Request, res: Response) => {
         title: whole ? 'LPO cancelled' : 'LPO partly cancelled',
         message: whole ? `${po.poNo} was cancelled: ${reason}` : `${po.poNo} was partly cancelled (${lineText}): ${reason}`,
         sentBy: employee._id?.toString(),
-        recipients: recipientsExcluding([po.createdBy, ...(wasPlaced ? await viewersOf('grn') : [])], employee),
+        recipients: recipientsExcluding([...await onlyViewers([po.createdBy], 'purchaseOrder'), ...(wasPlaced ? await viewersOf('grn') : [])], employee),
         referenceId: po._id,
         additionalData: { purchaseOrderId: po._id.toString() },
         channels: ['inapp', 'push', 'email'],

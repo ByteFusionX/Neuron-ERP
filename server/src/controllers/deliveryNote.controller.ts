@@ -20,7 +20,7 @@ import { Server } from 'socket.io';
 import { uploadFileToAws } from '../common/aws-connect';
 import { logAudit } from '../services/audit.service';
 import { notify } from '../services/notify.service';
-import { billingRecipients, jobOwnerOf, recipientsExcluding, safely } from '../services/workflowNotify.service';
+import { billingRecipients, jobOwnerOf, onlyViewers, recipientsExcluding, safely } from '../services/workflowNotify.service';
 
 import { DEFAULT_CURRENCY, dealCurrencyOf } from '../common/currency';
 const logDnAudit = (req: any, dn: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
@@ -951,7 +951,7 @@ export const dispatchDn = async (req: Request, res: Response) => {
                     title: 'Delivery dispatched',
                     message: `Delivery note ${updatedDn.dnNo} has left for the customer`,
                     sentBy: employee?._id?.toString(),
-                    recipients: recipientsExcluding([await jobOwnerOf(dn.jobId)], employee),
+                    recipients: recipientsExcluding(await onlyViewers([await jobOwnerOf(dn.jobId)], 'dispatch'), employee),
                     referenceId: updatedDn._id,
                     additionalData: { dnId: updatedDn._id.toString() },
                 });
@@ -1084,7 +1084,7 @@ export const completeDnPod = async (req: Request, res: Response) => {
                 title: 'Delivery confirmed',
                 message: `Delivery note ${updatedDn.dnNo} was delivered${receivedBy ? ` and received by ${receivedBy}` : ''}. It is ready to invoice`,
                 sentBy: actor?._id?.toString(),
-                recipients: recipientsExcluding([jobOwner, ...await billingRecipients([jobOwner])], actor),
+                recipients: recipientsExcluding([...await onlyViewers([jobOwner], 'dispatch'), ...await billingRecipients([jobOwner])], actor),
                 referenceId: updatedDn._id,
                 additionalData: { dnId: updatedDn._id.toString() },
             });

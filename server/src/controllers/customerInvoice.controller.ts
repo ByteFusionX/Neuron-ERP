@@ -8,7 +8,7 @@ import { CustomerInvoice, CUSTOMER_INVOICE_STATUSES, CUSTOMER_PAYMENT_METHODS, P
 import { buildPrivilegeAccessFilter, getEmployeeData } from '../common/utils/util';
 import { logAudit } from '../services/audit.service';
 import { notify } from '../services/notify.service';
-import { billingRecipients, jobOwnerOf, recipientsExcluding, safely } from '../services/workflowNotify.service';
+import { billingRecipients, jobOwnerOf, onlyViewers, recipientsExcluding, safely } from '../services/workflowNotify.service';
 
 import { DEFAULT_CURRENCY } from '../common/currency';
 const clean = (v: any) => String(v ?? '').trim();
@@ -323,7 +323,7 @@ export const updatePdcStatus = async (req: Request, res: Response) => {
                     title: 'PDC rejected',
                     message: `The post-dated cheque on invoice ${invoice.invoiceNo}${invoice.client?.name ? ` from ${invoice.client.name}` : ''} was rejected`,
                     sentBy: access.employee._id?.toString(),
-                    recipients: recipientsExcluding([jobOwner, invoice.createdBy, ...await billingRecipients([jobOwner, invoice.createdBy])], access.employee),
+                    recipients: recipientsExcluding([...await onlyViewers([jobOwner, invoice.createdBy], 'invoice'), ...await billingRecipients([jobOwner, invoice.createdBy])], access.employee),
                     referenceId: invoice._id,
                     additionalData: { customerInvoiceId: invoice._id.toString() },
                     channels: ['inapp', 'push', 'email'],

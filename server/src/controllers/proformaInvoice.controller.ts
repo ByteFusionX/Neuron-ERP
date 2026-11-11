@@ -6,7 +6,7 @@ import { issueDocNo, peekDocNo } from '../services/docNumber.service';
 import { getEmployeeData } from '../common/utils/util';
 import { logAudit } from '../services/audit.service';
 import { notify } from '../services/notify.service';
-import { jobOwnerOf, recipientsExcluding, safely } from '../services/workflowNotify.service';
+import { jobOwnerOf, onlyViewers, recipientsExcluding, safely } from '../services/workflowNotify.service';
 import { uploadFileToAws } from '../common/aws-connect';
 
 import { DEFAULT_CURRENCY } from '../common/currency';
@@ -295,7 +295,7 @@ export const confirmProformaPayment = async (req: Request, res: Response) => {
                     title: 'Advance payment confirmed',
                     message: `Payment on proforma ${pi.piNo} was confirmed. The job can move forward`,
                     sentBy: employee._id?.toString(),
-                    recipients: recipientsExcluding([jobOwner, pi.createdBy], employee),
+                    recipients: recipientsExcluding(await onlyViewers([jobOwner, pi.createdBy], 'invoice'), employee),
                     referenceId: pi._id,
                     additionalData: { proformaInvoiceId: pi._id.toString() },
                     channels: ['inapp', 'push', 'email'],

@@ -31,7 +31,7 @@ export const billingRecipients = (owners: any[] = []): Promise<string[]> => {
 };
 
 /** Employees who can view the given module (for example the receiving team of a GRN). */
-export const viewersOf = (privilegeKey: 'grn' | 'dispatch' | 'purchaseOrder'): Promise<string[]> =>
+export const viewersOf = (privilegeKey: 'grn' | 'dispatch' | 'purchaseOrder' | 'invoice'): Promise<string[]> =>
     filterEmployeesByPrivilege({
         privilegeKey,
         checkFunction: (privileges) => {
@@ -39,6 +39,17 @@ export const viewersOf = (privilegeKey: 'grn' | 'dispatch' | 'purchaseOrder'): P
             return !!view && view !== 'none';
         },
     });
+
+/**
+ * Keeps only the people who are allowed to open the module the notification points at. Used for recipients picked
+ * by relationship (job owner, record creator): being involved is not enough if their role can no longer see it.
+ */
+export const onlyViewers = async (ids: any[], privilegeKey: 'grn' | 'dispatch' | 'purchaseOrder' | 'invoice'): Promise<string[]> => {
+    const wanted = ids.flat().filter(Boolean).map(String);
+    if (!wanted.length) return [];
+    const viewers = new Set(await viewersOf(privilegeKey));
+    return wanted.filter(id => viewers.has(id));
+};
 
 /** De-duplicated recipient ids, without the person who did the thing (they already have the on-screen confirmation). */
 export const recipientsExcluding = (ids: any[], actor?: any): string[] => {
