@@ -865,7 +865,21 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     this._jobService.downloadFile(file.fileName).subscribe({
       next: (event) => {
         if (event.type !== HttpEventType.Response) return;
-        const blob = new Blob([event.body]);
+        const name = String(file.originalname || file.fileName || '').toLowerCase();
+        const mimeByExt: Record<string, string> = {
+          pdf: 'application/pdf',
+          png: 'image/png',
+          jpg: 'image/jpeg',
+          jpeg: 'image/jpeg',
+          gif: 'image/gif',
+          webp: 'image/webp',
+          txt: 'text/plain',
+        };
+        const type =
+          event.body?.type ||
+          mimeByExt[name.split('.').pop() || ''] ||
+          'application/octet-stream';
+        const blob = new Blob([event.body], { type });
         if (mode === 'download') {
           saveAs(blob, file.originalname);
         } else {
