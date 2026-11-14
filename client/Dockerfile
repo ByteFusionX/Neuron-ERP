@@ -20,6 +20,6 @@ FROM nginx:latest
 COPY default.conf /etc/nginx/conf.d
 
 # Copy the built Angular app
-COPY --from=build /app/dist/client /usr/share/nginx/html
+COPY --from=build /app/dist/client/browser /usr/share/nginx/html
 
 EXPOSE 80
