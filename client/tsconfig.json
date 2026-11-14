@@ -36,6 +36,6 @@
   },
   "exclude": [
     "src/sw-push.ts",
-    "scripts/build-sw-push.mts"
+    "scripts/build-sw-push.mjs"
   ]
 }
