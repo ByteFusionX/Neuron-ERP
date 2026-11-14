@@ -31,7 +31,11 @@ export interface WebPushPayload {
 }
 
 export const sendWebPushToEmployees = async (employeeIds: string[], payload: WebPushPayload): Promise<void> => {
-    if (!isConfigured || employeeIds.length === 0) {
+    if (!isConfigured) {
+        console.warn('[webpush] skipped: VAPID not configured');
+        return;
+    }
+    if (employeeIds.length === 0) {
         return;
     }
 
@@ -43,6 +47,7 @@ export const sendWebPushToEmployees = async (employeeIds: string[], payload: Web
         const dead = all.filter((s) => !s.family || !live.has(s.family));
         if (dead.length) await PushSubscription.deleteMany({ _id: { $in: dead.map((s) => s._id) } });
         const subscriptions = all.filter((s) => s.family && live.has(s.family));
+        console.log(`[webpush] employees=${employeeIds.length} subs=${all.length} dead(removed)=${dead.length} sending=${subscriptions.length}`);
 
         await Promise.all(subscriptions.map(async (subscription) => {
             try {
@@ -56,7 +61,9 @@ export const sendWebPushToEmployees = async (employeeIds: string[], payload: Web
                     },
                     JSON.stringify(payload)
                 );
+                console.log(`[webpush] sent ok -> ${new URL(subscription.endpoint).host}`);
             } catch (error: any) {
+                console.error(`[webpush] send failed status=${error?.statusCode} host=${new URL(subscription.endpoint).host} body=${error?.body}`);
                 if (error?.statusCode === 404 || error?.statusCode === 410) {
                     await PushSubscription.deleteOne({ _id: subscription._id });
                 } else {
