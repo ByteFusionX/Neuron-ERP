@@ -67,7 +67,7 @@ const proformaInvoiceSchema = new Schema({
 });
 
 proformaInvoiceSchema.index({ status: 1, createdAt: -1 });
-proformaInvoiceSchema.index({ job: 1 });
+proformaInvoiceSchema.index({ job: 1, createdAt: -1 });
 
 // History is recorded in the global audit log (entityType "proformaInvoice").
 export const ProformaInvoice = model('ProformaInvoice', proformaInvoiceSchema);

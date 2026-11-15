@@ -17,6 +17,8 @@ export interface DetailOverviewField {
   numeric?: boolean;
   /** Renders the value as a status pill, using `tone`. Only used for type 'field'. */
   pill?: boolean;
+  /** Renders the value as a router link. Only used for a static (non-editable) 'field'. */
+  link?: any[];
   stacked?: boolean;
   /** Spans both columns of a two-column section. Only used for type 'field'. */
   fullRow?: boolean;

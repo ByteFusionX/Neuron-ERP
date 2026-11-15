@@ -40,12 +40,24 @@ import {
 import { allocateStatus, JobTable } from 'src/app/shared/interfaces/job.interface';
 
 import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
+import type { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
 const JOB_STATUS_CLASSES: Record<string, string> = {
   [allocateStatus.Pending]: 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
   [allocateStatus.OnHold]: 'bg-orange-50 text-orange-700 ring-orange-200 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-900 dark:border-orange-900',
   [allocateStatus.WorkInProgress]: 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900 dark:border-sky-900',
   [allocateStatus.OpenToWork]: 'bg-violet-50 text-violet-700 ring-violet-200 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900 dark:border-violet-900',
   [allocateStatus.Completed]: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
+};
+
+const JOB_STATUS_TONES: Record<string, DetailTone> = {
+  [allocateStatus.Pending]: 'warn',
+  [allocateStatus.OnHold]: 'warn',
+  [allocateStatus.WorkInProgress]: 'info',
+  [allocateStatus.OpenToWork]: 'active',
+  [allocateStatus.Completed]: 'good',
+};
+const PI_STATUS_TONES: Record<string, DetailTone> = {
+  Pending: 'warn', Sent: 'info', Accepted: 'active', Received: 'good', Completed: 'good', Rejected: 'bad',
 };
 
 const PI_STATUS_CLASSES: Record<string, string> = {
@@ -137,7 +149,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
     { key: 'salesPerson', label: 'Sales Person', valueGetter: (r) => fullName(r.salesPersonDetails?.[0]) || '-' },
     { key: 'details', label: 'Subject' },
     { key: 'amount', label: 'LPO Value (QAR)', type: 'currency', currencyCode: 'QAR', align: 'right' },
-    { key: 'status', label: 'Status', type: 'badge', badgeClasses: JOB_STATUS_CLASSES },
+    { key: 'status', label: 'Job Status', type: 'badge', badgeClasses: { ...JOB_STATUS_CLASSES, 'In Progress': JOB_STATUS_CLASSES[allocateStatus.WorkInProgress] } },
     { key: 'piNo', label: 'PI Id' },
     { key: 'piStatus', label: 'PI Status', type: 'badge', badgeClasses: PI_STATUS_CLASSES },
   ]; }
@@ -145,7 +157,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
   private jobToAllRow(j: any): any {
     return { ...j, kind: 'Job', date: j.updatedDate || j.createdDate, reference: j.jobId, jobRef: j.jobId,
       customer: j.clientDetails?.companyName || '-', details: j.quotation?.subject || '-',
-      amount: j.lpoValue ?? 0, status: j.allocateStatus,
+      amount: j.lpoValue ?? 0, status: j.allocateStatus === allocateStatus.WorkInProgress ? 'In Progress' : j.allocateStatus,
       piNo: j.proforma?.piNo || '-', piStatus: j.proforma?.status || '' };
   }
 
@@ -225,14 +237,14 @@ export class InvoicesComponent implements OnInit, OnDestroy {
       const d = piDefaultsFromJob(row);
       return [
         { label: 'Job Id', value: row.jobId },
-        { label: 'Status', value: row.allocateStatus },
+        { label: 'Job Status', value: row.allocateStatus === allocateStatus.WorkInProgress ? 'In Progress' : row.allocateStatus, tone: JOB_STATUS_TONES[row.allocateStatus] },
         { label: 'Customer', value: d.client.name },
         { label: 'Payment terms', value: d.paymentTerms },
       ];
     }
     return [
       { label: 'PI No', value: pi.piNo },
-      { label: 'Status', value: pi.status },
+      { label: 'Status', value: pi.status, tone: PI_STATUS_TONES[pi.status] },
       { label: 'Total price', value: this.netTotal(pi), format: 'currency' },
       { label: 'Expected date', value: pi.expectedDate, format: 'date' },
     ];
@@ -246,8 +258,8 @@ export class InvoicesComponent implements OnInit, OnDestroy {
     const sections: DetailOverviewSection[] = [{
       title: 'Job', columns: '2',
       fields: [
-        { type: 'field', label: 'Job Id', value: row.jobId || '-' },
-        { type: 'field', label: 'Status', value: row.allocateStatus || '-' },
+        { type: 'field', label: 'Job Id', value: row.jobId || '-', link: row._id ? ['/job-sheet/view', row.job?._id || row._id] : undefined },
+        { type: 'field', label: 'Job Status', value: (row.allocateStatus === allocateStatus.WorkInProgress ? 'In Progress' : row.allocateStatus) || '-', pill: !!row.allocateStatus, tone: JOB_STATUS_TONES[row.allocateStatus] || 'neutral' },
         { type: 'field', label: 'Customer', value: d.client.name || '-' },
         { type: 'field', label: 'Subject', value: d.subject || '-' },
         { type: 'field', label: 'Customer PO', value: d.lpoNo || '-' },
@@ -261,7 +273,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
         title: 'Proforma', columns: '2',
         fields: [
           { type: 'field', label: 'PI No', value: pi.piNo },
-          { type: 'field', label: 'Status', value: pi.status },
+          { type: 'field', label: 'Status', value: pi.status, pill: true, tone: PI_STATUS_TONES[pi.status] || 'neutral' },
           { type: 'field', label: 'Created by', value: fullName(pi.createdBy) || '-' },
           { type: 'field', label: 'Created', value: formatDateTime(pi.createdAt) },
         ],
@@ -436,7 +448,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
         return this.jobService.getJobs({
           search: '', page: 1, row: 1, status: null,
           access: employee?.category?.privileges?.jobSheet?.viewReport, userId: employee?._id,
-          allocateStatuses: statuses, piState, onHoldType,
+          allocateStatuses: statuses, piState, onHoldType, countOnly: true,
         });
       };
       ['newjob', 'inprocess', 'received', 'completed'].forEach((id) =>
@@ -493,7 +505,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
         return this.jobService.getJobs({
           search: this.search, page: this.page, row: this.pageSize, status: null,
           access: employee?.category?.privileges?.jobSheet?.viewReport, userId: employee?._id,
-          allocateStatuses: statuses, piState, onHoldType,
+          allocateStatuses: statuses, piState, onHoldType, skipStatusCounts: true,
         });
       }),
       // Advances: attach each job's latest proforma so already-billed rows offer preview/download.
@@ -568,7 +580,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
         : pdf.getBlob((blob: Blob) => this.dialog.open(PdfPreviewComponent, {
           height: '90vh',
           maxWidth: '1200px',
-          data: { url: window.URL.createObjectURL(blob), formatedQuote: invoice, type: 'invoice' },
+          data: { url: window.URL.createObjectURL(blob), formatedQuote: invoice, type: 'proforma' },
         })))
       .catch(() => this.notificationService.error('Failed to generate the proforma PDF'));
   }

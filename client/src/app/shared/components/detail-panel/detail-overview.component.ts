@@ -1,6 +1,7 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import type { DataGridComponent } from '../data-grid/data-grid.component';
 import { DataGridFieldComponent } from '../data-grid/data-grid-field.component';
 import { DataGridAutofocusDirective } from '../data-grid/data-grid-autofocus.directive';
@@ -28,6 +29,7 @@ import { DetailOverviewField, DetailOverviewSection } from './detail-panel.model
   imports: [
     CommonModule,
     FormsModule,
+    RouterLink,
     DataGridFieldComponent,
     DataGridAutofocusDirective,
     DetailSectionComponent,
@@ -76,7 +78,10 @@ import { DetailOverviewField, DetailOverviewSection } from './detail-panel.model
               </ng-container>
               <ng-template #staticFieldValue>
                 <app-detail-badge *ngIf="f.pill && f.value; else plainValue" class="capitalize" [label]="f.value" [tone]="f.tone || 'neutral'"></app-detail-badge>
-                <ng-template #plainValue><span [class.tabular-nums]="f.numeric">{{ f.value ?? '—' }}</span></ng-template>
+                <ng-template #plainValue>
+                  <a *ngIf="f.link && f.value; else textValue" [routerLink]="f.link" class="text-violet-600 dark:text-violet-400 hover:underline" [class.tabular-nums]="f.numeric">{{ f.value }}</a>
+                  <ng-template #textValue><span [class.tabular-nums]="f.numeric">{{ f.value ?? '—' }}</span></ng-template>
+                </ng-template>
               </ng-template>
               </ng-template>
             </app-detail-field>
