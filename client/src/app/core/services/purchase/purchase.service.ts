@@ -212,7 +212,7 @@ export class PurchaseService {
       tableBody.push([
         { text: serialNumber++, style: 'tableText', alignment: 'center' },
         { text: item.detail || '', style: 'tableText' },
-        { text: item.quantity, style: 'tableText', alignment: 'center' },
+        { text: this.formatNumber(Number(item.quantity) || 0, 0, 3), style: 'tableText', alignment: 'center' },
         { text: plain(item.unitCost), style: 'tableText', alignment: 'right' },
         { text: plain(item.totalCost), style: 'tableText', alignment: 'right' },
       ]);
@@ -224,7 +224,7 @@ export class PurchaseService {
     const itemsTable = {
       table: {
         headerRows: 1,
-        widths: [40, '*', 35, 55, 65],
+        widths: [32, '*', 40, 70, 80],
         body: [
           [
             { text: 'Sl. No.', style: 'tableHeader' },

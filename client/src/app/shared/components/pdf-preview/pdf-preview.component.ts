@@ -23,7 +23,7 @@ export class PdfPreviewComponent {
 
   constructor(
     public dialogRef: MatDialogRef<PdfPreviewComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { url: string, formatedQuote: any, type?: 'quotation' | 'purchase' | 'grn' | 'delivery-note' },
+    @Inject(MAT_DIALOG_DATA) public data: { url: string, formatedQuote: any, type?: 'quotation' | 'purchase' | 'proforma' | 'invoice' | 'grn' | 'delivery-note' },
     private _quoteService: QuotationService,
     private _purchaseService: PurchaseService,
     private _dnService: DeliveryNoteService

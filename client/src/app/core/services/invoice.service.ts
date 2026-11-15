@@ -81,9 +81,9 @@ export class InvoiceService {
             tableBody.push([
                 { text: String(index + 1).padStart(2, '0'), style: 'tableText', alignment: 'center' },
                 { text: item.description || '-', style: 'tableText' },
-                { text: String(item.quantity || 0), style: 'tableText', alignment: 'center' },
-                { text: String((item.amount / item.quantity) || 0), style: 'tableText', alignment: 'right' },
-                { text: String(item.amount || 0), style: 'tableText', alignment: 'right' }
+                { text: this.fmt(item.quantity || 0, 0, 3), style: 'tableText', alignment: 'center' },
+                { text: this.fmt((item.amount / item.quantity) || 0), style: 'tableText', alignment: 'right' },
+                { text: this.fmt(item.amount || 0), style: 'tableText', alignment: 'right' }
             ]);
         });
 
@@ -91,15 +91,21 @@ export class InvoiceService {
         
         tableBody.push([
             { text: `Total (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '',
-            { text: String(invoice.amount || 0), style: 'tableFooter', alignment: 'right' },
+            { text: this.fmt(invoice.amount || 0), style: 'tableFooter', alignment: 'right' },
           ]);
         if (!invoice.isProforma && Number(invoice.discount) > 0) {
             tableBody.push(
-                [{ text: `Discount (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '', { text: String(invoice.discount), style: 'tableFooter', alignment: 'right' }],
-                [{ text: `Net Total (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '', { text: String(Math.max(0, Math.round((Number(invoice.amount || 0) - Number(invoice.discount)) * 100) / 100)), style: 'tableFooter', alignment: 'right' }],
+                [{ text: `Discount (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '', { text: this.fmt(invoice.discount), style: 'tableFooter', alignment: 'right' }],
+                [{ text: `Net Total (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '', { text: this.fmt(Math.max(0, Math.round((Number(invoice.amount || 0) - Number(invoice.discount)) * 100) / 100)), style: 'tableFooter', alignment: 'right' }],
             );
         }
         
+        const netPayable = Math.max(0, Number(invoice.amount || 0) - (Number(invoice.discount) > 0 ? Number(invoice.discount) : 0));
+        const wordsText = `${currency ? `(${currency}) ` : ''}${this.amountInWords(netPayable, currency)}`;
+        if (!invoice.isProforma) {
+            tableBody.push([{ text: wordsText, style: 'tableFooter', colSpan: 5, alignment: 'left' }, '', '', '', '']);
+        }
+
         const quoteCompany = (invoice.quoteCompany || '').toString().toLowerCase();
         const isSecurity = quoteCompany.includes('security');
 
@@ -176,7 +182,9 @@ export class InvoiceService {
 
         // Proforma layout: boxed client block, blue item table, claim rows, then bank details and sign-off.
         const box = { hLineWidth: () => 1.5, vLineWidth: () => 1.5 };
-        const cell = (text: string, extra: any = {}) => ({ text, fontSize: 10, margin: [2, 2, 2, 2], ...extra });
+        // same type as the invoice / DN: EBGaramond, 12pt info block, 10pt table text
+        const cell = (text: string, extra: any = {}) => ({ text, fontSize: 12, margin: [2, 2, 2, 2], ...extra });
+        const tcell = (text: string, extra: any = {}) => cell(text, { fontSize: 10, margin: [5, 5, 5, 5], ...extra });
         const proformaContent: any[] | null = invoice.isProforma ? [
             {
                 table: {
@@ -191,7 +199,7 @@ export class InvoiceService {
                     body: [
                         [cell('PI No'), cell(invoice.invoiceNo || '-', { bold: true }), cell('PI Date'), cell(new Date(invoice.date).toLocaleDateString('en-GB').replace(/\//g, '-'))],
                         [cell('Client'), cell((invoice.customer?.companyName || '-').toUpperCase()), cell('Payment Terms'), cell((invoice.paymentTerms || '-').toUpperCase(), { bold: true })],
-                        [cell('Atten'), cell(invoice.attention || '-'), cell('LPO, No:'), cell(invoice.lpoRef || '-')],
+                        [cell('Atten'), cell(invoice.attention || '-'), cell('LPO No:'), cell(invoice.lpoRef || '-')],
                         [cell('Ship To'), cell((invoice.shipTo || invoice.customer?.companyName || '-').toUpperCase()), cell('Job No:'), cell(invoice.jobId?.jobId || invoice.jobNo || '-')],
                     ]
                 }
@@ -204,18 +212,19 @@ export class InvoiceService {
                     body: [
                         ['SL.\nNo.', 'Description', 'Qty', `Unit Price\n(${currency})`, `Total Cost\n(${currency})`].map((t, i) => ({ text: t, bold: true, color: 'white', fillColor: '#1E3964', fontSize: 9, alignment: 'center', margin: [0, 4, 0, 4] })),
                         ...items.map((item: any, index: number) => [
-                            cell(String(index + 1).padStart(2, '0'), { alignment: 'center' }),
-                            cell(item.description || '-'),
-                            cell(String(item.quantity || 0).padStart(2, '0'), { alignment: 'center' }),
-                            cell(Number((item.amount / item.quantity) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { alignment: 'right' }),
-                            cell(Number(item.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { alignment: 'right' }),
+                            tcell(String(index + 1).padStart(2, '0'), { alignment: 'center' }),
+                            tcell(item.description || '-'),
+                            tcell(this.fmt(item.quantity || 0, 0, 3), { alignment: 'center' }),
+                            tcell(this.fmt((item.amount / item.quantity) || 0), { alignment: 'right' }),
+                            tcell(this.fmt(item.amount || 0), { alignment: 'right' }),
                         ]),
-                        [cell(`TOTAL (${currency})`, { colSpan: 4 }), {}, {}, {}, cell(Number(invoice.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { alignment: 'right' })],
+                        [tcell(`TOTAL (${currency})`, { colSpan: 4 }), {}, {}, {}, tcell(this.fmt(invoice.amount || 0), { alignment: 'right' })],
                         ...(Number(invoice.discount) > 0 ? [
-                            [cell(`DISCOUNT (${currency})`, { colSpan: 4 }), {}, {}, {}, cell(Number(invoice.discount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { alignment: 'right' })],
-                            [cell(`NET TOTAL (${currency})`, { bold: true, colSpan: 4 }), {}, {}, {}, cell(Math.max(0, Number(invoice.amount || 0) - Number(invoice.discount)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { bold: true, alignment: 'right' })],
+                            [tcell(`DISCOUNT (${currency})`, { colSpan: 4 }), {}, {}, {}, tcell(this.fmt(invoice.discount), { alignment: 'right' })],
+                            [tcell(`NET TOTAL (${currency})`, { bold: true, colSpan: 4 }), {}, {}, {}, tcell(this.fmt(Math.max(0, Number(invoice.amount || 0) - Number(invoice.discount))), { bold: true, alignment: 'right' })],
                         ] : []),
-                        [cell(`${(invoice.paymentTerms || '').toUpperCase()} AMOUNT CLAIM (${currency}):`.trim(), { bold: true, colSpan: 4 }), {}, {}, {}, cell(Number(invoice.claimAmount ?? invoice.amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), { bold: true, alignment: 'right' })],
+                        [tcell(wordsText, { bold: true, colSpan: 5 }), {}, {}, {}, {}],
+                        [tcell(`${(invoice.paymentTerms || '').toUpperCase()} AMOUNT CLAIM (${currency}):`.trim(), { bold: true, colSpan: 4 }), {}, {}, {}, tcell(this.fmt(invoice.claimAmount ?? invoice.amount ?? 0), { bold: true, alignment: 'right' })],
                     ]
                 }
             },
@@ -233,11 +242,17 @@ export class InvoiceService {
                 ],
             },
             {
-                margin: [90, 0, 0, 0],
-                stack: [
-                    { text: `For, ${(invoice.customer?.companyName || '').toUpperCase()}`, fontSize: 10, margin: [0, 0, 0, 25] },
-                    { text: 'Received by: ……………………………', fontSize: 10, margin: [0, 0, 0, 15] },
-                    { text: 'Date…………………………………………', fontSize: 10 },
+                unbreakable: true,
+                columns: [
+                    { width: '*', text: '' },
+                    {
+                        width: 250,
+                        stack: [
+                            { text: `For, ${(invoice.customer?.companyName || '').toUpperCase()}`, fontSize: 12, bold: true, margin: [0, 0, 0, 25] },
+                            { text: 'Received by : ____________________________', fontSize: 12, margin: [0, 0, 0, 15] },
+                            { text: 'Date : ________________________________', fontSize: 12 },
+                        ]
+                    },
                 ]
             },
         ] : null;
@@ -463,5 +478,34 @@ export class InvoiceService {
 
     getCancelledReissuedInvoices(params: any): Observable<any> {
         return this.http.get<any>(`${this.api}/invoice/cancelled-reissued-report`, { params });
+    }
+
+    private fmt(value: any, minFrac = 2, maxFrac = 2): string {
+        const n = Number(value);
+        return isNaN(n) ? '' : n.toLocaleString('en-US', { minimumFractionDigits: minFrac, maximumFractionDigits: maxFrac });
+    }
+
+    // e.g. "FIVE THOUSAND THREE HUNDRED FORTY-FOUR US DOLLARS AND SIXTY-ONE CENTS ONLY."
+    private amountInWords(amount: number, currency: string): string {
+        const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+        const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+        const words = (n: number): string => {
+            if (n < 20) return ones[n];
+            if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? '-' + ones[n % 10] : '');
+            if (n < 1000) return ones[Math.floor(n / 100)] + ' HUNDRED' + (n % 100 ? ' ' + words(n % 100) : '');
+            if (n < 1e6) return words(Math.floor(n / 1000)) + ' THOUSAND' + (n % 1000 ? ' ' + words(n % 1000) : '');
+            if (n < 1e9) return words(Math.floor(n / 1e6)) + ' MILLION' + (n % 1e6 ? ' ' + words(n % 1e6) : '');
+            return words(Math.floor(n / 1e9)) + ' BILLION' + (n % 1e9 ? ' ' + words(n % 1e9) : '');
+        };
+        const names: Record<string, [string, string]> = {
+            USD: ['US DOLLARS', 'CENTS'], QAR: ['QATARI RIYALS', 'DIRHAMS'], EUR: ['EUROS', 'CENTS'], GBP: ['POUNDS', 'PENCE'],
+        };
+        const [major, minor] = names[currency] || [currency, 'CENTS'];
+        const cents = Math.round((amount || 0) * 100);
+        const whole = Math.floor(cents / 100);
+        const fraction = cents % 100;
+        let text = `${words(whole) || 'ZERO'} ${major}`.trim();
+        if (fraction) text += ` AND ${words(fraction)} ${minor}`;
+        return `${text} ONLY.`;
     }
 }

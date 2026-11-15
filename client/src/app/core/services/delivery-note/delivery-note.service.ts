@@ -207,7 +207,6 @@ export class DeliveryNoteService {
             widths: [73.66, '*', 10, '*', 85.60, '*'],
             body: [
               [{ style: 'tableHead', text: 'Client:', alignment: 'left' }, { style: 'tableHead', text: dnData.clientName || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Delivery Date:', alignment: 'left' }, { style: 'tableHead', text: fmt(deliveryDate) || '-', alignment: 'left' }],
-              [{ style: 'tableHead', text: 'Invoice No:', alignment: 'left' }, { style: 'tableHead', text: dnData.invoiceNo || '-', alignment: 'left', colSpan: 3, bold: true }, {}, {}, { style: 'tableHead', text: 'Payment Terms:', alignment: 'left' }, { style: 'tableHead', text: dnData.paymentTerms || '-', alignment: 'left' }],
               [{ style: 'tableHead', text: 'DN. No:', alignment: 'left' }, { style: 'tableHead', text: dnData.dnNo || '-', alignment: 'left', colSpan: 3, bold: true }, {}, {}, { style: 'tableHead', text: 'LPO. Ref:', alignment: 'left' }, { style: 'tableHead', text: dnData.customerLpoNumber || '-', alignment: 'left' }],
               [{ style: 'tableHead', text: 'Sub:', alignment: 'left' }, { style: 'tableHead', text: dnData.subject || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Job No:', alignment: 'left' }, { style: 'tableHead', text: dnData.jobId?.jobId || dnData.job?.jobId || '-', alignment: 'left' }],
             ]
