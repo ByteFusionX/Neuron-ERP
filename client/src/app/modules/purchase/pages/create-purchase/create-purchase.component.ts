@@ -7,8 +7,7 @@ import { AfterViewInit, Component, computed, effect, EventEmitter, HostBinding, 
 import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
-import { MrRequestComponent } from '../mr-request/mr-request.component';
-import { MaterialRequestModalComponent } from '../material-request-modal/material-request-modal.component';
+import { MrItemsDrawerComponent } from '../mr-items-drawer/mr-items-drawer.component';
 import { getJob } from 'src/app/shared/interfaces/job.interface';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { ToastrService } from 'ngx-toastr';
@@ -65,6 +64,7 @@ interface PartNumberDropdownOption {
     PrFormComponent,
     PrReviewStepComponent,
     InitiateLpoComponent,
+    MrItemsDrawerComponent,
   ],
   templateUrl: './create-purchase.component.html',
   styleUrl: './create-purchase.component.css',
@@ -2237,52 +2237,29 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     }));
   }
 
+  /** The MR items drawer: the job's approved material request items, to pick from and add to this request. */
+  mrItemsOpen = false;
+  mrItemsPurchaseId: string | null = null;
+
   onMrRequestClicks() {
     if (!this.selectedJobSheet) {
       this.warningMessage('Please select any job from given list');
       return;
     }
-
-    this.ensurePurchaseId().then((purchaseId) => {
-      const dialogRef = this.modal.open<{ success: boolean }>(MrRequestComponent, {
-        width: '560px',
-        closeOnBackdrop: false,
-        data: { purchaseId }
-      });
-
-      dialogRef.afterClosed().subscribe((result) => {
-        if (result?.success) {
-          this.loadPurchaseData();
-        }
-      });
-    }).catch(() => {});
+    // Saves unsaved edits first, so the drawer compares against (and merges with) what the request really holds.
+    this.whenSaved((purchaseId) => {
+      this.mrItemsPurchaseId = purchaseId;
+      this.mrItemsOpen = true;
+    });
   }
 
   onGetMaterialRequestsClicks() {
-    if (!this.selectedJobSheet) {
-      this.warningMessage('Please select any job from given list');
-      return;
-    }
+    this.onMrRequestClicks();
+  }
 
-    this.ensurePurchaseId().then((purchaseId) => {
-      const dialogRef = this.modal.open<{ success: boolean }>(MaterialRequestModalComponent, {
-        width: '880px',
-        closeOnBackdrop: false,
-        data: {
-          purchaseId,
-          jobId: this.purchaseForm.get('job')?.value,
-          onDataChange: () => {
-            this.loadPurchaseData();
-          }
-        }
-      });
-
-      dialogRef.afterClosed().subscribe((result) => {
-        if (result?.success) {
-          this.loadPurchaseData();
-        }
-      });
-    }).catch(() => {});
+  onMrItemsAdded(): void {
+    this.loadPurchaseData();
+    this.saved.emit();
   }
 
   deelSheets(requestedJobId?: string | null) {

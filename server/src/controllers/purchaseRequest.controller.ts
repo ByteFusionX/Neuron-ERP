@@ -81,7 +81,7 @@ interface PoLineUsage { ordered: number; po: string; suppliers: Record<string, n
  * What the live POs (anything but Draft, Rejected or Cancelled) already took of each request line, by line id:
  * the quantity ordered, the first PO holding it, and the quantity per supplier.
  */
-const poLineUsage = async (purchaseId: any, items?: any[]): Promise<Map<string, PoLineUsage>> => {
+export const poLineUsage = async (purchaseId: any, items?: any[]): Promise<Map<string, PoLineUsage>> => {
     const pos: any[] = await PurchaseOrder.find({ purchaseId, isDeleted: { $ne: true }, poStatus: { $nin: ['Draft', 'Rejected', 'Cancelled'] } })
         .select('poNo poStatus supplierId items.prLineKey items.detail items.quantity').lean();
     // A PO line whose key no longer matches a request line (the line was re-saved under a new id) is matched by its product text instead.

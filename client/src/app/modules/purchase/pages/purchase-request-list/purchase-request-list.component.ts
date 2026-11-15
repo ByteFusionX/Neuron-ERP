@@ -258,7 +258,7 @@ export class PurchaseRequestListComponent {
       return;
     }
     this.columns = [
-      { key: 'date', label: 'Date', type: 'date', sortable: true, width: '120px', valueGetter: (r) => r.approvedDate || r.createdAt },
+      { key: 'date', label: 'Date', type: 'date', sortable: true, width: '120px', valueGetter: (r) => r.createdAt },
       { key: 'customerName', label: 'Customer Name', sortable: true, valueGetter: (r) => r.customerId?.companyName },
       { key: 'purchaseNo', label: 'PR NO', sortable: true },
       { key: 'nextFollowUpDate', label: 'Next Follow-up', type: 'date', sortable: true, valueGetter: (r) => r.followUp?.nextFollowUpDate, cellClass: (r) => followUpCellClass(r.followUp?.nextFollowUpDate, false) },
@@ -885,7 +885,7 @@ export class PurchaseRequestListComponent {
           { type: 'field', label: 'Customer', value: row.customerId?.companyName },
           { type: 'field', label: 'Job ID', value: row.jobId?.jobId },
           ...(isNewJob ? [] : [{ type: 'field' as const, label: 'Supplier', value: this.supplierLabel(row) }]),
-          { type: 'field', label: 'Date', value: this.datePipe.transform(row.approvedDate || row.createdAt, 'dd MMM yyyy') },
+          { type: 'field', label: 'Date', value: this.datePipe.transform(row.createdAt, 'dd MMM yyyy') },
           { type: 'field', label: 'Created By', value: row.createdBy ? `${row.createdBy.firstName} ${row.createdBy.lastName}` : '-' },
           { type: 'field', label: 'Procurement Person', value: row.procurementPerson?.firstName ? `${row.procurementPerson.firstName} ${row.procurementPerson.lastName}` : '-' },
           ...(row.status === 'Rejected' && row.rejectedReason?.length

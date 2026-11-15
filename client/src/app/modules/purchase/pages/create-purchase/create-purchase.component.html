@@ -298,8 +298,8 @@
     </div>
 
     <article *ngFor="let c of poCards()" class="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-erp-border-dark dark:bg-erp-surface-dark">
-      <div *ngIf="poCardTotals(c.supplierId) as t" class="flex flex-wrap items-center gap-3 px-4 py-3" [class.cursor-pointer]="c.lpos.length"
-        (click)="c.lpos.length && togglePoCard(c.supplierId)">
+      <div *ngIf="poCardTotals(c.supplierId) as t" class="flex cursor-pointer flex-wrap items-center gap-3 px-4 py-3"
+        (click)="togglePoCard(c.supplierId)">
         <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{{ c.name }}</p>
           <p class="text-xs text-gray-500">
@@ -327,7 +327,7 @@
           <app-action-button *ngIf="!c.lpos.length && (t.toOrder > 0 || !orderRows().length)" variant="primary" (click)="onCreatePo(c.supplierId)">
             <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Create PO
           </app-action-button>
-          <button *ngIf="c.lpos.length" type="button" (click)="togglePoCard(c.supplierId)" [attr.aria-expanded]="openPoCards.has(c.supplierId)" [attr.aria-label]="(openPoCards.has(c.supplierId) ? 'Hide' : 'Show') + ' lines'"
+          <button type="button" (click)="togglePoCard(c.supplierId)" [attr.aria-expanded]="openPoCards.has(c.supplierId)" [attr.aria-label]="(openPoCards.has(c.supplierId) ? 'Hide' : 'Show') + ' lines'"
             class="grid h-7 w-7 shrink-0 place-content-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
             <ng-icon [name]="openPoCards.has(c.supplierId) ? 'heroChevronDown' : 'heroChevronRight'" class="h-4 w-4"></ng-icon>
           </button>
@@ -335,7 +335,7 @@
       </div>
 
       <!-- The supplier's lines: its share, what its POs hold, and what is left to order or move -->
-      <div *ngIf="c.lpos.length && openPoCards.has(c.supplierId)" class="border-t border-gray-100 px-4 pb-3 pt-2 dark:border-erp-border-dark">
+      <div *ngIf="openPoCards.has(c.supplierId)" class="border-t border-gray-100 px-4 pb-3 pt-2 dark:border-erp-border-dark">
         <div class="hidden grid-cols-[minmax(0,4fr)_repeat(3,minmax(0,1fr))] gap-2 pb-1 text-[11px] uppercase tracking-wide text-gray-400 min-[900px]:grid">
           <span>Item</span><span class="text-right">Awarded</span><span class="text-right">On PO</span><span class="text-right">To order</span>
         </div>
@@ -395,6 +395,9 @@
 
 <app-initiate-lpo *ngIf="createPoSupplierId && purchaseId" [purchaseIdInput]="purchaseId" [initialSupplierId]="createPoSupplierId"
   (issued)="onPoIssued()" (closed)="onCreatePoClosed()"></app-initiate-lpo>
+
+<app-mr-items-drawer [open]="mrItemsOpen" [purchaseId]="mrItemsPurchaseId" [jobId]="purchaseForm.get('job')?.value || $any(selectedJobSheet)?._id || null"
+  [currentItems]="itemsList()" (added)="onMrItemsAdded()" (closed)="mrItemsOpen = false"></app-mr-items-drawer>
 
 <app-supplier-form-drawer [open]="createSupplierOpen" mode="create" (saved)="onSupplierCreated($event)" (closed)="createSupplierOpen = false"></app-supplier-form-drawer>
 <app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>

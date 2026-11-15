@@ -1,0 +1,79 @@
+<app-sf-drawer title="Material request items" subtitle="Approved items on this job. Pick what to add to the purchase request." width="min(900px, 96vw)"
+  [open]="open" [dirty]="selected.size > 0" (closed)="onDrawerClosed()">
+
+  <div *ngIf="loading" class="animate-pulse space-y-2">
+    <div *ngFor="let _ of [1, 2, 3]" class="h-12 rounded-lg bg-gray-100 dark:bg-gray-800"></div>
+  </div>
+
+  <div *ngIf="!loading && !rows.length" class="grid place-content-center gap-1 py-10 text-center">
+    <p class="text-[13px] font-medium">No approved material request items</p>
+    <p class="text-xs text-gray-500 dark:text-gray-400">Items appear here once they are approved on the job.</p>
+  </div>
+
+  <div *ngIf="!loading && rows.length" class="overflow-hidden rounded-lg border border-gray-200 dark:border-erp-border-dark">
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-[13px]">
+        <thead class="bg-gray-50 text-left text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:bg-white/5 dark:text-gray-400">
+          <tr>
+            <th class="w-10 px-3 py-2.5">
+              <app-sf-checkbox aria-label="Select all available" [disabled]="selectableCount === 0"
+                [ngModel]="selectableCount > 0 && selected.size === selectableCount"
+                (ngModelChange)="toggleAll()" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
+            </th>
+            <th class="px-3 py-2.5">Item</th>
+            <th class="px-3 py-2.5 text-right">MR qty</th>
+            <th class="px-3 py-2.5 text-right">In PR</th>
+            <th class="px-3 py-2.5 text-right">Est. cost</th>
+            <th class="px-3 py-2.5">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+          <tr *ngFor="let r of rows; let i = index" class="transition-colors"
+            [ngClass]="r.state === 'covered' ? 'bg-emerald-50/40 dark:bg-emerald-950/10' : selected.has(i) ? 'bg-violet-50/60 dark:bg-violet-950/20' : isSelectable(i) ? 'hover:bg-gray-50 dark:hover:bg-white/5' : ''"
+            [class.cursor-pointer]="isSelectable(i)" (click)="toggle(i)">
+            <td class="px-3 py-3" (click)="$event.stopPropagation()">
+              <app-sf-checkbox [attr.aria-label]="'Select ' + r.request.itemName" [ngModel]="isChecked(i)"
+                [disabled]="!isSelectable(i)" (ngModelChange)="toggle(i)" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
+            </td>
+            <td class="px-3 py-3">
+              <p class="font-medium text-gray-900 dark:text-gray-100">{{ r.request.itemName }}</p>
+              <p *ngIf="r.request.itemCode || r.request.partNo" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                <span *ngIf="r.request.itemCode">{{ r.request.itemCode }}</span><span *ngIf="r.request.itemCode && r.request.partNo"> · </span><span *ngIf="r.request.partNo">{{ r.request.partNo }}</span>
+              </p>
+              <p *ngIf="r.request.remarks" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ r.request.remarks }}</p>
+            </td>
+            <td class="px-3 py-3 text-right tabular-nums">{{ r.request.quantity }}{{ r.request.uom ? ' ' + r.request.uom : '' }}</td>
+            <td class="px-3 py-3 text-right tabular-nums">{{ r.inPr || '-' }}</td>
+            <td class="px-3 py-3 text-right tabular-nums">{{ r.request.estimatedCost | number: '1.2-2' }}</td>
+            <td class="whitespace-nowrap px-3 py-3">
+              <app-detail-badge *ngIf="r.state === 'covered'" label="In PR" tone="good" dot></app-detail-badge>
+              <ng-container *ngIf="r.state === 'up'">
+                <app-detail-badge label="Needs {{ r.diff }} more" tone="warn" dot></app-detail-badge>
+                <p class="mt-0.5 text-[11px] text-gray-500">MR {{ r.request.quantity }} vs {{ r.inPr }} in the latest PR</p>
+              </ng-container>
+              <ng-container *ngIf="r.state === 'down'">
+                <app-detail-badge label="Reduced by {{ r.diff }}" tone="bad" dot></app-detail-badge>
+                <p class="mt-0.5 text-[11px] text-gray-500">MR {{ r.request.quantity }} vs {{ r.inPr }} in the latest PR. Lower it in the PR.</p>
+              </ng-container>
+              <span *ngIf="r.state === 'new'" class="text-xs text-gray-400">Available</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <ng-container sfDrawerFooter>
+    <p class="mr-auto text-xs text-gray-500 dark:text-gray-400">
+      <ng-container *ngIf="selected.size; else none">
+        <span class="font-semibold text-gray-900 dark:text-gray-100">{{ selected.size }}</span> selected ·
+        <span class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ selectedTotal | number: '1.2-2' }}</span>
+      </ng-container>
+      <ng-template #none>Nothing selected</ng-template>
+    </p>
+    <app-action-button variant="secondary" (click)="onDrawerClosed()">Close</app-action-button>
+    <app-action-button variant="primary" [disabled]="!selected.size || saving" (click)="addSelected()">
+      {{ saving ? 'Adding…' : 'Add to PR' }}
+    </app-action-button>
+  </ng-container>
+</app-sf-drawer>

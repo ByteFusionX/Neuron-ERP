@@ -277,7 +277,7 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     },
     createdAt: {
         type: Date,
-        default: new Date()
+        default: Date.now
     },
     updatedBy: {
         type: Schema.Types.ObjectId,

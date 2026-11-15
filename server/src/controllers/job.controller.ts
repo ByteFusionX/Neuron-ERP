@@ -1376,7 +1376,7 @@ export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response
             {
                 $match: {
                     isDeleted: { $ne: true },
-                    allocateType: { $in: [allocateType.ProjectWithSupply, allocateType.AMC] },
+                    allocateType: { $in: [allocateType.ProjectWithSupply, allocateType.ProjectsWithOutSupply, allocateType.AMC] },
                     _id: { $nin: technicalJobIds }
                 }
             },

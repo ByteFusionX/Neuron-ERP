@@ -23,6 +23,7 @@ export interface ItemDetail {
     isNewlyAdded?: boolean;
     merged?: boolean;
     fromMrRequest?: boolean;
+    mrLineId?: string;
     short?: boolean;
     shortReason?: string;
 }
@@ -123,6 +124,11 @@ const itemDetailSchema = new Schema({
     fromMrRequest: {
         type: Boolean,
         default: false
+    },
+    // The material request line this PR line was added from; several PR lines can point to one MR line (the first covers the original quantity, later ones the extra asked for).
+    mrLineId: {
+        type: String,
+        trim: true
     },
     // A PR line the buyer accepts as not fully covered (no supplier, or not enough quantity); it may go for approval as it is.
     short: {

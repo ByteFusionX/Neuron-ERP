@@ -164,6 +164,12 @@ export class PurchaseService {
   async generatePDF(purchaseData: PurchaseOrder, includeStamp: boolean) {
     pdfMake.vfs = pdfFonts.vfs;
 
+    // Approval date: last approved workflow step, else the last approval-history entry.
+    const po: any = purchaseData;
+    const approvedSteps = (po.approvalStatus || []).filter((s: any) => s?.status === 'approved' && s?.updatedDate);
+    const approvedOn = approvedSteps.sort((a: any, b: any) => +new Date(b.updatedDate) - +new Date(a.updatedDate))[0]?.updatedDate
+      || po.approvedHistory?.[po.approvedHistory.length - 1]?.date || '';
+
     (pdfMake as any).fonts = {
       EBGaramond: {
         normal: `${window.location.origin}/assets/font/EBGaramond-Regular.ttf`,
@@ -188,6 +194,10 @@ export class PurchaseService {
     const quote = data.quoteId || data.purchaseId?.jobId?.quoteId || {};
     // exactly what was entered when the PO was created: no fallback to the quotation terms
     const paymentTerms = String(purchaseData.paymentTerms ?? '').trim();
+    // the job may be populated on the PO itself or only on its purchase request; a bare ObjectId string has no job number
+    const jobNo = [data.jobId, data.purchaseId?.jobId]
+      .map((j: any) => (j && typeof j === 'object' ? j.jobId : ''))
+      .find((j: any) => typeof j === 'string' && j) || '';
     const creator = data.createdBy || {};
     const creatorName = `${creator.firstName || ''} ${creator.lastName || ''}`.trim();
     const creatorPhone = this.qatarPhone(creator.contactNo);
@@ -307,9 +317,19 @@ export class PurchaseService {
               infoRow('Address', addressText, 'Place of Delivery', purchaseData.placeOfDelivery),
               infoRow('Contact Person', contact.name, 'Payment Terms', paymentTerms),
               infoRow('Phone', contact.phoneNumber, 'Shipping Terms', purchaseData.shippingTerms),
-              infoRow('E-mail', contact.email, 'PO Date:', purchaseData.poDate ? new Date(purchaseData.poDate).toLocaleDateString('en-GB') : ''),
-              infoRow('Quote Ref:', purchaseData.quoteId?.quoteId, 'PO No:', purchaseData.poNo),
-              infoRow('Subject:', purchaseData.subject, 'Job No:', purchaseData.jobId?.jobId || data.purchaseId?.jobId?.jobId),
+              infoRow('E-mail', contact.email, 'Job ID:', jobNo),
+              // Subject spans both rows on the left; PO Date with PO No beneath it on the right
+              [
+                { style: 'tableHead', text: 'Subject:', rowSpan: 2 },
+                { style: 'tableBody', text: purchaseData.subject || '', rowSpan: 2 },
+                { style: 'tableHead', text: 'PO Date:' },
+                { style: 'tableBody', text: purchaseData.poDate ? new Date(purchaseData.poDate).toLocaleDateString('en-GB') : '' },
+              ],
+              [
+                '', '',
+                { style: 'tableHead', text: 'PO No:' },
+                { style: 'tableBody', text: purchaseData.poNo || '' },
+              ],
             ]
           }
         },
@@ -318,14 +338,6 @@ export class PurchaseService {
         ...section('Point Of Contact:', creatorName ? `PLEASE COORDINATE WITH ${creatorName}${creatorPhone ? ` - ${creatorPhone}` : ''}` : ''),
         ...section('Payment terms', paymentTerms),
         { text: 'General Terms & Conditions:', style: 'subHeading' },
-        {
-          ul: [
-            'The Supplier/Contractor should deliver the Goods/Service as per the specifications agreed and approved.',
-            'The Supplier/Contractor is responsible for any damage to any persons (or) property whatever and responsible to insure for the same.',
-            'If the delivery is not made as per schedule and as per the approved specification. Neuron has the right to cancel the order partially or fully.',
-            "The Supplier's/Contractor's payment will be made as per the agreed terms.",
-          ], style: 'text'
-        },
         ...(purchaseData.termsAndCondition ? [{ text: purchaseData.termsAndCondition, style: 'text' }] : []),
         {
           unbreakable: true,
