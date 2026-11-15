@@ -1,9 +1,12 @@
 import { NextFunction, Request, Response } from "express";
 import jobModel, { allocateType } from "../models/job.model"
 import employeeModel from "../models/employee.model";
+import { issueDocNo } from "../services/docNumber.service";
 import technicalModel from "../models/technical.model";
+import projectModel, { PROJECT_STATUSES } from "../models/project.model";
 import { ObjectId } from "mongodb";
 import mongoose from "mongoose";
+import { poLineUsage } from "./purchaseRequest.controller";
 import { uploadFileToAws } from "../common/aws-connect";
 import { calculateCostPricePipe, calculateDiscountPricePipe, getDateRangeByDay, getEmployeeData, getUSDRated, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { emailQueue } from "../common/queues/email.queue";
@@ -12,6 +15,7 @@ import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { buildGridFilterMatch, buildGridSort, GridFieldMap } from "../common/utils/grid-query";
 import { getCustomerCommercialGuard } from "../common/customer-commercial-guards";
+import { logAudit } from "../services/audit.service";
 
 export const getProjectAndAMCJobs = async (req: Request, res: Response, next: NextFunction) => {
    try {
@@ -247,6 +251,12 @@ export const assignEngineer = async (req: Request, res: Response, next: NextFunc
          socket
       );
 
+      await logAudit(req, {
+         entityType: 'project', entityId: technicalProject._id, entityLabel: jobNumber?.toString(),
+         action: 'created', summary: `Job assigned to ${`${engineer.firstName || ''} ${engineer.lastName || ''}`.trim()} as ${projectType}`,
+         changes: [{ label: 'Priority', to: priority }],
+      });
+
       return res.status(201).json({
          success: true,
          message: "Project created and engineer assigned successfully",
@@ -313,6 +323,12 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
          .populate('assignedBy', 'firstName lastName')
          .populate('customer', 'companyName')
 
+      await logAudit(req, {
+         entityType: 'project', entityId: technicalProject._id,
+         action: 'created', summary: `${projectType === 'amc' ? 'AMC' : 'Project'} created and assigned`,
+         changes: [{ label: 'Priority', to: priority }],
+      });
+
       return res.status(201).json({
          success: true,
          message: "Project created successfully",
@@ -339,7 +355,7 @@ const PROJECT_GRID_FIELDS: GridFieldMap = {
 
 export const getProjects = async (req: Request, res: Response, next: NextFunction) => {
    try {
-      const { companyName, jobId, assignedTo, assignedBy, priority, row, page, projectType, status, search, filters, sortKey, sortDir } = req.body;
+      const { companyName, jobId, assignedTo, assignedToId, assignedBy, priority, row, page, projectType, status, search, filters, sortKey, sortDir } = req.body;
 
       const tokenData = req.user;
       const employee = await getEmployeeData(tokenData);
@@ -461,6 +477,10 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
 
       if (priority) {
          matchConditions.priority = priority;
+      }
+
+      if (assignedToId === 'me') {
+         matchConditions["assignedTo._id"] = employee._id;
       }
 
       if (typeof search === 'string' && search.trim()) {
@@ -694,6 +714,26 @@ export const getCostingDetails = async (req: Request, res: Response, next: NextF
    }
 }
 
+/**
+ * Material request lines already on a live PO (anything but Draft, Rejected or Cancelled): MR line id -> the PO holding it.
+ * Such a line cannot change until that PO is rejected or cancelled.
+ */
+const mrLinePoLocks = async (jobId: any): Promise<Record<string, string>> => {
+   const locks: Record<string, string> = {};
+   if (!jobId || !mongoose.Types.ObjectId.isValid(String(jobId))) return locks;
+   const prs: any[] = await purchaseRequestModel.find({ jobId, 'items.itemDetails.mrLineId': { $exists: true, $ne: '' } }).select('items').lean();
+   for (const pr of prs) {
+      const usage = await poLineUsage(pr._id, pr.items);
+      for (const item of pr.items || []) {
+         for (const d of item.itemDetails || []) {
+            const u = d.mrLineId ? usage.get(String(d._id)) : undefined;
+            if (u) locks[String(d.mrLineId)] = u.po;
+         }
+      }
+   }
+   return locks;
+};
+
 export const getProjectById = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { id } = req.params;
@@ -802,6 +842,7 @@ export const getProjectById = async (req: Request, res: Response, next: NextFunc
       ]);
 
       if (project.length > 0) {
+         project[0].mrLockedLines = await mrLinePoLocks(project[0].jobId?._id);
          return res.status(200).json({
             success: true,
             message: "Project fetched successfully",
@@ -836,6 +877,7 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
       }
 
       const project = await technicalModel.findByIdAndUpdate(id, updateData, { new: true });
+      await logAudit(req, { entityType: 'project', entityId: id, action: 'updated', summary: 'Project details updated' });
 
       return res.status(200).json({
          success: true,
@@ -909,6 +951,19 @@ export const transferEngineer = async (req: Request, res: Response, next: NextFu
          });
       }
 
+      // Keep a started Project on the new engineer, and give a rejected job back to them as Pending.
+      await projectModel.updateOne({ technical: projectId }, { assignedTo: engineerId });
+      await technicalModel.updateOne({ _id: projectId, status: 'Rejected' }, { status: 'Pending', $unset: { rejectReason: 1 } });
+      const startedProject = await projectModel.findOne({ technical: projectId }).select('projectNumber');
+      await logAudit(req, {
+         entityType: 'project',
+         entityId: projectId,
+         entityLabel: startedProject?.projectNumber || (project as any)?.jobId?.jobId,
+         action: 'reassigned',
+         summary: `Project transferred to ${engineer.firstName || ''} ${engineer.lastName || ''}`.trim(),
+         changes: [{ label: 'Engineer', to: `${engineer.firstName || ''} ${engineer.lastName || ''}`.trim() }],
+      });
+
       const jobNumber = (project as any)?.jobId?.jobId || '';
       const socket = req.app.get('io') as Server;
       await createNotificationWithPrivileges(
@@ -975,6 +1030,7 @@ export const createTask = async (req: Request, res: Response, next: NextFunction
       if (task) {
          task.tasks.push({ taskName, description, progress, status, priority, timeline, notes, associatedWith });
          await task.save();
+         await logAudit(req, { entityType: 'project', entityId: id, action: 'task-added', summary: `Task added: ${taskName}` });
       } else {
          return res.status(404).json({
             success: false,
@@ -1019,6 +1075,7 @@ export const updateTask = async (req: Request, res: Response, next: NextFunction
             task.notes = notes;
             task.associatedWith = associatedWith;
             await project.save();
+            await logAudit(req, { entityType: 'project', entityId: id, action: 'task-updated', summary: `Task updated: ${taskName}` });
             return res.status(200).json({
                success: true,
                message: "Task updated successfully",
@@ -2159,9 +2216,33 @@ export const updateMaterialRequest = async (req: any, res: Response, next: NextF
          });
       }
 
+      // A line on a live PO stays as it is until that PO is rejected or cancelled.
+      const locks = await mrLinePoLocks(technical.jobId);
+      for (const existing of technical.materialRequest as any[]) {
+         const po = locks[String(existing._id)];
+         if (!po) continue;
+         const next = materialRequest.find((m: any) => String(m._id) === String(existing._id));
+         const name = `"${existing.itemName}"`;
+         if (!next) {
+            return res.status(409).json({ success: false, message: `${name} is on ${po} and cannot be removed. Reject that PO if it is pending, or cancel it if it is placed or approved, first.` });
+         }
+         const changed = String(next.itemName || '').trim() !== existing.itemName
+            || Number(next.quantity) !== Number(existing.quantity)
+            || Number(next.estimatedCost) !== Number(existing.estimatedCost);
+         if (changed) {
+            return res.status(409).json({ success: false, message: `${name} is on ${po}, so it cannot be edited. Reject that PO if it is pending, or cancel it if it is placed or approved, first.` });
+         }
+      }
+
       const sanitizedMaterialRequest = materialRequest.map((item: any, index: number) => {
-         const existingItem = technical.materialRequest[index];
+         const existingItem: any = item._id ? (technical.materialRequest as any[]).find((e: any) => String(e._id) === String(item._id)) : undefined;
          return {
+            // Keep the line's id: PR lines point back to it.
+            ...(existingItem ? { _id: existingItem._id } : {}),
+            productId: item.productId && mongoose.Types.ObjectId.isValid(item.productId) ? item.productId : undefined,
+            itemCode: typeof item.itemCode === 'string' ? item.itemCode.trim() : '',
+            partNo: typeof item.partNo === 'string' ? item.partNo.trim() : '',
+            uom: typeof item.uom === 'string' ? item.uom.trim() : '',
             itemName: item.itemName.trim(),
             quantity: Number(item.quantity),
             estimatedCost: Number(item.estimatedCost),
@@ -2219,6 +2300,7 @@ export const updateMaterialRequest = async (req: any, res: Response, next: NextF
          );
       }
 
+      await logAudit(req, { entityType: 'project', entityId: id, action: 'material-request-updated', summary: 'Material request saved' });
       return res.status(200).json({
          success: true,
          message: "Material request updated successfully",
@@ -3036,6 +3118,7 @@ export const approveMaterialRequest = async (req: Request, res: Response, next: 
          socket
       );
 
+      await logAudit(req, { entityType: 'project', entityId: technical._id, action: 'material-request-approved', summary: 'Material request approved' });
       return res.status(200).json({
          success: true,
          message: "Material request approved successfully",
@@ -3157,6 +3240,7 @@ export const rejectMaterialRequest = async (req: Request, res: Response, next: N
          socket
       );
 
+      await logAudit(req, { entityType: 'project', entityId: technical._id, action: 'material-request-rejected', summary: 'Material request rejected' });
       return res.status(200).json({
          success: true,
          message: "Material request rejected successfully",
@@ -3273,6 +3357,7 @@ export const approveMaterialRequestItem = async (req: Request, res: Response, ne
          socket
       );
 
+      await logAudit(req, { entityType: 'project', entityId: technical._id, action: 'mr-item-approved', summary: 'Material request item approved' });
       return res.status(200).json({
          success: true,
          message: "Item approved successfully",
@@ -3376,6 +3461,7 @@ export const rejectMaterialRequestItem = async (req: Request, res: Response, nex
       technical.updatedAt = new Date();
       await technical.save();
 
+      await logAudit(req, { entityType: 'project', entityId: technical._id, action: 'mr-item-rejected', summary: 'Material request item rejected' });
       return res.status(200).json({
          success: true,
          message: "Item rejected successfully",
@@ -3469,6 +3555,7 @@ export const approveMaterialRequestFile = async (req: Request, res: Response, ne
       technical.updatedAt = new Date();
       await technical.save();
 
+      await logAudit(req, { entityType: 'project', entityId: technical._id, action: 'mr-file-approved', summary: 'Material request file approved' });
       return res.status(200).json({
          success: true,
          message: "File approved successfully",
@@ -3561,6 +3648,7 @@ export const rejectMaterialRequestFile = async (req: Request, res: Response, nex
       technical.updatedAt = new Date();
       await technical.save();
 
+      await logAudit(req, { entityType: 'project', entityId: technical._id, action: 'mr-file-rejected', summary: 'Material request file rejected' });
       return res.status(200).json({
          success: true,
          message: "File rejected successfully",
@@ -3688,6 +3776,7 @@ export const approveAllPendingMaterialRequests = async (req: Request, res: Respo
          socket
       );
 
+      await logAudit(req, { entityType: 'project', entityId: technical._id, action: 'material-request-approved', summary: `Approved ${approvedItemsCount} item(s) and ${approvedFilesCount} file(s)` });
       return res.status(200).json({
          success: true,
          message: `Approved ${approvedItemsCount} item(s) and ${approvedFilesCount} file(s) successfully`,
@@ -3702,3 +3791,369 @@ export const approveAllPendingMaterialRequests = async (req: Request, res: Respo
       });
    }
 }
+
+// ---- engineer response (start / reject) and project lifecycle ----
+
+// NR/PJ-mm-yy-seq, sequence restarts every month (shared counter from docNumber.service).
+const nextProjectNumber = async (): Promise<string> => issueDocNo('PJ', 'NR');
+
+/** The assigned engineer confirms the work: the assignment is approved and a Project is created. */
+export const startProject = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({ success: false, message: "Employee not found" });
+      }
+
+      const { id } = req.params;
+      if (!mongoose.isValidObjectId(id)) {
+         return res.status(400).json({ success: false, message: "Invalid project ID" });
+      }
+
+      // Atomic Pending -> Approved so a double click cannot create two projects.
+      const assignment = await technicalModel.findOneAndUpdate(
+         { _id: id, status: 'Pending', assignedTo: employee._id },
+         { status: 'Approved', respondedAt: new Date(), respondedBy: employee._id, updatedAt: new Date() },
+         { new: true }
+      );
+      if (!assignment) {
+         return res.status(409).json({
+            success: false,
+            message: "This project is not waiting for your response"
+         });
+      }
+
+      try {
+         const job = assignment.jobId ? await jobModel.findById(assignment.jobId).select('allocateType') : null;
+         let project = null;
+         for (let attempt = 0; attempt < 3 && !project; attempt++) {
+            try {
+               project = await projectModel.create({
+                  projectNumber: await nextProjectNumber(),
+                  technical: assignment._id,
+                  jobId: assignment.jobId,
+                  customer: assignment.customer,
+                  projectType: assignment.projectType,
+                  allocateType: (job as any)?.allocateType || '',
+                  priority: assignment.priority,
+                  assignedTo: assignment.assignedTo,
+                  assignedBy: assignment.assignedBy,
+                  assignedAt: assignment.assignedAt,
+                  status: 'In Progress',
+                  startedAt: new Date(),
+                  startedBy: employee._id,
+                  estimatedCostForProject: assignment.estimatedCostForProject || 0,
+                  statusHistory: [{ status: 'In Progress', remarks: '', changedBy: employee._id, changedAt: new Date() }],
+               });
+            } catch (error: any) {
+               // Duplicate projectNumber from a concurrent start: retry with a fresh number.
+               if (error?.code !== 11000 || attempt === 2) throw error;
+            }
+         }
+
+         await logAudit(req, {
+            entityType: 'project', entityId: assignment._id, entityLabel: (project as any)?.projectNumber,
+            action: 'started', summary: `Project ${(project as any)?.projectNumber || ''} started`.trim(),
+            changes: [{ label: 'Status', to: 'In Progress' }],
+         });
+         return res.status(201).json({ success: true, message: "Project started successfully", data: project });
+      } catch (error) {
+         // Put the assignment back so the engineer can try again.
+         await technicalModel.updateOne(
+            { _id: assignment._id },
+            { status: 'Pending', $unset: { respondedAt: 1, respondedBy: 1 } }
+         );
+         throw error;
+      }
+   } catch (error) {
+      return res.status(500).json({
+         success: false,
+         message: "Failed to start project",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+};
+
+/** The assigned engineer declines the work; the assignment moves to the Rejected tab. */
+export const rejectAssignment = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({ success: false, message: "Employee not found" });
+      }
+
+      const { id } = req.params;
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (!mongoose.isValidObjectId(id)) {
+         return res.status(400).json({ success: false, message: "Invalid project ID" });
+      }
+      if (!reason) {
+         return res.status(400).json({ success: false, message: "A reason is required to reject" });
+      }
+
+      const assignment = await technicalModel.findOneAndUpdate(
+         { _id: id, status: 'Pending', assignedTo: employee._id },
+         { status: 'Rejected', rejectReason: reason, respondedAt: new Date(), respondedBy: employee._id, updatedAt: new Date() },
+         { new: true }
+      );
+      if (!assignment) {
+         return res.status(409).json({
+            success: false,
+            message: "This project is not waiting for your response"
+         });
+      }
+
+      await logAudit(req, {
+         entityType: 'project', entityId: assignment._id, action: 'rejected', summary: `Assignment rejected: ${reason}`,
+      });
+      return res.status(200).json({ success: true, message: "Project rejected", data: assignment });
+   } catch (error) {
+      return res.status(500).json({
+         success: false,
+         message: "Failed to reject project",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+};
+
+/** Started projects (In Progress / Completed / Lost), with the same grid contract as getProjects. */
+export const getWorkProjects = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { page = 1, row = 15, status, search, filters, sortKey, sortDir } = req.body;
+
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({ success: false, message: "Employee not found" });
+      }
+
+      const privileges = employee.category?.privileges;
+      const accessFilter = privileges?.technical?.viewReport && privileges.technical.viewReport !== 'none'
+         ? await buildPrivilegeAccessFilter(employee._id, privileges.technical.viewReport, 'assignedBy')
+         : {};
+
+      const pipeline: any[] = [
+         { $lookup: { from: "jobs", localField: "jobId", foreignField: "_id", as: "jobId" } },
+         { $unwind: { path: "$jobId", preserveNullAndEmptyArrays: true } },
+         { $lookup: { from: "customers", localField: "customer", foreignField: "_id", as: "customer" } },
+         { $unwind: "$customer" },
+         { $lookup: { from: "employees", localField: "assignedTo", foreignField: "_id", as: "assignedTo" } },
+         { $unwind: "$assignedTo" },
+         { $addFields: { "assignedTo.fullName": { $concat: ["$assignedTo.firstName", " ", "$assignedTo.lastName"] } } },
+         { $lookup: { from: "employees", localField: "assignedBy", foreignField: "_id", as: "assignedBy" } },
+         { $unwind: "$assignedBy" },
+         { $addFields: { "assignedBy.fullName": { $concat: ["$assignedBy.firstName", " ", "$assignedBy.lastName"] } } },
+      ];
+
+      const statuses = (Array.isArray(status) ? status : []).filter((s: string) => (PROJECT_STATUSES as readonly string[]).includes(s));
+      if (statuses.length) {
+         pipeline.push({ $match: { status: { $in: statuses } } });
+      }
+
+      if (typeof search === 'string' && search.trim()) {
+         const searchRegex = { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+         pipeline.push({
+            $match: {
+               $or: [
+                  { projectNumber: searchRegex },
+                  { "customer.companyName": searchRegex },
+                  { "jobId.jobId": searchRegex },
+                  { "assignedTo.fullName": searchRegex },
+                  { "assignedBy.fullName": searchRegex },
+               ]
+            }
+         });
+      }
+
+      if (Object.keys(accessFilter).length > 0) {
+         pipeline.push({ $match: { $or: [accessFilter, { 'assignedTo._id': employee._id }] } });
+      }
+
+      const gridMatch = buildGridFilterMatch(filters, PROJECT_GRID_FIELDS);
+      if (gridMatch) pipeline.push({ $match: gridMatch });
+
+      const totalResult = await projectModel.aggregate([...pipeline, { $count: "total" }]);
+      const total = totalResult.length > 0 ? totalResult[0].total : 0;
+
+      pipeline.push({ $sort: buildGridSort(sortKey, sortDir, PROJECT_GRID_FIELDS, { updatedAt: -1 }) });
+      pipeline.push({ $skip: (page - 1) * row });
+      pipeline.push({ $limit: row });
+
+      const projects = await projectModel.aggregate(pipeline);
+
+      return res.status(200).json({
+         success: true,
+         message: projects.length > 0 ? "Projects fetched successfully" : "No projects found",
+         data: projects,
+         total
+      });
+   } catch (error) {
+      return res.status(500).json({
+         success: false,
+         message: "Failed to get projects",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+};
+
+const ASSIGNMENT_STATUSES = ['Pending', 'In Progress', 'Completed', 'Lost', 'Rejected'] as const;
+
+/**
+ * One status update for an assigned project: Pending, In Progress, Completed, Lost or Rejected.
+ * Lost and Rejected need a note, the others take an optional one. In Progress creates the
+ * Project record the first time. Allowed for the assigned engineer or a user who can assign.
+ */
+export const updateAssignmentStatus = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({ success: false, message: "Employee not found" });
+      }
+
+      const { id } = req.params;
+      const { status } = req.body;
+      const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+      if (!mongoose.isValidObjectId(id)) {
+         return res.status(400).json({ success: false, message: "Invalid project ID" });
+      }
+      if (!(ASSIGNMENT_STATUSES as readonly string[]).includes(status)) {
+         return res.status(400).json({ success: false, message: "Invalid status" });
+      }
+      if ((status === 'Lost' || status === 'Rejected') && !note) {
+         return res.status(400).json({ success: false, message: `A note is required to mark a project as ${status.toLowerCase()}` });
+      }
+
+      const assignment = await technicalModel.findById(id);
+      if (!assignment) {
+         return res.status(404).json({ success: false, message: "Project not found" });
+      }
+      const isEngineer = assignment.assignedTo?.toString() === employee._id.toString();
+      const canManage = employee.category?.privileges?.technical?.canViewOpenToWorkAndAssign === true;
+      if (!isEngineer && !canManage) {
+         return res.status(403).json({ success: false, message: "Only the assigned engineer can update this project" });
+      }
+
+      const now = new Date();
+      let project: any = await projectModel.findOne({ technical: assignment._id });
+      const previousStatus: string = project?.status || assignment.status;
+
+      if (status === 'Completed' || status === 'Lost') {
+         if (!project) {
+            return res.status(409).json({ success: false, message: "Start the project before completing or losing it" });
+         }
+      }
+
+      if (status === 'In Progress' && !project) {
+         const job = assignment.jobId ? await jobModel.findById(assignment.jobId).select('allocateType') : null;
+         for (let attempt = 0; attempt < 3 && !project; attempt++) {
+            try {
+               project = await projectModel.create({
+                  projectNumber: await nextProjectNumber(),
+                  technical: assignment._id,
+                  jobId: assignment.jobId,
+                  customer: assignment.customer,
+                  projectType: assignment.projectType,
+                  allocateType: (job as any)?.allocateType || '',
+                  priority: assignment.priority,
+                  assignedTo: assignment.assignedTo,
+                  assignedBy: assignment.assignedBy,
+                  assignedAt: assignment.assignedAt,
+                  status: 'In Progress',
+                  startedAt: now,
+                  startedBy: employee._id,
+                  estimatedCostForProject: assignment.estimatedCostForProject || 0,
+                  statusHistory: [{ status: 'In Progress', remarks: note, changedBy: employee._id, changedAt: now }],
+               });
+            } catch (error: any) {
+               if (error?.code !== 11000 || attempt === 2) throw error;
+            }
+         }
+      } else if (project) {
+         project.status = status;
+         project.closureRemarks = ['Completed', 'Lost', 'Rejected'].includes(status) ? note : '';
+         if (status === 'Completed') project.completedAt = now;
+         if (status === 'Lost') project.lostAt = now;
+         project.statusHistory.push({ status, remarks: note, changedBy: employee._id, changedAt: now });
+         await project.save();
+      }
+
+      // The assignment follows: Pending/Rejected stay visible in their tabs, everything else is Approved.
+      const assignmentStatus = status === 'Pending' ? 'Pending' : status === 'Rejected' ? 'Rejected' : 'Approved';
+      const update: any = { status: assignmentStatus, respondedAt: now, respondedBy: employee._id, updatedAt: now };
+      if (status === 'Rejected') update.rejectReason = note;
+      await technicalModel.updateOne({ _id: assignment._id }, update);
+
+      await logAudit(req, {
+         entityType: 'project', entityId: assignment._id, entityLabel: project?.projectNumber,
+         action: 'status-changed', summary: `Project ${project?.projectNumber || ''} marked as ${status}${note ? `: ${note}` : ''}`.replace('  ', ' '),
+         changes: [{ label: 'Status', from: previousStatus, to: status }],
+      });
+      return res.status(200).json({ success: true, message: `Project marked as ${status}`, data: project || assignment });
+   } catch (error) {
+      return res.status(500).json({
+         success: false,
+         message: "Failed to update project status",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+};
+
+/** Moves a started project from In Progress to Completed or Lost. */
+export const updateWorkProjectStatus = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({ success: false, message: "Employee not found" });
+      }
+
+      const { id } = req.params;
+      const { status, remarks } = req.body;
+      if (!mongoose.isValidObjectId(id)) {
+         return res.status(400).json({ success: false, message: "Invalid project ID" });
+      }
+      if (!['Completed', 'Lost'].includes(status)) {
+         return res.status(400).json({ success: false, message: "Status must be Completed or Lost" });
+      }
+      const note = typeof remarks === 'string' ? remarks.trim() : '';
+      if (status === 'Lost' && !note) {
+         return res.status(400).json({ success: false, message: "Remarks are required when marking a project as lost" });
+      }
+
+      const existing = await projectModel.findById(id).select('assignedTo status');
+      if (!existing) {
+         return res.status(404).json({ success: false, message: "Project not found" });
+      }
+      const isEngineer = existing.assignedTo.toString() === employee._id.toString();
+      const canManage = employee.category?.privileges?.technical?.canViewOpenToWorkAndAssign === true;
+      if (!isEngineer && !canManage) {
+         return res.status(403).json({ success: false, message: "Only the assigned engineer can update this project" });
+      }
+
+      const now = new Date();
+      const project = await projectModel.findOneAndUpdate(
+         { _id: id, status: 'In Progress' },
+         {
+            status,
+            closureRemarks: note,
+            ...(status === 'Completed' ? { completedAt: now } : { lostAt: now }),
+            $push: { statusHistory: { status, remarks: note, changedBy: employee._id, changedAt: now } },
+         },
+         { new: true }
+      );
+      if (!project) {
+         return res.status(409).json({ success: false, message: "Only projects in progress can be updated" });
+      }
+
+      await logAudit(req, {
+         entityType: 'project', entityId: project.technical, entityLabel: project.projectNumber,
+         action: 'status-changed', summary: `Project ${project.projectNumber} marked as ${status}${note ? `: ${note}` : ''}`,
+         changes: [{ label: 'Status', from: 'In Progress', to: status }],
+      });
+      return res.status(200).json({ success: true, message: `Project marked as ${status}`, data: project });
+   } catch (error) {
+      return res.status(500).json({
+         success: false,
+         message: "Failed to update project status",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+};

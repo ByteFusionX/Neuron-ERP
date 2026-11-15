@@ -3,7 +3,11 @@ import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { Observable, Subject, Subscription, catchError, forkJoin, map, of, switchMap } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, Subscription, catchError, forkJoin, map, of, switchMap } from 'rxjs';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { ProjectService } from 'src/app/core/services/project.service';
@@ -22,21 +26,41 @@ import {
   DataGridView,
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
+import { DetailMetaComponent } from 'src/app/shared/components/detail-panel/detail-meta.component';
+import { DetailMetaItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailOverviewSection } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ProjectStatus } from 'src/app/shared/interfaces/project.interface';
 import { CreateProjectComponent } from '../../create-project/create-project.component';
+import { MaterialRequestDrawerComponent } from '../../material-request-drawer/material-request-drawer.component';
 import { ModalService } from 'src/app/shared/components/modal';
 import { AssignEngineerDialogComponent, AssignEngineerDialogResult } from '../../dialogs/assign-engineer-dialog/assign-engineer-dialog.component';
+import { UpdateStatusComponent, UpdateStatusDialogResult } from '../../dialogs/update-status/update-status.component';
 import { TransferEngineerComponent, TransferEngineerDialogResult } from '../../dialogs/transfer-engineer/transfer-engineer.component';
 
-type ViewId = 'openToWork' | 'newProject' | 'pendingProjects' | 'pendingAmc' | 'materials';
+type ViewId = 'newProject' | 'all' | 'pending' | 'openToWork' | 'inProgress' | 'completed' | 'rejected' | 'amc' | 'materials';
 
 interface PageResult {
   rows: any[];
   total: number;
 }
 
-const VIEW_IDS: ViewId[] = ['openToWork', 'newProject', 'pendingProjects', 'pendingAmc', 'materials'];
+// Open To Work tab stays removed; its code stays for now.
+const VIEW_IDS: ViewId[] = ['newProject', 'all', 'pending', 'inProgress', 'completed', 'rejected', 'amc', 'materials'];
+
+// Started projects live in their own collection; every other tab reads the assignment records.
+const WORK_STATUS_BY_VIEW: Partial<Record<ViewId, string[]>> = {
+  inProgress: ['In Progress'],
+  completed: ['Completed', 'Lost'],
+};
+
+const STATUS_BADGE_CLASSES: Record<string, string> = {
+  'In Progress': 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900',
+  Completed: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900',
+  Lost: 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900',
+  Rejected: 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900',
+  Pending: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900',
+  Approved: 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900',
+};
 
 const PRIORITY_BADGE_CLASSES: Record<string, string> = {
   High: 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900',
@@ -47,13 +71,14 @@ const PRIORITY_BADGE_CLASSES: Record<string, string> = {
 @Component({
   selector: 'app-technical-project',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, CreateProjectComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailMetaComponent, DetailTimelineComponent, CreateProjectComponent, MaterialRequestDrawerComponent],
   templateUrl: './project.component.html',
   styleUrl: './project.component.css',
 })
 export class TechnicalProjectComponent implements OnInit, OnDestroy {
   @ViewChild('grid') grid?: DataGridComponent<any>;
 
+  private auditLog = inject(AuditLogService);
   private jobService = inject(JobService);
   private projectService = inject(ProjectService);
   private technicalService = inject(TechnicalService);
@@ -74,10 +99,14 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
   columns: DataGridColumn<any>[] = [];
   rowActions: DataGridRowAction<any>[] = [];
   views: DataGridView<any>[] = [];
-  detailTabs: DataGridDetailTab[] = [{ id: 'overview', label: 'Details', icon: 'info' }];
-  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Projects' }, { label: 'Technical' }];
+  detailTabs: DataGridDetailTab[] = [
+    { id: 'overview', label: 'Details', icon: 'info' },
+    { id: 'history', label: 'History', icon: 'history' },
+  ];
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Projects' }, { label: 'All Projects' }];
 
-  activeViewId: ViewId = 'openToWork';
+  activeViewId: ViewId = 'newProject';
   page = 1;
   row = 15;
   searchQuery = '';
@@ -96,6 +125,7 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
 
   readonly scopeOptions = [
     { label: 'Project With Supply', value: 'Project With Supply' },
+    { label: 'Projects With Out Supply', value: 'Projects With Out Supply' },
     { label: 'AMC', value: 'AMC' },
   ];
 
@@ -157,16 +187,19 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
   }
 
   get createLabel(): string {
-    if (this.activeViewId === 'newProject') return 'Create Project';
-    return this.activeViewId === 'openToWork' && this.canAssign ? 'Add Project' : '';
+    return this.activeViewId === 'newProject' && this.canAssign ? 'Add Project' : '';
   }
 
   get emptyMessage(): string {
     switch (this.activeViewId) {
-      case 'openToWork': return 'No jobs are waiting to be assigned';
-      case 'newProject': return 'No new projects found';
-      case 'pendingProjects': return 'No pending projects found';
-      case 'pendingAmc': return 'No pending AMC found';
+      case 'all': return 'No projects found';
+      case 'newProject': return 'No jobs are waiting to be assigned';
+      case 'pending': return 'No projects are waiting for an engineer to respond';
+      case 'openToWork': return 'Nothing is waiting for your response';
+      case 'inProgress': return 'No projects in progress';
+      case 'completed': return 'No completed projects';
+      case 'rejected': return 'No rejected projects';
+      case 'amc': return 'No AMC found';
       default: return 'No material approval requests found';
     }
   }
@@ -174,15 +207,19 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
   // ---- views ----
 
   private visibleViewIds(): ViewId[] {
-    return VIEW_IDS.filter((id) => (id === 'openToWork' ? this.canAssign : id === 'materials' ? this.canApproveMr : true));
+    return VIEW_IDS.filter((id) => (id === 'newProject' ? this.canAssign : id === 'materials' ? this.canApproveMr : true));
   }
 
   private labelFor(id: ViewId): string {
     switch (id) {
+      case 'newProject': return 'New';
+      case 'all': return 'All';
+      case 'pending': return 'Pending';
       case 'openToWork': return 'Open To Work';
-      case 'newProject': return 'New Project';
-      case 'pendingProjects': return 'Pending Projects';
-      case 'pendingAmc': return 'Pending AMC';
+      case 'inProgress': return 'In Progress';
+      case 'completed': return 'Completed';
+      case 'rejected': return 'Rejected';
+      case 'amc': return 'AMC';
       default: return 'Materials';
     }
   }
@@ -260,21 +297,27 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
       ? { filters: this.filters, sortKey: this.sortKey || undefined, sortDir: this.sortDir || undefined }
       : {};
     switch (id) {
-      case 'openToWork':
+      case 'newProject':
         return this.jobService.getUnassignedToTechnical({ page, row, search: text, ...query }).pipe(
           map((res) => ({ rows: res?.data ?? [], total: res?.total ?? 0 })),
         );
-      case 'newProject':
-      case 'pendingProjects':
-      case 'pendingAmc':
-        return this.projectService.getProjects({
-          page,
-          row,
-          search: text,
-          projectType: id === 'pendingAmc' ? 'amc' : 'project',
-          status: [ProjectStatus.Pending],
-          ...query,
-        } as any).pipe(map((res) => ({ rows: res?.data ?? [], total: res?.total ?? res?.data?.length ?? 0 })));
+      case 'inProgress':
+      case 'completed':
+        return this.technicalService.getWorkProjects({ page, row, search: text, status: WORK_STATUS_BY_VIEW[id], ...query })
+          .pipe(map((res) => ({ rows: res?.data ?? [], total: res?.total ?? res?.data?.length ?? 0 })));
+      case 'all':
+      case 'pending':
+      case 'openToWork':
+      case 'rejected':
+      case 'amc': {
+        const filter: Record<string, unknown> = {};
+        if (id === 'pending') filter['status'] = ['Pending'];
+        if (id === 'openToWork') { filter['status'] = ['Pending']; filter['assignedToId'] = 'me'; }
+        if (id === 'rejected') filter['status'] = ['Rejected'];
+        if (id === 'amc') filter['projectType'] = 'amc';
+        return this.projectService.getProjects({ page, row, search: text, ...filter, ...query } as any)
+          .pipe(map((res) => ({ rows: res?.data ?? [], total: res?.total ?? res?.data?.length ?? 0 })));
+      }
       default:
         return this.technicalService.getPendingMaterialRequestProjects({
           page,
@@ -304,7 +347,7 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
 
   private columnsFor(id: ViewId): DataGridColumn<any>[] {
     switch (id) {
-      case 'openToWork':
+      case 'newProject':
         return [
           { key: 'jobId', label: 'Job ID', sortable: true, locked: true },
           { key: 'customer', label: 'Customer', sortable: true, valueGetter: (r) => r.clientDetails?.companyName || '-' },
@@ -315,15 +358,26 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
           { key: 'dealSheet', label: 'Deal Sheet', sortable: true, valueGetter: (r) => r.quotation?.dealData?.dealId || '-' },
           { key: 'allocateType', label: 'Scope', sortable: true, filterOptions: this.scopeOptions },
         ];
-      case 'newProject':
-      case 'pendingProjects':
-      case 'pendingAmc':
+      case 'all':
+      case 'pending':
+      case 'openToWork':
+      case 'inProgress':
+      case 'completed':
+      case 'rejected':
+      case 'amc':
         return [
           { key: 'jobId', label: 'Job ID', sortable: true, locked: true, valueGetter: (r) => r.jobId?.jobId || '-' },
+          { key: 'projectNumber', label: 'Project No', sortable: true, valueGetter: (r) => r.projectNumber || '-' },
           { key: 'customer', label: 'Project Name', sortable: true, valueGetter: (r) => r.customer?.companyName || '-' },
+          { key: 'projectType', label: 'Type', sortable: true, valueGetter: (r) => (r.projectType || '-').toString().toUpperCase() },
+          { key: 'allocateType', label: 'Scope', sortable: true, valueGetter: (r) => r.allocateType || '-' },
           { key: 'assignedTo', label: 'Assigned Engineer', sortable: true, valueGetter: (r) => this.personName(r.assignedTo) },
           { key: 'assignedBy', label: 'Assigned By', sortable: true, valueGetter: (r) => this.personName(r.assignedBy) },
           { key: 'priority', label: 'Priority', type: 'badge', sortable: true, badgeClasses: PRIORITY_BADGE_CLASSES, filterOptions: this.priorityOptions, valueGetter: (r) => r.priority || '-' },
+          { key: 'status', label: 'Status', type: 'badge' as const, badgeClasses: STATUS_BADGE_CLASSES, valueGetter: (r: any) => r.status || '-' },
+          { key: 'assignedAt', label: 'Assigned On', type: 'date', sortable: true, width: '130px' },
+          { key: 'startedAt', label: 'Started On', type: 'date', sortable: true, width: '130px' },
+          { key: 'updatedAt', label: 'Updated', type: 'date', sortable: true, width: '130px' },
         ];
       default:
         return [
@@ -338,15 +392,27 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
 
   private buildRowActions(): void {
     const only = (id: ViewId) => () => this.activeViewId !== id;
-    const pendingProjectView = () => !['newProject', 'pendingProjects', 'pendingAmc'].includes(this.activeViewId);
+    const assignmentView = () => !['all', 'pending', 'openToWork', 'rejected', 'amc'].includes(this.activeViewId);
+    const awaitingMe = (r: any) => r.status === ProjectStatus.Pending && !!this.userId && r.assignedTo?._id === this.userId;
     this.rowActions = [
-      { id: 'assignEngineer', label: 'Assign to Engineer', icon: 'user', quick: true, panel: true, hidden: only('openToWork') },
-      { id: 'viewJob', label: 'View Job', icon: 'eye', hidden: (r) => this.activeViewId !== 'openToWork' || !r._id },
-      { id: 'editProject', label: 'Edit Project', icon: 'pencil', quick: true, panel: true, hidden: pendingProjectView },
-      { id: 'transferEngineer', label: 'Transfer Engineer', icon: 'transfer', quick: true, hidden: (r) => pendingProjectView() || !this.canTransfer || !r.assignedTo },
-      { id: 'deleteProject', label: 'Delete Project', icon: 'trash', variant: 'danger', divider: true, hidden: (r) => pendingProjectView() || r.status !== ProjectStatus.Pending },
+      { id: 'assignEngineer', label: 'Assign to Engineer', icon: 'user', quick: true, panel: true, hidden: only('newProject') },
+      { id: 'viewJob', label: 'View Job', icon: 'eye', hidden: (r) => !this.jobDbId(r) },
+      { id: 'startProject', label: 'Start Project', icon: 'check', quick: true, hidden: (r) => assignmentView() || !awaitingMe(r) },
+      { id: 'rejectProject', label: 'Reject', icon: 'close', variant: 'danger', hidden: (r) => assignmentView() || !awaitingMe(r) },
+      { id: 'updateStatus', label: 'Update Status', icon: 'flag', quick: true, hidden: (r) => this.activeViewId === 'newProject' || this.activeViewId === 'materials' || !(r.assignedTo?._id === this.userId || this.canAssign) },
+      { id: 'materialRequest', label: 'Material Request', icon: 'upload', quick: true, hidden: (r) => this.activeViewId === 'newProject' || r.status === ProjectStatus.Completed },
+      { id: 'editProject', label: 'Edit Project', icon: 'pencil', quick: true, panel: true, hidden: (r) => assignmentView() || r.status !== ProjectStatus.Pending || !this.canAssign },
+      { id: 'transferEngineer', label: 'Reassign to Engineer', icon: 'users', quick: true, hidden: (r) => this.activeViewId === 'newProject' || this.activeViewId === 'materials' || !this.canTransfer || !r.assignedTo },
+      { id: 'deleteProject', label: 'Delete Project', icon: 'trash', variant: 'danger', divider: true, hidden: (r) => assignmentView() || r.status !== ProjectStatus.Pending || !this.canAssign },
       { id: 'viewMr', label: 'View MR', icon: 'eye', quick: true, panel: true, hidden: only('materials') },
     ];
+  }
+
+  /** Database id of the job behind a row: the row itself in the New tab, the populated job on assignment rows. */
+  private jobDbId(row: any): string {
+    if (this.activeViewId === 'newProject') return row?._id || '';
+    const job = row?.jobId;
+    return job && typeof job === 'object' ? job._id || '' : '';
   }
 
   // ---- actions ----
@@ -355,12 +421,23 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
     const { action, row } = event;
     switch (action.id) {
       case 'assignEngineer': this.openAssignEngineer(row); break;
-      case 'viewJob': this.router.navigate(['/job-sheet/view', row._id], { state: { returnUrl: this.router.url } }); break;
+      case 'viewJob': this.router.navigate(['/job-sheet/view', this.jobDbId(row)], { state: { returnUrl: this.router.url } }); break;
+      case 'materialRequest': this.mrProjectId = this.assignmentIdOf(row); this.mrOpen = true; break;
       case 'editProject': this.editProjectId = row._id; this.createOpen = true; break;
       case 'transferEngineer': this.transferEngineer(row); break;
+      case 'startProject': void this.startProject(row); break;
+      case 'rejectProject': void this.rejectProject(row); break;
+      case 'updateStatus': this.updateStatus(row); break;
       case 'deleteProject': void this.deleteProject(row); break;
       case 'viewMr': this.router.navigate(['/technical/materials/view', row._id]); break;
     }
+  }
+
+  mrOpen = false;
+  mrProjectId: string | null = null;
+
+  onMaterialRequestSaved(): void {
+    this.reload();
   }
 
   createOpen = false;
@@ -383,7 +460,9 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
   }
 
   private openAssignEngineer(job: any): void {
-    const projectType = job.allocateType === allocateType.AMC ? 'amc' : job.allocateType === allocateType.ProjectWithSupply ? 'project' : '';
+    const projectType = job.allocateType === allocateType.AMC
+      ? 'amc'
+      : job.allocateType === allocateType.ProjectWithSupply || job.allocateType === allocateType.ProjectsWithOutSupply ? 'project' : '';
     this.modal.open<AssignEngineerDialogResult>(AssignEngineerDialogComponent, {
       width: '480px',
       data: { engineerOptions: this.engineerOptions, priorityOptions: this.priorityOptions, jobId: job.jobId },
@@ -411,10 +490,10 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
   private transferEngineer(project: any): void {
     this.modal.open<TransferEngineerDialogResult>(TransferEngineerComponent, {
       width: '480px',
-      data: { projectId: project._id, currentEngineer: project.assignedTo, jobId: project.jobId?.jobId },
+      data: { projectId: this.assignmentIdOf(project), currentEngineer: project.assignedTo, jobId: project.jobId?.jobId },
     }).afterClosed().subscribe((result) => {
       if (!result?.engineerId) return;
-      this.projectService.transferEngineer(project._id, result.engineerId).subscribe({
+      this.projectService.transferEngineer(this.assignmentIdOf(project), result.engineerId).subscribe({
         next: (response) => {
           if (response.success) {
             this.toaster.success('Engineer transferred successfully');
@@ -422,6 +501,61 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
           }
         },
         error: () => this.toaster.error('Failed to transfer engineer'),
+      });
+    });
+  }
+
+  private async startProject(row: any): Promise<void> {
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Start project',
+      message: 'Confirm that you are starting this project. It moves to In Progress.',
+      details: [
+        { label: 'Job ID', value: row.jobId?.jobId || '-' },
+        { label: 'Project', value: row.customer?.companyName || '-' },
+      ],
+      confirmLabel: 'Start project',
+    });
+    if (!confirmed) return;
+    this.technicalService.startProject(row._id).subscribe({
+      next: () => { this.toaster.success('Project started'); this.reload(); },
+      error: (e) => this.toaster.error(e?.error?.message || 'Failed to start project'),
+    });
+  }
+
+  private async rejectProject(row: any): Promise<void> {
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'reject',
+      title: 'Reject project',
+      message: 'The project moves to the Rejected tab.',
+      details: [
+        { label: 'Job ID', value: row.jobId?.jobId || '-' },
+        { label: 'Project', value: row.customer?.companyName || '-' },
+      ],
+      reason: true,
+      confirmLabel: 'Reject',
+    });
+    if (!confirmed || !reason) return;
+    this.technicalService.rejectAssignment(row._id, reason).subscribe({
+      next: () => { this.toaster.success('Project rejected'); this.reload(); },
+      error: (e) => this.toaster.error(e?.error?.message || 'Failed to reject project'),
+    });
+  }
+
+  /** Started projects (In Progress / Completed tabs) carry the assignment id in `technical`. */
+  private assignmentIdOf(row: any): string {
+    return row.technical ?? row._id;
+  }
+
+  private updateStatus(row: any): void {
+    this.modal.open<UpdateStatusDialogResult>(UpdateStatusComponent, {
+      width: '480px',
+      data: { jobId: row.jobId?.jobId, currentStatus: row.status },
+    }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this.technicalService.updateAssignmentStatus(this.assignmentIdOf(row), result.status, result.note).subscribe({
+        next: () => { this.toaster.success(`Status updated to ${result.status}`); this.reload(); },
+        error: (e) => this.toaster.error(e?.error?.message || 'Failed to update status'),
       });
     });
   }
@@ -450,15 +584,27 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
   // ---- detail panel ----
 
   detailTitle = (row: any): string => {
-    if (this.activeViewId === 'openToWork') return row.jobId || 'Job';
-    return this.jobNumber(row) || 'Project';
+    if (this.activeViewId === 'newProject') return row.jobId || 'Job';
+    return row.projectNumber || this.jobNumber(row) || 'Project';
   };
 
   detailSubtitle = (row: any): string =>
-    (this.activeViewId === 'openToWork' ? row.clientDetails?.companyName : row.customer?.companyName) || '';
+    (this.activeViewId === 'newProject' ? row.clientDetails?.companyName : row.customer?.companyName) || '';
+
+  /** Key-facts strip shown under the detail panel header. */
+  metaFor(row: any): DetailMetaItem[] {
+    const status = row?.projectStatus || row?.status;
+    const tone = status === 'Completed' ? 'good' : status === 'Rejected' || status === 'Lost' ? 'bad' : undefined;
+    return [
+      { label: 'Status', value: status || '-', tone: tone as any },
+      { label: 'Engineer', value: this.personName(row?.assignedTo) || '-' },
+      { label: 'Priority', value: row?.priority || '-' },
+      { label: 'Est. Cost', value: row?.estimatedCostForProject },
+    ];
+  }
 
   overviewSections(row: any): DetailOverviewSection[] {
-    if (this.activeViewId === 'openToWork') {
+    if (this.activeViewId === 'newProject') {
       return [{
         title: 'Job',
         columns: '2',
@@ -497,24 +643,86 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
         },
       ];
     }
-    return [{
-      title: 'Project',
-      columns: '2',
-      fields: [
-        { type: 'field', label: 'Job ID', value: row.jobId?.jobId || '-' },
-        { type: 'field', label: 'Project Name', value: row.customer?.companyName || '-' },
-        { type: 'field', label: 'Assigned Engineer', value: this.personName(row.assignedTo) },
-        { type: 'field', label: 'Assigned By', value: this.personName(row.assignedBy) },
-        { type: 'field', label: 'Priority', value: row.priority || '-' },
-        { type: 'field', label: 'Status', value: row.status || '-' },
-      ],
-    }];
+    const f = (label: string, value: any) => ({ type: 'field' as const, label, value: value || '-' });
+    const sections: DetailOverviewSection[] = [
+      {
+        title: 'Project',
+        columns: '2',
+        fields: [
+          f('Project No', row.projectNumber),
+          f('Job ID', this.jobNumber(row)),
+          f('Project Name', row.customer?.companyName),
+          f('Type', (row.projectType || '').toString().toUpperCase()),
+          f('Scope', row.allocateType),
+          f('Priority', row.priority),
+          f('Status', row.status),
+          { type: 'field', label: 'Estimated Cost', value: row.estimatedCostForProject ?? 0, numeric: true },
+        ],
+      },
+      {
+        title: 'Assignment',
+        columns: '2',
+        fields: [
+          f('Assigned Engineer', this.personName(row.assignedTo)),
+          f('Assigned By', this.personName(row.assignedBy)),
+          f('Assigned On', this.fmtDate(row.assignedAt)),
+          f('Responded On', this.fmtDate(row.respondedAt)),
+        ],
+      },
+      {
+        title: 'Timeline',
+        columns: '2',
+        fields: [
+          f('Started On', this.fmtDate(row.startedAt)),
+          f('Completed On', this.fmtDate(row.completedAt)),
+          f('Lost On', this.fmtDate(row.lostAt)),
+          f('Last Updated', this.fmtDate(row.updatedAt)),
+        ],
+      },
+      {
+        title: 'Notes',
+        columns: '1',
+        fields: [
+          f('Assignment Notes', row.notes || row.comment),
+          ...(row.rejectReason ? [f('Rejected Because', row.rejectReason)] : []),
+          ...(row.closureRemarks ? [f('Closing Remarks', row.closureRemarks)] : []),
+        ],
+      },
+    ];
+    return sections;
+  }
+
+  /** Audit-log history of the project, keyed by its assignment record (started projects point back to it). */
+  historyFor(row: any): Observable<DetailTimelineEntry[]> {
+    const id: string = row?.projectNumber ? (row.technical?._id || row.technical || '') : (this.activeViewId === 'newProject' || this.activeViewId === 'materials' ? '' : row?._id || '');
+    if (!id) return of([]);
+    let subject = this.historyCache.get(id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(id, subject);
+      this.auditLog.getHistory('project', id).subscribe({
+        next: (e) => subject!.next(toTimelineEntries(e || [])),
+        error: () => this.historyCache.delete(id),
+      });
+    }
+    return subject.asObservable();
   }
 
   // ---- helpers ----
 
   private personName(person: any): string {
     return person?.firstName ? `${person.firstName} ${person.lastName ?? ''}`.trim() : '-';
+  }
+
+  private fmtDate(value: any): string {
+    if (!value) return '';
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  private latestNote(row: any): string {
+    const h = Array.isArray(row.statusHistory) ? row.statusHistory[row.statusHistory.length - 1] : null;
+    return h?.remarks || row.rejectReason || row.closureRemarks || '-';
   }
 
   private jobNumber(row: any): string {

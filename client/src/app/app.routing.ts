@@ -352,7 +352,7 @@ export const routes: Routes = [
       { path: 'project/issues/:id', component: IssuesListComponent },
       { path: 'project/claims/:id', component: ClaimsComponent },
       { path: 'project/billing-summary/:id', component: BillingSummaryComponent },
-      { path: 'open-to-work-project', pathMatch: 'full', redirectTo: () => inject(Router).parseUrl('/technical/project-page?view=openToWork') },
+      { path: 'open-to-work-project', pathMatch: 'full', redirectTo: () => inject(Router).parseUrl('/technical/project-page?view=newProject') },
       { path: 'mr-approval-requests', redirectTo: 'materials', pathMatch: 'full' },
       { path: 'mr-approval-requests/view/:id', redirectTo: 'materials/view/:id' },
       { path: 'materials/view/:id', component: ViewMaterialRequestComponent }

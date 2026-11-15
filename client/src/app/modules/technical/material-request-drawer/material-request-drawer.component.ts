@@ -143,7 +143,7 @@ export class MaterialRequestDrawerComponent implements OnChanges, OnDestroy {
     const m = this.meta(line);
     if (!m.dateCtl) {
       const ctl = new FormControl<string | null>(m.requiredOn, Validators.required);
-      if (m.status === 'approved') ctl.disable({ emitEvent: false });
+      if (m.status === 'approved' || this.isPoLocked(line.get('lineKey')?.value)) ctl.disable({ emitEvent: false });
       ctl.valueChanges.subscribe((v) => {
         m.requiredOn = v;
         this.form.markAsDirty();
@@ -177,6 +177,7 @@ export class MaterialRequestDrawerComponent implements OnChanges, OnDestroy {
         this.loading = false;
         const p: any = res?.data;
         this.originals = Array.isArray(p?.materialRequest) ? p.materialRequest : [];
+        this.poLocked = p?.mrLockedLines || {};
         this.existingAttachments = (p?.materialRequestAttachements || []).map((f: any) => ({
           fileName: f.fileName,
           originalname: f.originalname,
@@ -192,7 +193,7 @@ export class MaterialRequestDrawerComponent implements OnChanges, OnDestroy {
             statusHistory: m.statusHistory || [],
             requiredOn: m.requiredOn ? new Date(m.requiredOn).toISOString().split('T')[0] : null,
           });
-          return { detail: m.itemName, quantity: m.quantity, unitCost: m.estimatedCost, remarks: m.remarks || '', lineKey: key };
+          return { productId: m.productId || null, itemCode: m.itemCode || '', partNo: m.partNo || '', uom: m.uom || '', detail: m.itemName, quantity: m.quantity, unitCost: m.estimatedCost, remarks: m.remarks || '', lineKey: key };
         });
         this.seedOptionalItems = details.length ? [{ items: [{ itemName: '', itemDetails: details }] }] : null;
         // Approved lines are read-only; wait for item-entry to build the seeded lines.
@@ -218,7 +219,7 @@ export class MaterialRequestDrawerComponent implements OnChanges, OnDestroy {
     for (const option of this.optionalItems.controls) {
       for (const item of (option.get('items') as FormArray).controls) {
         for (const line of (item.get('itemDetails') as FormArray).controls) {
-          if (this.isApproved(line)) line.disable({ emitEvent: false });
+          if (this.isApproved(line) || this.isPoLocked(line.get('lineKey')?.value)) line.disable({ emitEvent: false });
         }
       }
     }
@@ -229,6 +230,7 @@ export class MaterialRequestDrawerComponent implements OnChanges, OnDestroy {
     this.step = 1;
     this.seedOptionalItems = null;
     this.metas.clear();
+    this.poLocked = {};
     this.originals = [];
     this.existingAttachments = [];
     this.purchaseRequests = [];
@@ -313,9 +315,13 @@ export class MaterialRequestDrawerComponent implements OnChanges, OnDestroy {
     const materialRequest: any[] = this.lines().map((l) => {
       present.add(l.lineKey);
       const m = this.metas.get(l.lineKey)!;
-      if (m.status === 'approved' && m.original) return this.asPayload(m.original);
+      if ((m.status === 'approved' || this.isPoLocked(l.lineKey)) && m.original) return this.asPayload(m.original);
       return {
         _id: m.original?._id,
+        productId: l.productId || null,
+        itemCode: (l.itemCode || '').toString().trim(),
+        partNo: (l.partNo || '').toString().trim(),
+        uom: l.uom || '',
         itemName: (l.detail || '').trim(),
         quantity: Number(l.quantity) || 1,
         estimatedCost: Number(l.unitCost) || 0,
@@ -327,7 +333,7 @@ export class MaterialRequestDrawerComponent implements OnChanges, OnDestroy {
     });
     // An approved request can't be dropped, even if its row was removed.
     for (const o of this.originals) {
-      if (o.status === 'approved' && !present.has(o._id as string)) materialRequest.push(this.asPayload(o));
+      if ((o.status === 'approved' || this.isPoLocked(o._id)) && !present.has(o._id as string)) materialRequest.push(this.asPayload(o));
     }
 
     const formData = new FormData();
@@ -349,11 +355,18 @@ export class MaterialRequestDrawerComponent implements OnChanges, OnDestroy {
           this.toaster.error(res.message || 'Failed to update material request');
         }
       },
-      error: () => {
+      error: (err) => {
         this.saving = false;
-        this.toaster.error('Failed to update material request');
+        this.toaster.error(err?.error?.message || 'Failed to update material request');
       },
     }));
+  }
+
+  /** Lines on a live PO (line id -> PO): fixed until that PO is rejected or cancelled. */
+  poLocked: Record<string, string> = {};
+
+  isPoLocked(key: string | undefined | null): boolean {
+    return !!key && !!this.poLocked[key];
   }
 
   private isApprovedKey(key: string): boolean {
@@ -363,6 +376,10 @@ export class MaterialRequestDrawerComponent implements OnChanges, OnDestroy {
   private asPayload(o: MaterialRequest): any {
     return {
       _id: o._id,
+      productId: o.productId || null,
+      itemCode: o.itemCode || '',
+      partNo: o.partNo || '',
+      uom: o.uom || '',
       itemName: o.itemName,
       quantity: o.quantity,
       estimatedCost: o.estimatedCost,

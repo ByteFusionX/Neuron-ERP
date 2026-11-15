@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getProjectAndAMCJobs, getEngineers, getUnassignedJobsByCustomer, assignEngineer, getProjects, getProjectById, updateProject, getTasks, createTask, updateTask, getIssues, createIssue, updateIssue, deleteIssue, getActivityPlans, createActivityPlan, updateActivityPlan, deleteActivityPlan, closeActivityPlan, getProjectUpdates, getProjectUpdateById, createProjectUpdate, updateProjectUpdate, deleteProjectUpdate, removeProjectUpdateAttachment, updateMaterialRequest, getBillingSummaries, getBillingSummaryById, createBillingSummary, updateBillingSummary, deleteBillingSummary, getCostingDetails, getMrRequests, createProject, getMaterialRequestByJobId, transferEngineer, getPendingMaterialRequestProjects, approveMaterialRequest, rejectMaterialRequest, approveMaterialRequestItem, rejectMaterialRequestItem, approveMaterialRequestFile, rejectMaterialRequestFile, approveAllPendingMaterialRequests } from "../controllers/technical.controller";
+import { getProjectAndAMCJobs, getEngineers, getUnassignedJobsByCustomer, assignEngineer, getProjects, getProjectById, updateProject, getTasks, createTask, updateTask, getIssues, createIssue, updateIssue, deleteIssue, getActivityPlans, createActivityPlan, updateActivityPlan, deleteActivityPlan, closeActivityPlan, getProjectUpdates, getProjectUpdateById, createProjectUpdate, updateProjectUpdate, deleteProjectUpdate, removeProjectUpdateAttachment, updateMaterialRequest, getBillingSummaries, getBillingSummaryById, createBillingSummary, updateBillingSummary, deleteBillingSummary, getCostingDetails, getMrRequests, createProject, getMaterialRequestByJobId, transferEngineer, getPendingMaterialRequestProjects, approveMaterialRequest, rejectMaterialRequest, approveMaterialRequestItem, rejectMaterialRequestItem, approveMaterialRequestFile, rejectMaterialRequestFile, approveAllPendingMaterialRequests, startProject, rejectAssignment, getWorkProjects, updateWorkProjectStatus, updateAssignmentStatus } from "../controllers/technical.controller";
 const upload = require("../common/multer.storage")
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 
@@ -13,6 +13,11 @@ technicalRouter.get('/unassigned-jobs/:customerId', requirePrivilege("technical"
 technicalRouter.post('/assignEngineer', requirePrivilege("technical", "canViewOpenToWorkAndAssign"), assignEngineer)
 technicalRouter.post('/transferEngineer', requirePrivilege("technical", "canTransferToEngineer"), transferEngineer)
 technicalRouter.post('/getProjects', getProjects)
+technicalRouter.post('/assignment/:id/start', startProject)
+technicalRouter.post('/assignment/:id/reject', rejectAssignment)
+technicalRouter.post('/assignment/:id/status', updateAssignmentStatus)
+technicalRouter.post('/work-projects/list', getWorkProjects)
+technicalRouter.post('/work-projects/:id/status', updateWorkProjectStatus)
 technicalRouter.post('/createProject', createProject)
 technicalRouter.post('/getMrRequests', getMrRequests)
 technicalRouter.get('/:id', getProjectById)

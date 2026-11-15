@@ -282,7 +282,7 @@ export class RoleFormDrawerComponent implements OnChanges {
       scopes: [scope('technical.viewReport', 'Pending projects / AMC visibility')],
       flags: [
         { path: 'technical.canViewOpenToWorkAndAssign', label: 'View open-to-work and assign engineer' },
-        { path: 'technical.canTransferToEngineer', label: 'Transfer to another engineer' },
+        { path: 'technical.canTransferToEngineer', label: 'Reassign to another engineer' },
         { path: 'technical.canApproveMRRequests', label: 'Approve MR requests' },
       ],
     },

@@ -56,8 +56,8 @@
     </ng-template>
 
     <ng-container sfDrawerFooter>
-        <app-action-button variant="secondary" class="mr-auto" [disabled]="!hasPurchaseRequests" (click)="openPurchaseRequests()">
-            {{ hasPurchaseRequests ? 'View Request from Purchase' : 'No Requests from Purchase' }}
+        <app-action-button *ngIf="hasPurchaseRequests" variant="secondary" class="mr-auto" (click)="openPurchaseRequests()">
+            View Request from Purchase
         </app-action-button>
         <app-action-button *ngIf="step === 1" variant="secondary" [disabled]="saving" (click)="cancel()">Cancel</app-action-button>
         <app-action-button *ngIf="step === 2" variant="secondary" [disabled]="saving" (click)="step = 1">Back</app-action-button>

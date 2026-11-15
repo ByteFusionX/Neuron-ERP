@@ -31,6 +31,9 @@ interface Technical {
     involvedPersons: { name: string; designation: string }[];
     estimations: { type: string; value: string }[];
     estimatedCostForProject?: number;
+    rejectReason?: string;
+    respondedAt?: Date;
+    respondedBy?: Types.ObjectId;
     activityPlan: ActivityPlan[];
     projectUpdates: ProjectUpdate[];
     billingSummary: BillingSummary[];
@@ -93,6 +96,10 @@ interface ActivityPlan {
 }
 
 const MaterialRequestSchema = new Schema({
+    productId: { type: Schema.Types.ObjectId, ref: 'Product' },
+    itemCode: { type: String, trim: true, default: '' },
+    partNo: { type: String, trim: true, default: '' },
+    uom: { type: String, trim: true, default: '' },
     itemName: {
         type: String,
         required: true,
@@ -492,6 +499,17 @@ const technicalSchema = new Schema<Technical>({
     estimatedCostForProject: {
         type: Number,
         default: 0,
+    },
+    rejectReason: {
+        type: String,
+        default: '',
+    },
+    respondedAt: {
+        type: Date,
+    },
+    respondedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
     },
 })
 

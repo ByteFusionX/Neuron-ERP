@@ -22,6 +22,10 @@ export interface MaterialRequestStatusHistory {
 
 export interface MaterialRequest {
   _id?: string;
+  productId?: string | null;
+  itemCode?: string;
+  partNo?: string;
+  uom?: string;
   itemName: string;
   quantity: number;
   estimatedCost: number;
@@ -92,6 +96,26 @@ export class TechnicalService {
 
   assignEngineer(projectData: AssignEngineer): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/technical/assignEngineer`, projectData);
+  }
+
+  startProject(assignmentId: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/assignment/${assignmentId}/start`, {}, { context: context() });
+  }
+
+  rejectAssignment(assignmentId: string, reason: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/assignment/${assignmentId}/reject`, { reason }, { context: context() });
+  }
+
+  updateAssignmentStatus(assignmentId: string, status: string, note: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/assignment/${assignmentId}/status`, { status, note }, { context: context() });
+  }
+
+  getWorkProjects(filterData: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/work-projects/list`, filterData, { context: context() });
+  }
+
+  updateWorkProjectStatus(projectId: string, status: 'Completed' | 'Lost', remarks: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/work-projects/${projectId}/status`, { status, remarks }, { context: context() });
   }
 
   createProject(projectData: AssignEngineer): Observable<any> {

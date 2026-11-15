@@ -306,7 +306,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'technical',
-        label: 'Technical',
+        label: 'All Projects',
         icon: 'heroWrenchScrewdriver',
         route: '/technical/project-page',
         privilegeKey: 'technical',

@@ -8,8 +8,8 @@
   <app-data-grid #grid
     class="flex-1 min-h-0"
     [fillHeight]="true"
-    title="Technical"
-    subtitle="Open jobs, pending projects, AMC and material requests in one place"
+    title="All Projects"
+    subtitle="New jobs, pending projects, AMC and material requests in one place"
     [breadcrumbs]="breadcrumbs"
     rowKey="_id"
     [serverSide]="true"
@@ -32,10 +32,18 @@
     (queryChange)="onQueryChange($event)"
     (rowAction)="onRowAction($event)">
 
+    <ng-template #detailMetaTemplate let-row>
+      <app-detail-meta [items]="metaFor(row)"></app-detail-meta>
+    </ng-template>
+
     <ng-template #detailTemplate let-row let-tab="tab">
       <app-detail-overview *ngIf="tab === 'overview'" [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+      <app-detail-timeline *ngIf="tab === 'history'" [entries]="(historyFor(row) | async) ?? []"
+        emptyMessage="No project history yet."></app-detail-timeline>
     </ng-template>
   </app-data-grid>
+
+  <app-material-request-drawer [open]="mrOpen" [projectId]="mrProjectId" (saved)="onMaterialRequestSaved()" (closed)="mrOpen = false"></app-material-request-drawer>
 
   <app-create-project class="contents" [open]="createOpen" [projectId]="editProjectId" (saved)="onProjectCreated()" (closed)="onProjectDrawerClosed()"></app-create-project>
 </div>
