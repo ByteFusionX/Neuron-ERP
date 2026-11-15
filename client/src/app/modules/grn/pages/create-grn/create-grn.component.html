@@ -52,7 +52,7 @@
         <ng-container *ngIf="step === 1">
             <app-sf-section title="Purchase order" columns="2">
                 @if (!isLpoPreselected()) {
-                    <app-sf-field full label="LPO number" required [control]="f['selectedLpo']"
+                    <app-sf-field label="LPO number" required [control]="f['selectedLpo']"
                         [messages]="{ required: 'Choose the LPO the goods arrived against' }">
                         <app-sf-combobox formControlName="selectedLpo" [options]="lpoSelectOptions"
                             [placeholder]="isLpoOptionsLoading() ? 'Loading LPOs…' : 'Select LPO to create GRN against'"></app-sf-combobox>
@@ -97,20 +97,12 @@
                 <app-sf-field label="Received by">
                     <app-sf-input [ngModel]="receivedByName" [ngModelOptions]="{ standalone: true }" readonly></app-sf-input>
                 </app-sf-field>
-                <app-sf-field label="Destination" required [control]="f['destinationType']"><app-sf-select formControlName="destinationType" [options]="destinationOptions" [readonly]="isEdit"></app-sf-select></app-sf-field>
-                @if (isEdit) {
-                    <app-sf-field label="Receiving warehouse" required [control]="f['warehouse']">
-                        <app-sf-select formControlName="warehouse" [options]="warehouseOptions" readonly
-                            placeholder="Select warehouse"></app-sf-select>
-                    </app-sf-field>
-                }
-                @if (f['destinationType'].value === 'site') {
-                    <app-sf-field label="Project / site" required [control]="f['siteName']"><app-sf-input formControlName="siteName" placeholder="Enter project or site"></app-sf-input></app-sf-field>
-                }
+                <app-sf-field label="Warehouse" required [control]="f['warehouse']" [messages]="{ required: 'Choose the receiving warehouse' }"><app-sf-combobox formControlName="warehouse" [options]="warehouseOptions" [readonly]="isEdit" placeholder="Select warehouse"
+                  [footerLabel]="isEdit ? '' : 'Add warehouse'" (footerAction)="createWarehouse()"></app-sf-combobox></app-sf-field>
             </app-sf-section>
 
             <app-sf-section title="Inspection" columns="2">
-                <app-sf-field label="Result" required [control]="f['inspectionResult']"><app-sf-select formControlName="inspectionResult" [options]="inspectionOptions"></app-sf-select></app-sf-field>
+                <app-sf-field label="Result" [control]="f['inspectionResult']"><app-sf-select formControlName="inspectionResult" [options]="inspectionOptions"></app-sf-select></app-sf-field>
                 <app-sf-field label="Inspected by" [control]="f['inspectedBy']"><app-sf-combobox formControlName="inspectedBy" [options]="employeeOptions" placeholder="Search inspector" clearable></app-sf-combobox></app-sf-field>
                 <app-sf-field label="Inspection date" [control]="f['inspectionDate']"><app-sf-date formControlName="inspectionDate" typeable displayFormat="dd/MM/yyyy"></app-sf-date></app-sf-field>
                 <app-sf-field full label="Notes" [control]="f['inspectionNotes']"><app-sf-textarea formControlName="inspectionNotes" [rows]="3" placeholder="Optional notes"></app-sf-textarea></app-sf-field>

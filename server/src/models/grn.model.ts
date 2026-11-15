@@ -152,7 +152,6 @@ const grnSchema = new Schema<GRN>(
     },
     warehouse: {
       type: Schema.Types.ObjectId,
-      required: true,
       ref: "Warehouse"
     },
     destinationType: {

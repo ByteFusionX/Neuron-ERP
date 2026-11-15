@@ -13,6 +13,7 @@ import { issueDocNo, peekDocNo } from "../services/docNumber.service";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { Server } from "socket.io";
 import { StockHold } from "../models/stockHold.model";
+import Warehouse from "../models/warehouse.model";
 import { logAudit } from "../services/audit.service";
 import { notify } from "../services/notify.service";
 import { billingRecipients, jobOwnerOf, onlyViewers, recipientsExcluding, safely } from "../services/workflowNotify.service";
@@ -100,10 +101,10 @@ export const createGRN = async (req: Request, res: Response) => {
       });
     }
 
-    if (!grnDate || !warehouse || !items || !Array.isArray(items) || items.length === 0) {
+    if (!grnDate || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields: grnDate, warehouse, and items are required"
+        message: "Missing required fields: grnDate and items are required"
       });
     }
 
@@ -111,10 +112,18 @@ export const createGRN = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Supplier delivery note no. is required" });
     }
 
-    if (!['warehouse', 'site'].includes(destinationType) || (destinationType === 'site' && !siteName)) {
-      return res.status(400).json({ success: false, message: "A valid destination and project / site are required" });
+    if (!warehouse || !mongoose.Types.ObjectId.isValid(warehouse)) {
+      return res.status(400).json({ success: false, message: "Receiving warehouse is required" });
     }
-    if (!['Pending', 'Passed', 'Partial', 'Failed'].includes(inspectionResult)) {
+    const receivingWarehouse: any = await Warehouse.findOne({ _id: warehouse, isDeleted: { $ne: true } }).select('_id isActive').lean();
+    if (!receivingWarehouse || receivingWarehouse.isActive === false) {
+      return res.status(400).json({ success: false, message: "Receiving warehouse not found or inactive" });
+    }
+
+    if (destinationType && !['warehouse', 'site'].includes(destinationType)) {
+      return res.status(400).json({ success: false, message: "Invalid destination" });
+    }
+    if (inspectionResult && !['Pending', 'Passed', 'Partial', 'Failed'].includes(inspectionResult)) {
       return res.status(400).json({ success: false, message: "Invalid inspection result" });
     }
 
@@ -336,6 +345,13 @@ export const createGRN = async (req: Request, res: Response) => {
         createdBy: employee._id,
       };
 
+      if (!warehouse) {
+        // No receiving warehouse chosen: record the GRN but do not post stock.
+        if ((acceptedQty > 0 || rejectedQty > 0) && !warnings.includes('No receiving warehouse selected, so no stock was posted')) {
+          warnings.push('No receiving warehouse selected, so no stock was posted');
+        }
+        continue;
+      }
       if (acceptedQty > 0) {
         await postStock({ ...commonStockData, warehouse, type: 'Receipt', direction: 'in', quantity: acceptedQty });
         // Goods bought for a job are claimed for it as soon as they arrive.
@@ -1089,9 +1105,6 @@ export const updateGRN = async (req: Request, res: Response) => {
     }
     if (inspectionResult && !['Pending', 'Passed', 'Partial', 'Failed'].includes(inspectionResult)) {
       return res.status(400).json({ success: false, message: "Invalid inspection result" });
-    }
-    if (grn.destinationType === 'site' && !siteName) {
-      return res.status(400).json({ success: false, message: "Project / site is required" });
     }
 
     const day = (d: any) => d ? new Date(d).toISOString().slice(0, 10) : '';

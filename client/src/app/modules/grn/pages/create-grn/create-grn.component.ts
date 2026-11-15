@@ -20,6 +20,8 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
+import { ModalService } from 'src/app/shared/components/modal';
+import { QuickAddDialogComponent, QuickAddDialogData } from 'src/app/modules/products/modals/quick-add-dialog/quick-add-dialog.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { GrnItemEntryComponent } from '../../components/grn-item-entry/grn-item-entry.component';
 
@@ -59,6 +61,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
   private grnService = inject(GrnService);
   private warehouseService = inject(WarehouseService);
   private employeeService = inject(EmployeeService);
+  private modal = inject(ModalService);
 
   lpoId!: string;
   purchaseId!: string;
@@ -96,7 +99,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
   private readonly stepControls: Record<1 | 2 | 3, string[]> = {
     1: ['grnDate', 'supplierDeliveryNoteNo'],
     2: ['items'],
-    3: ['warehouse', 'destinationType', 'siteName', 'inspectionResult'],
+    3: ['warehouse', 'inspectionResult'],
   };
 
   get isEdit(): boolean {
@@ -122,7 +125,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
       { label: 'GRN date', value: v.grnDate ? new Date(v.grnDate).toLocaleDateString('en-GB') : '-' },
       { label: 'Delivery note', value: v.supplierDeliveryNoteNo || '-' },
       { label: 'Invoice', value: v.supplierInvoiceNo || '-' },
-      { label: v.destinationType === 'site' ? 'Site' : 'Warehouse', value: (v.destinationType === 'site' ? v.siteName : String(warehouse ?? '')) || '-' },
+      { label: 'Warehouse', value: String(warehouse ?? '') || '-' },
       { label: 'Inspection', value: v.inspectionResult || '-' },
     ];
   }
@@ -173,12 +176,12 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
     linkedLpoNo: ['', [Validators.required]],
     jobId: ['', [Validators.required]],
     supplierDeliveryNoteNo: ['', [Validators.required, Validators.pattern(/\S/)]],
-    receivedBy: ['', [Validators.required]],
+    receivedBy: [''],
     warehouse: ['', [Validators.required]],
-    destinationType: ['warehouse', [Validators.required]],
+    destinationType: ['warehouse'],
     siteName: [''],
     quarantineWarehouse: [''],
-    inspectionResult: ['Passed', [Validators.required]],
+    inspectionResult: ['Passed'],
     inspectionDate: [''],
     inspectionNotes: [''],
     inspectedBy: [''],
@@ -200,11 +203,6 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
     }
     this.grnForm.get('selectedLpo')?.valueChanges.subscribe((value) => {
       if (value && value !== this.lpoId) this.onLpoSelected(value);
-    });
-    this.grnForm.get('destinationType')?.valueChanges.subscribe((value) => {
-      const siteName = this.grnForm.get('siteName');
-      value === 'site' ? siteName?.setValidators([Validators.required]) : siteName?.clearValidators();
-      siteName?.updateValueAndValidity({ emitEvent: false });
     });
 
     if (this.grnId) {
@@ -233,8 +231,11 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
     setTimeout(() => this.closed.emit(), 250);
   }
 
-  get lpoSelectOptions(): SfOption[] {
-    return this.lpoOptions.map((option) => ({ label: option.label, value: option._id }));
+  // Cached: a getter returned a new array every change-detection pass, which reset the combobox mid-click.
+  lpoSelectOptions: SfOption[] = [];
+
+  private syncLpoSelectOptions(): void {
+    this.lpoSelectOptions = this.lpoOptions.map((option) => ({ label: option.label, value: option._id }));
   }
 
   warehouseOptions: SfOption[] = [];
@@ -253,38 +254,19 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
       .getAllPurchaseOrders({
         page: 1,
         row: 500,
-        status: ['Placed', 'Closed'],
+        // Only placed LPOs that still have goods to receive: no GRN yet, or partially received.
+        status: ['Placed'],
+        receiptStatus: 'Not Received,Partially Received',
       })
       .subscribe({
         next: (response: any) => {
           const lpos: any[] = response?.success ? response.data : [];
-          if (!lpos.length) {
-            this.lpoOptions = [];
-            this.isLpoOptionsLoading.set(false);
-            return;
-          }
-
-          const grnChecks = lpos.map((lpo: any) =>
-            this.grnService
-              .getAllGRNsByLpoId(lpo._id)
-              .pipe(catchError(() => of({ success: false, data: [] }))),
-          );
-
-          forkJoin(grnChecks).subscribe((grnResponses: any[]) => {
-            this.lpoOptions = lpos
-              .filter(
-                (lpo: any, index: number) =>
-                  !this.isLpoFullyReceived(
-                    lpo.items || [],
-                    grnResponses[index]?.data || [],
-                  ),
-              )
-              .map((lpo: any) => ({
-                _id: lpo._id,
-                label: `${lpo.poNo || 'N/A'} - ${lpo.supplierId?.supplierName || 'N/A'}`,
-              }));
-            this.isLpoOptionsLoading.set(false);
-          });
+          this.lpoOptions = lpos.map((lpo: any) => ({
+            _id: lpo._id,
+            label: `${lpo.poNo || 'N/A'} - ${lpo.supplierId?.supplierName || 'N/A'}`,
+          }));
+          this.syncLpoSelectOptions();
+          this.isLpoOptionsLoading.set(false);
         },
         error: (error) => {
           console.error('Error loading LPOs:', error);
@@ -735,9 +717,29 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
     });
   }
 
+  /** Quick-add a warehouse (same dialog as the product form / stock adjust) and select it. */
+  createWarehouse(): void {
+    const data: QuickAddDialogData = {
+      title: 'Warehouse',
+      create: (name) => this.warehouseService.createWarehouse({ wareHouseName: name, createdDate: new Date() } as any),
+    };
+    this.modal.open<any, QuickAddDialogData>(QuickAddDialogComponent, { width: '480px', data }).afterClosed().subscribe((warehouse) => {
+      if (!warehouse?._id) return;
+      this.toastr.success('Warehouse created successfully');
+      this.warehouses = [...this.warehouses, warehouse];
+      this.warehouseOptions = [...this.warehouseOptions, { label: warehouse.wareHouseName, value: warehouse._id }];
+      this.grnForm.get('warehouse')?.setValue(warehouse._id);
+      this.grnForm.get('warehouse')?.markAsDirty();
+    });
+  }
+
   loadWarehouses(selectedId?: string): void {
     this.warehouseService.getWarehouses().subscribe({
-      next: (warehouses) => {
+      next: (all) => {
+        // Same list as Settings > Master Data > Product Data > Warehouses; inactive ones stay out
+        // unless the GRN already uses one.
+        const current = selectedId || this.grnForm.get('warehouse')?.value;
+        const warehouses = all.filter((w: any) => w.isActive !== false || w._id === current);
         this.warehouses = warehouses;
         this.warehouseOptions = warehouses.map((warehouse) => ({ label: warehouse.wareHouseName, value: warehouse._id }));
         if (selectedId) {
@@ -902,8 +904,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
       supplierDeliveryNoteNo: formValue.supplierDeliveryNoteNo?.trim() || undefined,
       receivedBy: formValue.receivedBy || undefined,
       warehouse: formValue.warehouse,
-      destinationType: formValue.destinationType,
-      siteName: formValue.siteName || undefined,
+      destinationType: 'warehouse',
       quarantineWarehouse: formValue.quarantineWarehouse || undefined,
       inspectionResult: formValue.inspectionResult,
       inspectionDate: formValue.inspectionDate || undefined,
