@@ -154,6 +154,7 @@ export interface Privileges {
     cancelInvoice?: boolean;
     rejectInvoice?: boolean;
     reissueInvoice?: boolean;
+    viewSupplierBill?: boolean;
   };
   claims: {
     viewReport: string;
@@ -170,11 +171,6 @@ export interface Privileges {
   // Sidebar group switches. Undefined = enabled on roles saved before these existed.
   groups?: {
     [group in 'sales' | 'operations' | 'projects' | 'finance' | 'administration']?: { enabled?: boolean; dashboard?: boolean };
-  };
-  sensitiveData?: {
-    viewCost: boolean;
-    viewMargin: boolean;
-    overrideDiscount: boolean;
   };
   departments?: {
     view: boolean;

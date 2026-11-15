@@ -14,6 +14,8 @@ export interface MenuItem {
   notificationKeys?: string[];
   /** Boolean privilege flags that also grant access, even when `privilegeValue` itself is not met. */
   anyOfFlags?: string[];
+  /** Hides the entry when this boolean flag on the privilege object is explicitly false. */
+  hiddenIfFlagFalse?: string;
   children?: SubMenuItem[];
   inventorySubKey?: 'products' | 'stockEntries' | 'stockBalance' | 'stockMovements';
 }
@@ -356,6 +358,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         route: '/finance/vendor-bills',
         privilegeKey: 'invoice',
         privilegeValue: 'none',
+        hiddenIfFlagFalse: 'viewSupplierBill',
       },
     ],
   },
@@ -476,6 +479,12 @@ export function hasMenuAccess(privileges: Privileges | undefined, item: MenuItem
 
   const privilegeObj = privileges[item.privilegeKey as keyof Privileges];
   if (!privilegeObj) return false;
+
+  // Entry-level deny: an explicit false hides it (undefined = allowed, for roles saved before the flag existed).
+  if ('hiddenIfFlagFalse' in item && item.hiddenIfFlagFalse && typeof privilegeObj === 'object'
+    && (privilegeObj as any)[item.hiddenIfFlagFalse] === false) {
+    return false;
+  }
 
   if (
     'anyOfFlags' in item &&

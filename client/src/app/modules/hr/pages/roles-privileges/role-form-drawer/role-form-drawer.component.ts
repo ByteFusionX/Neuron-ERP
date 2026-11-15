@@ -51,7 +51,7 @@ const MODULE_CATEGORY_OF: Record<string, string> = {
   supplier: 'Operations', purchase: 'Operations', purchaseOrder: 'Operations', grn: 'Operations',
   inventory: 'Operations', dispatch: 'Operations', invoice: 'Finance',
   technical: 'Projects',
-  claims: 'Finance', sensitiveData: 'Finance',
+  claims: 'Finance',
   home: 'Main', dashboard: 'Main', employee: 'Administration', departments: 'Administration',
   announcement: 'Administration',
   companyProfile: 'Settings', numbering: 'Settings', masterData: 'Settings', roles: 'Settings',
@@ -275,6 +275,7 @@ export class RoleFormDrawerComponent implements OnChanges {
         { path: 'invoice.cancelInvoice', label: 'Cancel invoice' },
         { path: 'invoice.rejectInvoice', label: 'Reject invoice' },
         { path: 'invoice.reissueInvoice', label: 'Cancel and reissue invoice' },
+        { path: 'invoice.viewSupplierBill', label: 'View supplier bills' },
       ],
     },
     {
@@ -298,15 +299,6 @@ export class RoleFormDrawerComponent implements OnChanges {
     {
       key: 'claims', label: 'Claims', abbr: 'CL', description: 'Expense claims', master: 'claimsChecked', group: 'claims',
       scopes: [scope('claims.viewReport')], flags: [{ path: 'claims.canApprove', label: 'Approve claims' }],
-    },
-    {
-      key: 'sensitiveData', label: 'Sensitive Data', abbr: 'SD', description: 'Cost, margin and discount',
-      scopes: [],
-      flags: [
-        { path: 'sensitiveData.viewCost', label: 'View cost' },
-        { path: 'sensitiveData.viewMargin', label: 'View margin' },
-        { path: 'sensitiveData.overrideDiscount', label: 'Override discount' },
-      ],
     },
     {
       key: 'departments', label: 'Departments', abbr: 'DP', description: 'HR departments',
@@ -552,15 +544,11 @@ export class RoleFormDrawerComponent implements OnChanges {
         cancelInvoice: [true],
         rejectInvoice: [true],
         reissueInvoice: [true],
+        viewSupplierBill: [true],
       }),
       claims: this._fb.group({
         viewReport: 'none',
         canApprove: [false],
-      }),
-      sensitiveData: this._fb.group({
-        viewCost: [false],
-        viewMargin: [false],
-        overrideDiscount: [false],
       }),
       departments: this._fb.group({
         view: [false],

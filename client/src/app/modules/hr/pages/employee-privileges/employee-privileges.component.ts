@@ -31,7 +31,6 @@ const MODULE_META: Record<string, [string, string]> = {
   technical: ['TE', 'Pending projects and AMC'],
   supplier: ['SU', 'Supplier accounts'],
   claims: ['CL', 'Expense claims'],
-  sensitiveData: ['SD', 'Cost, margin and discount'],
 };
 
 // Mirrors the boolean action flags from role-form-drawer.component.ts. Only flags that
@@ -110,11 +109,6 @@ const PRIVILEGE_MODULES: PrivilegeModule[] = [
   ]},
   { key: 'claims', label: 'Claims', flags: [
     { path: 'claims.canApprove', label: 'Approve claims' },
-  ]},
-  { key: 'sensitiveData', label: 'Sensitive Data', flags: [
-    { path: 'sensitiveData.viewCost', label: 'View cost' },
-    { path: 'sensitiveData.viewMargin', label: 'View margin' },
-    { path: 'sensitiveData.overrideDiscount', label: 'Override discount' },
   ]},
 ].map((m) => ({ ...m, abbr: MODULE_META[m.key]?.[0], description: MODULE_META[m.key]?.[1] }));
 
