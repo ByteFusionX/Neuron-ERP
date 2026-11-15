@@ -215,7 +215,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
       { id: 'reject', label: 'Reject', icon: 'close', quick: true, hidden: (r) => !this.canApproveOrReject(r) },
       { id: 'edit', label: 'Edit PO', icon: 'edit', quick: true, hidden: (r) => !this.canResend(r) },
       { id: 'resend', label: 'Resend for approval', icon: 'refresh', quick: true, hidden: (r) => !this.canResend(r) },
-      { id: 'viewGrn', label: 'View GRN', icon: 'receipt', quick: true, hidden: (r) => !r.grns?.length },
+      { id: 'viewGrn', label: 'View GRN', icon: 'inboxArrowDown', quick: true, hidden: (r) => !r.grns?.length },
       { id: 'previewPdf', label: 'Preview PDF', icon: 'eye' },
       { id: 'downloadPdf', label: 'Download PDF', icon: 'download' },
       { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', hidden: (r) => r.poStatus !== 'Pending for Approval' || !this.isSuperAdmin },

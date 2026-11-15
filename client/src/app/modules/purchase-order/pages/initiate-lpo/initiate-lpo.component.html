@@ -62,7 +62,7 @@
         <app-sf-field label="Shipping Terms" required [control]="f['shippingTerms']">
           <app-sf-input formControlName="shippingTerms" placeholder="Enter shipping terms"></app-sf-input>
         </app-sf-field>
-        <app-sf-field label="Payment Terms" [control]="f['paymentTerms']">
+        <app-sf-field label="Payment Terms" required [control]="f['paymentTerms']">
           <app-sf-input formControlName="paymentTerms" placeholder="Enter payment terms"></app-sf-input>
         </app-sf-field>
         <app-sf-field label="PO Date" required [control]="f['poDate']">
@@ -75,8 +75,12 @@
 
       <app-sf-section title="Terms and notes">
         <div>
-          <p *ngIf="!readOnly" class="mb-1.5 text-xs font-medium text-gray-600 dark:text-gray-400">Template</p>
-          <app-sf-select *ngIf="!readOnly" [ngModel]="null" [ngModelOptions]="{ standalone: true }" [options]="termsAndConditionOptions()" placeholder="Select a saved terms &amp; notes template" (ngModelChange)="onTermsTemplate($event)"></app-sf-select>
+          <ng-container *ngIf="!readOnly">
+            <app-sf-field label="Insert saved terms &amp; notes">
+              <app-sf-combobox [optionLines]="3" [ngModelOptions]="{ standalone: true }" [ngModel]="null" [options]="termsOptions"
+                [placeholder]="termsAndConditions.length ? 'Choose a template…' : 'No saved terms yet'" (ngModelChange)="onTermsTemplate($event)"></app-sf-combobox>
+            </app-sf-field>
+          </ng-container>
           <app-sf-field class="mt-3 block" label="Terms and Conditions" required [control]="f['termsAndCondition']">
             <app-sf-textarea formControlName="termsAndCondition" placeholder="Enter terms and conditions" [rows]="5" bullets autoresize></app-sf-textarea>
           </app-sf-field>

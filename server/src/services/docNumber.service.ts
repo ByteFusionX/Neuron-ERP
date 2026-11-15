@@ -5,18 +5,18 @@ import { getNextSequence, peekNextSequence } from '../models/counter.model';
  * A code can be shared by several documents (customer invoices both use INV), because
  * the counter is keyed by code and month only.
  */
-const prefixFor = (code: string) => {
+const prefixFor = (code: string, org = 'NT') => {
     const now = new Date();
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yy = String(now.getFullYear()).slice(-2);
-    return { prefix: `NT/${code}-${mm}-${yy}`, key: `doc:${code}:${yy}${mm}` };
+    return { prefix: `${org}/${code}-${mm}-${yy}`, key: `doc:${code}:${yy}${mm}` };
 };
 
 const format = (prefix: string, seq: number) => `${prefix}-${String(seq).padStart(4, '0')}`;
 
 /** Takes the next number. Call only when the document is being saved. */
-export const issueDocNo = async (code: string): Promise<string> => {
-    const { prefix, key } = prefixFor(code);
+export const issueDocNo = async (code: string, org = 'NT'): Promise<string> => {
+    const { prefix, key } = prefixFor(code, org);
     return format(prefix, await getNextSequence(key));
 };
 

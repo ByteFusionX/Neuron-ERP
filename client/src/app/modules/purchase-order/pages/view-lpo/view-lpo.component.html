@@ -83,7 +83,7 @@
           <p *ngIf="grnStatus === 'loading'" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Loading details&hellip;</p>
           <p *ngIf="grnStatus === 'error'" class="py-6 text-center text-[13px] text-red-600 dark:text-red-400">Could not load GRNs. Reopen this tab to retry.</p>
           <ng-container *ngIf="grnStatus === 'ready'">
-            <app-detail-table *ngIf="grnRows.length"
+            <app-detail-table layout="list" *ngIf="grnRows.length"
               [columns]="grnColumns"
               [rows]="grnRows"
               [currency]="currency()"
@@ -116,7 +116,7 @@
       <p *ngIf="lpo?.poStatus === 'Pending for Approval' && (isSuperAdmin || canApprovePOs()) && (isSuperAdmin || !isOwnLpo()) && !isMyTurn()" class="m-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
         Waiting for the current approval stage — it is not your turn to decide yet.
       </p>
-      <app-detail-table class="block min-h-0 flex-1"
+      <app-detail-table layout="list" class="block min-h-0 flex-1"
         [columns]="itemColumns"
         [rows]="lineRows"
         [footRows]="lineFootRows"

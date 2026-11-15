@@ -166,7 +166,6 @@ export class InitiateLpoComponent implements OnInit {
     if (this.step !== 1) return;
     this.activeKey = group.key;
     this.ensureLines(group);
-    this.poForm?.patchValue({ paymentTerms: group.paymentTerms || '' });
   }
 
   get tabs(): LpoSupplierTab[] {
@@ -367,7 +366,7 @@ export class InitiateLpoComponent implements OnInit {
     this.poForm = this.fb.group({
       subject: ['', [Validators.required]],
       shippingTerms: ['', [Validators.required]],
-      paymentTerms: [''],
+      paymentTerms: ['', [Validators.required]],
       placeOfDelivery: ['', [Validators.required]],
       poDate: [new Date().toISOString().split('T')[0], [Validators.required]],
       termsAndCondition: ['', [Validators.required]],
@@ -376,14 +375,18 @@ export class InitiateLpoComponent implements OnInit {
   }
 
   private loadNotes(): void {
-    this.profileService.getNotes().subscribe({
-      next: (res: any) => {
-        this.termsAndConditions = res?.purchaseTermsNotes || [];
-        this.placesOfDelivery = res?.placeOfDelivery || [];
-        this.shippingTermsList = res?.shippingTerms || [];
-      },
-      error: (err: any) => console.error('Error loading notes:', err),
+    // Settings > Master Data > Notes & Terms saves to the master lists, so read them from there.
+    const load = (list: 'purchaseTermsNotes' | 'placeOfDelivery' | 'shippingTerms', set: (v: any[]) => void) =>
+      this.masterList.getItems(list).subscribe({
+        next: (res) => set((res.data ?? []).filter((i) => i.isActive).map((i) => ({ _id: i._id, note: i.label }))),
+        error: (err: any) => console.error(`Error loading ${list}:`, err),
+      });
+    load('purchaseTermsNotes', (v) => {
+      this.termsAndConditions = v;
+      this.termsOptions = v.map((t) => ({ label: t.note, value: t.note }));
     });
+    load('placeOfDelivery', (v) => (this.placesOfDelivery = v));
+    load('shippingTerms', (v) => (this.shippingTermsList = v));
   }
 
   private generatePONumber(): void {
@@ -393,31 +396,44 @@ export class InitiateLpoComponent implements OnInit {
     });
   }
 
-  termsAndConditionOptions(): SfOption[] {
-    return this.termsAndConditions.map((t) => ({ label: t.note, value: t._id || t.note }));
+  /** Stable array (not rebuilt per change-detection pass) so the combobox keeps its pick. */
+  termsOptions: SfOption[] = [];
+
+  private termLines(): string[] {
+    return String(this.poForm.value.termsAndCondition ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
+  }
+
+  isTermPicked(note: string): boolean {
+    return this.termLines().includes(String(note).trim());
+  }
+
+  /** Ticking a master-data term adds it to the LPO's terms text; unticking removes that line. */
+  toggleTerm(note: string): void {
+    const n = String(note).trim();
+    const lines = this.termLines();
+    const next = lines.includes(n) ? lines.filter((l) => l !== n) : [...lines, n];
+    this.poForm.patchValue({ termsAndCondition: next.join('\n') });
+    this.poForm.markAsDirty();
   }
 
   onTermsTemplate(value: string): void {
-    const t = this.termsAndConditions.find((x) => (x._id || x.note) === value);
-    if (t?.note) {
-      this.poForm.patchValue({ termsAndCondition: t.note });
-      this.poForm.markAsDirty();
-    }
+    if (!value || this.isTermPicked(value)) return;
+    this.toggleTerm(value);
   }
 
   /** Saves new place of delivery / shipping terms values to the notes list once the LPO is issued. */
   private saveDeliveryNotes(placeOfDelivery: string, shippingTerms: string): void {
     const place = String(placeOfDelivery || '').trim();
     if (place && !this.placesOfDelivery.some((p) => p.note.toLowerCase() === place.toLowerCase())) {
-      this.profileService.createPlaceOfDelivery({ note: place }).subscribe({
-        next: (res: any) => { this.placesOfDelivery = res?.placeOfDelivery || this.placesOfDelivery; },
+      this.masterList.createItem('placeOfDelivery', { label: place, value: null }).subscribe({
+        next: () => this.loadNotes(),
         error: (err: any) => console.error('Error saving place of delivery:', err),
       });
     }
     const terms = String(shippingTerms || '').trim();
     if (terms && !this.shippingTermsList.some((t) => t.note.toLowerCase() === terms.toLowerCase())) {
-      this.profileService.createShippingTerms({ note: terms }).subscribe({
-        next: (res: any) => { this.shippingTermsList = res?.shippingTerms || this.shippingTermsList; },
+      this.masterList.createItem('shippingTerms', { label: terms, value: null }).subscribe({
+        next: () => this.loadNotes(),
         error: (err: any) => console.error('Error saving shipping terms:', err),
       });
     }
@@ -479,7 +495,7 @@ export class InitiateLpoComponent implements OnInit {
       jobId: (this.purchase as any)?.jobId?._id,
       quoteId: (this.purchase as any)?.quoteId?._id,
       etaTerms: first.etaTerms || '',
-      paymentTerms: String(form.paymentTerms ?? first.paymentTerms ?? '').trim(),
+      paymentTerms: String(form.paymentTerms ?? '').trim(),
       shippingTerms: form.shippingTerms,
       deliveryTerms: first.etaTerms || first.paymentTerms || 'As per terms',
       placeOfDelivery: form.placeOfDelivery,
@@ -850,7 +866,6 @@ export class InitiateLpoComponent implements OnInit {
     if (wanted && !this.activeKey) this.activeKey = wanted.key;
     if (!this.supplierGroups.some((g) => g.key === this.activeKey)) this.activeKey = this.supplierGroups[0]?.key ?? '';
     this.ensureLines(this.activeGroup);
-    if (!this.poForm?.value?.paymentTerms) this.poForm?.patchValue({ paymentTerms: this.activeGroup?.paymentTerms || '' });
     if (!wanted) this.selectFirstOpenSupplier();
   }
 

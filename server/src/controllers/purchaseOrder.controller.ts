@@ -1493,7 +1493,10 @@ export const placePurchaseOrder = async (req: Request, res: Response) => {
     await notifyByPrivilege({ ...base, type: 'LpoPlacedBilling', title: 'LPO placed', message: `${placed.poNo} to ${supplierName} was placed, delivery expected ${dateText}` }, billFilter);
     const dueAt = new Date(expected);
     dueAt.setHours(8, 0, 0, 0);
-    await notifyByPrivilege({ ...base, type: 'LpoDeliveryDue', title: 'LPO due today', message: `${placed.poNo} from ${supplierName} is due today. Create the GRN when it arrives.`, sendAt: dueAt, dedupeKey: `lpo-due:${placed._id}:${expected.toISOString().slice(0, 10)}` }, grnFilter);
+    // Already sent "LPO arriving" just now; a same-day reminder would only duplicate it.
+    if (dueAt.getTime() > Date.now()) {
+      await notifyByPrivilege({ ...base, type: 'LpoDeliveryDue', title: 'LPO due today', message: `${placed.poNo} from ${supplierName} is due today. Create the GRN when it arrives.`, sendAt: dueAt, dedupeKey: `lpo-due:${placed._id}:${expected.toISOString().slice(0, 10)}` }, grnFilter);
+    }
     return res.status(200).json({ success: true, message: "Order placed", data: placed });
   } catch (error: any) {
     console.error("Place purchase order error:", error);

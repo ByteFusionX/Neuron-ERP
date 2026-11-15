@@ -207,6 +207,14 @@ export class ViewLpoComponent implements OnInit {
     'Approved': 'good', 'Placed': 'good', 'Closed': 'good', 'Cancelled': 'bad', 'Pending for Approval': 'warn', 'Rejected': 'bad', 'Draft': 'neutral',
   };
 
+  /** When the PO was approved: the last approved workflow step, else the last approval-history entry. */
+  private approvedOn(l: any): any {
+    if (!['Approved', 'Placed', 'Closed'].includes(l?.poStatus)) return null;
+    const steps = (l?.approvalStatus || []).filter((s: any) => s?.status === 'approved' && s?.updatedDate);
+    const last = steps.sort((a: any, b: any) => +new Date(b.updatedDate) - +new Date(a.updatedDate))[0]?.updatedDate;
+    return last || l?.approvedHistory?.[l.approvedHistory.length - 1]?.date || null;
+  }
+
   private fullName(person: any): string {
     return person?.firstName ? `${person.firstName} ${person.lastName ?? ''}`.trim() : '-';
   }
@@ -235,7 +243,8 @@ export class ViewLpoComponent implements OnInit {
     const tone = DETAIL_TONE[ViewLpoComponent.STATUS_TONES[l.poStatus] ?? 'neutral'];
     const facts: (LpoFact | false)[] = [
       { label: 'Supplier', value: s?.supplierName || '-' },
-      { label: 'PO Date', value: date(l.poDate) },
+      { label: 'Created On', value: date(l.createdAt) },
+      { label: 'Approved On', value: date(this.approvedOn(l)) },
       { label: 'PR No', value: pr?.purchaseNo || '-', link: pr?._id ? ['/purchase/view-purchase', pr._id] : undefined },
       { label: 'Job ID', value: job?.jobId || '-', link: job?._id && job?.jobId ? ['/job-sheet/view', job._id] : undefined },
       { label: 'Quotation', value: quote?.quoteId || '-', link: quote?._id && quote?.quoteId ? ['/quotations/view', quote._id] : undefined },
@@ -249,12 +258,11 @@ export class ViewLpoComponent implements OnInit {
       !!l.expectedDeliveryDate && { label: 'Expected Delivery', value: date(l.expectedDeliveryDate) },
       !!l.placedAt && { label: 'Placed On', value: date(l.placedAt) },
       { label: 'Created By', value: this.fullName(l.createdBy) },
-      { label: 'Created On', value: date(l.createdAt) },
       { label: 'Currency', value: this.currency() },
       { label: 'Status', value: l.poStatus === 'Pending for Approval' ? 'Pending' : (l.poStatus || '-'), state: { dot: tone.dot, text: tone.text } },
     ];
     this.detailFacts = facts.filter((f): f is LpoFact => !!f);
-    const hidden = ['Phone', 'Email', 'Shipping Terms', 'Currency', 'Created On'];
+    const hidden = ['Phone', 'Email', 'Shipping Terms', 'Currency'];
     this.detailItems = this.detailFacts.map((f) => ({ key: f.label, label: f.label, hiddenByDefault: hidden.includes(f.label) }));
 
     // This PO's items only; the discount is its share of the supplier's discount on the PR.
