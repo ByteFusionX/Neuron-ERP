@@ -34,7 +34,7 @@
     <ng-template #detailTemplate let-row let-tab="tab">
       <ng-container [ngSwitch]="tab">
         <app-detail-overview *ngSwitchCase="'overview'" [grid]="grid" [row]="row" [sections]="advanceSections(row)"></app-detail-overview>
-        <app-detail-table *ngSwitchCase="'items'" [columns]="itemColumns" [rows]="itemRows(row)"
+        <app-detail-table layout="list" *ngSwitchCase="'items'" [columns]="itemColumns" [rows]="itemRows(row)"
           [currency]="advanceCurrency(row)" [footRows]="itemFootRows(row)" numbered
           emptyMessage="No items yet. They appear once a proforma invoice is created."></app-detail-table>
         <app-detail-documents *ngSwitchCase="'documents'" title="Payment proof" emptyMessage="No payment proof uploaded yet."

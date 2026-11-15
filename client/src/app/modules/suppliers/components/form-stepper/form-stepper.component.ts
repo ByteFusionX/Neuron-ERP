@@ -14,7 +14,7 @@ export interface SupplierFormStepperStep {
   imports: [NgFor, NgIf, NgClass, NgIcon],
   template: `
     <ol class="mb-5 flex items-center gap-2">
-      <li *ngFor="let s of steps; trackBy: trackByStep" class="flex flex-1 items-center gap-2">
+      <li *ngFor="let s of steps; trackBy: trackByStep" class="flex min-w-0 items-center gap-2" [ngClass]="s.n === current ? 'flex-[2_1_0%]' : 'flex-1'">
         <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
           [ngClass]="s.n === current ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
           (click)="stepClick.emit(s.n)">
@@ -27,7 +27,7 @@ export interface SupplierFormStepperStep {
             <ng-icon *ngIf="s.n < current && isStepValid(s.n); else stepNumber" name="heroCheck" class="h-3.5 w-3.5"></ng-icon>
             <ng-template #stepNumber>{{ s.n }}</ng-template>
           </span>
-          <span class="truncate text-xs font-medium"
+          <span class="min-w-0 truncate text-xs font-medium" [class.hidden]="s.n !== current" [class.sm:inline]="s.n !== current"
             [ngClass]="s.n === current ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'">{{ s.label }}</span>
         </button>
         <span *ngIf="s.n < steps.length" class="h-px w-4 shrink-0 bg-gray-200 dark:bg-erp-border-dark"></span>

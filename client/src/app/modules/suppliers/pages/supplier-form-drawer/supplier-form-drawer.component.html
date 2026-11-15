@@ -24,7 +24,7 @@
             <app-sf-field label="Website" [control]="supplierForm.controls.website">
                 <app-sf-input formControlName="website" placeholder="www.company.com"></app-sf-input>
             </app-sf-field>
-            <div *ngIf="duplicateMatches.length" class="col-span-2 rounded-md border px-3 py-2 text-sm" role="alert"
+            <div *ngIf="duplicateMatches.length" class="col-span-full rounded-md border px-3 py-2 text-sm" role="alert"
                 [ngClass]="hasBlock ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-800'">
                 <p class="font-medium">{{ hasBlock ? 'This supplier already exists' : 'Similar suppliers found' }}</p>
                 <p *ngFor="let m of duplicateMatches">{{ m.reason }}</p>
@@ -37,7 +37,7 @@
                 <app-sf-combobox formControlName="supplierType" [options]="supplierTypeOptions" placeholder="Select type"
                     footerLabel="Add supplier type" (footerAction)="createMasterListItem('supplierType')"></app-sf-combobox>
             </app-sf-field>
-            <p *ngIf="masterDataFeedback" class="col-span-2 text-xs font-medium text-emerald-700 dark:text-emerald-400" role="status">{{ masterDataFeedback }}</p>
+            <p *ngIf="masterDataFeedback" class="col-span-full text-xs font-medium text-emerald-700 dark:text-emerald-400" role="status">{{ masterDataFeedback }}</p>
             <app-sf-field label="Credit Days" [control]="supplierForm.controls.creditDays">
                 <app-sf-number formControlName="creditDays"></app-sf-number>
             </app-sf-field>
@@ -139,7 +139,7 @@
     </form>
 
     <ng-container sfDrawerFooter>
-        <div class="mr-auto flex items-center gap-2">
+        <div class="mr-auto flex flex-wrap items-center gap-2 max-sm:w-full">
             <app-action-button *ngIf="step === 1" variant="tool" (click)="addAddress()">+ Add Address</app-action-button>
             <app-action-button *ngIf="step === 2" variant="tool" (click)="addContact()">+ Add Contact</app-action-button>
             <app-action-button *ngIf="step === 4" variant="tool" (click)="addBankAccount()">+ Add Bank Account</app-action-button>

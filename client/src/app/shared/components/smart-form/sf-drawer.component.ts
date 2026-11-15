@@ -28,10 +28,10 @@ export function topDrawerZ(): number {
       [style.zIndex]="61 + level * 10" [style.maxWidth]="width">
       <!-- Dims a drawer that another drawer is open on top of. -->
       <div class="sfd-cover pointer-events-none absolute inset-0 z-10 bg-gray-900/55 dark:bg-black/65" [class.sfd-cover-on]="covered"></div>
-      <header class="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-5">
+      <header class="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-4 py-3 sm:px-5">
         <div class="min-w-0">
           <h2 class="truncate text-base font-semibold text-gray-900 dark:text-gray-100">{{ title }}</h2>
-          <p *ngIf="subtitle" class="mt-0.5 text-xs text-gray-500 dark:text-gray-500">{{ subtitle }}</p>
+          <p *ngIf="subtitle" class="mt-0.5 text-xs text-gray-500 dark:text-gray-500 max-sm:line-clamp-2">{{ subtitle }}</p>
         </div>
         <div class="flex shrink-0 items-center gap-2">
           <ng-content select="[sfDrawerHeader]"></ng-content>
@@ -44,11 +44,11 @@ export function topDrawerZ(): number {
         </div>
       </header>
 
-      <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5"><ng-content></ng-content></div>
+      <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"><ng-content></ng-content></div>
 
       <ng-content select="[sfDrawerBottom]"></ng-content>
 
-      <div *ngIf="confirming" class="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/40 px-6 py-2.5 text-[13px] text-amber-900 dark:text-amber-200" role="alert">
+      <div *ngIf="confirming" class="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/40 px-4 sm:px-6 py-2.5 text-[13px] text-amber-900 dark:text-amber-200" role="alert">
         <span>Discard unsaved changes?</span>
         <span class="flex gap-3">
           <button type="button" class="font-medium hover:underline" (click)="confirming = false">Keep editing</button>
@@ -56,7 +56,7 @@ export function topDrawerZ(): number {
         </span>
       </div>
 
-      <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark px-6 py-3">
+      <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark px-4 py-3 sm:px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <ng-content select="[sfDrawerFooter]"></ng-content>
       </footer>
     </aside>

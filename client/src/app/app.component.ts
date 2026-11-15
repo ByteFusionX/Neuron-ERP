@@ -154,6 +154,11 @@ export class AppComponent implements OnDestroy, OnInit {
 
   @HostListener('window:keydown', ['$event'])
   onKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.layout.overlay() && this.layout.overlayOpen()) {
+      // Mobile drawer / peeked sidebar: Escape closes it like the backdrop does.
+      this.layout.closeOverlay();
+      return;
+    }
     if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.code === 'KeyB') {
       // Alt+B: the navbar button is hidden behind drawers, so the report form is reachable from the keyboard too.
       if (this.isLoginRoute()) return;

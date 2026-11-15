@@ -117,7 +117,7 @@
             </div>
           </app-detail-section>
         </div>
-        <app-detail-table *ngSwitchCase="'ready-items'" title="Job items" [columns]="readyJobItemColumns" [rows]="readyJobItemRows(row)" showTotals
+        <app-detail-table layout="list" *ngSwitchCase="'ready-items'" title="Job items" [columns]="readyJobItemColumns" [rows]="readyJobItemRows(row)" showTotals
           emptyMessage="No items ordered for this job."></app-detail-table>
         <div *ngSwitchCase="'overview'" class="dn-sections space-y-5">
           <app-detail-section title="Overview">
@@ -154,7 +154,7 @@
             </div>
           </app-detail-section>
         </div>
-        <app-detail-table *ngSwitchCase="'items'" title="Delivery items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals
+        <app-detail-table layout="list" *ngSwitchCase="'items'" title="Delivery items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals
           emptyMessage="No items on this delivery note."></app-detail-table>
         <app-detail-documents *ngSwitchCase="'documents'" [documents]="detailDocuments(row)"
           [downloadable]="false" [viewable]="false" emptyMessage="No proof-of-delivery documents attached."></app-detail-documents>

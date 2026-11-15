@@ -68,7 +68,7 @@
       <ng-container *ngIf="row.recordType !== 'pending'" [ngSwitch]="tab">
         <app-detail-overview *ngSwitchCase="'overview'" [grid]="returnsGrid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
 
-        <app-detail-table
+        <app-detail-table layout="list"
           *ngSwitchCase="'items'"
           title="Return item"
           [columns]="itemColumns"

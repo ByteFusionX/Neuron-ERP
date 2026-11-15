@@ -1,15 +1,15 @@
-<div class="jr-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-6 flex flex-col gap-5">
+<div class="jr-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-2 sm:p-6 flex flex-col gap-3 sm:gap-5">
 
     <!-- Header — same shell and spacing as the grid's toolbar, so List and Report read as one screen. -->
     <div class="jr-card shrink-0">
-        <div class="relative flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
+        <div class="relative flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
             <div class="min-w-0">
                 <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate" aria-current="page">Job Sheet</h2>
                 <p class="mt-1 text-xs leading-4 text-gray-500 dark:text-gray-400 truncate">Track and manage jobs from allocation to completion</p>
             </div>
 
             <!-- List | Report, centered in the header to match the list tab's toolbar. -->
-            <div class="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
+            <div class="flex max-lg:order-last max-lg:w-full lg:absolute lg:left-1/2 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 items-center justify-center">
                 <app-view-toggle label="Job Sheet" active="report" listLink="/job-sheet" reportLink="/job-sheet/report" [listQueryParams]="listQueryParams"></app-view-toggle>
             </div>
 
@@ -42,8 +42,8 @@
     <ng-container *ngIf="!loading && !failed">
 
         <!-- KPI strip -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
-            <app-kpi-card label="Total Jobs" [value]="totalJobs" [foot]="(totalLpoValue | numberFormatter) + ' QAR total LPO'" [delta]="delta('totalJobs')"></app-kpi-card>
+        <div class="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-5">
+            <app-kpi-card class="col-span-2 lg:col-span-1" label="Total Jobs" [value]="totalJobs" [foot]="(totalLpoValue | numberFormatter) + ' QAR total LPO'" [delta]="delta('totalJobs')"></app-kpi-card>
             <app-kpi-card label="Pending" [value]="pendingCount" valueClass="text-amber-600 dark:text-amber-400"></app-kpi-card>
             <app-kpi-card label="Open To Work" [value]="openToWorkCount" valueClass="text-sky-600 dark:text-sky-400"></app-kpi-card>
             <app-kpi-card label="In Progress" [value]="inProgressCount" valueClass="text-violet-600 dark:text-violet-400"></app-kpi-card>
@@ -52,7 +52,7 @@
         </div>
 
         <!-- Sections: one at a time on screen, all of them when printed. -->
-        <div class="jr-toggle self-start" role="tablist" aria-label="Report section">
+        <div class="jr-toggle self-start max-sm:self-stretch max-sm:overflow-x-auto" role="tablist" aria-label="Report section">
             <button type="button" role="tab" class="jr-toggle-btn" [attr.aria-selected]="section === 'overview'"
                 [ngClass]="section === 'overview' ? 'jr-toggle-on' : ''" (click)="section = 'overview'">Overview</button>
             <button type="button" role="tab" class="jr-toggle-btn" [attr.aria-selected]="section === 'breakdown'"
@@ -63,10 +63,10 @@
             </button>
         </div>
 
-        <div class="jr-section flex flex-col gap-5" [class.jr-hidden]="section !== 'overview'">
+        <div class="jr-section flex flex-col gap-3 sm:gap-5" [class.jr-hidden]="section !== 'overview'">
 
         <!-- Pipeline -->
-        <div class="jr-card p-5">
+        <div class="jr-card p-4 sm:p-5">
             <div class="mb-4 flex items-baseline justify-between gap-3">
                 <h3 class="jr-heading">Pipeline</h3>
                 <p class="text-xs text-gray-500 dark:text-gray-500">Each job sits in one status. Untick a status to hide it from the chart.</p>
@@ -90,7 +90,7 @@
         </div>
 
         <!-- Trend -->
-        <div class="jr-card p-5">
+        <div class="jr-card p-4 sm:p-5">
             <div class="mb-2 flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h3 class="jr-heading">Created vs Completed</h3>
@@ -139,7 +139,7 @@
         </div>
 
         <!-- Attention -->
-        <div class="jr-section grid grid-cols-1 gap-5" [class.jr-hidden]="section !== 'attention'">
+        <div class="jr-section grid grid-cols-1 gap-3 sm:gap-5" [class.jr-hidden]="section !== 'attention'">
             <div class="jr-card flex flex-col">
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-5 py-3">
                     <h3 class="jr-heading">Needs Attention</h3>

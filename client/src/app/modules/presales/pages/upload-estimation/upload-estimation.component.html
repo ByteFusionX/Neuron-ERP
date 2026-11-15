@@ -1,11 +1,11 @@
-<div class="bg-white m-6">
-    <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8">
+<div class="bg-white m-2 sm:m-6">
+    <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-4 sm:px-8">
 
         <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
             <h3 class="font-semibold">Upload Estimation</h3>
         </div>
     </div>
-    <div class="relative overflow-x-auto  p-8" [formGroup]="quoteForm">
+    <div class="relative overflow-x-auto p-4 sm:p-8" [formGroup]="quoteForm">
         <div class="w-full md:w-1/4 mb-6 md:mb-3">
             <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="grid-first-name">
                 Currency
@@ -17,67 +17,67 @@
             </ng-select>
         </div>
         <optional-items [optionalItems]="optionalItems" [submit]="submit" (calculatedValues)="onCalculatedValuesReceived($event)" [oldOptionalItems]="patchOptionalItems"></optional-items>
-        <div class="relative overflow-x-auto mt-6 w-full flex gap-6">
-            <table class="w-1/2 text-sm text-left rtl:text-right text-black border bg-gray-50">
+        <div class="relative overflow-x-auto mt-6 w-full flex flex-col md:flex-row gap-4 md:gap-6">
+            <table class="w-full md:w-1/2 text-sm text-left rtl:text-right text-black border bg-gray-50">
                 <tbody>
                     <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
+                        <td class="px-2 py-3  border text-center font-medium text-base sm:text-xl ">
                             Total Cost
                         </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
+                        <td class="px-2 py-2 border text-center uppercase text-base sm:text-xl font-medium">
                             {{calculatedValues.totalCost | numberFormatter}}
                         </td>
                     </tr>
                     <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
+                        <td class="px-2 py-3  border text-center font-medium text-base sm:text-xl ">
                             Total Selling price
                         </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
+                        <td class="px-2 py-2 border text-center uppercase text-base sm:text-xl font-medium">
                             {{calculatedValues.sellingPrice | numberFormatter}}
                         </td>
                     </tr>
                     <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
+                        <td class="px-2 py-3  border text-center font-medium text-base sm:text-xl ">
                             Profit Margin
                         </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
+                        <td class="px-2 py-2 border text-center uppercase text-base sm:text-xl font-medium">
                             {{(calculatedValues.sellingPrice - calculatedValues.totalCost) | numberFormatter}}
                         </td>
                     </tr>
                     <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
+                        <td class="px-2 py-3  border text-center font-medium text-base sm:text-xl ">
                             Profit margin with %
                         </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
+                        <td class="px-2 py-2 border text-center uppercase text-base sm:text-xl font-medium">
                             {{calculatedValues.totalProfit.toFixed(2)}}%
                         </td>
                     </tr>
 
                 </tbody>
             </table>
-            <table class="w-1/2  text-sm text-left rtl:text-right text-black border bg-gray-100">
+            <table class="w-full md:w-1/2  text-sm text-left rtl:text-right text-black border bg-gray-100">
                 <tbody>
                     <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
+                        <td class="px-2 py-3  border text-center font-medium text-base sm:text-xl ">
                             Subtotal
                         </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
+                        <td class="px-2 py-2 border text-center uppercase text-base sm:text-xl font-medium">
                             {{calculatedValues.sellingPrice | numberFormatter}}
                         </td>
                     </tr>
                     <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
+                        <td class="px-2 py-3  border text-center font-medium text-base sm:text-xl ">
                             Discount
                         </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
+                        <td class="px-2 py-2 border text-center uppercase text-base sm:text-xl">
                             {{calculatedValues.discount | numberFormatter}}
                         </td>
                     </tr>
                     <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
+                        <td class="px-2 py-3  border text-center font-medium text-base sm:text-xl ">
                             Total Amount
                         </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
+                        <td class="px-2 py-2 border text-center uppercase text-base sm:text-xl font-medium">
                             {{calculateDiscountPrice() | numberFormatter}}
                         </td>
                     </tr>
@@ -100,8 +100,8 @@
         </div>
     </div>
 
-    <div class="px-8 py-6 border-t flex justify-end">
-        <div class="flex w-40">
+    <div class="px-4 sm:px-8 py-4 sm:py-6 border-t flex justify-end">
+        <div class="flex gap-0">
             <button type="button"
                 class=" hover:bg-gray-100 text-black font-medium py-2 px-4 rounded text-sm mr-3  border border-gray-300"
                 routerLink="/presales">

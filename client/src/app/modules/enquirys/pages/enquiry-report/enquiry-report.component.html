@@ -1,15 +1,15 @@
-<div class="er-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-6 flex flex-col gap-5">
+<div class="er-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-2 sm:p-6 flex flex-col gap-3 sm:gap-5">
 
     <!-- Header — same shell and spacing as the grid's toolbar, so List and Report read as one screen. -->
     <div class="er-card shrink-0">
-        <div class="relative flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
+        <div class="relative flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
             <div class="min-w-0">
                 <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate" aria-current="page">Enquiries</h2>
                 <p class="mt-1 text-xs leading-4 text-gray-500 dark:text-gray-400 truncate">Track and manage customer enquiries from first contact through to quotation</p>
             </div>
 
             <!-- List | Report, centered in the header to match the list tab's toolbar. -->
-            <div class="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
+            <div class="flex max-lg:order-last max-lg:w-full lg:absolute lg:left-1/2 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 items-center justify-center">
                 <app-view-toggle label="Enquiry" active="report" listLink="/enquiry" reportLink="/enquiry/report" [listQueryParams]="listQueryParams"></app-view-toggle>
             </div>
 
@@ -42,7 +42,7 @@
     <ng-container *ngIf="!loading && report as r">
 
         <!-- KPI strip -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div class="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
             <app-kpi-card label="Enquiries" [value]="r.kpi.totalCount"
                 [foot]="r.kpi.openCount + ' still open'" [delta]="delta('totalCount')"></app-kpi-card>
             <app-kpi-card label="Quoted" [value]="r.kpi.quotedCount" valueClass="text-emerald-600 dark:text-emerald-400"
@@ -54,7 +54,7 @@
         </div>
 
         <!-- Sections: one at a time on screen, all of them when printed. -->
-        <div class="er-toggle self-start" role="tablist" aria-label="Report section">
+        <div class="er-toggle self-start max-sm:self-stretch max-sm:overflow-x-auto" role="tablist" aria-label="Report section">
             <button type="button" role="tab" class="er-toggle-btn" [attr.aria-selected]="section === 'overview'"
                 [ngClass]="section === 'overview' ? 'er-toggle-on' : ''" (click)="section = 'overview'">Overview</button>
             <button type="button" role="tab" class="er-toggle-btn" [attr.aria-selected]="section === 'breakdown'"
@@ -69,7 +69,7 @@
 
         <!-- Pipeline + presale workload split -->
         <div class="grid grid-cols-1 gap-5 lg:grid-cols-3">
-            <div class="er-card lg:col-span-2 p-5">
+            <div class="er-card lg:col-span-2 p-4 sm:p-5">
                 <div class="mb-4 flex items-baseline justify-between gap-3">
                     <h3 class="er-heading">Pipeline</h3>
                     <p class="text-xs text-gray-500 dark:text-gray-500">Each enquiry sits in one stage. Untick a stage to hide it from the chart.</p>
@@ -93,7 +93,7 @@
             </div>
 
             <!-- Presale workload -->
-            <div class="er-card p-5">
+            <div class="er-card p-4 sm:p-5">
                 <h3 class="er-heading mb-1">Presale Workload</h3>
                 <p class="mb-3 text-xs text-gray-500 dark:text-gray-500">Enquiries currently sitting with each presale.</p>
                 <apx-chart *ngIf="workloadChart"
@@ -114,7 +114,7 @@
         </div>
 
         <!-- Trend -->
-        <div class="er-card p-5">
+        <div class="er-card p-4 sm:p-5">
             <div class="mb-2">
                 <h3 class="er-heading">Received vs Quoted</h3>
                 <p class="text-xs text-gray-500 dark:text-gray-500">Last 12 months. An enquiry counts as quoted in the month the quotation was raised.</p>
@@ -189,7 +189,7 @@
                 </div>
             </div>
 
-            <div class="er-card p-5">
+            <div class="er-card p-4 sm:p-5">
                 <h3 class="er-heading mb-1">Why Enquiries Are Rejected</h3>
                 <p class="mb-4 text-xs text-gray-500 dark:text-gray-500">Taken from the note left when the enquiry was rejected.</p>
                 <div class="space-y-3">

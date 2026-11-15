@@ -94,7 +94,8 @@ interface FollowUpView {
 
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 const PRESALE_AUDIT_ACTIONS = new Set([
-  'sent-to-presale', 'resent-to-presale', 'presale-rejected', 'presale-returned',
+  'sent-to-presale', 'resent-to-presale', 'presale-rejected', 'presale-returned', 'presale-sent-for-approval',
+  'quote-presale-requested', 'quote-presale-returned', 'quote-presale-merged',
   'estimation-uploaded', 'estimation-deleted', 'revision-requested',
 ]);
 

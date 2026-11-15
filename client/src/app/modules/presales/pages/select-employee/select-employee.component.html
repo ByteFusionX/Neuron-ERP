@@ -1,6 +1,6 @@
 <div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
   <!-- Header -->
-  <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+  <header class="flex items-start gap-3 border-b border-gray-100 px-4 sm:px-6 py-4 dark:border-erp-border-dark">
     <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100 dark:bg-sky-950/40 dark:text-sky-400 dark:ring-sky-900">
       <ng-icon name="heroChatBubbleLeftRight" class="text-lg"></ng-icon>
     </span>
@@ -15,7 +15,7 @@
   </header>
 
   <!-- Body -->
-  <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+  <div class="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4">
     <app-sf-field label="Employee">
       <app-sf-combobox [options]="employeeOptions" [(ngModel)]="selectedEmployee" placeholder="Select employee"></app-sf-combobox>
     </app-sf-field>
@@ -27,7 +27,7 @@
   </div>
 
   <!-- Footer -->
-  <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
+  <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-4 sm:px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
     <app-action-button variant="secondary" (click)="onClose()">Cancel</app-action-button>
     <app-action-button variant="primary" (click)="onSubmit()">Submit</app-action-button>
   </footer>

@@ -46,6 +46,6 @@
       </dl>
     </section>
 
-    <app-detail-table title="LPO items" [columns]="itemColumns" [rows]="itemRows()" [currency]="purchaseOrder.currency || 'QAR'" numbered showTotals></app-detail-table>
+    <app-detail-table layout="list" title="LPO items" [columns]="itemColumns" [rows]="itemRows()" [currency]="purchaseOrder.currency || 'QAR'" numbered showTotals></app-detail-table>
   }
 </app-form-modal-shell>

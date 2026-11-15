@@ -1,3 +1,4 @@
+import { ScrollTabsComponent } from 'src/app/shared/components/scroll-tabs/scroll-tabs.component';
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, booleanAttribute } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -67,7 +68,7 @@ export interface DetailViewTab {
 @Component({
   selector: 'app-detail-view-shell',
   standalone: true,
-  imports: [CommonModule, RouterLink, ActionButtonComponent, DetailSectionComponent, DetailFieldsMenuComponent, DetailFieldComponent, DetailBadgeComponent, DetailProgressComponent, DetailAvatarComponent],
+  imports: [ScrollTabsComponent, CommonModule, RouterLink, ActionButtonComponent, DetailSectionComponent, DetailFieldsMenuComponent, DetailFieldComponent, DetailBadgeComponent, DetailProgressComponent, DetailAvatarComponent],
   templateUrl: './detail-view-shell.component.html',
   styleUrls: ['./detail-view-shell.component.css'],
 })

@@ -32,7 +32,7 @@
                 <tbody>
                     <ng-container *ngFor="let item of option?.items">
                         <tr class="border-t border-gray-200 dark:border-erp-border-dark bg-gray-50/70 dark:bg-white/[0.03]">
-                            <td colspan="8" class="px-4 py-2 text-center text-xs font-semibold uppercase">{{ item.itemName }}</td>
+                            <td colspan="8" class="px-4 py-2 text-center max-sm:text-left text-xs font-semibold uppercase"><span class="max-sm:sticky max-sm:left-4 max-sm:inline-block">{{ item.itemName }}</span></td>
                         </tr>
                         <tr *ngFor="let d of item.itemDetails" class="border-t border-gray-100 dark:border-erp-border-dark align-top">
                             <td class="whitespace-pre-line px-4 py-2"><div [innerHTML]="d.detail | parseBracketsText | parseBoldText"></div></td>

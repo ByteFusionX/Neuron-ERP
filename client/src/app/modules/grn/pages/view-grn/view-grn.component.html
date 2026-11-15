@@ -62,7 +62,7 @@
       <div class="dv-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel" [ngSwitch]="panelTab">
 
         <ng-container *ngSwitchCase="'poitems'">
-          <app-detail-table *ngIf="poItemRows.length; else noPoItems"
+          <app-detail-table layout="list" *ngIf="poItemRows.length; else noPoItems"
             [columns]="poItemColumns"
             [rows]="poItemRows"
             [footRows]="poFootRows"
@@ -103,7 +103,7 @@
     </div>
 
     <div tabBody class="h-full">
-      <app-detail-table class="block h-full"
+      <app-detail-table layout="list" class="block h-full"
         [columns]="itemColumns"
         [rows]="itemRows"
         [footRows]="itemFootRows"

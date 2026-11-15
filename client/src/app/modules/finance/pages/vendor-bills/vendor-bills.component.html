@@ -49,7 +49,7 @@
     <ng-template #detailTemplate let-row let-tab="tab">
       <ng-container [ngSwitch]="tab">
         <app-detail-overview *ngSwitchCase="'overview'" [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
-        <app-detail-table *ngSwitchCase="'items'" title="Ordered items" [columns]="itemColumns" [rows]="itemRows(row)" [currency]="row.currency || 'QAR'" showTotals></app-detail-table>
+        <app-detail-table layout="list" *ngSwitchCase="'items'" title="Ordered items" [columns]="itemColumns" [rows]="itemRows(row)" [currency]="row.currency || 'QAR'" showTotals></app-detail-table>
         <app-detail-documents *ngSwitchCase="'documents'" title="PO & GRN documents" emptyMessage="No PO or GRN documents yet."
           [documents]="documents(row)" [downloadable]="false" (open)="openDocument(row, $event)"></app-detail-documents>
         <app-detail-timeline *ngSwitchCase="'history'" [entries]="(historyFor(row) | async) ?? []"

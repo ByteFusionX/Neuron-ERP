@@ -5,6 +5,7 @@ const ACTION_TONES: Record<string, DetailTimelineEntry['tone']> = {
   created: 'good', quoted: 'good', 'status-changed': 'info', 'presale-rejected': 'bad', deleted: 'bad',
   'attachment-removed': 'warn', 'estimation-deleted': 'warn', 'revision-requested': 'warn',
   'presale-returned': 'warn', 'resent-to-presale': 'info', 'sent-to-presale': 'info', 'estimation-uploaded': 'good',
+  'presale-sent-for-approval': 'info', 'quote-presale-requested': 'info', 'quote-presale-returned': 'good', 'quote-presale-merged': 'good',
   approved: 'good', rejected: 'bad', blocked: 'bad', unblocked: 'good',
   transferred: 'info', 'role-changed': 'info', 'approval-limit-changed': 'info', 'privilege-granted': 'good', 'privilege-revoked': 'warn',
   renamed: 'info', hidden: 'warn', unhidden: 'good',
@@ -21,7 +22,7 @@ const AUDIT_MODULE_LABELS: Record<string, string> = {
   supplier: 'Supplier', product: 'Product', masterList: 'Master List', announcement: 'Announcement',
   purchaseRequest: 'Purchase Request', generalPurchaseRequest: 'General Purchase Request',
   purchaseOrder: 'Purchase Order (LPO)', grn: 'GRN', deliveryNote: 'Delivery Note', proformaInvoice: 'Proforma Invoice',
-  customerInvoice: 'Customer Invoice', stock: 'Stock Balance',
+  customerInvoice: 'Customer Invoice', stock: 'Stock Balance', project: 'Project',
 };
 
 export function auditModuleLabel(type: string): string {

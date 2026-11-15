@@ -1,14 +1,14 @@
-<div class="er-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-6 flex flex-col gap-5">
+<div class="er-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-2 sm:p-6 flex flex-col gap-3 sm:gap-5">
 
     <div class="er-card shrink-0">
-        <div class="relative flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
+        <div class="relative flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
             <div class="min-w-0">
                 <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate" aria-current="page">Presale</h2>
                 <p class="mt-1 text-xs leading-4 text-gray-500 dark:text-gray-400 truncate">Track and manage jobs sent to presale engineers</p>
             </div>
 
             <!-- List | Report, centered in the header to match the list tab's toolbar. -->
-            <div class="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
+            <div class="flex max-lg:order-last max-lg:w-full lg:absolute lg:left-1/2 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 items-center justify-center">
                 <app-view-toggle label="Presale" active="report" listLink="/presales" reportLink="/presales/report"></app-view-toggle>
             </div>
 
@@ -36,18 +36,18 @@
     </div>
 
     <ng-container *ngIf="!loading && report as r">
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <div class="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-5">
             <app-kpi-card label="Total Jobs" [value]="r.kpi.count" [foot]="'sent to presale'" [delta]="delta('count')"></app-kpi-card>
             <app-kpi-card label="Waiting" [value]="r.kpi.new" [foot]="r.avgWaitDays !== null ? 'avg ' + (r.avgWaitDays | number: '1.0-1') + ' days unassigned' : 'nothing unassigned'"></app-kpi-card>
             <app-kpi-card label="With Engineers" [value]="r.kpi.assigned" [foot]="'assigned, in progress'"></app-kpi-card>
             <app-kpi-card label="Completed" [value]="r.kpi.completed" valueClass="text-emerald-600 dark:text-emerald-400"
                 [foot]="(r.kpi.completionRate | number: '1.0-0') + '% of all jobs'" [delta]="delta('completed')"></app-kpi-card>
-            <app-kpi-card label="Rejected" [value]="r.kpi.rejected" valueClass="text-red-600 dark:text-red-400"
+            <app-kpi-card class="max-lg:col-span-2" label="Rejected" [value]="r.kpi.rejected" valueClass="text-red-600 dark:text-red-400"
                 [foot]="(r.kpi.rejectionRate | number: '1.0-0') + '% of all jobs'" [delta]="delta('rejected')"></app-kpi-card>
         </div>
 
         <!-- Sections: one at a time on screen, all of them when printed. -->
-        <div class="er-toggle self-start" role="tablist" aria-label="Report section">
+        <div class="er-toggle self-start max-sm:self-stretch max-sm:overflow-x-auto" role="tablist" aria-label="Report section">
             <button type="button" role="tab" class="er-toggle-btn" [attr.aria-selected]="section === 'overview'"
                 [ngClass]="section === 'overview' ? 'er-toggle-on' : ''" (click)="section = 'overview'">Overview</button>
             <button type="button" role="tab" class="er-toggle-btn" [attr.aria-selected]="section === 'breakdown'"
@@ -59,8 +59,8 @@
         </div>
 
         <div class="er-section flex flex-col gap-5" [class.er-hidden]="section !== 'overview'">
-            <div class="er-card p-5">
-                <div class="mb-4 flex items-baseline justify-between gap-3">
+            <div class="er-card p-4 sm:p-5">
+                <div class="mb-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <h3 class="er-heading">Pipeline</h3>
                     <p class="text-xs text-gray-500 dark:text-gray-500">Each job sits in one stage. Untick a stage to hide it from the chart.</p>
                 </div>
@@ -79,7 +79,7 @@
                 </div>
             </div>
 
-            <div class="er-card p-5">
+            <div class="er-card p-4 sm:p-5">
                 <div class="mb-2">
                     <h3 class="er-heading">Sent vs Completed</h3>
                     <p class="text-xs text-gray-500 dark:text-gray-500">Last 12 months, by the month the enquiry was created.</p>
@@ -95,7 +95,7 @@
         <div class="er-section flex flex-col gap-3" [class.er-hidden]="section !== 'breakdown'">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="er-heading">Breakdown</h3>
-                <div class="er-toggle">
+                <div class="er-toggle max-w-full overflow-x-auto">
                     <button *ngFor="let t of breakdownTabs" type="button" class="er-toggle-btn"
                         [ngClass]="breakdownKey === t.key ? 'er-toggle-on' : ''" (click)="breakdownKey = t.key">{{ t.label }}</button>
                 </div>
@@ -108,9 +108,9 @@
 
         <div class="er-section grid grid-cols-1 gap-5 lg:grid-cols-3" [class.er-hidden]="section !== 'attention'">
             <div class="er-card lg:col-span-2 flex flex-col">
-                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-5 py-3">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-4 sm:px-5 py-3">
                     <h3 class="er-heading">Needs Attention</h3>
-                    <div class="er-toggle">
+                    <div class="er-toggle max-w-full overflow-x-auto">
                         <button *ngFor="let t of attentionTabs" type="button" class="er-toggle-btn"
                             [ngClass]="attentionKey === t.key ? 'er-toggle-on' : ''" (click)="attentionKey = t.key">
                             {{ t.label }} <span class="er-count">{{ attentionCount(t.key) }}</span>
@@ -119,7 +119,7 @@
                 </div>
                 <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-erp-border-dark">
                     <button *ngFor="let item of attentionItems; trackBy: trackById" type="button"
-                        class="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                        class="flex w-full items-center gap-3 px-4 sm:px-5 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
                         (click)="openJob(item)">
                         <span class="min-w-0 flex-1">
                             <span class="block truncate text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ item.enquiryId }} — {{ item.customer }}</span>
@@ -132,12 +132,12 @@
                     </button>
                     <p *ngIf="!attentionItems.length" class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">Nothing here — all clear.</p>
                 </div>
-                <p class="border-t border-gray-100 dark:border-erp-border-dark px-5 py-2 text-[11px] text-gray-500 dark:text-gray-500">
+                <p class="border-t border-gray-100 dark:border-erp-border-dark px-4 sm:px-5 py-2 text-[11px] text-gray-500 dark:text-gray-500">
                     Days are counted from when the job was sent, assigned or last reassigned. The longest-waiting 50 are shown.
                 </p>
             </div>
 
-            <div class="er-card p-5">
+            <div class="er-card p-4 sm:p-5">
                 <h3 class="er-heading mb-1">Why Jobs Are Rejected</h3>
                 <p class="mb-4 text-xs text-gray-500 dark:text-gray-500">Taken from the comment left when a job was rejected.</p>
                 <div class="space-y-3">

@@ -1,3 +1,4 @@
+import { ScrollTabsComponent } from 'src/app/shared/components/scroll-tabs/scroll-tabs.component';
 import {
   Component, EventEmitter, HostBinding, HostListener, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges,
 } from '@angular/core';
@@ -24,7 +25,7 @@ import { DetailPanelIconComponent } from './detail-panel-icon.component';
   // A `title` input must not leak onto the host as a native browser tooltip.
   host: { '[attr.title]': 'null' },
   standalone: true,
-  imports: [CommonModule, DetailPanelIconComponent],
+  imports: [ScrollTabsComponent, CommonModule, DetailPanelIconComponent],
   templateUrl: './detail-panel.component.html',
   styleUrls: ['./detail-panel.component.css'],
 })

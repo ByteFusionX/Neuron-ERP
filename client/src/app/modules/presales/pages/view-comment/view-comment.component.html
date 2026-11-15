@@ -4,7 +4,7 @@
     [onClose]="onClose.bind(this)"
     [footerButtons]="footerButtons"
     contentMaxHeight="70vh">
-    <div class="px-6 py-5 space-y-4">
+    <div class="px-4 sm:px-6 py-5 space-y-4">
         <div *ngIf="data.revisionComment?.length">
             <h3 class="text-md font-semibold text-gray-900 dark:text-gray-100">Revision Comment</h3>
             <div class="mt-2 rounded-lg bg-gray-100 p-4 dark:bg-white/5" *ngFor="let comment of data.revisionComment;let i=index">

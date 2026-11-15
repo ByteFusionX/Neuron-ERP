@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, Inject, Input, LOCALE_ID, OnInit, booleanAttribute } from '@angular/core';
+import { Component, ElementRef, HostListener, Inject, Input, LOCALE_ID, OnInit, booleanAttribute, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { CommonModule, formatNumber } from '@angular/common';
 import { DetailFootRow, DetailSummaryRow, DetailTableColumn } from './detail-panel.model';
@@ -7,6 +7,7 @@ import { DetailTone } from './detail-tone';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { FormsModule } from '@angular/forms';
 import { SfInputComponent } from '../smart-form/sf-input.component';
+import { LayoutService } from '../../../core/services/layout.service';
 
 import { DEFAULT_CURRENCY } from '../../constants/currency';
 /** One rendered line of the table: a group heading, a data row, or a per-group subtotal. */
@@ -46,7 +47,89 @@ interface DetailTableLine {
     <p *ngIf="title" class="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
       {{ title }} <span class="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ count }}</span>
     </p>
-    <div [ngClass]="bare ? 'bare-scroll min-h-0 flex-1 overflow-auto' : 'overflow-x-auto rounded-xl border border-gray-200 shadow-sm ring-1 ring-black/[0.02] dark:border-erp-border-dark dark:ring-white/[0.03]'">
+    <!-- list layout: every line is a stacked item (title, then label/value pairs) instead of a table row -->
+    <ng-container *ngIf="listView">
+      <div *ngIf="(searchKey && primaryCol) || tools" class="flex shrink-0 items-center gap-2 border-b border-gray-200 px-3 py-2 dark:border-erp-border-dark">
+        <app-sf-input *ngIf="searchKey && primaryCol" type="search" clearable class="block min-w-0 flex-1 sm:max-w-sm"
+          [ngModel]="query" (ngModelChange)="onSearch($event ?? '')" [ngModelOptions]="{ standalone: true }"
+          [suffix]="query ? (matches.length ? (matchPos + 1) + ' of ' + matches.length : 'No items') : ''"
+          (keydown.enter)="$event.preventDefault(); step($any($event).shiftKey ? -1 : 1)"
+          (keydown.arrowdown)="$event.preventDefault(); step(1)"
+          (keydown.arrowup)="$event.preventDefault(); step(-1)"
+          placeholder="Search item or category"></app-sf-input>
+        <span class="ml-auto text-[11px] font-medium text-gray-500 dark:text-gray-400">{{ count }} {{ count === 1 ? 'item' : 'items' }}</span>
+        <button *ngIf="tools" type="button" (click)="openColMenu($event)" class="dt-dots" title="Show or hide fields" aria-label="Show or hide fields" aria-haspopup="true" [attr.aria-expanded]="colMenuOpen">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+        </button>
+      </div>
+      <div [ngClass]="bare ? 'bare-scroll min-h-0 flex-1 overflow-y-auto' : 'rounded-xl border border-gray-200 dark:border-erp-border-dark'">
+        <ul class="divide-y divide-gray-100 dark:divide-white/5" [ngClass]="large ? 'text-[13.5px]' : 'text-[13px]'">
+          <ng-container *ngFor="let line of lines; trackBy: trackLine">
+            <li *ngIf="line.kind === 'group'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos"
+              class="sticky top-0 z-[1] flex items-center gap-2 border-y border-gray-200 bg-gray-50 px-3 py-1.5 dark:border-gray-700 dark:bg-[#1a1a1a]">
+              <span class="inline-block h-3 w-[3px] shrink-0 rounded-full bg-violet-400 dark:bg-violet-500"></span>
+              <span class="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300">{{ line.row['label'] }}</span>
+              <span *ngIf="(line.groupCount ?? 0) > 1" class="shrink-0 rounded-full bg-gray-200/70 px-1.5 py-px text-[10px] font-medium text-gray-600 dark:bg-white/10 dark:text-gray-300">{{ line.groupCount }} items</span>
+              <app-detail-badge *ngIf="line.row['badge']" [label]="line.row['badge']" tone="warn"></app-detail-badge>
+              <span *ngIf="line.row['bandText'] || ((line.groupCount ?? 0) > 1 && bandTotal(line))" class="ml-auto shrink-0 text-[12px] font-semibold tabular-nums text-gray-600 dark:text-gray-300">{{ line.row['bandText'] || bandTotal(line) }}</span>
+            </li>
+            <li *ngIf="line.kind === 'data'" [attr.data-line]="line.pos" [class.dt-hit]="activeLine === line.pos" [class.opacity-60]="line.excluded" [class.bg-red-50]="!!line.row['_reject']"
+              [class.cursor-pointer]="!!line.row['_link']" [class.pl-8]="line.sub" (click)="openRow(line.row, $event)"
+              class="flex gap-3 px-3 py-3 transition-colors hover:bg-violet-50/50 dark:hover:bg-white/[0.04]">
+              <span *ngIf="numbered" class="w-7 shrink-0 pt-px text-right text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{{ line.sub ? line.label : line.index }}</span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-start gap-3">
+                  <div *ngIf="primaryCol as pc" class="min-w-0 flex-1 text-gray-900 dark:text-gray-100" [class.text-[12px]]="line.sub">
+                    <div *ngIf="pc.type === 'html'; else plainTitle" [innerHTML]="line.row[pc.key]" class="dt-list-title cursor-pointer break-words" [class.dt-clamp]="!isExpanded(line.pos, pc)"
+                      (click)="toggleExpanded(line.pos, pc)" [attr.title]="isExpanded(line.pos, pc) ? 'Click to collapse' : 'Click to expand'"></div>
+                    <ng-template #plainTitle>
+                      <div class="break-words font-medium">{{ line.row[pc.key] ?? '—' }}</div>
+                      <div *ngIf="pc.subKey && line.row[pc.subKey]" class="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{{ line.row[pc.subKey] }}</div>
+                    </ng-template>
+                  </div>
+                  <ng-container *ngFor="let ic of imageCols">
+                    <button *ngIf="line.row[ic.key]" type="button" (click)="openImage(line.row[ic.key], line.row[ic.key + 'Alt'])"
+                      class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-gray-300 text-gray-600 hover:border-violet-400 hover:bg-violet-50 hover:text-violet-700 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-violet-500/10"
+                      title="View item image" aria-label="View item image">
+                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12s3.5-6 9.75-6 9.75 6 9.75 6-3.5 6-9.75 6-9.75-6-9.75-6Z" /><circle cx="12" cy="12" r="2.75" /></svg>
+                    </button>
+                  </ng-container>
+                  <div *ngIf="emphasisCol as ec" class="shrink-0 text-right">
+                    <div class="text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">{{ ec.label }}</div>
+                    <div class="font-semibold tabular-nums text-gray-900 dark:text-white">{{ cellText(ec, line.row) }}</div>
+                  </div>
+                </div>
+                <dl *ngIf="fieldCols.length" class="mt-2 flex flex-wrap gap-x-5 gap-y-1.5">
+                  <div *ngFor="let c of fieldCols" class="min-w-0">
+                    <dt class="text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">{{ c.label }}</dt>
+                    <dd class="tabular-nums text-gray-700 dark:text-gray-200">
+                      <app-detail-badge *ngIf="c.type === 'badge'; else fieldText" [label]="line.row[c.key]" [tone]="badgeTone(c, line.row)"></app-detail-badge>
+                      <ng-template #fieldText>
+                        <span *ngIf="c.type === 'html'; else fieldPlain" [innerHTML]="line.row[c.key]"></span>
+                        <ng-template #fieldPlain>{{ cellText(c, line.row) }}</ng-template>
+                      </ng-template>
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            </li>
+          </ng-container>
+          <li *ngIf="!count" class="px-3 py-10 text-center text-gray-500 dark:text-gray-400">{{ emptyMessage }}</li>
+        </ul>
+      </div>
+      <!-- footer lines as a summary block: each figure keeps its column name -->
+      <div *ngIf="footRows.length && count" class="shrink-0 border-t border-gray-300 px-3 py-2 dark:border-gray-700" [ngClass]="bare ? 'bg-white dark:bg-[#111111]' : ''">
+        <div *ngFor="let f of footRows" class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-1">
+          <span class="text-[11px] uppercase tracking-wider" [ngClass]="f.emphasis ? 'font-bold text-gray-900 dark:text-white' : 'font-semibold text-gray-500 dark:text-gray-400'">{{ f.label }}</span>
+          <span class="flex flex-wrap justify-end gap-x-4 text-[12px] tabular-nums">
+            <span *ngFor="let c of footCols(f)"><span *ngIf="footCols(f).length > 1" class="text-gray-400 dark:text-gray-500">{{ c.label }}</span>
+              <span class="ml-1.5" [ngClass]="f.emphasis || c.emphasis ? 'font-bold text-gray-900 dark:text-white' : 'font-semibold text-gray-700 dark:text-gray-200'">{{ footValue(f.cells[c.key]) }}</span></span>
+          </span>
+        </div>
+      </div>
+    </ng-container>
+
+    <div *ngIf="!listView" [ngClass]="bare ? 'bare-scroll min-h-0 flex-1 overflow-auto' : 'overflow-x-auto rounded-xl border border-gray-200 shadow-sm ring-1 ring-black/[0.02] dark:border-erp-border-dark dark:ring-white/[0.03]'">
       <table class="w-full border-collapse" [ngClass]="large ? 'text-[13.5px]' : 'text-[13px]'">
         <colgroup>
           <col *ngIf="numbered" style="width:3rem" />
@@ -92,7 +175,7 @@ interface DetailTableLine {
               <td *ngIf="numbered && !centerGroups" class="border-y-2 border-gray-300 px-3 py-1.5 dark:border-gray-700"></td>
               <td [attr.colspan]="centerGroups ? span : span - (numbered ? 1 : 0)" [class.pr-10]="tools" class="border-y-2 border-gray-300 px-3 py-1.5 dark:border-gray-700">
                 <div class="relative flex items-center gap-2">
-                  <div class="flex min-w-0 items-center gap-2" [class.mx-auto]="centerGroups">
+                  <div class="flex min-w-0 items-center gap-2 max-sm:sticky max-sm:left-3 max-sm:!mx-0" [class.mx-auto]="centerGroups">
                     <span class="inline-block h-3 w-[3px] shrink-0 rounded-full bg-violet-400 dark:bg-violet-500"></span>
                     <span class="truncate text-[11px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300">{{ line.row['label'] }}</span>
                     <span *ngIf="(line.groupCount ?? 0) > 1" class="rounded-full bg-gray-200/70 px-1.5 py-px text-[10px] font-medium text-gray-600 dark:bg-white/10 dark:text-gray-300">
@@ -213,7 +296,7 @@ interface DetailTableLine {
     </div>
 
     <!-- totals as a right-aligned card instead of a footer row, so the figure people want is clear of the grid -->
-    <div *ngIf="summary.length && count" class="mt-3 flex justify-end">
+    <div *ngIf="summary.length && count && !listView" class="mt-3 flex justify-end">
       <div class="w-full max-w-xs rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-erp-border-dark dark:bg-erp-surface-dark">
         <div *ngFor="let s of summary" class="flex items-baseline justify-between gap-4 py-1"
           [class.mt-1]="s.emphasis" [class.border-t]="s.emphasis" [class.border-gray-200]="s.emphasis" [class.pt-2]="s.emphasis"
@@ -255,6 +338,8 @@ interface DetailTableLine {
     '.dt-dots:hover{background:rgba(124,58,237,.1);color:#6d28d9}',
     'tr.dt-sub>td{font-size:12px;color:#6b7280}',
     'tr.dt-hit>td{background:rgba(124,58,237,.14)!important;box-shadow:inset 0 1px 0 #a78bfa,inset 0 -1px 0 #a78bfa}',
+    'li.dt-hit{background:rgba(124,58,237,.14)!important}',
+    '.dt-list-title :is(p,ul,ol){margin:0}',
     '.dt-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}',
   ],
 })
@@ -271,6 +356,42 @@ export class DetailTableComponent implements OnInit {
   @Input({ transform: booleanAttribute }) groupDividers = false;
   /** When set, hidden columns are remembered in this browser under this key. */
   @Input() storageKey = '';
+  /** 'list' stacks each line as an item (title, then label/value pairs) instead of table columns. */
+  @Input() layout: 'table' | 'list' = 'table';
+  private layoutSvc = inject(LayoutService);
+  /** The list design is for phones and tablets only; big screens keep the table. */
+  get listView(): boolean { return this.layout === 'list' && this.layoutSvc.isMobile(); }
+
+  /** List layout: the column shown as each item's title (the search column, else the first). */
+  get primaryCol(): DetailTableColumn | undefined {
+    return this.columns.find((c) => c.key === this.searchKey) ?? this.columns.find((c) => c.type !== 'image');
+  }
+  /** List layout: the emphasised figure (e.g. Total Price) shown on the item's right. */
+  get emphasisCol(): DetailTableColumn | undefined {
+    return this.columns.find((c) => c.emphasis && c !== this.primaryCol && c.type !== 'image');
+  }
+  get imageCols(): DetailTableColumn[] {
+    return this.columns.filter((c) => c.type === 'image');
+  }
+  /** List layout: every other visible column, as label/value pairs under the title. */
+  get fieldCols(): DetailTableColumn[] {
+    const skip = new Set([this.primaryCol, this.emphasisCol]);
+    return this.columns.filter((c) => !skip.has(c) && c.type !== 'image');
+  }
+  footCols(f: DetailFootRow): DetailTableColumn[] {
+    return this.columns.filter((c) => f.cells[c.key]);
+  }
+  cellText(c: DetailTableColumn, r: Record<string, any>): string {
+    const v = r[c.key];
+    if (v == null || v === '') return '—';
+    if (c.type === 'currency') return formatNumber(Number(v) || 0, this.locale, '1.2-2');
+    if (c.type === 'number') return formatNumber(Number(v) || 0, this.locale, '1.0-3');
+    if (c.type === 'date') {
+      const d = new Date(v);
+      return isNaN(+d) ? String(v) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+    return String(v);
+  }
   constructor(@Inject(LOCALE_ID) private locale: string, private host: ElementRef<HTMLElement>, private router: Router) {}
 
   /** Rows carrying a `_link` open that route on click; clicks on expandable cells keep their own behaviour. */
@@ -591,7 +712,7 @@ export class DetailTableComponent implements OnInit {
   private scrollToActive(): void {
     // Wait for the highlight class to render, then bring the line to the middle of the scroll area.
     setTimeout(() => {
-      this.host.nativeElement.querySelector(`tr[data-line="${this.activeLine}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      this.host.nativeElement.querySelector(`[data-line="${this.activeLine}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     });
   }
 

@@ -1,4 +1,4 @@
-<div class="h-full flex flex-col p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-2 sm:p-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
     <div *ngIf="selectedCategory || selectedSupplierType" class="mb-3 flex shrink-0 flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300" role="status">
         <span>Filtered from report:</span>
         <span *ngIf="selectedCategory" class="rounded-full border border-violet-300 bg-violet-50 px-2.5 py-0.5 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">Category</span>
@@ -76,7 +76,7 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'products'">
-                    <app-detail-table [columns]="productColumns" [rows]="productRows(row)" emptyMessage="No products listed."></app-detail-table>
+                    <app-detail-table layout="list" [columns]="productColumns" [rows]="productRows(row)" emptyMessage="No products listed."></app-detail-table>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'documents'">

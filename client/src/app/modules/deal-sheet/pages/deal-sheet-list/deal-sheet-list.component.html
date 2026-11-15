@@ -1,4 +1,4 @@
-<div class="h-full flex flex-col p-5 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-2 sm:p-5 gap-3 sm:gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
     <app-data-grid #grid [strong]="true"
         class="flex-1 min-h-0"
         [fillHeight]="true"
@@ -56,11 +56,11 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'items'">
-                    <app-detail-table title="Items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" [currency]="row.currency"></app-detail-table>
+                    <app-detail-table layout="list" title="Items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" [currency]="row.currency"></app-detail-table>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'costs'">
-                    <app-detail-table title="Additional costs and discounts" [columns]="costColumns" [rows]="costRows(row)" showTotals [currency]="row.currency"
+                    <app-detail-table layout="list" title="Additional costs and discounts" [columns]="costColumns" [rows]="costRows(row)" showTotals [currency]="row.currency"
                         emptyMessage="No additional costs or discounts."></app-detail-table>
                 </ng-container>
 

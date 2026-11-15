@@ -3,11 +3,11 @@
   <div class="dg-card flex-1 min-w-0 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl overflow-hidden flex flex-col">
 
     <!-- Toolbar / bulk bar -->
-    <div class="relative shrink-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 border-b border-gray-100 dark:border-erp-border-dark transition-colors"
+    <div class="dg-toolbar relative shrink-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 border-b border-gray-100 dark:border-erp-border-dark transition-colors"
       [ngClass]="[selectedKeys.size > 0 ? 'bg-violet-50 dark:bg-violet-950/40' : '', showTitleBlock ? 'py-4 min-h-16' : 'py-2']">
       <div *ngIf="loading && data.length" class="dg-progress" role="progressbar" aria-label="Loading"></div>
       <ng-container *ngIf="selectedKeys.size === 0; else bulkBar">
-        <div *ngIf="showTitleBlock" class="flex flex-1 flex-col justify-center min-w-0">
+        <div *ngIf="showTitleBlock" class="dg-title flex flex-1 flex-col justify-center min-w-0">
           <div class="min-w-0">
             <div class="flex items-center gap-2.5 min-w-0">
               <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate">{{ title }}</h2>
@@ -45,13 +45,13 @@
       </ng-template>
 
       <!-- Extra toolbar actions projected by the host page, centered in the header -->
-      <div *ngIf="selectedKeys.size === 0" class="hidden md:flex shrink-0 items-center justify-center">
+      <div *ngIf="selectedKeys.size === 0" class="dg-extra flex shrink-0 items-center justify-center empty:hidden max-md:order-last max-md:w-full">
         <ng-content select="[dgToolbarExtra]"></ng-content>
       </div>
 
-      <div *ngIf="selectedKeys.size === 0" class="flex flex-1 flex-wrap items-center justify-end gap-2 min-w-0">
+      <div *ngIf="selectedKeys.size === 0" class="dg-tools flex flex-1 flex-wrap items-center justify-end gap-2 min-w-0">
       <!-- Search -->
-      <div class="w-56 max-w-full">
+      <div class="dg-search w-56 max-w-full">
         <app-sf-input type="search" clearable [placeholder]="searchPlaceholder" [attr.aria-label]="'Search ' + title"
           [ngModel]="searchTerm" (ngModelChange)="onSearch($event ?? '')"></app-sf-input>
       </div>
@@ -199,7 +199,7 @@
 
     <!-- Views -->
     <div *ngIf="allViews.length" role="tablist" [attr.aria-label]="title + ' views'"
-      class="dg-view-tabs shrink-0 flex flex-wrap items-center gap-x-5 gap-y-1 px-5 border-b border-gray-100 dark:border-erp-border-dark">
+      class="dg-view-tabs shrink-0 flex flex-wrap max-sm:flex-nowrap max-sm:overflow-x-auto items-center gap-x-5 gap-y-1 px-5 border-b border-gray-100 dark:border-erp-border-dark">
       <button *ngFor="let v of allViews" type="button" role="tab" class="dg-view-tab group/view"
         draggable="true" (dragstart)="onViewDragStart(v, $event)" (dragover)="onViewDragOver(v, $event)"
         (drop)="onViewDrop(v, $event)" (dragend)="onViewDragEnd()"
@@ -280,7 +280,7 @@
 
     <!-- Table -->
     <div class="dg-scroll overflow-auto" [style.maxHeight]="fillHeight ? null : maxHeight" (scroll)="closeActionMenu()">
-      <table class="w-full text-sm border-separate border-spacing-0" [class.dg-compact]="density === 'compact'" [class.dg-tall]="tallRows">
+      <table class="dg-table w-full text-sm border-separate border-spacing-0" [class.dg-compact]="density === 'compact'" [class.dg-tall]="tallRows">
         <thead>
           <tr>
             <th *ngIf="selectable" class="dg-th w-12 !pl-5">
@@ -359,7 +359,7 @@
                   aria-label="Select row" />
               </td>
 
-              <td *ngFor="let c of visibleColumns; let first = first" class="dg-td"
+              <td *ngFor="let c of visibleColumns; let first = first" class="dg-td" [attr.data-label]="c.label"
                 [class.dg-active-bar]="first && !selectable && isActive(row)"
                 [class.dg-accent-cell]="first && !selectable"
                 [ngClass]="(alignOf(c) === 'right' ? 'text-right tabular-nums ' : alignOf(c) === 'center' ? 'text-center ' : '')
@@ -474,7 +474,7 @@
   </ng-container>
 
   <!-- Toasts -->
-  <div class="fixed bottom-5 right-5 z-[60] flex flex-col gap-2 items-end" aria-live="polite">
+  <div class="fixed bottom-5 right-5 max-sm:left-4 max-sm:right-4 z-[60] flex flex-col gap-2 items-end" aria-live="polite">
     <div *ngFor="let t of toasts" class="dg-pop flex items-center gap-2.5 min-w-60 max-w-sm pl-3 pr-1.5 py-2 rounded-lg bg-gray-900 text-white text-sm shadow-lg" role="status">
       <svg *ngIf="t.variant === 'success'" class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7" /></svg>
       <svg *ngIf="t.variant === 'error'" class="w-4 h-4 text-red-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 8v5M12 16.5v.5" /><circle cx="12" cy="12" r="9" /></svg>

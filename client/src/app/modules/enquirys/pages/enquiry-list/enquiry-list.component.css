@@ -36,3 +36,9 @@ table {
 :host-context(html.dark) .enquiry-meta-value {
   color: #ededed;
 }
+
+@media (max-width: 639px) {
+  .enquiry-meta:nth-child(odd) { border-left: 0 !important; }
+  .enquiry-meta:nth-child(n + 3) { border-top: 1px solid #e5e7eb; }
+  :host-context(html.dark) .enquiry-meta:nth-child(n + 3) { border-top-color: #262626; }
+}

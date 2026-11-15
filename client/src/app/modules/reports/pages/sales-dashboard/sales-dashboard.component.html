@@ -351,7 +351,7 @@
             </div>
           </header>
           <p *ngIf="data.margin.missingCost" class="sd-note mt-0 mb-3">{{ plural(data.margin.missingCost, 'won quote') }} {{ data.margin.missingCost === 1 ? 'has' : 'have' }} no cost entered and show 100% margin.</p>
-          <div class="grid gap-6 lg:grid-cols-2">
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>*]:min-w-0">
             <div>
               <h3 class="sd-sub">By product</h3>
               <div class="overflow-x-auto">

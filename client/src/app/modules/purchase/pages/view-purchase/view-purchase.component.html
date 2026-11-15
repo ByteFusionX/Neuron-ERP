@@ -92,7 +92,7 @@
         <ng-container *ngSwitchCase="'pos'">
           <p *ngIf="posLoading" class="py-6 text-center text-sm text-gray-500">Loading POs…</p>
           <p *ngIf="!posLoading && !poLineRows().length" class="py-6 text-center text-sm text-gray-500">No items have been moved to a PO yet.</p>
-          <app-detail-table *ngIf="poLineRows().length"
+          <app-detail-table layout="list" *ngIf="poLineRows().length"
             [columns]="poColumns"
             [rows]="poTableRows()"
             [footRows]="poFootRows()"
@@ -110,7 +110,7 @@
     </div>
 
     <div tabBody class="h-full">
-      <app-detail-table class="block h-full"
+      <app-detail-table layout="list" class="block h-full"
         [columns]="itemColumns"
         [rows]="itemRows"
         [currency]="purchase?.currency || 'QAR'"

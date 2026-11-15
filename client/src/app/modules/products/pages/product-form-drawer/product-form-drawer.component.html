@@ -21,7 +21,7 @@
                     footerLabel="Add brand" (footerAction)="createBrand()"></app-sf-combobox>
             </app-sf-field>
             @if (duplicateMatches.length) {
-                <div class="col-span-2 rounded-md border px-3 py-2 text-sm"
+                <div class="col-span-full rounded-md border px-3 py-2 text-sm"
                     [class]="blockingMatch ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-800'">
                     <p class="font-medium">{{ blockingMatch ? 'This product is already in the catalogue' : 'Same part number found under another brand' }}</p>
                     @for (m of duplicateMatches; track m._id) {

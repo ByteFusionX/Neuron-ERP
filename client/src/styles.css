@@ -40,6 +40,8 @@
 html,
 body {
   height: 100%;
+  /* off-canvas drawers parked at translateX(100%) must not widen the page on phones */
+  overflow-x: clip;
 }
 
 :root {

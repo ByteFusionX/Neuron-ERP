@@ -14,11 +14,11 @@
   <app-action-button *ngIf="emptyLink" variant="primary" [link]="emptyLink" class="mx-auto mt-5">{{ emptyLinkLabel }}</app-action-button>
 </div>
 
-<div *ngIf="!loading && !empty" class="flex min-h-0 flex-1 flex-col" [ngClass]="sectioned ? 'gap-2' : 'dvs-shell overflow-hidden'">
+<div *ngIf="!loading && !empty" class="dvs-stack flex min-h-0 min-w-0 flex-1 flex-col" [ngClass]="sectioned ? 'gap-2' : 'dvs-shell overflow-hidden'">
 
   <!-- 1. header + details (non-scrolling); its own card when sectioned -->
   <section class="shrink-0" [class.dvs-card]="sectioned">
-  <header class="dvs-line shrink-0 border-b px-5 pt-4" [class.dvs-header-contrast]="headerTone === 'contrast'" [class.pb-4]="headerTone === 'contrast' && (!stats.length || statsLayout === 'fields')">
+  <header class="dvs-line shrink-0 border-b px-4 pt-4 sm:px-5" [class.dvs-header-contrast]="headerTone === 'contrast'" [class.pb-4]="headerTone === 'contrast' && (!stats.length || statsLayout === 'fields')">
     <nav *ngIf="breadcrumbs.length" class="dvs-muted flex items-center gap-1.5 text-[13px]" aria-label="Breadcrumb">
       <ng-container *ngFor="let b of breadcrumbs; let last = last">
         <a *ngIf="b.link && !last" [routerLink]="b.link" class="hover:text-violet-600">{{ b.label }}</a>
@@ -65,7 +65,7 @@
   </header>
 
   <!-- stats as a plain field column, sharing a row with any [beforeStats] / [afterStats] blocks (one column each) -->
-  <div *ngIf="stats.length && statsLayout === 'fields'" class="dvs-line grid shrink-0 grid-cols-1 gap-x-8 gap-y-3 px-5 py-3 lg:auto-cols-fr lg:grid-flow-col" [class.border-b]="!sectioned">
+  <div *ngIf="stats.length && statsLayout === 'fields'" class="dvs-line grid shrink-0 grid-cols-1 gap-x-8 gap-y-3 px-4 py-3 sm:px-5 lg:auto-cols-fr lg:grid-flow-col" [class.border-b]="!sectioned">
     <ng-content select="[beforeStats]"></ng-content>
     <app-detail-section *ngIf="statsTitle" [title]="statsTitle" columns="2">
       <app-detail-fields-menu *ngIf="statsStorageKey" sectionActions [items]="statItems" [storageKey]="statsStorageKey" (hiddenChange)="hiddenStats = $event" (orderChange)="statsOrder = $event"></app-detail-fields-menu>
@@ -101,19 +101,19 @@
 
   <!-- 2. tabs -->
   <div *ngIf="tabs.length" class="dvs-line flex h-11 shrink-0 items-stretch justify-between border-b px-5">
-    <div class="dvs-tabs flex h-full gap-5 overflow-x-auto" role="tablist">
+    <app-scroll-tabs class="dvs-tabs h-full min-w-0 flex-1 -ml-2" gapClass="gap-x-5">
       <button *ngFor="let t of tabs" type="button" role="tab" [attr.aria-selected]="activeTab === t.id" (click)="selectTab(t.id)"
-        class="-mb-px flex h-full items-center whitespace-nowrap border-b-2 text-[13px] font-medium transition-colors"
+        class="flex h-full shrink-0 items-center whitespace-nowrap border-b-2 text-[13px] font-medium transition-colors"
         [ngClass]="activeTab === t.id ? 'border-violet-600 text-gray-900 dark:text-gray-100' : 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100'">
         {{ t.label }}
       </button>
-    </div>
+    </app-scroll-tabs>
     <ng-container *ngTemplateOutlet="stripControls"></ng-container>
   </div>
 
-  <div #row class="flex min-h-0 flex-1" [class.gap-4]="sectioned && !resizable">
+  <div #row class="dvs-row flex min-h-0 flex-1" [class.gap-4]="sectioned && !resizable">
     <!-- tab body (scrolls) -->
-    <main class="flex min-w-0 flex-1 flex-col" [class.dvs-card]="sectioned">
+    <main class="dvs-main flex min-w-0 flex-1 flex-col" [class.dvs-card]="sectioned">
       <div *ngIf="!bodyBare && !tabs.length && (bodyTitle || (showPanelToggle && hasSidebar))" class="dvs-line flex h-11 shrink-0 items-center justify-between gap-3 border-b px-5">
         <h2 class="dvs-strong text-[13px] font-semibold">{{ bodyTitle }}</h2>
         <ng-container *ngTemplateOutlet="stripControls"></ng-container>
@@ -131,7 +131,7 @@
     </div>
 
     <!-- 3. right panel -->
-    <aside *ngIf="hasSidebar && panelOpen" class="dvs-line hidden shrink-0 flex-col lg:flex" [ngClass]="[sidebarBare ? 'w-[26rem]' : 'w-80', sectioned ? 'dvs-card' : 'border-l']"
+    <aside *ngIf="hasSidebar && panelOpen" class="dvs-aside dvs-line flex shrink-0 flex-col" [ngClass]="[sidebarBare ? 'w-[26rem]' : 'w-80', sectioned ? 'dvs-card' : 'border-l']"
       [style.width]="resizable ? (panelWidth !== null ? panelWidth + 'px' : '25%') : null">
       <div class="min-h-0 flex-1" [ngClass]="sidebarBare ? 'flex flex-col' : 'space-y-5 overflow-y-auto p-4'">
         <div *ngFor="let s of sections" class="dov-section">

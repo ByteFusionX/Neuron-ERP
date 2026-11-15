@@ -73,7 +73,7 @@
           <p class="pd-muted text-[13px]">Showing stock for <span class="pd-strong font-medium">{{ location }}</span></p>
           <p *ngIf="materialTotals.shortages" class="text-[13px] font-medium text-amber-700 dark:text-amber-400">{{ materialTotals.shortages }} item(s) short</p>
         </div>
-        <app-detail-table [columns]="materialCols" [rows]="materialRows" showTotals></app-detail-table>
+        <app-detail-table layout="list" [columns]="materialCols" [rows]="materialRows" showTotals></app-detail-table>
       </div>
 
       <!-- pricing -->

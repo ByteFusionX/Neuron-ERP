@@ -43,7 +43,7 @@
                         <app-count-badge [count]="announcementService.unread()"></app-count-badge>
                     </button>
                     <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="announcementsOrigin"
-                        [cdkConnectedOverlayOpen]="announcementsOpen" [cdkConnectedOverlayPositions]="announcementsPositions"
+                        [cdkConnectedOverlayOpen]="announcementsOpen" [cdkConnectedOverlayPositions]="announcementsPositions" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12"
                         (overlayOutsideClick)="onAnnouncementsOutsideClick($event)" (detach)="announcementsOpen = false"
                         (overlayKeydown)="$event.key === 'Escape' && (announcementsOpen = false)">
                         <app-announcement-popover (closed)="announcementsOpen = false"></app-announcement-popover>
@@ -58,7 +58,7 @@
                     <app-count-badge [count]="(textNotificationBadgeCount$ | async) ?? 0"></app-count-badge>
                 </button>
                 <ng-template cdkConnectedOverlay [cdkConnectedOverlayOrigin]="notificationsOrigin"
-                    [cdkConnectedOverlayOpen]="notificationsOpen" [cdkConnectedOverlayPositions]="announcementsPositions"
+                    [cdkConnectedOverlayOpen]="notificationsOpen" [cdkConnectedOverlayPositions]="announcementsPositions" [cdkConnectedOverlayPush]="true" [cdkConnectedOverlayViewportMargin]="12"
                     (overlayOutsideClick)="onNotificationsOutsideClick($event)" (detach)="notificationsOpen = false"
                     (overlayKeydown)="$event.key === 'Escape' && (notificationsOpen = false)">
                     <app-notification (closed)="notificationsOpen = false"></app-notification>

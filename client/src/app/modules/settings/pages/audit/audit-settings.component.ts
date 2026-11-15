@@ -66,6 +66,7 @@ export class AuditSettingsComponent implements OnInit {
       case 'deliveryNote': return { commands: ['/dispatch/view', id] };
       case 'enquiry': return { commands: [/^presale|estimation|feedback|revision|to-presale/.test(row.action || '') ? '/presales' : '/enquiry'], queryParams: search };
       case 'customerInvoice': return { commands: ['/finance/invoices'] };
+      case 'project': return { commands: ['/technical/project-page'], queryParams: search };
       case 'customer': return { commands: ['/customers'], queryParams: search };
       case 'supplier': return { commands: ['/suppliers'], queryParams: search };
       case 'product': return { commands: ['/products'], queryParams: search };
@@ -132,7 +133,7 @@ export class AuditSettingsComponent implements OnInit {
     // Fixed tab order; any other recorded module is appended after these.
     const ordered = [
       'enquiry', 'presale', 'quotation', 'dealSheet', 'job', 'product', 'supplier',
-      'purchaseRequest', 'purchaseOrder', 'grn', 'deliveryNote', 'proformaInvoice', 'customerInvoice', 'stock',
+      'purchaseRequest', 'purchaseOrder', 'grn', 'deliveryNote', 'proformaInvoice', 'customerInvoice', 'stock', 'project',
     ];
     const extra = this.entityTypes.filter((t) => !ordered.includes(t));
     this.views = [

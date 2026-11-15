@@ -579,3 +579,89 @@ tr:hover .dg-editable {
 :host-context(html.dark) .dg-strong .dark\:text-gray-400 { color: #bdbdbd; }
 :host-context(html.dark) .dg-strong .dark\:text-gray-300 { color: #e0e0e0; }
 :host-context(html.dark) .dg-strong .dark\:text-gray-200 { color: #f0f0f0; }
+
+/* ---- tablet / laptop: title + view toggle on row 1, all tools on one row below ---- */
+@media (min-width: 640px) and (max-width: 1535px) {
+  .dg-tools { flex-basis: 100%; flex-wrap: nowrap; justify-content: flex-start; }
+  .dg-search { flex: 1 1 auto; width: auto; min-width: 10rem; max-width: 24rem; }
+  .dg-tools > .dg-primary-btn { margin-left: auto; }
+  .dg-extra { justify-content: flex-end; }
+}
+
+/* ---- phone layout: toolbar stacks, rows become cards ---- */
+@media (max-width: 639px) {
+  .dg-toolbar { padding-left: 0.75rem; padding-right: 0.75rem; }
+  .dg-title { flex: 1 1 0%; }
+  .dg-extra { order: 0; width: auto; }
+  .dg-tools { flex-basis: 100%; justify-content: stretch; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; }
+  .dg-tools > * { min-width: 0; }
+  .dg-search { width: 100%; grid-column: 1 / -1; }
+  .dg-tools > .relative > .dg-tool-btn, .dg-tools > .dg-tool-btn { width: 100%; justify-content: center; padding: 0 0.375rem; }
+  .dg-tools > .dg-primary-btn { grid-column: 1 / -1; justify-content: center; }
+  .dg-tools .dg-pop.absolute { position: fixed; left: 1rem !important; right: 1rem !important; width: auto !important; top: auto; }
+  .dg-tool-btn, .dg-primary-btn { height: 2.25rem; }
+  .dg-scroll { scrollbar-width: none; }
+  .dg-scroll::-webkit-scrollbar { display: none; }
+  .dg-view-tabs { padding-left: 0.75rem; padding-right: 0.75rem; gap: 1rem; scrollbar-width: none; }
+  .dg-view-tabs::-webkit-scrollbar { display: none; }
+
+  .dg-table thead { display: none; }
+  .dg-table, .dg-table tbody { display: block; width: 100%; }
+  .dg-table tbody tr.dg-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0.625rem 3rem 0.625rem 0.75rem;
+    border-bottom: 1px solid #f1f2f4;
+  }
+  :host-context(html.dark) .dg-table tbody tr.dg-row { border-bottom-color: #262626; }
+  .dg-table tbody tr.dg-row .dg-td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    max-width: none;
+    padding: 0.1875rem 0;
+    border-bottom: 0;
+    text-align: right;
+    min-width: 0;
+  }
+  .dg-table tbody tr.dg-row .dg-td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #9ca3af;
+    text-align: left;
+  }
+  .dg-table tbody tr.dg-row .dg-td > span { justify-content: flex-end; min-width: 0; }
+  /* first column reads as the card heading */
+  .dg-table tbody tr.dg-row .dg-td.dg-accent-cell[data-label],
+  .dg-table tbody tr.dg-row .dg-td.dg-accent-cell:not([data-label]) + .dg-td {
+    padding-bottom: 0.375rem; margin-bottom: 0.25rem; font-size: 0.9375rem;
+  }
+  .dg-table tbody tr.dg-row .dg-td.dg-accent-cell[data-label]::before,
+  .dg-table tbody tr.dg-row .dg-td.dg-accent-cell:not([data-label]) + .dg-td::before { display: none; }
+  .dg-table tbody tr.dg-row .dg-td.dg-accent-cell[data-label],
+  .dg-table tbody tr.dg-row .dg-td.dg-accent-cell:not([data-label]) + .dg-td { justify-content: flex-start; text-align: left; }
+  .dg-table tbody tr.dg-row .dg-td.dg-accent-cell[data-label] > span,
+  .dg-table tbody tr.dg-row .dg-td.dg-accent-cell:not([data-label]) + .dg-td > span { justify-content: flex-start; }
+  .dg-table tbody tr.dg-row .dg-td .truncate { white-space: nowrap; }
+  .dg-table tbody tr.dg-row { margin: 0; }
+  .dg-row-active { box-shadow: inset 3px 0 0 #7c3aed; }
+  /* checkbox + actions pinned to the card corners */
+  .dg-table tbody tr.dg-row .dg-td.dg-accent-cell:not([data-label]) {
+    position: absolute; top: 0.625rem; left: 0.75rem; padding: 0 !important;
+  }
+  .dg-table tbody tr.dg-row:has(td.dg-accent-cell:not([data-label])) { padding-left: 2.25rem; }
+  .dg-table tbody tr.dg-row .dg-sticky-right {
+    position: absolute; top: 0.375rem; right: 0.25rem; padding: 0 !important; background: transparent;
+  }
+  .dg-table tbody tr.dg-row .dg-quick:not(.dg-quick-persistent) { display: none; }
+  /* skeleton / empty rows */
+  .dg-table tbody tr:not(.dg-row) { display: block; }
+  .dg-table tbody tr:not(.dg-row) > td { display: block; }
+  .dg-table tbody tr:not(.dg-row) > td.dg-td { padding: 0.5rem 0.75rem; }
+}

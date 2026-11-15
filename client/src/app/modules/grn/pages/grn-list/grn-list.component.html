@@ -89,7 +89,7 @@
         </ng-container>
 
         <ng-container *ngSwitchCase="'items'">
-          <app-detail-table
+          <app-detail-table layout="list"
             [title]="isArrivingView ? 'Ordered items' : 'Received items'"
             [columns]="isArrivingView ? arrivingItemColumns : itemColumns"
             [rows]="isArrivingView ? arrivingItemRows(row) : itemRows(row)"

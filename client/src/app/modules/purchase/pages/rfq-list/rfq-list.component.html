@@ -65,7 +65,7 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'quotes'">
-                    <app-detail-table title="Supplier offers" [columns]="quoteColumns" [rows]="quoteRows(row)" showTotals [currency]="row.currency"></app-detail-table>
+                    <app-detail-table layout="list" title="Supplier offers" [columns]="quoteColumns" [rows]="quoteRows(row)" showTotals [currency]="row.currency"></app-detail-table>
                 </ng-container>
             </ng-container>
         </ng-template>

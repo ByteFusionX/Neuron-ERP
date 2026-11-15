@@ -1,15 +1,15 @@
-<div class="qr-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-6 flex flex-col gap-5">
+<div class="qr-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-2 sm:p-6 flex flex-col gap-3 sm:gap-5">
 
     <!-- Header — same shell and spacing as the grid's toolbar, so List and Report read as one screen. -->
     <div class="qr-card shrink-0">
-        <div class="relative flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
+        <div class="relative flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
             <div class="min-w-0">
                 <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate" aria-current="page">Quotations</h2>
                 <p class="mt-1 text-xs leading-4 text-gray-500 dark:text-gray-400 truncate">Track and manage customer quotations</p>
             </div>
 
             <!-- List | Report, centered in the header to match the list tab's toolbar. -->
-            <div class="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
+            <div class="flex max-lg:order-last max-lg:w-full lg:absolute lg:left-1/2 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 items-center justify-center">
                 <app-view-toggle label="Quotation" active="report" listLink="/quotations" reportLink="/quotations/report" [listQueryParams]="listQueryParams"></app-view-toggle>
             </div>
 
@@ -42,7 +42,7 @@
     <ng-container *ngIf="!loading && report as r">
 
         <!-- KPI strip -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <div class="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-5 max-lg:[&>*:last-child]:col-span-2">
             <app-kpi-card label="Total Quoted" [value]="r.kpi.totalValue | numberFormatter" [unit]="r.currency"
                 [foot]="r.kpi.totalCount + ' quotation' + (r.kpi.totalCount === 1 ? '' : 's')" [delta]="delta('totalValue')"></app-kpi-card>
             <app-kpi-card label="Won" [value]="r.kpi.wonValue | numberFormatter" [unit]="r.currency" valueClass="text-emerald-600 dark:text-emerald-400"

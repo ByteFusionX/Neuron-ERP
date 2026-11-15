@@ -13,7 +13,7 @@
                 <app-sf-input formControlName="companyName" placeholder="Company name"></app-sf-input>
                 <p *ngIf="companyExists" class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">Company already exists</p>
             </app-sf-field>
-            <div *ngIf="duplicateMatches.length" class="col-span-2 rounded-md border px-3 py-2 text-sm" role="alert"
+            <div *ngIf="duplicateMatches.length" class="col-span-full rounded-md border px-3 py-2 text-sm" role="alert"
                 [ngClass]="hasBlock ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-800'">
                 <p class="font-medium">{{ hasBlock ? 'This customer already exists' : 'Similar customers found' }}</p>
                 <p *ngFor="let m of duplicateMatches">{{ m.reason }}</p>
@@ -97,7 +97,7 @@
     </form>
 
     <ng-container sfDrawerFooter>
-        <div class="mr-auto flex items-center gap-2">
+        <div class="mr-auto flex flex-wrap items-center gap-2 max-sm:w-full">
             <app-action-button *ngIf="step === 1 && canCreateCustomerType" variant="tool" (click)="createCustomerType()">+ Create Customer Type</app-action-button>
             <app-action-button *ngIf="step === 2 && canCreateDepartment" variant="tool" (click)="createCustomerDepartment()">+ Create Department</app-action-button>
             <app-action-button *ngIf="step === 2" variant="tool" (click)="addContact()">+ Add Contact</app-action-button>

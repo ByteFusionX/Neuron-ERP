@@ -37,10 +37,10 @@
       </dl>
     </section>
 
-    <div class="mb-6"><app-detail-table title="PR items" [columns]="prItemColumns" [rows]="prItemRows()" numbered></app-detail-table></div>
+    <div class="mb-6"><app-detail-table layout="list" title="PR items" [columns]="prItemColumns" [rows]="prItemRows()" numbered></app-detail-table></div>
 
     @if (purchaseOrder) {
-      <app-detail-table [title]="'LPO progress - ' + (purchaseOrder?.poNo || 'N/A')" [columns]="lpoItemColumns" [rows]="lpoItemRows()" [currency]="purchaseOrder?.currency || 'QAR'" numbered showTotals></app-detail-table>
+      <app-detail-table layout="list" [title]="'LPO progress - ' + (purchaseOrder?.poNo || 'N/A')" [columns]="lpoItemColumns" [rows]="lpoItemRows()" [currency]="purchaseOrder?.currency || 'QAR'" numbered showTotals></app-detail-table>
     }
   }
 </app-form-modal-shell>

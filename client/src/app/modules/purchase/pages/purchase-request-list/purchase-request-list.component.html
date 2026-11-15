@@ -42,7 +42,7 @@
             </div>
             <div class="pr-meta">
                 <p class="pr-meta-label">Date</p>
-                <p class="pr-meta-value">{{ (row.approvedDate || row.createdAt) | date: 'dd MMM yyyy' }}</p>
+                <p class="pr-meta-value">{{ row.createdAt | date: 'dd MMM yyyy' }}</p>
             </div>
         </ng-template>
 
@@ -84,7 +84,7 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'items'">
-                    <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" showTotals [currency]="row.currency"></app-detail-table>
+                    <app-detail-table layout="list" title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" showTotals [currency]="row.currency"></app-detail-table>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'approval'">

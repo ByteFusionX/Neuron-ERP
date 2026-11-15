@@ -1,5 +1,5 @@
-<div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
-  <app-sf-field *ngFor="let f of fields" [label]="f.label">
+<div class="grid grid-cols-2 gap-3 p-4 lg:grid-cols-5">
+  <app-sf-field *ngFor="let f of fields" [label]="f.label" [class.max-sm:col-span-2]="f.type !== 'date'">
     <ng-container [ngSwitch]="f.type">
       <app-sf-select *ngSwitchCase="'select'" [ngModel]="values[f.key]" [options]="f.options || []" [placeholder]="f.placeholder || ''"
         (ngModelChange)="set(f.key, $event)"></app-sf-select>

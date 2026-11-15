@@ -1,3 +1,4 @@
+import { ScrollTabsComponent } from 'src/app/shared/components/scroll-tabs/scroll-tabs.component';
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule, formatDate } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -86,7 +87,7 @@ const jobStatusLabel = (v: unknown): string => (v === JobStatus.WorkInProgress ?
   templateUrl: './view-job.component.html',
   styleUrls: ['./view-job.component.css'],
   standalone: true,
-  imports: [
+  imports: [ScrollTabsComponent, 
     CommonModule,
     RouterLink,
     DetailViewShellComponent,

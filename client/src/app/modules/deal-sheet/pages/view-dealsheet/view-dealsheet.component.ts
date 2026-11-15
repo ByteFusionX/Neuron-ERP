@@ -1,3 +1,4 @@
+import { ScrollTabsComponent } from 'src/app/shared/components/scroll-tabs/scroll-tabs.component';
 import { Component, OnInit, inject } from '@angular/core';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { MatDialog } from '@angular/material/dialog';
@@ -105,7 +106,7 @@ interface ViewDealsheetNavState {
   templateUrl: './view-dealsheet.component.html',
   styleUrls: ['./view-dealsheet.component.css'],
   standalone: true,
-  imports: [
+  imports: [ScrollTabsComponent, 
     DealFormComponent,
     CommonModule,
     DetailViewShellComponent,

@@ -5,7 +5,8 @@ export const SIDEBAR_RAIL_WIDTH = 72;
 export const SIDEBAR_MIN_FULL_WIDTH = 240;
 export const SIDEBAR_MAX_WIDTH = 360;
 export const SIDEBAR_DEFAULT_WIDTH = 240;
-const MOBILE_BREAKPOINT = 768;
+// Below this width the sidebar is a slide-out drawer (phones + tablets) so pages get the full width.
+const MOBILE_BREAKPOINT = 1024;
 const SNAP_TO_RAIL_BELOW = 140;
 const SNAP_TO_FULL_ABOVE = 190;
 const KEYBOARD_STEP = 16;

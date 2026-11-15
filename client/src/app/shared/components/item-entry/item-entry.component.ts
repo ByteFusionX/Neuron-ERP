@@ -114,6 +114,24 @@ export interface LineShare {
     @media (min-width: 900px) { .ie-short { grid-template-columns: minmax(0, 6fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.6fr) minmax(0, 1.6fr); } }
     .ie-num { justify-content: flex-end; font-variant-numeric: tabular-nums; }
     .ie-short.ie-labels > span:nth-child(2), .ie-short.ie-labels > span:nth-child(4), .ie-short.ie-labels > span:nth-child(5) { text-align: right; }
+    /* Below 1400px the column header row is hidden, so each quote field carries its own caption. */
+    @media (max-width: 1399px) {
+      .ie-strip-quote > *::before { display: block; margin-bottom: 0.125rem; font-size: 0.625rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em; color: #9ca3af; }
+      .ie-strip-quote > .ie-total, .ie-strip-quote > .ie-cell { flex-wrap: wrap; align-content: center; padding-top: 0.25rem; padding-bottom: 0.25rem; }
+      .ie-strip-quote > .ie-total::before, .ie-strip-quote > .ie-cell::before { flex-basis: 100%; text-align: left; }
+      .ie-strip-quote > :nth-child(1)::before { content: 'Item code'; }
+      .ie-strip-quote > :nth-child(2)::before { content: 'Part no'; }
+      .ie-strip-quote > :nth-child(3)::before { content: 'Qty'; }
+      .ie-strip-quote > :nth-child(4)::before { content: 'UoM'; }
+      .ie-strip-quote > :nth-child(5)::before { content: 'Unit cost'; }
+      .ie-strip-quote > :nth-child(6)::before { content: 'Margin'; }
+      .ie-strip-quote > :nth-child(7)::before { content: 'Unit price'; }
+      .ie-strip-quote > :nth-child(8)::before { content: 'Total cost'; }
+      .ie-strip-quote > :nth-child(9)::before { content: 'Total price'; }
+      .ie-strip-quote > :nth-child(10)::before { content: 'Supplier'; }
+      .ie-strip-quote > :nth-child(11)::before { content: 'Availability'; }
+    }
+    :host-context(html.dark) .ie-strip-quote > *::before { color: #6b7280; }
     .ie-labels { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.03em; color: #9ca3af; }
     .ie-labels > span:nth-child(n+3):nth-child(-n+7), .ie-labels > span:nth-child(n+10) { text-align: right; }
     .ie-labels.ie-strip-purchase > span:nth-child(n+3):nth-child(-n+6), .ie-labels.ie-strip-purchase > span:nth-child(n+9) { text-align: right; }

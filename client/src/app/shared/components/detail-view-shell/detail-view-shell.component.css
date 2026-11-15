@@ -38,3 +38,20 @@
 .dvs-footer-left, .dvs-footer-right { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .dvs-footer-right { margin-left: auto; }
 :host-context(html.dark) .dvs-footer { background: #111111; }
+
+/* Below lg the shell stops being a fixed-height split view: header, body and panel stack and the page scrolls. */
+@media (max-width: 1023px) {
+  .dvs-stack { overflow-y: auto; overflow-x: hidden; }
+  .dvs-stack > section, .dvs-stack > .dvs-line { flex-shrink: 0; }
+  .dvs-row { flex: none; flex-direction: column; gap: 0.5rem; min-height: auto; }
+  .dvs-main { flex: none; max-height: 75vh; }
+  .dvs-aside { width: 100% !important; flex: none; height: auto; min-height: 16rem; max-height: 85vh; }
+  .dvs-header-actions { width: 100%; }
+}
+
+/* lg+ on short screens (laptops, browser zoom): the header must not squeeze the table/panel to a sliver.
+   The row keeps a usable minimum height and the whole shell scrolls instead. Tall screens are unaffected. */
+@media (min-width: 1024px) {
+  .dvs-stack { overflow-y: auto; }
+  .dvs-row { min-height: 28rem; }
+}

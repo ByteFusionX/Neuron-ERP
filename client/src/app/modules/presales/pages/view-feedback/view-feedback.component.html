@@ -1,6 +1,6 @@
 <div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
   <!-- Header -->
-  <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+  <header class="flex items-start gap-3 border-b border-gray-100 px-4 sm:px-6 py-4 dark:border-erp-border-dark">
     <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100 dark:bg-sky-950/40 dark:text-sky-400 dark:ring-sky-900">
       <ng-icon name="heroChatBubbleBottomCenterText" class="text-lg"></ng-icon>
     </span>
@@ -15,12 +15,12 @@
   </header>
 
   <!-- Body -->
-  <div class="flex-1 overflow-y-auto px-6 py-5 space-y-3">
+  <div class="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-3">
     <ng-container *ngFor="let feedback of data.feedback">
       <div class="rounded-lg border-2 border-gray-200 dark:border-erp-border-dark px-4 py-4"
         [ngClass]="{'border-orange-500': feedback.seenByFeedbackRequester == false}">
-        <div class="flex w-full items-center justify-between">
-          <div>
+        <div class="flex w-full items-start justify-between gap-3">
+          <div class="min-w-0">
             <h4 *ngIf="feedback?.employeeId?.firstName" class="text-sm font-semibold text-gray-900 dark:text-gray-100">
               {{ feedback.employeeId.firstName + ' ' + feedback.employeeId.lastName }}
             </h4>
@@ -30,14 +30,14 @@
             <p class="text-sm italic text-gray-500 dark:text-gray-400">No feedback has been received yet</p>
           </ng-template>
           <span *ngIf="feedback.seenByFeedbackRequester == false"
-            class="rounded-xl bg-orange-200 px-2 py-1 text-xs text-orange-600">New</span>
+            class="shrink-0 rounded-xl bg-orange-200 px-2 py-1 text-xs text-orange-600">New</span>
         </div>
       </div>
     </ng-container>
   </div>
 
   <!-- Footer -->
-  <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
+  <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-4 sm:px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
     <app-action-button variant="secondary" (click)="closeModal()">Close</app-action-button>
   </footer>
 </div>
