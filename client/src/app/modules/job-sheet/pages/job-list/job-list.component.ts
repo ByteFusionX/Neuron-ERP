@@ -71,7 +71,7 @@ const holdChoices = (allowAdvance: boolean) => ({
   ],
 });
 /** Statuses set by hand, named by allocate status (values match the matching JobStatus where one exists). */
-const MANUAL_STATUSES: readonly string[] = [allocateStatus.OnHold, allocateStatus.Completed, LOST_STATUS];
+const MANUAL_STATUSES: readonly string[] = [allocateStatus.Pending, allocateStatus.OnHold,allocateStatus.Completed, LOST_STATUS];
 const jobStatusLabel = (v: unknown): string => (v === JobStatus.WorkInProgress ? 'In Progress' : v ? String(v) : '—');
 const allocateStatusLabel =(v: unknown): string => ALLOCATE_STATUS_LABELS[String(v)] ?? (v ? String(v) : '—');
 
@@ -277,17 +277,10 @@ export class JobListComponent {
       { key: 'jobId', label: 'Job Id', sortable: true },
       // Status, owner and value come first so they stay in view without horizontal scrolling at ~1500 px.
       {
-        // Hidden by default; the columns menu can turn it on or off.
-        key: 'allocateStatus', label: 'Allocate Status', type: 'badge', sortable: true, visible: false,
+        key: 'allocateStatus', label: 'Allocate Status', type: 'badge', sortable: true,
         badgeClasses: this.allocateStatusBadgeClasses,
         badgeLabel: allocateStatusLabel,
         filterOptions: Object.entries(ALLOCATE_STATUS_LABELS).map(([value, label]) => ({ value, label })),
-      },
-      {
-        key: 'status', label: 'Job Status', type: 'badge', sortable: true, valueGetter: (r) => r.status ?? '',
-        badgeClasses: Object.fromEntries(Object.entries(JOB_STATUS_TONES).map(([s, tone]) => [s, STATUS_TONE_CLASSES[tone].pill + ' border'])),
-        badgeLabel: jobStatusLabel,
-        filterOptions: Object.values(JobStatus).map((s) => ({ value: s, label: jobStatusLabel(s) })),
       },
       { key: 'customerName', label: 'Customer', sortable: true, valueGetter: (r) => r.clientDetails?.companyName },
       { key: 'description', label: 'Subject', sortable: true, valueGetter: (r) => r.quotation?.subject },
@@ -529,7 +522,8 @@ export class JobListComponent {
         // Allocate status: Pending / In Progress follow allocation, so only these three are set by hand.
         currentStatus: row.allocateStatus,
         // Lost is saved through the mark-lost flow.
-        statuses: this.canMarkLost(row) ? MANUAL_STATUSES : MANUAL_STATUSES.filter((s) => s !== LOST_STATUS),
+        // Pending is offered only to lift a hold, which also drops the job from Finance > Invoices > New Jobs.
+        statuses: MANUAL_STATUSES.filter((s) => (s !== LOST_STATUS || this.canMarkLost(row)) && (s !== allocateStatus.Pending || row.allocateStatus === allocateStatus.OnHold)),
         formatStatus: allocateStatusLabel,
         requireReasonFor: [JobStatus.onHold, LOST_STATUS],
         reasonLabels: {
@@ -537,6 +531,7 @@ export class JobListComponent {
           [LOST_STATUS]: { label: 'Reason', placeholder: 'Why was this job lost?' },
         },
         warnings: {
+          [allocateStatus.Pending]: 'The hold is lifted and the job returns to the Pending tab. It leaves Finance > Invoices > New Jobs.',
           [JobStatus.completed]: 'The job moves to the Completed tab.',
           [JobStatus.onHold]: 'The job moves to the On Hold tab. Saving purchase requests will not resume it.',
           [LOST_STATUS]: 'The quotation and enquiry behind this job are marked lost too, and its open purchase requests, purchase orders, delivery notes and invoices are cancelled.',
@@ -571,9 +566,9 @@ export class JobListComponent {
     });
   }
 
-  /** Only a pending job can be allocated; once allocated it moves on its own. */
+  /** A job with allocate history (allocateType is set on first allocation) is reallocated, never allocated again. */
   canAllocate(row: getJob): boolean {
-    return this.canAllocateJobs && row.allocateStatus === allocateStatus.Pending;
+    return this.canAllocateJobs && row.status !== JobStatus.completed && !row.allocateType && row.allocateStatus === allocateStatus.Pending;
   }
 
   /** Losing a job is the other way out of Pending, so it shares the allocate permission. */
@@ -607,30 +602,30 @@ export class JobListComponent {
     }
     this.modal.open<TransferProcurementPersonResult>(TransferProcurementPersonComponent, {
       width: '520px',
-      data: { jobId: row._id, jobLabel: row.jobId, currentProcurementPerson: row.procurementPerson },
+      data: {
+        jobId: row._id, jobLabel: row.jobId, currentProcurementPerson: row.procurementPerson,
+        allocateType: row.allocateType, productDistribution: row.productDistribution, projectInstallation: row.projectInstallation, amc: row.amc,
+      },
     }).afterClosed().subscribe((result) => {
-      if (!result?.procurementPersonId) return;
-      this._jobService.transferProcurementPerson(row._id, result.procurementPersonId).subscribe({
+      if (!result) return;
+      const { procurementPersonId, ...scope } = result;
+      this._jobService.transferProcurementPerson(row._id, procurementPersonId, scope).subscribe({
         next: (response) => {
           if (response.success) {
-            this.toast.success(row.procurementPerson ? 'Procurement person transferred successfully' : 'Procurement person assigned successfully');
+            this.toast.success('Job reallocated successfully');
             this.getJobs(true);
           }
         },
-        error: (error) => this.toast.error(error?.error?.message || 'Failed to transfer procurement person'),
+        error: (error) => this.toast.error(error?.error?.message || 'Failed to reallocate job'),
       });
     });
   }
 
   canTransfer(row: getJob): boolean {
-    // Supply jobs have a procurement owner to hand over, or to assign when allocation left it blank.
-    // Work In Progress too: the server still allows it while the job's PRs are New or In Progress, and says why when not.
-    return this.canTransferProcurementPerson && (!!row.procurementPerson || this.hasSupply(row)) &&
-      (row.allocateStatus === allocateStatus.OpenToWork || row.allocateStatus === allocateStatus.WorkInProgress);
-  }
-
-  private hasSupply(row: getJob): boolean {
-    return row.allocateType === 'Supply Only' || row.allocateType === 'Project With Supply';
+    // Only a job that has been allocated before can be reallocated (a new job gets Allocate instead); completed jobs get neither.
+    // The server says why when a purchase request has locked it.
+    return this.canTransferProcurementPerson && row.status !== JobStatus.completed && !!row.allocateType &&
+      (row.allocateStatus === allocateStatus.Pending || row.allocateStatus === allocateStatus.OpenToWork || row.allocateStatus === allocateStatus.WorkInProgress);
   }
 
   transferLabel(row: getJob): string {
@@ -687,6 +682,7 @@ export class JobListComponent {
           { type: 'field', label: 'Department', value: row.departmentDetails?.[0]?.departmentName ?? '' },
           { type: 'field', label: 'Last Updated', value: row.updatedDate ? (this.datePipe.transform(row.updatedDate, 'dd MMM yyyy') ?? '—') : '—' },
           { type: 'field', label: 'Procurement Person', value: this.fullName(row.procurementPerson) || '—', visible: !!row.procurementPerson },
+          { type: 'field', label: 'Allocated By', value: this.fullName(row.allocatedBy) || '—', visible: !!row.allocatedBy },
           { type: 'field', label: 'Hold Reason', value: row.holdReason || '—', noHover: true, visible: row.allocateStatus === 'On Hold' },
           { type: 'field', label: 'Lost Reason', value: row.lostReason || '—', noHover: true, visible: row.allocateStatus === 'Lost' },
         ],
