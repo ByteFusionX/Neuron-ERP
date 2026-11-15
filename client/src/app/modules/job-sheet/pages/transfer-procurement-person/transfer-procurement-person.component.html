@@ -1,16 +1,16 @@
 <app-form-modal-shell
   icon="user-round-check"
   tone="sky"
-  [title]="currentProcurementPersonName ? 'Transfer procurement' : 'Assign procurement'"
+  title="Reallocate job"
   contextLabel="Job"
   [context]="data?.jobLabel"
-  contextEmptyText="Choose the procurement owner."
+  contextEmptyText="Choose the job scope and procurement owner."
   formId="transfer-procurement-form"
   [invalid]="form.invalid && submitted"
-  invalidText="Select a procurement person"
-  [submitLabel]="currentProcurementPersonName ? 'Transfer' : 'Assign'"
+  invalidText="Select a scope and procurement person"
+  submitLabel="Reallocate"
   submitIcon="check"
-  submitShortcutVerb="transfer"
+  submitShortcutVerb="reallocate"
   (closed)="close()">
   <form id="transfer-procurement-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
     <div *ngIf="currentProcurementPersonName" class="current-person">
@@ -18,13 +18,43 @@
       <strong>{{ currentProcurementPersonName }}</strong>
     </div>
 
-    <app-sf-section title="Procurement" columns="1">
-      <app-sf-field [label]="currentProcurementPersonName ? 'New procurement person' : 'Procurement person'" [control]="form.controls.procurementPerson">
-        <app-sf-combobox
-          formControlName="procurementPerson"
-          [options]="employeeOptions"
-          placeholder="Select procurement person"></app-sf-combobox>
+    <app-sf-section title="Job scope" columns="1">
+      <app-sf-field label="What does this job cover?" hint="Select any that apply." [control]="form" [messages]="{ scopeRequired: 'Select at least one.' }">
+        <div class="space-y-3">
+          @for (o of scopes; track o.key) {
+            <div class="flex cursor-pointer items-center gap-3 rounded-lg border p-3.5 shadow-sm transition-colors"
+                 [ngClass]="form.controls[o.key].value
+                   ? o.card
+                   : 'border-gray-200 bg-white hover:border-gray-300 dark:border-erp-border-dark dark:bg-gray-800/60'"
+                 (click)="toggle(o.key)">
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                    [ngClass]="form.controls[o.key].value
+                      ? o.iconOn
+                      : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300'">
+                <span class="material-icons text-[16px]">{{ o.icon }}</span>
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ o.label }}</span>
+                <span class="block text-[11px] text-gray-500 dark:text-gray-400">{{ o.description }}</span>
+              </span>
+              <span (click)="$event.stopPropagation()">
+                <app-sf-checkbox [formControlName]="o.key"></app-sf-checkbox>
+              </span>
+            </div>
+          }
+        </div>
       </app-sf-field>
     </app-sf-section>
+
+    @if (form.controls.productDistribution.value) {
+      <app-sf-section title="Purchase" columns="1">
+        <app-sf-field label="Procurement person" hint="Handles the purchase request for this job." [control]="form.controls.procurementPerson">
+          <app-sf-combobox
+            formControlName="procurementPerson"
+            [options]="employeeOptions"
+            placeholder="Select procurement person"></app-sf-combobox>
+        </app-sf-field>
+      </app-sf-section>
+    }
   </form>
 </app-form-modal-shell>

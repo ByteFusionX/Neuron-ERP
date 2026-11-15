@@ -14,6 +14,13 @@ export enum allocateType {
   AMC = 'AMC'
 }
 
+/** The scope choices shared by the Allocate and Reallocate modals. */
+export const ALLOCATE_SCOPES = [
+  { key: 'productDistribution' as const, label: 'Product distribution', icon: 'local_shipping', card: 'border-emerald-300 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-500/10', iconOn: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300', description: 'Supply the materials to the customer' },
+  { key: 'projectInstallation' as const, label: 'Project installation', icon: 'construction', card: 'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10', iconOn: 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300', description: 'Install and commission on site' },
+  { key: 'amc' as const, label: 'AMC', icon: 'event_repeat', card: 'border-violet-300 bg-violet-50 dark:border-violet-500/40 dark:bg-violet-500/10', iconOn: 'bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300', description: 'Annual maintenance contract after handover' },
+] as const;
+
 export interface AllocateTypeResult {
   id: string;
   jobId: string;
@@ -81,11 +88,7 @@ export class AllocateTypeModalComponent implements OnInit {
   private dialogRef = inject<ModalRef<AllocateTypeResult>>(ModalRef);
   data = inject(MODAL_DATA, { optional: true }) as getJob | null;
 
-  readonly scopes = [
-    { key: 'productDistribution' as const, label: 'Product distribution', icon: 'local_shipping', card: 'border-emerald-300 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-500/10', iconOn: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300', description: 'Supply the materials to the customer' },
-    { key: 'projectInstallation' as const, label: 'Project installation', icon: 'construction', card: 'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10', iconOn: 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300', description: 'Install and commission on site' },
-    { key: 'amc' as const, label: 'AMC', icon: 'event_repeat', card: 'border-violet-300 bg-violet-50 dark:border-violet-500/40 dark:bg-violet-500/10', iconOn: 'bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300', description: 'Annual maintenance contract after handover' },
-  ];
+  readonly scopes = ALLOCATE_SCOPES;
 
   submitted = false;
   buyerOptions: SfOption[] = [];

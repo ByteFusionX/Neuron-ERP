@@ -142,6 +142,13 @@ export const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number, jobO
     },
     { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
     {
+        $lookup: {
+            from: 'employees', let: { aid: '$allocatedBy' }, as: 'allocatedBy',
+            pipeline: [{ $match: { $expr: { $eq: ['$_id', '$$aid'] } } }, { $project: { employeeId: 1, firstName: 1, lastName: 1 } }],
+        },
+    },
+    { $unwind: { path: '$allocatedBy', preserveNullAndEmptyArrays: true } },
+    {
         $addFields: {
             departmentName: { $ifNull: [{ $arrayElemAt: ['$departmentDetails.departmentName', 0] }, ''] },
             salesPersonName: {
@@ -293,7 +300,10 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
 
         // Tab badges: jobs per allocate status, scoped by access only.
         const { allocateStatus: _ignored, ...matchWithoutStatus } = matchFilters;
-        const statusCounts = jobModel.aggregate([
+        // Callers that only need a badge number (countOnly) or never read the per-status totals (skipStatusCounts) skip those queries.
+        const countOnly = req.body.countOnly === true;
+        const skipStatusCounts = countOnly || req.body.skipStatusCounts === true;
+        const statusCounts = skipStatusCounts ? Promise.resolve([]) : jobModel.aggregate([
             ...jobBasePipeline(salesPerson, qatarUsdRate, ownMatch(false)),
             ...withoutPiStages,
             { $match: { ...accessFilter, ...matchWithoutStatus } },
@@ -301,7 +311,7 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
         ]);
 
         const [jobData, jobTotal, statusRows] = await Promise.all([
-            jobModel.aggregate([
+            countOnly ? Promise.resolve([]) : jobModel.aggregate([
                 ...baseStages,
                 { $sort: gridQuery.sort },
                 { $skip: skipNum },
@@ -409,6 +419,8 @@ export const totalJob = async (req: Request, res: Response, next: NextFunction) 
                 $lookup: { from: 'employees', localField: 'procurementPerson', foreignField: '_id', as: 'procurementPerson' }
             },
             { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
+            { $lookup: { from: 'employees', localField: 'allocatedBy', foreignField: '_id', as: 'allocatedBy' } },
+            { $unwind: { path: '$allocatedBy', preserveNullAndEmptyArrays: true } },
             {
                 $match: accessFilter
             },
@@ -445,6 +457,8 @@ const JOB_STATUS_TAB: Record<string, string> = {
     [jobStatus.Invoiced]: allocateStatus.WorkInProgress,
     [jobStatus.Completed]: allocateStatus.Completed,
     [jobStatus.OnHold]: allocateStatus.OnHold,
+    // Not a job status of its own: lifts a hold and puts the job back in the Pending tab.
+    [allocateStatus.Pending]: allocateStatus.Pending,
 };
 
 export const updateJobStatus = async (req: Request, res: Response, next: NextFunction) => {
@@ -466,22 +480,28 @@ export const updateJobStatus = async (req: Request, res: Response, next: NextFun
         if (job.status === jobStatus.Completed) {
             return res.status(409).json({ success: false, message: `Status can't be changed while the job is ${job.status}` });
         }
+        const backToPending = status === allocateStatus.Pending;
+        if (backToPending && job.allocateStatus !== allocateStatus.OnHold) {
+            return res.status(409).json({ success: false, message: 'Only a job that is on hold can be moved back to Pending' });
+        }
         if (job.status === status && job.allocateStatus === targetTab) {
             return res.status(200).json({ success: true, status, allocateStatus: targetTab });
         }
+        // The job's own status stays Work In Progress when it returns from hold, as when an advance payment is confirmed.
+        const newStatus = backToPending ? jobStatus.WorkInProgress : status;
 
         const holdType = req.body.holdType === 'advance-payment' ? 'advance-payment' : 'other';
         const holdNote = String(req.body.note ?? '').trim();
         const holdReason = holdNote ? `${reason} — ${holdNote}` : reason;
         await jobModel.updateOne({ _id: job._id }, status === jobStatus.OnHold
             ? { $set: { status, allocateStatus: targetTab, holdReason, holdType, updatedDate: new Date() } }
-            : { $set: { status, allocateStatus: targetTab, updatedDate: new Date() }, $unset: { holdReason: '', holdType: '' } });
+            : { $set: { status: newStatus, allocateStatus: targetTab, updatedDate: new Date() }, $unset: { holdReason: '', holdType: '' } });
 
         await logAudit(req, {
             entityType: 'job', entityId: job._id, entityLabel: job.jobId, action: 'status-changed',
             summary: `Status changed to ${status}${reason ? ` — ${status === jobStatus.OnHold ? holdReason : reason}` : ''}`,
             changes: [
-                { label: 'Status', from: String(job.status), to: String(status) },
+                { label: 'Status', from: String(job.status), to: String(newStatus) },
                 ...(job.allocateStatus !== targetTab ? [{ label: 'Allocation status', from: String(job.allocateStatus), to: targetTab }] : []),
                 ...(reason ? [{ label: 'Reason', to: status === jobStatus.OnHold ? holdReason : reason }] : []),
             ],
@@ -1119,6 +1139,11 @@ export const markJobLost = async (req: Request, res: Response, next: NextFunctio
 export const transferProcurementPerson = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { jobId, procurementPersonId } = req.body;
+        // Reallocation can also change the job scope (same three choices as Allocate); omit all three to change the buyer only.
+        const scopeGiven = ['productDistribution', 'projectInstallation', 'amc'].some((k) => typeof req.body[k] === 'boolean');
+        const productDistribution = req.body.productDistribution === true;
+        const projectInstallation = req.body.projectInstallation === true;
+        const amc = req.body.amc === true;
 
         const tokenData = req.user;
         const employee = await getEmployeeData(tokenData);
@@ -1130,7 +1155,8 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
         }
 
         const privileges = employee.category?.privileges;
-        if (!privileges?.jobSheet?.transferProcurementPerson) {
+        const isSuperAdmin = /^superadmin$/i.test(String((employee.category as any)?.role ?? ''));
+        if (!isSuperAdmin && !privileges?.jobSheet?.transferProcurementPerson) {
             return res.status(403).json({
                 success: false,
                 message: "You do not have permission to transfer procurement person",
@@ -1138,11 +1164,16 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
         }
 
         // Validate required fields
-        if (!jobId || !procurementPersonId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Job ID and procurement person ID are required'
-            });
+        if (!jobId) {
+            return res.status(400).json({ success: false, message: 'Job ID is required' });
+        }
+        if (scopeGiven && !productDistribution && !projectInstallation && !amc) {
+            return res.status(400).json({ success: false, message: 'Select at least one of Product distribution, Project installation or AMC' });
+        }
+        // A buyer is needed unless the new scope has no product distribution.
+        const needsBuyer = !scopeGiven || productDistribution;
+        if (needsBuyer && !procurementPersonId) {
+            return res.status(400).json({ success: false, message: 'Job ID and procurement person ID are required' });
         }
 
         const existingJob = await jobModel.findById(jobId);
@@ -1153,22 +1184,27 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
             });
         }
 
-        if (!ObjectId.isValid(String(procurementPersonId))) {
+        if (needsBuyer && !ObjectId.isValid(String(procurementPersonId))) {
             return res.status(400).json({ success: false, message: 'Invalid employee id' });
         }
         if (existingJob.isDeleted) {
             return res.status(404).json({ success: false, message: 'Job not found' });
         }
         // Saving the first PR moves the job to Work In Progress; the PR status below decides if reassignment is still allowed.
-        if (existingJob.allocateStatus !== allocateStatus.OpenToWork && existingJob.allocateStatus !== allocateStatus.WorkInProgress) {
-            return res.status(409).json({ success: false, message: 'Procurement can only be transferred while the job is Open To Work or Work In Progress' });
+        if (existingJob.allocateStatus !== allocateStatus.Pending && existingJob.allocateStatus !== allocateStatus.OpenToWork && existingJob.allocateStatus !== allocateStatus.WorkInProgress) {
+            return res.status(409).json({ success: false, message: 'Procurement can only be reallocated while the job is Pending, Open To Work or Work In Progress' });
         }
-        if (existingJob.procurementPerson?.toString() === String(procurementPersonId)) {
-            return res.status(400).json({ success: false, message: 'That employee is already the procurement person for this job' });
+        const sameBuyer = !!procurementPersonId && existingJob.procurementPerson?.toString() === String(procurementPersonId);
+        const sameScope = scopeGiven && !!existingJob.productDistribution === productDistribution
+            && !!existingJob.projectInstallation === projectInstallation && !!existingJob.amc === amc;
+        if (needsBuyer && sameBuyer && (!scopeGiven || sameScope)) {
+            return res.status(400).json({ success: false, message: scopeGiven ? 'Nothing to change: same scope and procurement person' : 'That employee is already the procurement person for this job' });
         }
-        const newPerson = await findPurchaseBuyer(String(procurementPersonId));
-        if (!newPerson) {
-            return res.status(400).json({ success: false, message: 'Selected employee cannot be assigned purchase work' });
+        if (needsBuyer) {
+            const newPerson = await findPurchaseBuyer(String(procurementPersonId));
+            if (!newPerson) {
+                return res.status(400).json({ success: false, message: 'Selected employee cannot be assigned purchase work' });
+            }
         }
 
         // Reassignment is allowed only while the job's PRs are New or In Progress, before anything goes for approval.
@@ -1187,7 +1223,14 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
         const updateJob = await jobModel.findByIdAndUpdate(
             { _id: jobId },
             {
-                procurementPerson: procurementPersonId,
+                ...(needsBuyer ? { procurementPerson: procurementPersonId } : {}),
+                ...(scopeGiven ? {
+                    productDistribution, projectInstallation, amc,
+                    allocateType: productDistribution && projectInstallation ? allocateType.ProjectWithSupply
+                        : productDistribution ? allocateType.SupplyOnly
+                        : projectInstallation ? allocateType.ProjectsWithOutSupply
+                        : allocateType.AMC,
+                } : {}),
                 allocatedBy: employee._id, allocatedAt: new Date(),
                 updatedDate: new Date()
             },
@@ -1204,15 +1247,25 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
         }
 
         // Open PRs follow the job to the new assignee.
-        await PurchaseRequest.updateMany(
-            { jobId: existingJob._id, isDeleted: false, status: { $in: [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress] } },
-            { $set: { procurementPerson: procurementPersonId, allocatedBy: employee._id, allocatedAt: new Date() } }
-        );
+        if (needsBuyer) {
+            await PurchaseRequest.updateMany(
+                { jobId: existingJob._id, isDeleted: false, status: { $in: [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress] } },
+                { $set: { procurementPerson: procurementPersonId, allocatedBy: employee._id, allocatedAt: new Date() } }
+            );
+        }
 
-        const newProcurementId = procurementPersonId.toString();
+        const newProcurementId = needsBuyer ? procurementPersonId.toString() : (existingJob.procurementPerson?.toString() ?? '');
         const previousProcurementId = existingJob.procurementPerson?.toString();
-        await logAudit(req, { entityType: 'job', entityId: updateJob._id, entityLabel: updateJob.jobId, action: 'procurement-transferred', summary: 'Procurement person transferred', changes: [{ label: 'Procurement person', from: await employeeLabel(previousProcurementId), to: await employeeLabel(newProcurementId) }] });
-        if (newProcurementId !== previousProcurementId) {
+        const scopeLabel = [productDistribution && 'Product distribution', projectInstallation && 'Project installation', amc && 'AMC'].filter(Boolean).join(' + ');
+        await logAudit(req, {
+            entityType: 'job', entityId: updateJob._id, entityLabel: updateJob.jobId, action: 'procurement-transferred',
+            summary: scopeGiven ? `Reallocated: ${scopeLabel}` : 'Procurement person transferred',
+            changes: [
+                ...(scopeGiven ? [{ label: 'Scope', from: existingJob.allocateType || '—', to: scopeLabel }] : []),
+                ...(needsBuyer ? [{ label: 'Procurement person', from: await employeeLabel(previousProcurementId), to: await employeeLabel(newProcurementId) }] : []),
+            ],
+        });
+        if (needsBuyer && newProcurementId !== previousProcurementId) {
             const socket = req.app.get('io') as Server;
             void createNotificationWithPrivileges(
                 {
@@ -1239,7 +1292,7 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
 
         res.status(200).json({
             success: true,
-            message: 'Procurement person transferred successfully',
+            message: scopeGiven ? 'Job reallocated successfully' : 'Procurement person transferred successfully',
             data: updateJob
         });
 

@@ -79,7 +79,7 @@ const holdChoices = (allowAdvance: boolean) => ({
   ],
 });
 /** Statuses set by hand, named by allocate status (values match the matching JobStatus where one exists). */
-const MANUAL_STATUSES: readonly string[] = [allocateStatus.OnHold, allocateStatus.Completed, LOST_STATUS];
+const MANUAL_STATUSES: readonly string[] = [allocateStatus.Pending, allocateStatus.OnHold,allocateStatus.Completed, LOST_STATUS];
 const jobStatusLabel = (v: unknown): string => (v === JobStatus.WorkInProgress ? 'In Progress' : v ? String(v) : '—');
 
 @Component({
@@ -488,7 +488,7 @@ export class ViewJobComponent implements OnInit {
   }
 
   get canAllocate(): boolean {
-    return !!this.job && this.canAllocateJobs && this.job.allocateStatus === allocateStatus.Pending;
+    return !!this.job && this.canAllocateJobs && this.job.status !== JobStatus.completed && !this.job.allocateType && this.job.allocateStatus === allocateStatus.Pending;
   }
 
   /** Only users with the allocate/reallocate privilege can hold; not an already held, paid, completed or lost job. */
@@ -511,7 +511,8 @@ export class ViewJobComponent implements OnInit {
         // Allocate status: Pending / In Progress follow allocation, so only these three are set by hand.
         currentStatus: job.allocateStatus,
         // Lost is saved through the mark-lost flow.
-        statuses: this.canMarkLost ? MANUAL_STATUSES : MANUAL_STATUSES.filter((s) => s !== LOST_STATUS),
+        // Pending is offered only to lift a hold, which also drops the job from Finance > Invoices > New Jobs.
+        statuses: MANUAL_STATUSES.filter((s) => (s !== LOST_STATUS || this.canMarkLost) && (s !== allocateStatus.Pending || job.allocateStatus === allocateStatus.OnHold)),
         formatStatus: (v: string) => ALLOCATE_STATUS_LABELS[v] ?? v,
         requireReasonFor: [JobStatus.onHold, LOST_STATUS],
         reasonLabels: {
@@ -519,6 +520,7 @@ export class ViewJobComponent implements OnInit {
           [LOST_STATUS]: { label: 'Reason', placeholder: 'Why was this job lost?' },
         },
         warnings: {
+          [allocateStatus.Pending]: 'The hold is lifted and the job returns to the Pending tab. It leaves Finance > Invoices > New Jobs.',
           [JobStatus.completed]: 'The job moves to the Completed tab.',
           [JobStatus.onHold]: 'The job moves to the On Hold tab. Saving purchase requests will not resume it.',
           [LOST_STATUS]: 'The quotation and enquiry behind this job are marked lost too, and its open purchase requests, purchase orders, delivery notes and invoices are cancelled.',

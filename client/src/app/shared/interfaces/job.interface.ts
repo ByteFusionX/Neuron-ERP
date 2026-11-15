@@ -16,6 +16,10 @@ export interface filterJob {
     piState?: 'exists' | 'none' | 'inProcess' | 'received' | 'completed';
     /** With On Hold among allocateStatuses, keeps only the held jobs of this type. */
     onHoldType?: 'advance-payment' | 'other';
+    /** Returns only `total`/`totalLpo`: no rows and no per-status totals. */
+    countOnly?: boolean;
+    /** Skips the per-status totals (`statusTotals`/`viewCounts`) when the caller doesn't use them. */
+    skipStatusCounts?: boolean;
     sortKey?: string | null;
     sortDir?: 'asc' | 'desc' | null;
     filters?: { key: string; op: string; value?: unknown }[];
@@ -44,12 +48,20 @@ export interface getJob {
     supplierDiscounts?:any;
     allocateStatus: allocateStatus
     allocateType: allocateType
+    productDistribution?: boolean;
+    projectInstallation?: boolean;
+    amc?: boolean;
     hasPurchaseRequest?: boolean;
     /** A proforma invoice exists for the job and its advance payment is confirmed. */
     advancePaid?: boolean;
     comment?: string;
     lpoValue?: number;
     procurementPerson?: {
+        _id: string;
+        firstName: string;
+        lastName: string;
+    };
+    allocatedBy?: {
         _id: string;
         firstName: string;
         lastName: string;

@@ -3566,9 +3566,8 @@ export const getConvertibleJobs = async (req: Request, res: Response, next: Next
         const jobs = await jobModel.aggregate([
             {
                 $match: {
-                    isDeleted: { $ne: true },
-                    allocateStatus: allocateStatus.OpenToWork
-                    // procurementPerson filter removed for now
+                    // Any job without a purchase request can get one, whatever its job or allocation status.
+                    isDeleted: { $ne: true }
                 }
             },
             {

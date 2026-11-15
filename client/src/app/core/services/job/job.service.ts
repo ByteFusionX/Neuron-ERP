@@ -80,10 +80,11 @@ export class JobService {
     return this.http.get<any>(`${this.apiUrl}/job/technical`)
   }
 
-  transferProcurementPerson(jobId: string, procurementPersonId: string): Observable<any> {
+  transferProcurementPerson(jobId: string, procurementPersonId?: string, scope?: { productDistribution: boolean; projectInstallation: boolean; amc: boolean }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/job/transferProcurementPerson`, {
       jobId,
-      procurementPersonId
+      ...(procurementPersonId ? { procurementPersonId } : {}),
+      ...(scope ?? {})
     }, { context: context() })
   }
 
