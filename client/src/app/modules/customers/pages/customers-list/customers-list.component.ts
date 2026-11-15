@@ -124,7 +124,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this._route.queryParams.subscribe((params) => {
         this.page = params['page'] ? parseInt(params['page']) : 1;
-        this.row = params['row'] ? parseInt(params['row']) : 10;
+        this.row = params['row'] ? parseInt(params['row']) : 15;
         if (this.grid) this.grid.page = this.page;
         this.selectedEmployee = params['employee'] || null;
         this.searchQuery = params['search'] || '';
@@ -290,7 +290,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       relativeTo: this._route,
       queryParams: {
         page: this.page !== 1 ? this.page : null,
-        row: this.row !== 10 ? this.row : null,
+        row: this.row !== 15 ? this.row : null,
         employee: this.selectedEmployee,
         search: this.searchQuery ? this.searchQuery : null,
         create: null,

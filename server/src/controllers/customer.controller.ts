@@ -195,6 +195,8 @@ export const getAllCustomers = async (req: Request, res: Response, next: NextFun
 export const getFilteredCustomers = async (req: Request, res: Response, next: NextFunction) => {
     try {
         let { page, row, createdBy, access, userId, search, creditStatus, status } = req.body;
+        page = Number(page) > 0 ? Number(page) : 1;
+        row = Number(row) > 0 ? Number(row) : 15;
         let skipNum: number = (page - 1) * row;
         let isCreatedBy = createdBy == null ? true : false;
 
@@ -309,6 +311,8 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
             {
                 $match: filters,
             },
+            // Newest first, then page: sorting after skip/limit only reordered each page.
+            { $sort: { createdDate: -1, _id: -1 } },
             {
                 $skip: skipNum,
             },
@@ -427,7 +431,7 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
                 },
             },
             {
-                $sort: { createdDate: -1 },
+                $sort: { createdDate: -1, _id: -1 },
             },
         ]);
 
