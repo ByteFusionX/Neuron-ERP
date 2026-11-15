@@ -10,6 +10,7 @@ import Category from '../models/category.model';
 import Workflow from '../models/workflow.model';
 import { resolveCurrentAssignmentStep, rejectUnassignedPresale, stageRoleIds } from './presaleAssignment.service';
 import { notify } from './notify.service';
+import { filterEmployeesByPrivilege } from '../controllers/notification.controller';
 import { logAudit } from './audit.service';
 import { processOutbox } from './outbox.service';
 import { runExclusive } from './cronLock.service';
@@ -585,6 +586,70 @@ const processOverduePurchaseFollowUps = async () => {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Days a quote may sit with presales (or with a returned estimate) before the daily reminders start. */
+const QUOTE_PRESALE_REMINDER_DAYS = 1;
+
+/**
+ * Daily reminders for the quote → presale update flow. While the quote is In Presales, whoever holds the job (or, when it
+ * is still unassigned, everyone who can assign it) is reminded; once the estimate is back, the quote owner is reminded to
+ * accept it or send it back. Quote-origin jobs never touch the enquiry status, so the assignment ladder does not see them.
+ * One reminder per quote per calendar day, deduplicated by key.
+ */
+const processQuotePresaleReminders = async () => {
+    try {
+        const today = new Date().toISOString().slice(0, 10);
+        const threshold = new Date(Date.now() - QUOTE_PRESALE_REMINDER_DAYS * DAY_MS);
+        const quotes: any[] = await Quotation.find({
+            isDeleted: { $ne: true },
+            status: { $in: [quoteStatus.InPresales, quoteStatus.Estimated] },
+        }).select('quoteId status createdBy enqId presaleRevision').lean();
+
+        for (const quote of quotes) {
+            const enquiry: any = quote.enqId
+                ? await Enquiry.findOne({ _id: quote.enqId, 'preSale.origin': 'quote', 'preSale.quoteId': quote._id })
+                    .select('enquiryId reAssigned preSale.presalePerson preSale.createdDate').lean()
+                : null;
+            if (!enquiry) continue;
+            const since = quote.status === quoteStatus.Estimated ? quote.presaleRevision?.returnedAt : (enquiry.preSale?.createdDate ?? quote.presaleRevision?.requestedAt);
+            if (!since || new Date(since) > threshold) continue;
+            const waitedDays = Math.max(1, Math.floor((Date.now() - new Date(since).getTime()) / DAY_MS));
+
+            if (quote.status === quoteStatus.Estimated) {
+                await notify({
+                    type: 'EnquiryEstimationReady',
+                    referenceModel: 'Enquiry',
+                    title: 'Updated estimate waiting',
+                    message: `The updated estimate for quote ${quote.quoteId} has been waiting ${waitedDays} day${waitedDays === 1 ? '' : 's'}. Accept it to create a new revision, or send it back.`,
+                    recipients: [quote.createdBy],
+                    referenceId: enquiry._id,
+                    additionalData: { enquiryId: enquiry._id.toString(), quoteId: String(quote._id) },
+                    dedupeKey: `quote-presale-owner-reminder:${quote._id}:${quote.presaleRevision?.round}:${today}`,
+                });
+                continue;
+            }
+
+            const holder = String(enquiry.reAssigned || enquiry.preSale?.presalePerson || '');
+            const recipients = holder
+                ? [holder]
+                : await filterEmployeesByPrivilege({ privilegeKey: 'assignedJob', checkFunction: (privileges) => privileges.assignedJob?.assign === true });
+            await notify({
+                type: 'AssignedJob',
+                referenceModel: 'Enquiry',
+                title: holder ? 'Presale update overdue' : 'Presale update not assigned',
+                message: holder
+                    ? `The estimate update for quote ${quote.quoteId} (enquiry ${enquiry.enquiryId}) has been waiting ${waitedDays} day${waitedDays === 1 ? '' : 's'}.`
+                    : `Quote ${quote.quoteId} (enquiry ${enquiry.enquiryId}) has been waiting ${waitedDays} day${waitedDays === 1 ? '' : 's'} for a presale assignee.`,
+                recipients,
+                referenceId: enquiry._id,
+                additionalData: { enquiryId: enquiry._id.toString() },
+                dedupeKey: `quote-presale-reminder:${quote._id}:${quote.presaleRevision?.round}:${today}`,
+            });
+        }
+    } catch (error) {
+        console.error('Quote presale reminder error:', error.message);
+    }
+};
+
 /** The credit days in a payment-terms text such as "Net 30" or "30 days"; null when it states none. */
 const paymentTermDays = (terms: unknown): number | null => {
     const days = String(terms ?? '').match(/\d+/);
@@ -720,6 +785,7 @@ const startCronJob = () => {
             await processOverdueQuoteFollowUps();
             await processOverduePurchaseFollowUps();
             await processOverdueInvoices();
+            await processQuotePresaleReminders();
             await expireLapsedReservations();
         }
         await processOutbox();

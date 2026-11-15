@@ -1,3 +1,4 @@
+import { ScrollTabsComponent } from 'src/app/shared/components/scroll-tabs/scroll-tabs.component';
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, TemplateRef, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { HttpEventType } from '@angular/common/http';
@@ -35,19 +36,18 @@ import { DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
 @Component({
   selector: 'app-quotation-side-panel',
   standalone: true,
-  imports: [CommonModule, ActionButtonComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailPanelIconComponent, FollowUpPanelComponent],
+  imports: [CommonModule, ActionButtonComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailPanelIconComponent, FollowUpPanelComponent, ScrollTabsComponent],
   providers: [DatePipe, NumberFormatterPipe],
   template: `
-    <nav role="tablist"
-      class="qsp-tabs sticky top-0 z-10 flex h-11 shrink-0 flex-nowrap items-center gap-x-4 overflow-x-auto overflow-y-hidden border-b border-gray-300 bg-white px-5 dark:border-neutral-700 dark:bg-[#111111]">
-      <button *ngFor="let t of tabs" type="button" role="tab" (click)="activeTab = t.id"
-        [attr.aria-selected]="activeTab === t.id"
-        class="-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 py-2.5 text-sm transition-colors"
-        [ngClass]="activeTab === t.id ? 'border-violet-600 dark:border-gray-100 text-gray-900 dark:text-gray-100 font-medium' : 'border-transparent text-gray-500 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'">
-        <app-dp-icon *ngIf="t.icon && (tabs.length <= 5 || activeTab === t.id)" [name]="t.icon" size="w-3.5 h-3.5"></app-dp-icon>
-        {{ t.label }}
-      </button>
-    </nav>
+    <app-scroll-tabs class="qsp-tabbar sticky top-0 z-10 h-11 shrink-0 border-b border-gray-300 bg-white px-2 dark:border-neutral-700 dark:bg-[#111111]">
+        <button *ngFor="let t of tabs" type="button" role="tab" (click)="activeTab = t.id"
+          [attr.aria-selected]="activeTab === t.id"
+          class="flex h-full shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 text-sm transition-colors"
+          [ngClass]="activeTab === t.id ? 'border-violet-600 dark:border-gray-100 text-gray-900 dark:text-gray-100 font-medium' : 'border-transparent text-gray-500 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'">
+          <app-dp-icon *ngIf="t.icon && (tabs.length <= 5 || activeTab === t.id)" [name]="t.icon" size="w-3.5 h-3.5"></app-dp-icon>
+          {{ t.label }}
+        </button>
+    </app-scroll-tabs>
 
     <div class="qsp-body min-h-0 flex-1 space-y-5 overflow-y-auto p-5" role="tabpanel">
       <ng-container [ngSwitch]="activeTab">
@@ -113,12 +113,14 @@ import { DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
     .qsp-tabs::-webkit-scrollbar-thumb, .qsp-body::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 9999px; }
     :host-context(html.dark) .qsp-tabs, :host-context(html.dark) .qsp-body { scrollbar-color: #404040 transparent; }
     :host-context(html.dark) .qsp-tabs::-webkit-scrollbar-thumb, :host-context(html.dark) .qsp-body::-webkit-scrollbar-thumb { background: #404040; }
+    @media (max-width: 639px) { .qsp-body { padding: 1rem; } }
     .qsp-footer { flex-shrink: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; border-top: 1px solid #f3f4f6; background: #fff; }
     .qsp-footer:not(:has(button, a)) { display: none; }
     :host-context(html.dark) .qsp-footer { border-top-color: #262626; background: #111111; }
   `],
 })
 export class QuotationSidePanelComponent implements OnChanges {
+
   @Input({ required: true }) quote!: Quotatation;
   /** The page owns the LPO upload flow (modal, upload, reload); the panel only asks for it. */
   @Output() uploadLpo = new EventEmitter<void>();

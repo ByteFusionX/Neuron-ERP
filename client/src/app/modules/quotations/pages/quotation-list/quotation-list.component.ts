@@ -10,7 +10,7 @@ import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { StatusChangeModalComponent, StatusChangeResult } from 'src/app/shared/components/status-change-modal/status-change-modal.component';
 import { canSelectQuoteStatus, quoteStatusModalData } from '../status-update-modal/quote-status-modal.config';
-import { getQuotation, Quotatation, QuoteStatus, quoteStatusLabel } from 'src/app/shared/interfaces/quotation.interface';
+import { getQuotation, Quotatation, QuoteStatus, quoteStatusLabel, isPresaleLocked, canRequestPresaleUpdate, canCancelPresaleRequest } from 'src/app/shared/interfaces/quotation.interface';
 import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/follow-up-create-modal.component';
 import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/follow-up-panel/follow-up-panel.component';
 import { FollowUpViewModel, followUpCellClass, followUpViewer } from 'src/app/shared/utils/follow-up.util';
@@ -52,6 +52,7 @@ import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { HttpEventType } from '@angular/common/http';
 import { environment } from 'src/environments/environment';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { ViewEstimationComponent } from 'src/app/modules/presales/pages/view-estimation/view-estimation.component';
 import { QuoteFormDrawerComponent } from '../quote-form-drawer/quote-form-drawer.component';
 import { getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { RevisionHistoryModalComponent, RevisionHistoryModalData } from 'src/app/shared/components/revision-history-modal/revision-history-modal.component';
@@ -76,7 +77,7 @@ const PDF_STATUSES: QuoteStatus[] = [
     templateUrl: './quotation-list.component.html',
     styleUrls: ['./quotation-list.component.css'],
     providers: [NumberFormatterPipe, DatePipe],
-    imports: [ViewToggleComponent, NgIf, NgClass, NgSwitch, NgSwitchCase, DatePipe, AsyncPipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent, FollowUpPanelComponent, DetailTimelineComponent]
+    imports: [ViewEstimationComponent, ViewToggleComponent,NgIf, NgClass, NgSwitch, NgSwitchCase, DatePipe, AsyncPipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent, FollowUpPanelComponent, DetailTimelineComponent]
 })
 export class QuotationListComponent implements AfterViewInit {
   @ViewChild('grid') grid!: DataGridComponent<Quotatation>;
@@ -94,7 +95,7 @@ export class QuotationListComponent implements AfterViewInit {
   userId: string | undefined = ''
 
   quoteStatuses = Object.values(QuoteStatus);
-  selectableQuoteStatuses = Object.values(QuoteStatus).filter(status => status !== QuoteStatus.Expired);
+  selectableQuoteStatuses = Object.values(QuoteStatus).filter(status => status !== QuoteStatus.Expired && status !== QuoteStatus.InPresales && status !== QuoteStatus.Estimated);
   statusOrder = [
     QuoteStatus.Draft,
     QuoteStatus.WorkInProgress,
@@ -112,6 +113,7 @@ export class QuotationListComponent implements AfterViewInit {
   rowActions: DataGridRowAction<Quotatation>[] = [];
   views: DataGridView<Quotatation>[] = [
     { id: 'all', label: 'All' },
+    { id: 'in-presales', label: 'In Presales' },
     { id: 'pending-deal', label: 'Pending Deal', filters: [{ id: 1, key: 'dealStatus', op: 'eq', value: 'pending' }] },
     { id: 'rejected-deal', label: 'Rejected Deal', filters: [{ id: 1, key: 'dealStatus', op: 'eq', value: 'rejected' }] },
     { id: 'ready-for-job', label: 'Ready For Job', filters: [{ id: 1, key: 'dealStatus', op: 'eq', value: 'approved' }] },
@@ -168,6 +170,8 @@ export class QuotationListComponent implements AfterViewInit {
     [QuoteStatus.Won]: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
     [QuoteStatus.Lost]: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
     Expired: 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700',
+    [QuoteStatus.InPresales]: 'bg-violet-50 text-violet-700 ring-violet-200 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900 dark:border-violet-900',
+    [QuoteStatus.Estimated]: 'bg-teal-50 text-teal-700 ring-teal-200 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:ring-teal-900 dark:border-teal-900',
   };
   readonly dealStatusBadgeClasses: Record<string, string> = {
     pending: 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
@@ -424,6 +428,19 @@ export class QuotationListComponent implements AfterViewInit {
         hidden: (r) => this.isCreatorOnlyView(r) || !(r.status === 'Won' && r.lpoFiles?.length && (r.dealData as any)?.status === 'rejected'),
       },
       {
+        // Hidden (never disabled) when the quote is Won/Lost, already with presales, or its deal sheet is pending/approved.
+        id: 'requestPresale', label: 'Request Presale Update', icon: 'refresh', quick: true,
+        hidden: (r) => this.isCreatorOnlyView(r) || !this.isQuoteOwnerOrAdmin(r) || !canRequestPresaleUpdate(r),
+      },
+      {
+        id: 'cancelPresale', label: 'Cancel Presale Request', icon: 'refresh',
+        hidden: (r) => !canCancelPresaleRequest(r) || !this.isQuoteOwnerOrAdmin(r),
+      },
+      {
+        id: 'viewEstimation', label: 'View Estimation', icon: 'clipboardCheck', quick: true,
+        hidden: (r) => r.status !== QuoteStatus.Estimated || !this.isQuoteOwnerOrAdmin(r),
+      },
+      {
         id: 'updateStatus', label: 'Update Status', icon: 'refresh',
         hidden: (r) => this.isCreatorOnlyView(r) || r.status === 'Expired' || this.isStatusLocked(r),
       },
@@ -498,6 +515,7 @@ export class QuotationListComponent implements AfterViewInit {
   }
 
   private isEditLocked(r: Quotatation): boolean {
+    if (isPresaleLocked(r)) return true;
     if ((r.dealData as any)?.status?.toLowerCase() === 'approved') return true;
     // A rejected deal reopens the quote for its owner or a Super Admin only.
     if (this.isDealRejected(r)) return !(this.isSuperAdmin || this.personId(r.createdBy) === this.userId);
@@ -543,6 +561,15 @@ export class QuotationListComponent implements AfterViewInit {
         break;
       case 'downloadStampedPdf':
         this.downloadPdf(row, true);
+        break;
+      case 'requestPresale':
+        void this.onRequestPresale(row);
+        break;
+      case 'cancelPresale':
+        void this.onCancelPresale(row);
+        break;
+      case 'viewEstimation':
+        this.estimateQuote = row;
         break;
       case 'convertToDealSheet':
       case 'resubmitDealSheet':
@@ -693,6 +720,7 @@ export class QuotationListComponent implements AfterViewInit {
       quoteStatus: this.selectedQuoteStatus,
       dealStatus: this.selectedDealStatus,
       followUpView: this.activeViewId.startsWith('fu-') ? this.activeViewId.slice(3) : null,
+      presaleView: this.activeViewId === 'in-presales',
       access: access,
       userId: userId
     };
@@ -719,7 +747,7 @@ export class QuotationListComponent implements AfterViewInit {
   private loadSub?: Subscription;
 
   isStatusLocked(element: Quotatation): boolean {
-    return !!element.dealData?.status && element.dealData.status !== 'rejected';
+    return isPresaleLocked(element) || !!element.dealData?.status && element.dealData.status !== 'rejected';
   }
 
   canSelectStatus(currentStatus: QuoteStatus, targetStatus: QuoteStatus): boolean {
@@ -1419,6 +1447,16 @@ export class QuotationListComponent implements AfterViewInit {
           ...(row.revision ? [{ type: 'field' as const, label: 'Revision', value: `Rev ${row.revision}`, noHover: true }] : []),
         ],
       },
+      ...(isPresaleLocked(row) ? [{
+        title: 'Presale update',
+        columns: '2' as const,
+        fields: [
+          { type: 'field' as const, label: 'State', value: row.status === QuoteStatus.Estimated ? 'Estimate returned. Accept it to create a new revision, or send it back.' : 'With presales. The quote is locked until the estimate comes back.', noHover: true },
+          { type: 'field' as const, label: 'Requested', value: row.presaleRevision?.note || '—', noHover: true },
+          { type: 'field' as const, label: 'Presale note', value: row.presaleRevision?.proposedEstimate?.presaleNote || '—', noHover: true, visible: row.status === QuoteStatus.Estimated },
+          { type: 'field' as const, label: 'Deal sheet', value: 'Under revision. It is invalidated when the new estimate is accepted.', noHover: true, visible: !!row.presaleRevision?.dealUnderRevision },
+        ],
+      }] : []),
       {
         title: 'Overview',
         fields: [
@@ -1449,6 +1487,77 @@ export class QuotationListComponent implements AfterViewInit {
 
   private personId(person?: { _id?: string } | string): string {
     return typeof person === 'string' ? person : person?._id ?? '';
+  }
+
+  /** Only the quote owner (or a Super Admin) works the presale-update flow. */
+  private isQuoteOwnerOrAdmin(row: Quotatation): boolean {
+    return this.isSuperAdmin || (!!this.userId && this.personId(row.createdBy) === this.userId);
+  }
+
+  async onRequestPresale(row: Quotatation): Promise<void> {
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Request presale update',
+      message: 'Presales will rework the estimate for this quote. The quote is locked until they send it back.',
+      details: [{ label: 'Quote', value: row.quoteId ?? '' }, { label: 'Current status', value: row.status }],
+      reason: true,
+      reasonLabel: 'What should presales change?',
+      confirmLabel: 'Send to presales',
+    });
+    if (!confirmed || !reason) return;
+    this._enquiryService.requestQuotePresale(row._id as string, reason).subscribe({
+      next: () => { this.toaster.success('Quote sent to presales'); this.getQuotations(); },
+      error: (e) => this.toaster.error(e?.error?.message || 'Failed to send the quote to presales.'),
+    });
+  }
+
+  async onCancelPresale(row: Quotatation): Promise<void> {
+    const { confirmed } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Cancel presale request',
+      message: 'The quote returns to its previous status. This only works while presales has not started on the estimate.',
+      details: [{ label: 'Quote', value: row.quoteId ?? '' }],
+      confirmLabel: 'Cancel request',
+    });
+    if (!confirmed) return;
+    this._enquiryService.cancelQuotePresale(row._id as string).subscribe({
+      next: () => { this.toaster.success('Presale request cancelled'); this.getQuotations(); },
+      error: (e) => this.toaster.error(e?.error?.message || 'Failed to cancel the presale request.'),
+    });
+  }
+
+  /** Quote whose returned estimation is open in the drawer. */
+  estimateQuote: Quotatation | null = null;
+
+  async onAcceptPresale(row: Quotatation): Promise<void> {
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Accept the updated estimate',
+      message: 'The returned estimate replaces the quote items and becomes a new revision in Work In Progress.',
+      details: [{ label: 'Quote', value: row.quoteId ?? '' }, ...(row.dealData?.status ? [{ label: 'Deal sheet', value: 'The current deal sheet will be invalidated' }] : [])],
+      confirmLabel: 'Submit',
+    });
+    if (!confirmed) return;
+    this._enquiryService.acceptQuotePresale(row._id as string).subscribe({
+      next: () => { this.estimateQuote = null; this.toaster.success('Estimate merged into the quote'); this.getQuotations(); },
+      error: (e) => this.toaster.error(e?.error?.message || 'Failed to accept the estimate.'),
+    });
+  }
+
+  async onSendBackPresale(row: Quotatation): Promise<void> {
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Send back to presales',
+      message: 'The estimate returns to presales for another revision.',
+      reason: true,
+      reasonLabel: 'What is still wrong?',
+      confirmLabel: 'Send back',
+    });
+    if (!confirmed || !reason) return;
+    this._enquiryService.sendBackQuotePresale(row._id as string, reason).subscribe({
+      next: () => { this.estimateQuote = null; this.toaster.success('Returned to presales as a new job'); this.getQuotations(); },
+      error: (e) => this.toaster.error(e?.error?.message || 'Failed to send the estimate back.'),
+    });
   }
 
   private isCreatorOnlyView(row: Quotatation): boolean {

@@ -250,7 +250,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   /** The enquiry only says "in presales"; the presale job's own review/revision state is shown here instead. */
   displayStatus(r: any): string {
     const ps: string | undefined = r?.preSale?.status;
-    return ps && ['new', 'assigned', 'in review', 'in revision', 'rejected', 'returned', 'approved', 'completed', 'cancelled'].includes(ps) ? ps : r?.status;
+    return ps && ['new', 'assigned', 'in review', 'pending approval', 'in revision', 'rejected', 'returned', 'approved', 'completed', 'cancelled'].includes(ps) ? ps : r?.status;
   }
 
   /** One line telling the user where the job stands and what happens next. */
@@ -258,7 +258,8 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     switch (r?.preSale?.status) {
       case 'new': return 'Waiting to be assigned to a presale engineer.';
       case 'assigned': return 'With the presale engineer — upload an estimation to send it for review.';
-      case 'in review': return "Waiting for sales to review the estimation. You can't edit until they approve or request a revision.";
+      case 'in review': return 'Waiting for sales to review the estimation. You can still edit it until they approve or request a revision.';
+      case 'pending approval': return 'Estimate finished. Waiting for the assigning manager to send it on or reassign it.';
       case 'in revision': return 'Sales asked for changes — update the estimation and send it again.';
       case 'rejected': return 'Rejected by presale. It stays here until a manager reassigns or closes it.';
       case 'returned': return 'Returned to the salesperson, who can resend it or mark the enquiry lost.';
@@ -271,7 +272,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Why Edit is disabled for this job, or '' when editing is allowed. */
   editBlockedReason(r: any): string {
-    if (this.activeTab === 'assigned' && ['assigned', 'in revision'].includes(r?.preSale?.status ?? 'assigned')) return '';
+    if (this.activeTab === 'assigned' && ['assigned', 'in review', 'in revision'].includes(r?.preSale?.status ?? 'assigned')) return '';
     return this.nextStep(r) || 'This estimation can only be edited while the job is assigned to you.';
   }
 
@@ -298,6 +299,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       'Lost': 'Cancelled',
       'lost': 'Cancelled',
       'in review': 'In Review',
+      'pending approval': 'Pending Approval',
       'in revision': 'In Revision',
       'new': 'New',
       'assigned': 'Assigned',
@@ -315,6 +317,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     'Assigned To Presale Manager': 'bg-yellow-50 text-yellow-700 ring-yellow-200',
     'in presales': 'bg-yellow-50 text-yellow-700 ring-yellow-200',
     'in review': 'bg-blue-50 text-blue-700 ring-blue-200',
+    'pending approval': 'bg-amber-50 text-amber-700 ring-amber-200',
     'in revision': 'bg-orange-50 text-orange-700 ring-orange-200',
     'Rejected by Presale Engineer': 'bg-red-50 text-red-700 ring-red-200',
     'Rejected by Presale Manager': 'bg-red-50 text-red-700 ring-red-200',
@@ -333,6 +336,16 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     'lost': 'bg-gray-100 text-gray-700 ring-gray-300',
   };
 
+  /** The engineer finished and sent it; it now waits for the assigner to send it on or reassign it. */
+  isPendingApproval(r: any): boolean {
+    return r?.preSale?.status === 'pending approval';
+  }
+
+  /** Pending approval and the viewer cannot decide on it: the Send buttons stay hidden. */
+  private awaitingManager(r: any): boolean {
+    return this.isPendingApproval(r) && !this.canAssign;
+  }
+
   /** Tabs that mix jobs of every stage, where an action's eligibility must follow the row's own status. */
   private get isMixedTab(): boolean {
     return this.activeTab === 'all' || this.activeTab === 'resolve' || this.activeTab.startsWith('fu-');
@@ -348,7 +361,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     // A job the salesperson resent keeps preSale.status 'returned' but waits in New, like the server's tab logic.
     if (ps === 'returned' && s.toLowerCase() === 'revision') return 'new';
     if (ps === 'rejected') return 'rejected';
-    if (ps === 'assigned' || ps === 'in review' || ps === 'in revision' || ps === 'estimated') return 'assigned';
+    if (ps === 'assigned' || ps === 'in review' || ps === 'pending approval' || ps === 'in revision' || ps === 'estimated') return 'assigned';
     if (ps === 'approved') return 'completed';
     if (s === 'estimated' && ps !== 'cancelled') return 'assigned';
     if (s === 'Sent to Presales') return 'new';
@@ -371,7 +384,12 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       {
         id: 'assign', label: 'Assign', icon: 'user', quick: true,
-        hidden: (r) => this.rowStage(r) !== 'new' || !this.canAssign,
+        hidden: (r) => this.rowStage(r) !== 'new' || !this.canAssign || (this.isQuoteOrigin(r) && !!this.previousAssigneeId(r)),
+      },
+      {
+        // A quote reopened this job: hand it back to whoever worked on it before (pre-selected, changeable).
+        id: 'reassignQuote', label: 'Reassign', icon: 'user', quick: true,
+        hidden: (r) => this.rowStage(r) !== 'new' || !this.canAssign || !this.isQuoteOrigin(r) || !this.previousAssigneeId(r),
       },
       {
         id: 'restartWorkflow', label: 'Reset Workflow', icon: 'refresh',
@@ -392,7 +410,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       {
         id: 'reassign', label: 'Reassign', icon: 'user', quick: true,
-        hidden: (r) => this.rowStage(r) !== 'rejected' || !this.canAssign,
+        hidden: (r) => !(this.rowStage(r) === 'rejected' || this.isPendingApproval(r)) || !this.canAssign,
       },
       {
         id: 'return', label: 'Return to Enquiry', icon: 'send', quick: true,
@@ -400,7 +418,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       {
         id: 'feedbackAsk', label: 'Ask For Feedback', icon: 'chat', quick: true,
-        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.newFeedbackAccess || !r.preSale?.estimations || !this.canEstimate,
+        hidden: (r) => this.rowStage(r) !== 'assigned' || this.isPendingApproval(r) || !r.preSale?.newFeedbackAccess || !r.preSale?.estimations || !this.canEstimate,
       },
       {
         id: 'giveFeedback', label: 'Give Feedback', icon: 'chat', quick: true,
@@ -416,12 +434,17 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       {
         id: 'viewEstimation', label: 'View Estimation', icon: 'files', quick: true,
-        hidden: (r) => stageIn(r, 'assigned', 'completed', 'all') || !r.preSale?.estimations,
+        // A job opened from a quote keeps the quote's last estimation, so it can be viewed in every stage.
+        hidden: (r) => (stageIn(r, 'assigned', 'completed', 'all') && !this.isQuoteOrigin(r)) || !r.preSale?.estimations,
       },
-      { id: 'reject', label: 'Reject Job', icon: 'close', variant: 'danger', quick: true, menu: false, hidden: (r) => this.rowStage(r) !== 'assigned' || !this.canReject },
+      { id: 'reject', label: 'Reject Job', icon: 'close', variant: 'danger', quick: true, menu: false, hidden: (r) => this.rowStage(r) !== 'assigned' || this.isPendingApproval(r) || !this.canReject },
       {
         id: 'send', label: 'Send to Enquiry', icon: 'send', quick: true,
-        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r) || !this.canEstimate,
+        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r) || !this.canEstimate || this.isQuoteOrigin(r) || this.awaitingManager(r),
+      },
+      {
+        id: 'sendQuote', label: 'Send to Quote', icon: 'send', quick: true,
+        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r) || !this.canEstimate || !this.isQuoteOrigin(r) || this.awaitingManager(r),
       },
     ];
   }
@@ -435,6 +458,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
         break;
       case 'assign': this.onAssignClicks(row._id, 'assign'); break;
       case 'reassign': this.onAssignClicks(row._id, 'reassign'); break;
+      case 'reassignQuote': this.onAssignClicks(row._id, 'reassign', this.previousAssigneeId(row)); break;
       case 'restartWorkflow': this.onRestartWorkflow(row); break;
       case 'escalateHeld': this.onResolveHeld(row, 'escalate'); break;
       case 'rejectHeld': this.onResolveHeld(row, 'reject'); break;
@@ -446,7 +470,8 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       case 'uploadEstimation': this.onUploadClicks(row._id); break;
       case 'viewEstimation': this.onViewEstimation(row.preSale?.estimations, row._id, row.preSale?.estimationHistory, row); break;
       case 'reject': this.onRejectJob(row); break;
-      case 'send': this.onSendClicked(row); break;
+      case 'send':
+      case 'sendQuote': this.onSendClicked(row); break;
     }
   }
 
@@ -480,7 +505,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** An estimation that is done, cancelled or back with sales is no longer chased. */
   isFollowUpClosed(r: any): boolean {
-    return ['approved', 'completed', 'cancelled', 'returned'].includes(String(r?.preSale?.status)) || ['quoted', 'lost'].includes(String(r?.status || '').toLowerCase());
+    return ['approved', 'completed', 'cancelled', 'returned'].includes(String(r?.preSale?.status)) || (!this.isQuoteOrigin(r) && ['quoted', 'lost'].includes(String(r?.status || '').toLowerCase()));
   }
 
   private readonly followUpViewFor = followUpViewer();
@@ -603,9 +628,18 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
           { type: 'field', label: 'Status', value: this.statusLabel(this.displayStatus(row)), pill: true, visible: this.viewAssignedFor },
           { type: 'field', label: 'Assigned To', value: row.reAssigned?.[0] ? `${row.reAssigned[0].firstName} ${row.reAssigned[0].lastName}` : '—', visible: this.viewAssignedFor },
           { type: 'field', label: 'Cancel Reason', value: row.preSale?.cancelReason || row.lostReason || '—', visible: row.preSale?.status === 'cancelled' },
+          // Origin is shown here only, never as a table column.
+          { type: 'field', label: 'Origin', value: this.isQuoteOrigin(row) ? 'Quote update' : 'Enquiry', pill: true, noHover: true },
+          { type: 'field', label: 'Quote', value: row.preSaleQuote?.quoteId || '—', noHover: true, visible: this.isQuoteOrigin(row) },
+          { type: 'field', label: 'Update requested', value: row.preSale?.revisionComment?.slice(-1)[0] || '—', noHover: true, visible: this.isQuoteOrigin(row) },
         ],
       },
     ];
+  }
+
+  /** The job was opened by a quote owner asking for an estimate update; its result goes back to that quote. */
+  isQuoteOrigin(row: any): boolean {
+    return row?.preSale?.origin === 'quote';
   }
 
   // ---- Progress tab: presale assignment escalation ladder ----------------------------------
@@ -770,7 +804,8 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private readonly presaleAuditActions = new Set([
     'sent-to-presale', 'resent-to-presale', 'assigned', 'reassigned', 'self-assigned',
-    'presale-rejected', 'presale-returned', 'presale-cancelled',
+    'presale-rejected', 'presale-returned', 'presale-cancelled', 'presale-sent-for-approval',
+    'quote-presale-requested', 'quote-presale-returned', 'quote-presale-merged',
     'estimation-uploaded', 'estimation-deleted', 'revision-requested',
     'feedback-requested', 'feedback-given',
   ]);
@@ -975,11 +1010,17 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // ---- Row actions: reassign / feedback / reject / send -----------------------------------
 
-  onAssignClicks(enqId: string, mode: 'assign' | 'reassign' = 'reassign') {
+  /** The engineer who last held this job (from the assignment history), used as the Reassign default for quote updates. */
+  private previousAssigneeId(row: any): string | undefined {
+    const last = [...(row?.assignmentHistory ?? [])].reverse().find((h: any) => h?.employee);
+    return last ? String(last.employee?._id ?? last.employee) : undefined;
+  }
+
+  onAssignClicks(enqId: string, mode: 'assign' | 'reassign' = 'reassign', defaultEmployeeId?: string) {
     const row = this.rows?.find((r: any) => r._id === enqId);
     this.modal.open<{ message: string }>(AssignEmployeeComponent, {
       width: '520px',
-      data: { enquiryId: enqId, context: row?.enquiryId, mode, canAssign: this.canAssign }
+      data: { enquiryId: enqId, context: row?.enquiryId, mode, canAssign: this.canAssign, defaultEmployeeId }
     }).afterClosed().subscribe((res) => {
       if (res) {
         this.getJobsData()
@@ -1173,7 +1214,9 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     const { confirmed } = await this.confirm.open({
       tone: 'approve',
       title: 'Send job back?',
-      message: 'This action is irreversible and sends the completed estimation back to the salesperson for review.',
+      message: this.isQuoteOrigin(row)
+        ? `This action is irreversible and sends the updated estimation back to quote ${row.preSaleQuote?.quoteId ?? ''} for its owner to accept.`
+        : 'This action is irreversible and sends the completed estimation back to the salesperson for review.',
       confirmLabel: 'Send',
       cancelLabel: 'Cancel',
     });
@@ -1188,7 +1231,11 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       this._enquiryService.updateEnquiryStatus(selectedEnquiry).subscribe((data) => {
         if (data) {
           this.getJobsData();
-          if (data.quoteId) {
+          if (data.pendingApproval) {
+            this.toast.success('Estimate sent to the assigning manager for approval');
+          } else if (this.isQuoteOrigin(row)) {
+            this.toast.success(`Updated estimate sent back to quote \n(${row.preSaleQuote?.quoteId ?? ''})`)
+          } else if (data.quoteId) {
             this.toast.success(`Job has successfully completed and send back to Quotation  \n(${data.quoteId})`)
           } else {
             this.toast.success(`Job has successfully completed and send back to Enquiry \n(${data.update.enquiryId})`)
@@ -1196,6 +1243,25 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       })
     )
+  }
+
+  async onMergeToQuote(row: any): Promise<void> {
+    const quoteId = row.preSale?.quoteId;
+    if (!quoteId) return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Merge into quote?',
+      message: `The quote's current items will be replaced by the new estimation items${row.preSaleQuote?.quoteId ? ` on ${row.preSaleQuote.quoteId}` : ''}.`,
+      confirmLabel: 'Merge',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+    this.subscriptions.add(
+      this._enquiryService.acceptQuotePresale(String(quoteId)).subscribe({
+        next: () => { this.toast.success('Estimation merged into the quote'); this.getJobsData(); },
+        error: (e) => this.toast.error(e?.error?.message || 'Failed to merge the estimation.'),
+      })
+    );
   }
 
   async onRejectJob(row: any): Promise<void> {

@@ -16,6 +16,10 @@ import {
     presaleTabCounts,
     giveRevision,
     reviseQuoteEstimation,
+    requestQuotePresale,
+    acceptQuotePresale,
+    sendBackQuotePresale,
+    cancelQuotePresale,
     presalesCount,
     markAsSeenJob,
     markAsSeenFeedback,
@@ -94,6 +98,11 @@ equiRouter.patch('/feedback-request', requireUnlessDenied("assignedJob", "estima
 equiRouter.patch('/give-feedback', requireUnlessDenied("assignedJob", "assign", STRICT), giveFeedback);
 equiRouter.patch('/revision/:enquiryId', requireUnlessDenied("enquiry", "reassign", STRICT), giveRevision);
 equiRouter.patch('/quoteRevision/:enquiryId', requireUnlessDenied("enquiry", "reassign", STRICT), reviseQuoteEstimation);
+// Quote owner asks presales to rework the estimate; the result comes back to the quote (accept / send back).
+equiRouter.post('/quote-presale/:quoteId', requireUnlessDenied("quotation", "edit"), requestQuotePresale);
+equiRouter.post('/quote-presale/:quoteId/accept', requireUnlessDenied("quotation", "edit"), acceptQuotePresale);
+equiRouter.post('/quote-presale/:quoteId/send-back', requireUnlessDenied("quotation", "edit"), sendBackQuotePresale);
+equiRouter.post('/quote-presale/:quoteId/cancel', requireUnlessDenied("quotation", "edit"), cancelQuotePresale);
 equiRouter.get('/feedback-request/:employeeId', getFeedbackRequestsById);
 equiRouter.post('/upload-estimation', requireUnlessDenied("assignedJob", "estimate", STRICT), uploadEstimations)
 equiRouter.post('/markAsSeenEstimation', markAsSeenEstimation);

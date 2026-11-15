@@ -30,7 +30,7 @@ export interface LpoUploadModalResult {
   imports: [CommonModule, FormsModule, SmartFormModule, DetailPanelIconComponent],
   template: `
     <div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
-      <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+      <header class="flex items-start gap-3 border-b border-gray-100 px-4 py-4 sm:px-6 dark:border-erp-border-dark">
         <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100 dark:bg-sky-950/40 dark:text-sky-400 dark:ring-sky-900">
           <app-dp-icon name="upload" size="w-5 h-5"></app-dp-icon>
         </span>
@@ -50,7 +50,7 @@ export interface LpoUploadModalResult {
         </button>
       </header>
 
-      <div class="flex-1 overflow-y-auto px-6 py-6 min-h-[280px]">
+      <div class="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 min-h-[280px]">
         <div class="mb-5 grid gap-4 sm:grid-cols-2">
           <app-sf-field label="Customer PO / LPO No." hint="Optional">
             <app-sf-input [(ngModel)]="customerPoNumber" [ngModelOptions]="{ standalone: true }" placeholder="e.g. PO-1245"></app-sf-input>
@@ -65,7 +65,7 @@ export interface LpoUploadModalResult {
         <app-sf-file [(ngModel)]="files" [maxSizeMb]="5" [disabled]="uploading"></app-sf-file>
       </div>
 
-      <footer class="flex flex-wrap items-center gap-3 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
+      <footer class="flex flex-wrap items-center gap-3 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20 max-sm:px-4">
         <div class="flex gap-2 ml-auto">
           <button type="button" (click)="close()" [disabled]="uploading"
             class="rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-[13px] font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>

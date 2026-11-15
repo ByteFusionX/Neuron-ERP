@@ -12,6 +12,7 @@ import { DetailClause, DetailTableColumn } from 'src/app/shared/components/detai
 import { ParseBoldTextPipe } from 'src/app/shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from 'src/app/shared/pipes/highlightParse.pipe';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
+import { SupplierService } from 'src/app/core/services/supplier.service';
 import { EstimationHistoryEntry, Estimations } from 'src/app/shared/interfaces/enquiry.interface';
 
 /**
@@ -44,19 +45,23 @@ export class ViewEstimationComponent implements OnChanges {
   selectedOption = 0;
   tab: 'items' | 'summary' = 'items';
 
+  supplierNames: Record<string, string> = {};
+
   private router = inject(Router);
+  private supplierService = inject(SupplierService);
   private numberFormatter = new NumberFormatterPipe();
   private boldPipe = new ParseBoldTextPipe();
   private bracketsPipe = new ParseBracketsTextPipe(inject(DomSanitizer));
 
   readonly itemCols: DetailTableColumn[] = [
-    { key: 'detail', label: 'Item Details', type: 'html', wrap: true },
+    { key: 'detail', label: 'Item Details', type: 'html', truncate: true },
     { key: 'quantity', label: 'Qty', type: 'number' },
     { key: 'unitCost', label: 'Unit Cost', align: 'right' },
     { key: 'totalCost', label: 'Total Cost', align: 'right', total: true, totalKey: 'totalCostRaw', totalFormat: '1.2-2' },
     { key: 'profit', label: 'Profit', align: 'right' },
     { key: 'unitPrice', label: 'Unit Price', align: 'right' },
     { key: 'totalPrice', label: 'Total Price', align: 'right', emphasis: true, total: true, totalKey: 'totalPriceRaw', totalFormat: '1.2-2' },
+    { key: 'supplier', label: 'Supplier', truncate: true },
     { key: 'availability', label: 'Avbl.', type: 'badge', badgeTones: { 'Ex-Stock': 'good', 'ex-stock': 'good' } },
   ];
 
@@ -108,6 +113,7 @@ export class ViewEstimationComponent implements OnChanges {
         const totalPrice = (d.quantity || 0) * (d.unitSellingPrice || 0);
         rows.push({
           detail: this.boldPipe.transform(this.bracketsPipe.transform(d.detail) as string),
+          supplier: this.supplierLabel(d),
           quantity: d.quantity,
           unitCost: this.numberFormatter.transform(d.unitCost),
           totalCost: this.numberFormatter.transform(totalCost),
@@ -154,11 +160,27 @@ export class ViewEstimationComponent implements OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes['open'] && this.open && !Object.keys(this.supplierNames).length) {
+      this.supplierService.supplierList(true).subscribe({
+        next: (res: any) => {
+          const names: Record<string, string> = {};
+          (res?.data || []).forEach((s: any) => (names[s._id] = s.supplierName));
+          this.supplierNames = names;
+        },
+      });
+    }
     if (this.open && (changes['open'] || changes['estimation'])) {
       this.selectedOption = 0;
       this.tab = 'items';
       this.viewingIndex = null;
     }
+  }
+
+  /** Saved lines hold the supplier as a bare id, so the name is looked up from the supplier list. */
+  private supplierLabel(d: any): string {
+    const s = d.supplierId;
+    const id = typeof s === 'string' ? s : s?._id;
+    return d.supplierName || s?.supplierName || s?.companyName || s?.name || (id && this.supplierNames[id]) || '—';
   }
 
   profit(d: any): number {

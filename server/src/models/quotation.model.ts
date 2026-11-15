@@ -211,6 +211,20 @@ interface Quotation extends Document {
     customerAcceptance: CustomerAcceptance;
     releasedDealId?: string;
     discardedDeals?: { dealId?: string; status?: string; lastComment?: string; discardedAt?: Date; discardedBy?: Types.ObjectId; reason?: string }[];
+    /** Presale-update request: the quote owner asked presales to rework the estimate. The returned estimate is staged here until accepted. */
+    presaleRevision?: {
+        note?: string;
+        requestedBy?: Types.ObjectId;
+        requestedAt?: Date;
+        previousStatus?: string;
+        round?: number;
+        proposedEstimate?: any;
+        returnedAt?: Date;
+        returnedBy?: Types.ObjectId;
+        sendBackNote?: string;
+        dealUnderRevision?: boolean;
+        history?: any[];
+    };
 }
 
 export enum quoteStatus {
@@ -223,6 +237,9 @@ export enum quoteStatus {
     Won = 'Won',
     Lost = 'Lost',
     Expired = 'Expired',
+    // Set by the presale-update flow only; never chosen from the status menu.
+    InPresales = 'In Presales',
+    Estimated = 'Estimated',
 }
 
 const quoteItemImageSchema = new Schema({
@@ -486,7 +503,7 @@ const editHistoryEntrySchema = new Schema<EditHistoryEntry>({
     },
     action: {
         type: String,
-        enum: ['Created', 'Updated', 'StatusChanged', 'QuoteSent', 'ApprovalRequested', 'ApprovalApproved', 'ApprovalRejected', 'FollowUpUpdated', 'CustomerAccepted', 'CustomerRejected', 'CustomerNoResponse', 'OptionalItemsDecided', 'DealApproved', 'DealRejected', 'DealRevoked'],
+        enum: ['Created', 'Updated', 'StatusChanged', 'QuoteSent', 'ApprovalRequested', 'ApprovalApproved', 'ApprovalRejected', 'FollowUpUpdated', 'CustomerAccepted', 'CustomerRejected', 'CustomerNoResponse', 'OptionalItemsDecided', 'DealApproved', 'DealRejected', 'DealRevoked', 'PresaleRequested', 'PresaleReturned', 'PresaleAccepted', 'PresaleSentBack', 'PresaleCancelled'],
         required: true,
     },
     fromStatus: {
@@ -726,6 +743,19 @@ const quotationSchema = new Schema<Quotation>({
     },
     // Set when the quote leaves Won: the deal number is kept for the next deal sheet and the old sheet's outcome stays on record.
     releasedDealId: { type: String },
+    presaleRevision: {
+        note: { type: String },
+        requestedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        requestedAt: { type: Date },
+        previousStatus: { type: String },
+        round: { type: Number },
+        proposedEstimate: { type: Schema.Types.Mixed },
+        returnedAt: { type: Date },
+        returnedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        sendBackNote: { type: String },
+        dealUnderRevision: { type: Boolean },
+        history: { type: [Schema.Types.Mixed], default: [] },
+    },
     discardedDeals: {
         type: [{
             dealId: { type: String },

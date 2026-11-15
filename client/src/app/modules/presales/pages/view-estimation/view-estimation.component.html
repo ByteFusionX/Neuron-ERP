@@ -45,7 +45,7 @@
 
         <!-- items -->
         <div *ngIf="tab === 'items'">
-            <app-detail-table [columns]="itemCols" [rows]="itemRows" groupStyle="band" numbered groupTotals spread centerGroups
+            <app-detail-table layout="list" [columns]="itemCols" [rows]="itemRows" groupStyle="band" numbered groupTotals spread centerGroups
                 emptyMessage="No items in this option."></app-detail-table>
         </div>
 
@@ -74,5 +74,6 @@
         <span *ngIf="viewingIndex === null && (editable || editBlockedReason)" [attr.title]="editBlockedReason || null">
             <app-action-button variant="primary" [disabled]="!!editBlockedReason" (click)="onEdit()" icon="edit">Edit</app-action-button>
         </span>
+        <ng-content select="[estimationFooter]"></ng-content>
     </ng-container>
 </app-sf-drawer>

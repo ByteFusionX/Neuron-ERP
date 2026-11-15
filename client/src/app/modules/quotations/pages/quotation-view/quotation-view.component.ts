@@ -28,6 +28,7 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/form-prompt.service';
 import { EditHistoryModalComponent } from 'src/app/shared/components/edit-history-modal/edit-history-modal.component';
 import { RevisionHistoryComponent, RevisionHistoryData } from 'src/app/shared/components/revision-history/revision-history.component';
+import { ViewEstimationComponent } from 'src/app/modules/presales/pages/view-estimation/view-estimation.component';
 import { QuoteFormDrawerComponent } from '../quote-form-drawer/quote-form-drawer.component';
 import { DealFormComponent } from '../deal-form/deal-form.component';
 import { QuotationSidePanelComponent } from './quotation-side-panel.component';
@@ -56,7 +57,7 @@ import {
   DetailViewShellComponent,
   DetailViewStat,
 } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
-import { getQuotatation, QuoteRevision, QuoteStatus, quoteStatusLabel } from 'src/app/shared/interfaces/quotation.interface';
+import { canCancelPresaleRequest, canRequestPresaleUpdate, getQuotatation, isPresaleLocked, QuoteRevision, QuoteStatus, quoteStatusLabel } from 'src/app/shared/interfaces/quotation.interface';
 import { DomSanitizer } from '@angular/platform-browser';
 import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
@@ -148,6 +149,7 @@ export interface QvHistoryEntry {
     DealFormComponent,
     NumberFormatterPipe,
     QuotationSidePanelComponent,
+    ViewEstimationComponent,
   ],
 })
 export class QuotationViewComponent implements OnInit, OnDestroy {
@@ -168,6 +170,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     return true;
   }
   editOpen = false;
+  /** The returned presale estimate is shown in a drawer whose footer holds Return to presales / Accept & merge. */
+  estimateOpen = false;
   /** Nudged after an edit so the page refetches the quote the same way the route does. */
   private reload$ = new BehaviorSubject<void>(undefined);
 
@@ -301,6 +305,10 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
             this.rebuild();
             this.loadStockHold();
             this.loading = false;
+            if (this._route.snapshot.queryParamMap.get('estimation')) {
+              this.estimateOpen = true;
+              this._router.navigate([], { queryParams: { estimation: null }, queryParamsHandling: 'merge', replaceUrl: true });
+            }
           },
           error: () => {
             this.quoteData = null;
@@ -333,6 +341,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   }
 
   get isEditDisabled(): boolean {
+    if (isPresaleLocked(this.quoteData)) return true;
     if (this.isDealApproved) return true;
     if (this.isDealRejected) return !(this.isSuperAdmin || this.isQuoteOwner);
     return this.quoteData?.status === 'Won' && !this.isSuperAdmin;
@@ -340,6 +349,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
 
   /** Why Edit is greyed out, shown as its tooltip; empty when it is available. */
   get editDisabledReason(): string {
+    if (isPresaleLocked(this.quoteData)) return 'This quotation is with presales for an estimate update, so it is locked.';
     if (this.isDealApproved) return 'The deal sheet is approved, so the quotation is locked.';
     if (this.isEditDisabled) {
       return this.isDealRejected
@@ -352,10 +362,97 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   /** Same lock the quotation list applies: an active (non-rejected) deal sheet freezes the status. */
   get isStatusLocked(): boolean {
     const q = this.quoteData;
-    return q?.status === 'Expired' || (!!q?.dealData?.status && q.dealData.status !== 'rejected');
+    return isPresaleLocked(q) || q?.status === 'Expired' || (!!q?.dealData?.status && q.dealData.status !== 'rejected');
+  }
+
+  // --- presale update: the owner sends the quote back to presales; the returned estimate is accepted in one click ---
+
+  /** Hidden (not disabled) when Won/Lost, already with presales, or the deal sheet is pending/approved. */
+  get canRequestPresale(): boolean {
+    return (this.isSuperAdmin || this.isQuoteOwner) && canRequestPresaleUpdate(this.quoteData);
+  }
+
+  get hasReturnedEstimate(): boolean {
+    return this.quoteData?.status === QuoteStatus.Estimated && (this.isSuperAdmin || this.isQuoteOwner);
+  }
+
+  async onRequestPresale(): Promise<void> {
+    const q = this.quoteData;
+    if (!q?._id) return;
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Request presale update',
+      message: 'Presales will rework the estimate for this quote. The quote is locked until they send it back.',
+      details: [{ label: 'Quote', value: q.quoteId ?? '' }, { label: 'Current status', value: q.status }],
+      reason: true,
+      reasonLabel: 'What should presales change?',
+      confirmLabel: 'Send to presales',
+    });
+    if (!confirmed || !reason) return;
+    this._enquiryService.requestQuotePresale(q._id as string, reason).subscribe({
+      next: () => { this.toast.success('Quote sent to presales'); this.reload$.next(); },
+      error: (e) => this.toast.error(e?.error?.message || 'Failed to send the quote to presales.'),
+    });
+  }
+
+  get canCancelPresale(): boolean {
+    return (this.isSuperAdmin || this.isQuoteOwner) && canCancelPresaleRequest(this.quoteData);
+  }
+
+  async onCancelPresale(): Promise<void> {
+    const q = this.quoteData;
+    if (!q?._id) return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Cancel presale request',
+      message: 'The quote returns to its previous status. This only works while presales has not started on the estimate.',
+      details: [{ label: 'Quote', value: q.quoteId ?? '' }],
+      confirmLabel: 'Cancel request',
+    });
+    if (!confirmed) return;
+    this._enquiryService.cancelQuotePresale(q._id as string).subscribe({
+      next: () => { this.toast.success('Presale request cancelled'); this.reload$.next(); },
+      error: (e) => this.toast.error(e?.error?.message || 'Failed to cancel the presale request.'),
+    });
+  }
+
+  async onAcceptPresale(): Promise<void> {
+    const q = this.quoteData;
+    if (!q?._id) return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Accept & merge the estimate',
+      message: 'The quote items are replaced with the items from this estimation (a new revision if the quote had been sent).',
+      details: [{ label: 'Quote', value: q.quoteId ?? '' }, ...(q.dealData?.status ? [{ label: 'Deal sheet', value: 'The current deal sheet will be invalidated' }] : [])],
+      confirmLabel: 'Accept & merge',
+    });
+    if (!confirmed) return;
+    this._enquiryService.acceptQuotePresale(q._id as string).subscribe({
+      next: () => { this.estimateOpen = false; this.toast.success('Estimate merged into the quote'); this.reload$.next(); },
+      error: (e) => this.toast.error(e?.error?.message || 'Failed to accept the estimate.'),
+    });
+  }
+
+  async onSendBackPresale(): Promise<void> {
+    const q = this.quoteData;
+    if (!q?._id) return;
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Return to presales',
+      message: 'The job goes back to presales as a new job, to be assigned again.',
+      reason: true,
+      reasonLabel: 'What is still wrong?',
+      confirmLabel: 'Send back',
+    });
+    if (!confirmed || !reason) return;
+    this._enquiryService.sendBackQuotePresale(q._id as string, reason).subscribe({
+      next: () => { this.estimateOpen = false; this.toast.success('Returned to presales as a new job'); this.reload$.next(); },
+      error: (e) => this.toast.error(e?.error?.message || 'Failed to send the estimate back.'),
+    });
   }
 
   get statusLockedReason(): string {
+    if (isPresaleLocked(this.quoteData)) return 'This quotation is with presales for an estimate update, so its status is locked.';
     if (this.quoteData?.status === 'Expired') return 'The quotation expired, so its status can no longer change.';
     return this.isStatusLocked ? 'A deal sheet is in progress or approved, so the status is locked.' : '';
   }
@@ -397,6 +494,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     if (this.canRecordCustomerDecision) {
       items.push({ id: 'accepted', label: 'Customer accepted' }, { id: 'rejected', label: 'Customer rejected' });
     }
+    if (this.canRequestPresale) items.push({ id: 'requestPresale', label: 'Request presale update' });
+    if (this.canCancelPresale) items.push({ id: 'cancelPresale', label: 'Cancel presale request' });
     if (this.hasOptionalItems) items.push({ id: 'optional', label: 'Optional decisions' });
     if (this.isQuoteOpen) items.push({ id: 'followUp', label: 'Follow up' });
     if (this.isNoteOwner) items.push({ id: 'note', label: 'View note' });
@@ -412,6 +511,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   onMenu(id: string): void {
     switch (id) {
       case 'status': this.onUpdateStatus(); break;
+      case 'requestPresale': void this.onRequestPresale(); break;
+      case 'cancelPresale': void this.onCancelPresale(); break;
       case 'accepted': void this.onCustomerDecision('accepted'); break;
       case 'rejected': void this.onCustomerDecision('rejected'); break;
       case 'optional': void this.onUpdateOptionalDecisions(); break;

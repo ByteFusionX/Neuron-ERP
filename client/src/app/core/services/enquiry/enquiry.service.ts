@@ -73,8 +73,8 @@ export class EnquiryService {
     return this.http.patch<{ success: boolean; data: getEnquiry }>(`${this.api}/enquiry/${enquiryId}/details`, details)
   }
 
-  updateEnquiryStatus(selectedEnquiry: { id: string, status: string, lostReason?: string, competitorName?: string, competitorPriceGap?: string }): Observable<{ update: getEnquiry, quoteId: string | undefined }> {
-    return this.http.put<{ update: getEnquiry, quoteId: string | undefined }>(`${this.api}/enquiry/update`, selectedEnquiry)
+  updateEnquiryStatus(selectedEnquiry: { id: string, status: string, lostReason?: string, competitorName?: string, competitorPriceGap?: string }): Observable<{ update: getEnquiry, quoteId: string | undefined, pendingApproval?: boolean }> {
+    return this.http.put<{ update: getEnquiry, quoteId: string | undefined, pendingApproval?: boolean }>(`${this.api}/enquiry/update`, selectedEnquiry)
   }
 
   schedulePresaleFollowUp(enquiryId: string, data: { dueDate: string; note?: string }): Observable<{ success: boolean; followUp: FollowUpBlockData }> {
@@ -178,6 +178,26 @@ export class EnquiryService {
 
   quoteRevision(revisionComment: string, enquiryId: string) {
     return this.http.patch(`${this.api}/enquiry/quoteRevision/${enquiryId}`, { revisionComment })
+  }
+
+  /** Quote owner asks presales to rework the estimate; the quote goes to "In Presales". */
+  requestQuotePresale(quoteId: string, note: string): Observable<{ success: boolean; status: string }> {
+    return this.http.post<{ success: boolean; status: string }>(`${this.api}/enquiry/quote-presale/${quoteId}`, { note })
+  }
+
+  /** One click: the returned estimate becomes the quote's content (new revision when the old one was sent). */
+  acceptQuotePresale(quoteId: string): Observable<{ success: boolean; status: string; revision: number }> {
+    return this.http.post<{ success: boolean; status: string; revision: number }>(`${this.api}/enquiry/quote-presale/${quoteId}/accept`, {})
+  }
+
+  /** The returned estimate is not right: back to presales with a comment. */
+  sendBackQuotePresale(quoteId: string, comment: string): Observable<{ success: boolean; status: string }> {
+    return this.http.post<{ success: boolean; status: string }>(`${this.api}/enquiry/quote-presale/${quoteId}/send-back`, { comment })
+  }
+
+  /** Sales withdraws the request while presales has not started; the quote returns to its previous status. */
+  cancelQuotePresale(quoteId: string): Observable<{ success: boolean; status: string }> {
+    return this.http.post<{ success: boolean; status: string }>(`${this.api}/enquiry/quote-presale/${quoteId}/cancel`, {})
   }
 
   presalesCounts(access?: string, userId?: string): Observable<{ pending: number, completed: number }> {

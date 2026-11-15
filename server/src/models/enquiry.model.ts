@@ -26,7 +26,7 @@ interface Enquiry extends Document {
     lastFollowUpDate?: string | number | Date;
     followUpHistory: { date: Date, outcome: string, note: string, nextFollowUpDate: Date, createdBy: Types.ObjectId, createdByName: string, createdAt: Date, correctionOf?: Types.ObjectId | null, status?: 'scheduled' | 'done' | 'cancelled', dueDate?: Date, completedAt?: Date, cancelReason?: string }[];
     createdDate: Date;
-    preSale: { followUp?: { history?: any[], nextFollowUpDate?: Date, lastActivityDate?: Date, lastOutcome?: string }, presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string, version?: number }, estimationHistory?: any[], presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[], assignApproval?: { stepIndex: number, role: Types.ObjectId, assignedAt: Date, escalationDueAt: Date, escalatedFrom?: Types.ObjectId, reminderDueAt?: Date, reminderSentAt?: Date, timeoutAction?: string, repeatReminder?: boolean, timeoutHandledAt?: Date, workflowVersion?: number }, status?: string };
+    preSale: { followUp?: { history?: any[], nextFollowUpDate?: Date, lastActivityDate?: Date, lastOutcome?: string }, presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string, version?: number }, estimationHistory?: any[], presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[], assignApproval?: { stepIndex: number, role: Types.ObjectId, assignedAt: Date, escalationDueAt: Date, escalatedFrom?: Types.ObjectId, reminderDueAt?: Date, reminderSentAt?: Date, timeoutAction?: string, repeatReminder?: boolean, timeoutHandledAt?: Date, workflowVersion?: number }, status?: string, origin?: 'enquiry' | 'quote', quoteId?: Types.ObjectId, quoteBaselineVersion?: number };
     // preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; }[] };
     assignedFiles: []
     status: string;
@@ -232,8 +232,22 @@ const preSaleSchema = new Schema({
     assignApproval: assignApprovalSchema,
     status: {
         type: String,
-        enum: ['new', 'assigned', 'in review', 'rejected', 'returned', 'in revision', 'approved', 'completed', 'cancelled'],
+        enum: ['new', 'assigned', 'in review', 'pending approval', 'rejected', 'returned', 'in revision', 'approved', 'completed', 'cancelled'],
         default: 'new'
+    },
+    // Where the job came from. Missing = a normal enquiry job. 'quote' = the quote owner asked presales to rework the
+    // estimate; the result goes back to that quote and the enquiry's own status is never touched.
+    origin: {
+        type: String,
+        enum: ['enquiry', 'quote']
+    },
+    quoteId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Quotation'
+    },
+    // Version of the estimate that existed when the quote asked for an update; the first upload of the round archives it.
+    quoteBaselineVersion: {
+        type: Number
     },
     // Set when the enquiry is marked Lost while presale is still working on it.
     cancelReason: {

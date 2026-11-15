@@ -15,7 +15,7 @@ import { isQuoteExpired } from "./quotation.controller";
 
 const DAY = 86_400_000;
 const OPEN_ENQUIRY = ['new', 'in progress', 'New', 'In Review', 'Work In Progress'];
-const OPEN_PRESALE = ['assigned', 'in review', 'in revision', 'returned'];
+const OPEN_PRESALE = ['assigned', 'in review', 'pending approval', 'in revision', 'returned'];
 const SENT = [quoteStatus.QuoteSubmitted, quoteStatus.UnderNegotiation, quoteStatus.UnderReview, quoteStatus.Won, quoteStatus.Lost, quoteStatus.Expired] as string[];
 const AWAITING_CUSTOMER = [quoteStatus.QuoteSubmitted, quoteStatus.UnderNegotiation, quoteStatus.UnderReview] as string[];
 const CLOSED = [quoteStatus.Won, quoteStatus.Lost, quoteStatus.Expired] as string[];

@@ -29,7 +29,7 @@ function needsReason(current: S, target: S): boolean {
 /** Quotation rules for the shared `app-status-change-modal`. */
 export function quoteStatusModalData(currentStatus: S, targetStatus?: S): StatusChangeModalData<S> {
   // Every status is listed; the ones this quote can't move to are shown disabled.
-  const statuses = Object.values(S).filter((s) => s !== S.Expired);
+  const statuses = Object.values(S).filter((s) => s !== S.Expired && s !== S.InPresales && s !== S.Estimated);
   const reopening = currentStatus === S.Won || currentStatus === S.Lost;
   return {
     currentStatus,

@@ -1,6 +1,7 @@
 import Workflow from "../models/workflow.model";
 import Enquiry from "../models/enquiry.model";
 import Category from "../models/category.model";
+import Quotation, { quoteStatus } from "../models/quotation.model";
 import { dueAfterWorkingTime } from "./workflow.service";
 
 const DEFAULT_REMINDER_PERCENT = 75;
@@ -180,13 +181,43 @@ export const advanceAssignmentStep = async (assignment: any, now = new Date(), k
 
 /** Rejects a job nobody picked up in time: it goes back to sales with the reason, and leaves the assignment workflow. */
 export const rejectUnassignedPresale = async (enquiryId: any, reason: string, rejectedRole: string) => {
+    const job: any = await Enquiry.findById(enquiryId).select('preSale.origin preSale.quoteId').lean();
+    const fromQuote = job?.preSale?.origin === 'quote';
     await Enquiry.updateOne(
         { _id: enquiryId },
         {
-            $set: { status: 'rejected', 'preSale.status': 'returned', 'preSale.seenbySalesPerson': false, 'preSale.seenbyEmployee': false, 'preSale.newFeedbackAccess': true },
+            // A quote-origin job never moves the enquiry's own status.
+            $set: { ...(fromQuote ? {} : { status: 'rejected' }), 'preSale.status': 'returned', 'preSale.seenbySalesPerson': false, 'preSale.seenbyEmployee': false, 'preSale.newFeedbackAccess': true },
             $push: { 'preSale.rejectionHistory': { rejectionReason: reason, rejectedRole, rejectedAt: new Date() } },
             $unset: { 'preSale.assignApproval': '' }
         }
+    );
+    if (fromQuote && job?.preSale?.quoteId) {
+        await restoreQuoteAfterPresale(job.preSale.quoteId, reason, 'rejected');
+    }
+};
+
+/**
+ * The presale job for a quote ended without an estimate (rejected, not feasible, auto-rejected): the quote goes back
+ * to the status it had before the request, and the presale comment is kept in the request history.
+ */
+export const restoreQuoteAfterPresale = async (quoteId: any, note: string, outcome: string) => {
+    const quote: any = await Quotation.findById(quoteId).select('status presaleRevision').lean();
+    if (!quote || quote.status !== quoteStatus.InPresales) return null;
+    const pr = quote.presaleRevision || {};
+    return Quotation.findByIdAndUpdate(
+        quoteId,
+        {
+            $set: { status: pr.previousStatus || quoteStatus.WorkInProgress },
+            $push: {
+                'presaleRevision.history': {
+                    round: pr.round, requestedBy: pr.requestedBy, requestedAt: pr.requestedAt, requestNote: pr.note,
+                    returnedAt: new Date(), outcome, outcomeNote: note,
+                },
+            },
+            $unset: { 'presaleRevision.proposedEstimate': '', 'presaleRevision.dealUnderRevision': '' },
+        },
+        { new: true }
     );
 };
 

@@ -14,6 +14,8 @@ export interface AssignEmployeeModalData {
   context?: string;
   mode?: 'assign' | 'reassign';
   canAssign?: boolean;
+  /** Pre-selected engineer (e.g. whoever handled the job before a quote reopened it). */
+  defaultEmployeeId?: string;
 }
 
 /** Closes with `{ message }` once the job is assigned, or undefined on cancel. */
@@ -78,6 +80,10 @@ export class AssignEmployeeComponent implements OnInit, OnDestroy {
             options.unshift({ value: this.selfId, label: `${me.firstName} ${me.lastName} (Self assign)` });
           }
           this.employeeOptions = options;
+          const def = this.data?.defaultEmployeeId;
+          if (def && options.some((o) => o.value === def) && !this.form.controls.employee.value) {
+            this.form.controls.employee.setValue(def);
+          }
         });
       })
     );

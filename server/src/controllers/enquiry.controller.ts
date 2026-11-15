@@ -14,7 +14,7 @@ import { cancelInBlock, completeInBlock, followUpViewFilter, readCompleteBody, r
 import { notifyByPrivilege } from "../services/notify.service";
 import { getNextSequence } from "../models/counter.model";
 import { getCustomerCommercialGuard } from "../common/customer-commercial-guards";
-import { buildAssignmentChain, resolveCurrentAssignmentStep, advanceAssignmentStep, rejectUnassignedPresale, stageRoleIds } from "../services/presaleAssignment.service";
+import { buildAssignmentChain, resolveCurrentAssignmentStep, advanceAssignmentStep, rejectUnassignedPresale, restoreQuoteAfterPresale, stageRoleIds } from "../services/presaleAssignment.service";
 import { logEnquiryAudit } from "../services/enquiryAudit.service";
 import { cancelOpenFollowUp } from "../services/enquiryFollowUp.service";
 const { ObjectId } = require('mongodb')
@@ -498,7 +498,7 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
         // Assigning is only for a job that has no one working on it; handing over a live job is reassign's job.
         const blocked = await presaleStepBlock(enquiryId);
         if (blocked) return res.status(blocked.code).json({ success: false, message: blocked.message });
-        const liveStatuses = ['assigned', 'in review', 'in revision', 'completed', 'approved'];
+        const liveStatuses = ['assigned', 'in review', 'pending approval', 'in revision', 'completed', 'approved'];
         if (enquiry.preSale?.presalePerson && liveStatuses.includes(String(enquiry.preSale?.status))) {
             return res.status(409).json({ success: false, message: `This job is already ${enquiry.preSale.status}. Use reassign instead.` });
         }
@@ -534,7 +534,8 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
                     'preSale.newFeedbackAccess': true,
                     'preSale.createdDate': Date.now(),
                     'preSale.status': 'assigned',
-                    status: 'in presales',
+                    // A quote-origin job never moves the enquiry itself.
+                    ...(enquiry.preSale?.origin === 'quote' ? {} : { status: 'in presales' }),
                 },
                 // A fresh assignment starts a clean cycle: no stale reassignee, no running escalation timer.
                 $unset: { reAssigned: '', reAssignedDate: '', 'preSale.assignApproval': '' },
@@ -973,8 +974,8 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             }
         ] : [];
 
-        // With no explicit sort, enquiries whose follow-up is overdue come first (most overdue first), then newest.
-        const defaultSort = !sortKey;
+        // With no explicit sort the newest enquiry comes first. Overdue follow-ups are flagged in the row, not floated to the top.
+        const defaultSort = false;
         const isOverdueExpr = {
             $and: [
                 { $lt: [{ $ifNull: ['$nextFollowUpDate', todayStart] }, todayStart] },
@@ -1154,7 +1155,7 @@ const PRESALE_TAB_STATUSES: Record<string, string[]> = {
 /** Same tabs, keyed on the new preSale.status values used by new write paths going forward. */
 const NEW_PRESALE_TAB_STATUSES: Record<string, string[]> = {
     new: ['new'],
-    assignedTab: ['assigned', 'in review', 'in revision'],
+    assignedTab: ['assigned', 'in review', 'pending approval', 'in revision'],
     rejected: ['rejected'],
     completedTab: ['approved', 'completed'],
     cancelledTab: ['cancelled'],
@@ -1180,7 +1181,7 @@ const presaleTabMatch = (tab: keyof typeof PRESALE_TAB_STATUSES) => {
         { status: { $in: PRESALE_TAB_STATUSES[key] } },
         { 'preSale.status': { $in: NEW_PRESALE_TAB_STATUSES[key] } },
     ];
-    if (tab === 'resolve') return { $or: [...byStatus('rejected'), PENDING_FEEDBACK_MATCH] };
+    if (tab === 'resolve') return { $or: [...byStatus('rejected'), { 'preSale.status': 'pending approval' }, PENDING_FEEDBACK_MATCH] };
     // Enquiry.status 'estimated' also lands here unless presale has already sent it on (approved) or closed it.
     if (tab === 'assignedTab') return {
         $or: [...byStatus(tab), { status: 'estimated', 'preSale.status': { $nin: ['approved', 'completed', 'cancelled', 'rejected', 'new'] } }],
@@ -1229,8 +1230,7 @@ export const presaleTabCounts = async (req: Request, res: Response, next: NextFu
         const scope: any = {
             isDeleted: { $ne: true },
             ...NOT_WITH_SALES,
-            status: { $nin: ['Quoted', 'quoted'] },
-            $and: [{ $or: [{ 'preSale.presalePerson': { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }] }],
+            $and: [{ $or: [{ status: { $nin: ['Quoted', 'quoted'] } }, { 'preSale.origin': 'quote' }] }, { $or: [{ 'preSale.presalePerson': { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }, { 'preSale.origin': 'quote', 'preSale.status': 'new' }] }],
         };
         const entries = await Promise.all(Object.keys(PRESALE_TAB_STATUSES).map(async (key) => {
             // The unassigned New pool is only for people who assign; everyone else is limited to their own jobs.
@@ -1264,8 +1264,7 @@ export const getPresaleReport = async (req: Request, res: Response, next: NextFu
         const match: any = {
             isDeleted: { $ne: true },
             ...NOT_WITH_SALES,
-            status: { $nin: ['Quoted', 'quoted'] },
-            $and: [{ $or: [{ 'preSale.presalePerson': { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }] }],
+            $and: [{ $or: [{ status: { $nin: ['Quoted', 'quoted'] } }, { 'preSale.origin': 'quote' }] }, { $or: [{ 'preSale.presalePerson': { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }, { 'preSale.origin': 'quote', 'preSale.status': 'new' }] }],
         };
         if (department) match.department = new ObjectId(department);
         const dateFilter: Record<string, Date> = {};
@@ -1459,9 +1458,11 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
         // Quoted enquiries are normally excluded from the presale worklist (they've moved past presale),
         // but the completed tab still needs to show ones that went through presale estimation before being quoted.
         const hasEstimation = { 'preSale.estimations.optionalItems': { $exists: true, $not: { $size: 0 } } };
+        // A quoted enquiry whose quote asked presales for an update (origin 'quote') stays on the worklist.
+        const quoteOriginMatch = { 'preSale.origin': 'quote' };
         const quotedExclusionMatch = filter === 'completed'
-            ? { $or: [{ status: { $nin: ['Quoted', 'quoted'] } }, hasEstimation] }
-            : { status: { $nin: ['Quoted', 'quoted'] } };
+            ? { $or: [{ status: { $nin: ['Quoted', 'quoted'] } }, hasEstimation, quoteOriginMatch] }
+            : { $or: [{ status: { $nin: ['Quoted', 'quoted'] } }, quoteOriginMatch] };
 
         // Joined fields (customer/department/assigned-by names) need their lookups run before the
         // search $match can see them, so a text search covers more than just enquiryId/title.
@@ -1500,7 +1501,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
         const sortOrder: 1 | -1 = sortDir === 'desc' ? -1 : 1;
         const sortNeedsLookups = !!sortField && sortField.includes('.');
         const lookupsBeforeSort = needsJoinedSearch || sortNeedsLookups;
-        const sortStage: PipelineStage = sortField ? { $sort: { [sortField]: sortOrder, _id: sortOrder } } : { $sort: { 'preSale.createdDate': -1 } };
+        const sortStage: PipelineStage = sortField ? { $sort: { [sortField]: sortOrder, _id: sortOrder } } : { $sort: { 'preSale.createdDate': -1, _id: -1 } };
 
         const totalPresale: { total: number }[] = await enquiryModel.aggregate([
             {
@@ -1514,7 +1515,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
                 }
             },
             {
-                $match: { $or: [{ "preSale.presalePerson": { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }] }
+                $match: { $or: [{ "preSale.presalePerson": { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }, { 'preSale.origin': 'quote', 'preSale.status': 'new' }] }
             },
             ...(statusFilterMatch ? [{ $match: statusFilterMatch }] : []),
             ...(followUpMatch ? [{ $match: followUpMatch }] : []),
@@ -1537,7 +1538,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
                 $match: quotedExclusionMatch
             },
             {
-                $match: { $or: [{ "preSale.presalePerson": { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }] }
+                $match: { $or: [{ "preSale.presalePerson": { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }, { 'preSale.origin': 'quote', 'preSale.status': 'new' }] }
             },
             ...(statusFilterMatch ? [{ $match: statusFilterMatch }] : []),
             ...(followUpMatch ? [{ $match: followUpMatch }] : []),
@@ -1602,6 +1603,14 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
             {
                 $lookup: { from: 'employees', localField: 'preSale.presalePerson', foreignField: '_id', as: 'preSale.presalePerson' }
             },
+            // Quote-origin jobs show which quote asked for the update (details panel only).
+            {
+                $lookup: {
+                    from: 'quotations', localField: 'preSale.quoteId', foreignField: '_id', as: 'preSaleQuote',
+                    pipeline: [{ $project: { quoteId: 1, status: 1, subject: 1 } }],
+                }
+            },
+            { $addFields: { preSaleQuote: { $arrayElemAt: ['$preSaleQuote', 0] } } },
         ])
 
         if (totalPresale.length) return res.status(200).json({ total: totalPresale[0].total, enquiry: preSaleData })
@@ -1672,6 +1681,52 @@ const holderBlock = async (req: any, enquiryId: any): Promise<{ code: number; me
     return null;
 };
 
+/** The person who last assigned the job to someone other than its current holder (the manager who decides on it). */
+const assignerOf = (enquiry: any): string => {
+    const holderId = String(enquiry?.reAssigned || enquiry?.preSale?.presalePerson || '');
+    const last = [...(enquiry?.assignmentHistory || [])].reverse().find((h: any) => h.assignedBy && String(h.assignedBy) !== holderId);
+    return last ? String(last.assignedBy) : '';
+};
+
+/**
+ * When the holder (not a manager) sends the job on, it waits for the assigner instead: status 'pending approval'.
+ * Returns null when the send should go straight through (manager/super admin, self-assigned, or not the holder).
+ */
+const holdSendForApproval = async (req: any, enquiryId: any): Promise<{ error?: { code: number; message: string }; enquiry?: any } | null> => {
+    const actor = req.employee || await getEmployeeData(req.user);
+    if (/^superadmin$/i.test(String((actor?.category as any)?.role ?? '')) || hasAssignFlag(actor)) return null;
+    const job: any = await enquiryModel.findById(enquiryId);
+    if (!job || !['assigned', 'in review', 'in revision'].includes(String(job.preSale?.status))) return null;
+    const holderId = String(job.reAssigned || job.preSale?.presalePerson || '');
+    const assignerId = assignerOf(job);
+    if (!holderId || holderId !== String(actor?._id) || !assignerId) return null;
+    if (job.preSale?.feedback?.some((fb: any) => !fb.feedback)) {
+        return { error: { code: 400, message: 'A feedback request is still awaiting a response. Please wait for it before sending this job.' } };
+    }
+    const est = job.preSale?.estimations;
+    const baseline = job.preSale?.quoteBaselineVersion;
+    if (!est?.optionalItems?.length || (job.preSale?.origin === 'quote' && typeof baseline === 'number' && (est.version || 0) <= baseline)) {
+        return { error: { code: 400, message: 'Upload the estimate before sending it.' } };
+    }
+    const fromQuote = job.preSale?.origin === 'quote';
+    await enquiryModel.updateOne({ _id: job._id }, { $set: { 'preSale.status': 'pending approval' } });
+    await logEnquiryAudit(req, job._id, 'presale-sent-for-approval', `Estimate sent to the assigner to send ${fromQuote ? 'to the quote' : 'to the enquiry'}`);
+    await notifyByPrivilege(
+        {
+            type: 'AssignedJob',
+            referenceModel: 'Enquiry',
+            title: 'Estimate waiting for your approval',
+            message: `${actor?.firstName ?? 'The engineer'} finished the estimate for enquiry ${job.enquiryId}. Send it ${fromQuote ? 'to the quote' : 'to sales'} or reassign it.`,
+            sentBy: actor?._id?.toString() || assignerId,
+            referenceId: job._id,
+            additionalData: { enquiryId: job._id.toString() }
+        },
+        { privilegeKey: 'assignedJob', checkFunction: (_privileges, employeeId) => employeeId === assignerId }
+    );
+    const updated = await enquiryModel.findById(enquiryId).populate(['client', 'department', 'salesPerson']);
+    return { enquiry: updated };
+};
+
 export const updateEnquiryStatus =async (req: Request, res: Response, next: NextFunction) => {
     try {
         let data = req.body
@@ -1710,6 +1765,26 @@ export const updateEnquiryStatus =async (req: Request, res: Response, next: Next
                     [{ label: 'Status', from: 'Lost', to: 'New' }]);
             }
             return res.status(200).json({ update: reopened });
+        }
+        // An engineer's send goes to whoever assigned the job first; that person decides whether it goes on to sales.
+        if (data.status === 'Work In Progress') {
+            const held = await holdSendForApproval(req, data.id);
+            if (held?.error) return res.status(held.error.code).json({ message: held.error.message });
+            if (held?.enquiry) return res.status(200).json({ update: held.enquiry, pendingApproval: true });
+        }
+        // A presale job that came from a quote hands back to the quote, never to the enquiry.
+        const quoteJob: any = await enquiryModel.findById(data.id);
+        if (quoteJob?.preSale?.origin === 'quote' && ['new', 'assigned', 'in review', 'pending approval', 'in revision'].includes(String(quoteJob.preSale?.status))) {
+            if (data.status !== 'Work In Progress') {
+                return res.status(409).json({ message: 'A presale update for a quote is running on this enquiry. Its status cannot be changed from here.' });
+            }
+            if (quoteJob.preSale?.feedback?.some((fb: any) => !fb.feedback)) {
+                return res.status(400).json({ message: 'A feedback request is still awaiting a response. Please wait for it before sending this job back to the quote.' });
+            }
+            const quoteJobError = await completeQuotePresale(req, quoteJob);
+            if (quoteJobError) return res.status(quoteJobError.code).json({ message: quoteJobError.message });
+            const handedBack = await enquiryModel.findById(data.id).populate(['client', 'department', 'salesPerson']);
+            return res.status(200).json({ update: handedBack });
         }
         let quote = await quotationModel.findOne({ enqId: data.id })
         let status = data.status
@@ -2054,6 +2129,7 @@ export const giveFeedback = async (req: any, res: Response, next: NextFunction) 
             }
         }
 
+        const feedbackJob: any = await enquiryModel.findById(enquiryId).select('preSale.origin preSale.quoteId').lean();
         const setFields: any = {
             "preSale.feedback.$.feedback": feedback,
             "preSale.feedback.$.seenByFeedbackRequester": false,
@@ -2067,7 +2143,8 @@ export const giveFeedback = async (req: any, res: Response, next: NextFunction) 
             setFields['preSale.createdDate'] = Date.now();
         } else {
             // Sent to sales: the presale job is done and moves to Completed.
-            setFields['status'] = 'estimated';
+            // A quote-origin job hands back to the quote below and never moves the enquiry's own status.
+            if (!feedbackJob?.preSale?.origin || feedbackJob.preSale.origin !== 'quote') setFields['status'] = 'estimated';
             setFields['preSale.status'] = 'completed';
             setFields['preSale.seenbySalesPerson'] = false;
         }
@@ -2108,7 +2185,11 @@ export const giveFeedback = async (req: any, res: Response, next: NextFunction) 
                     }
                 }
             );
-            if (action !== 'revise') {
+            if (action !== 'revise' && feedbackJob?.preSale?.origin === 'quote') {
+                // Approved: the estimate is staged on the quote and its owner is notified there.
+                const staged = await completeQuotePresale(req, result);
+                if (staged) return res.status(staged.code).json({ message: staged.message });
+            } else if (action !== 'revise') {
                 // Approved estimation goes to the enquiry owner, who now has to review it
                 const owner = String(result.salesPerson ?? '');
                 await notifyByPrivilege(
@@ -2140,6 +2221,10 @@ export const giveRevision = async (req: any, res: Response, next: NextFunction) 
         let enquiryId = req.params.enquiryId;
         const blocked = await presaleStepBlock(enquiryId, ['in review', 'completed', 'approved']);
         if (blocked) return res.status(blocked.code).json({ message: blocked.message });
+        const originCheck: any = await enquiryModel.findById(enquiryId).select('preSale.origin').lean();
+        if (originCheck?.preSale?.origin === 'quote') {
+            return res.status(409).json({ message: 'This estimate belongs to a quote update. Send it back from the quote.' });
+        }
         const result = await enquiryModel.findOneAndUpdate(
             { _id: enquiryId },
             {
@@ -2192,69 +2277,424 @@ export const giveRevision = async (req: any, res: Response, next: NextFunction) 
     }
 }
 
-export const reviseQuoteEstimation = async (req: any, res: Response, next: NextFunction) => {
+// ---------------------------------------------------------------------------------------------------------------------
+// Quote → presale update. The quote owner asks presales to rework the estimate; the job runs through the normal presale
+// queue (same enquiry document, preSale.origin = 'quote') and the result goes back to the QUOTE. The enquiry's own
+// status is never touched by this flow.
+// ---------------------------------------------------------------------------------------------------------------------
+
+const QUOTE_PRESALE_ACTIVE_JOB = ['new', 'assigned', 'in review', 'pending approval', 'in revision', 'rejected'];
+const QUOTE_UNSENT_STATUSES: string[] = [quoteStatus.Draft, quoteStatus.WorkInProgress, quoteStatus.ReadyForSubmission];
+
+/** Why a quote cannot be sent to presales right now, or null when it can. Mirrors what the client uses to hide the button. */
+const quotePresaleBlock = (quote: any): string | null => {
+    if ([quoteStatus.Won, quoteStatus.Lost].includes(quote.status)) return 'A Won or Lost quote cannot be sent to presales.';
+    if (quote.status === quoteStatus.InPresales || quote.status === quoteStatus.Estimated) return 'This quote is already with presales.';
+    const dealStatus = quote.dealData?.status;
+    if (dealStatus === 'pending' || dealStatus === 'approved') return 'The deal sheet must be rejected before the quote can go back to presales.';
+    return null;
+};
+
+const isSuperAdminEmployee = (employee: any) => /^superadmin$/i.test(String(employee?.category?.role ?? ''));
+
+/** Loads a quote and checks the caller owns it (or is a Super Admin). */
+const loadOwnedQuote = async (req: any, res: Response) => {
+    const quote: any = await quotationModel.findById(req.params.quoteId);
+    if (!quote || quote.isDeleted) {
+        res.status(404).json({ message: 'Quote not found' });
+        return null;
+    }
+    const actor = req.employee || await getEmployeeData(req.user);
+    if (String(quote.createdBy) !== String(actor?._id) && !isSuperAdminEmployee(actor)) {
+        res.status(403).json({ message: 'Only the quote owner or a Super Admin can do this' });
+        return null;
+    }
+    return { quote, actor };
+};
+
+export const requestQuotePresale = async (req: any, res: Response, next: NextFunction) => {
     try {
-        let { revisionComment } = req.body;
-        let enquiryId = req.params.enquiryId;
-        const blocked = await presaleStepBlock(enquiryId, ['in review', 'completed', 'approved']);
-        if (blocked) return res.status(blocked.code).json({ message: blocked.message });
-        const quote = await quotationModel.findOne({ enqId: enquiryId });
-        const result = await enquiryModel.findOneAndUpdate(
-            { _id: enquiryId },
+        const note = String(req.body?.note ?? req.body?.revisionComment ?? '').trim();
+        const loaded = await loadOwnedQuote(req, res);
+        if (!loaded) return;
+        const { quote, actor } = loaded;
+
+        const blockReason = quotePresaleBlock(quote);
+        if (blockReason) return res.status(409).json({ message: blockReason });
+        if (!note) return res.status(400).json({ message: 'Tell presales what needs to change in the estimate.' });
+
+        const enquiry: any = quote.enqId ? await enquiryModel.findOne({ _id: quote.enqId, isDeleted: { $ne: true } }) : null;
+        if (!enquiry) return res.status(400).json({ message: 'This quote is not linked to an enquiry, so there is no presale job to reopen.' });
+        if (QUOTE_PRESALE_ACTIVE_JOB.includes(String(enquiry.preSale?.status))) {
+            return res.status(409).json({ message: 'Presales is still working on the enquiry behind this quote.' });
+        }
+
+        const est = enquiry.preSale?.estimations;
+        const historyCount = (enquiry.preSale?.estimationHistory || []).length;
+        const hasEstimate = !!est?.optionalItems?.length || !!est?.currency;
+        const baselineVersion = hasEstimate ? (est.version || historyCount + 1) : 0;
+        const assignApproval = await buildAssignmentChain();
+        const now = new Date();
+
+        await enquiryModel.updateOne(
+            { _id: enquiry._id },
             {
-                $push: { 'preSale.revisionComment': revisionComment },
-                status: 'revision',
-                'preSale.status': 'in revision',
-                'preSale.seenbyEmployee': false,
-                'preSale.newFeedbackAccess': true,
-                'preSale.createdDate': Date.now()
-            },
-            { new: true }
+                $set: {
+                    'preSale.origin': 'quote',
+                    'preSale.quoteId': quote._id,
+                    'preSale.quoteBaselineVersion': baselineVersion,
+                    'preSale.status': 'new',
+                    'preSale.createdDate': now,
+                    'preSale.newFeedbackAccess': true,
+                    'preSale.seenbyEmployee': false,
+                    'preSale.seenbySalesPerson': false,
+                    ...(assignApproval ? { 'preSale.assignApproval': assignApproval } : {}),
+                },
+                $push: { 'preSale.revisionComment': note },
+                $unset: { reAssigned: '', reAssignedDate: '', 'preSale.presalePerson': '', ...(assignApproval ? {} : { 'preSale.assignApproval': '' }) },
+            }
         );
-        if (!result) {
-            return res.status(404).send('Enquiry not found or comment not added.');
-        }
 
-        if (quote) {
-            await quotationModel.updateOne({ _id: quote._id }, { $set: { status: "revised" } })
-        }
-        await logEnquiryAudit(req, enquiryId, 'revision-requested', 'Quotation estimation sent back for revision',
-            revisionComment ? [{ label: 'Comment', to: String(revisionComment) }] : undefined);
+        const round = (quote.presaleRevision?.round ?? 0) + 1;
+        const dealRejected = quote.dealData?.status === 'rejected';
+        await quotationModel.updateOne(
+            { _id: quote._id },
+            {
+                $set: {
+                    status: quoteStatus.InPresales,
+                    'presaleRevision.note': note,
+                    'presaleRevision.requestedBy': actor?._id,
+                    'presaleRevision.requestedAt': now,
+                    'presaleRevision.previousStatus': quote.status,
+                    'presaleRevision.round': round,
+                    // A rejected deal sheet is flagged as under revision; it is invalidated only when the new estimate is accepted.
+                    ...(dealRejected ? { 'presaleRevision.dealUnderRevision': true } : {}),
+                },
+                $unset: {
+                    'presaleRevision.proposedEstimate': '', 'presaleRevision.returnedAt': '',
+                    'presaleRevision.returnedBy': '', 'presaleRevision.sendBackNote': '',
+                    ...(dealRejected ? {} : { 'presaleRevision.dealUnderRevision': '' }),
+                },
+                $push: {
+                    editHistory: {
+                        editedBy: actor?._id, editedAt: now, action: 'PresaleRequested',
+                        fromStatus: quote.status, toStatus: quoteStatus.InPresales, reason: note,
+                    },
+                },
+            }
+        );
 
-        // After a reassign the person doing the work is `reAssigned`, not the original presale person
-        const presalePerson = String(result.reAssigned || result.preSale?.presalePerson || '');
-        const userData = await getEmployeeData(req.user);
+        await logEnquiryAudit(req, enquiry._id, 'quote-presale-requested', `Quote ${quote.quoteId} sent to presales for an estimate update`,
+            [{ label: 'Note', to: note }]);
         await notifyByPrivilege(
             {
                 type: 'AssignedJob',
                 referenceModel: 'Enquiry',
-                title: 'Estimation sent back for revision',
-                message: `Presale estimation has been sent back for revision for enquiry ${result.enquiryId}`,
-                sentBy: userData?._id?.toString() || presalePerson,
-                referenceId: result._id,
-                additionalData: { enquiryId: result._id.toString() }
+                title: 'Quote sent to presales',
+                message: `Quote ${quote.quoteId} needs an updated estimate (enquiry ${enquiry.enquiryId}). It is waiting to be assigned.`,
+                sentBy: actor?._id?.toString() || String(quote.createdBy),
+                referenceId: enquiry._id,
+                additionalData: { enquiryId: enquiry._id.toString() }
+            },
+            { privilegeKey: 'assignedJob', checkFunction: (privileges) => privileges.assignedJob?.assign === true }
+        );
+
+        return res.status(200).json({ success: true, status: quoteStatus.InPresales });
+    } catch (error) {
+        console.log(error);
+        next(error);
+    }
+};
+
+/** The old "send for revision" entry point now opens the quote-owned flow instead of flipping the enquiry. */
+export const reviseQuoteEstimation = async (req: any, res: Response, next: NextFunction) => {
+    try {
+        const quote: any = await quotationModel.findOne({ enqId: req.params.enquiryId, isDeleted: { $ne: true } }).select('_id');
+        if (!quote) return res.status(404).json({ message: 'No quote found for this enquiry.' });
+        req.params.quoteId = String(quote._id);
+        return requestQuotePresale(req, res, next);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Presale handed the job back. For a quote-origin job the estimate is staged on the quote (status Estimated) and waits
+ * for the owner's one-click accept; nothing on the quote's content changes yet. Returns an error object or null.
+ */
+const completeQuotePresale = async (req: any, enquiry: any): Promise<{ code: number; message: string } | null> => {
+    const quote: any = await quotationModel.findById(enquiry.preSale?.quoteId);
+    if (!quote || quote.status !== quoteStatus.InPresales) {
+        return { code: 409, message: 'The quote is no longer waiting for presales.' };
+    }
+    const est = enquiry.preSale?.estimations;
+    const baseline = enquiry.preSale?.quoteBaselineVersion;
+    if (!est?.optionalItems?.length || (typeof baseline === 'number' && (est.version || 0) <= baseline)) {
+        return { code: 400, message: 'Upload the updated estimate before sending it back to the quote.' };
+    }
+    const actor = req.employee || await getEmployeeData(req.user);
+    const now = new Date();
+    await quotationModel.updateOne(
+        { _id: quote._id },
+        {
+            $set: {
+                status: quoteStatus.Estimated,
+                'presaleRevision.proposedEstimate': {
+                    optionalItems: est.optionalItems, currency: est.currency, totalDiscount: est.totalDiscount,
+                    presaleNote: est.presaleNote, version: est.version, exchangeRate: est.exchangeRate,
+                },
+                'presaleRevision.returnedAt': now,
+                'presaleRevision.returnedBy': actor?._id,
+            },
+            $push: {
+                editHistory: {
+                    editedBy: actor?._id, editedAt: now, action: 'PresaleReturned',
+                    fromStatus: quoteStatus.InPresales, toStatus: quoteStatus.Estimated,
+                    reason: est.presaleNote || 'Presales returned an updated estimate',
+                },
+            },
+        }
+    );
+    await enquiryModel.updateOne(
+        { _id: enquiry._id },
+        { $set: { 'preSale.status': 'completed', 'preSale.seenbySalesPerson': false, 'preSale.newFeedbackAccess': true } }
+    );
+    await logEnquiryAudit(req, enquiry._id, 'quote-presale-returned', `Updated estimate returned to quote ${quote.quoteId}`);
+    const owner = String(quote.createdBy ?? '');
+    await notifyByPrivilege(
+        {
+            type: 'EnquiryEstimationReady',
+            referenceModel: 'Enquiry',
+            title: 'Updated estimate ready',
+            message: `Presales returned an updated estimate for quote ${quote.quoteId}. Review it and accept to create a new revision.`,
+            sentBy: actor?._id?.toString() || owner,
+            referenceId: enquiry._id,
+            additionalData: { enquiryId: enquiry._id.toString(), quoteId: String(quote._id) }
+        },
+        { privilegeKey: 'quotation', checkFunction: (_privileges, employeeId) => employeeId === owner }
+    );
+    return null;
+};
+
+/** One click: the staged estimate becomes the quote's content as a new revision (when the old one had gone to the customer). */
+export const acceptQuotePresale = async (req: any, res: Response, next: NextFunction) => {
+    try {
+        const loaded = await loadOwnedQuote(req, res);
+        if (!loaded) return;
+        const { quote, actor } = loaded;
+        if (quote.status !== quoteStatus.Estimated || !quote.presaleRevision?.proposedEstimate) {
+            return res.status(409).json({ message: 'There is no returned estimate waiting for acceptance.' });
+        }
+        const proposed = quote.presaleRevision.proposedEstimate;
+        const pr = quote.presaleRevision;
+        const now = new Date();
+        const wasSent = !QUOTE_UNSENT_STATUSES.includes(String(pr.previousStatus));
+        const nextRevision = (quote.revision ?? 0) + 1;
+
+        const $set: any = {
+            status: quoteStatus.WorkInProgress,
+            optionalItems: proposed.optionalItems,
+            currency: proposed.currency,
+            ...(proposed.totalDiscount !== undefined ? { totalDiscount: proposed.totalDiscount } : {}),
+        };
+        const $unset: any = {
+            'presaleRevision.proposedEstimate': '', 'presaleRevision.dealUnderRevision': '',
+            'presaleRevision.returnedAt': '', 'presaleRevision.returnedBy': '', 'presaleRevision.sendBackNote': '',
+        };
+        const $push: any = {
+            editHistory: {
+                editedBy: actor?._id, editedAt: now, action: 'PresaleAccepted',
+                fromStatus: quoteStatus.Estimated, toStatus: quoteStatus.WorkInProgress,
+                ...(wasSent ? { revision: nextRevision } : {}),
+                reason: wasSent ? `Presale estimate merged into the quote as revision ${nextRevision}` : 'Presale estimate merged into the quote',
+            },
+            'presaleRevision.history': {
+                round: pr.round, requestedBy: pr.requestedBy, requestedAt: pr.requestedAt, requestNote: pr.note,
+                returnedAt: pr.returnedAt, outcome: 'accepted', outcomeNote: proposed.presaleNote, acceptedAt: now,
+            },
+        };
+        if (wasSent) {
+            $set.revision = nextRevision;
+            $push.revisions = {
+                revision: nextRevision - 1, savedAt: now, savedBy: actor?._id, reason: `Presale update (round ${pr.round})`,
+                snapshot: {
+                    subject: quote.subject, currency: quote.currency, optionalItems: quote.optionalItems,
+                    customerNote: quote.customerNote, termsAndCondition: quote.termsAndCondition,
+                    paymentTerms: quote.paymentTerms, deliveryTerms: quote.deliveryTerms, deliveryLocation: quote.deliveryLocation,
+                    validityDate: quote.closingDate || quote.validityDate, quotedDate: quote.quotedDate || quote.date,
+                },
+            };
+        }
+        // The old Deal Sheet no longer matches the new estimate: archive it and free its number for the next one.
+        if (quote.dealData?.dealId || quote.dealData?.status) {
+            const comments: string[] = Array.isArray(quote.dealData?.comments) ? quote.dealData.comments : [];
+            if (quote.dealData?.dealId) $set.releasedDealId = String(quote.dealData.dealId);
+            $unset.dealData = '';
+            $push.discardedDeals = {
+                dealId: quote.dealData.dealId, status: quote.dealData.status, lastComment: comments[comments.length - 1] ?? '',
+                discardedAt: now, discardedBy: actor?._id, reason: 'Estimate updated by presales',
+            };
+        }
+
+        await quotationModel.updateOne({ _id: quote._id }, { $set, $unset, $push });
+        await logEnquiryAudit(req, quote.enqId, 'quote-presale-merged',
+            `Estimate merged into quote ${quote.quoteId}${wasSent ? ` as revision ${nextRevision}` : ''}`);
+        return res.status(200).json({ success: true, status: quoteStatus.WorkInProgress, revision: wasSent ? nextRevision : quote.revision ?? 0 });
+    } catch (error) {
+        console.log(error);
+        next(error);
+    }
+};
+
+/** The owner is not happy with the returned estimate: it goes back to presales with a mandatory comment. */
+export const sendBackQuotePresale = async (req: any, res: Response, next: NextFunction) => {
+    try {
+        const comment = String(req.body?.comment ?? '').trim();
+        if (!comment) return res.status(400).json({ message: 'Tell presales what is still wrong with the estimate.' });
+        const loaded = await loadOwnedQuote(req, res);
+        if (!loaded) return;
+        const { quote, actor } = loaded;
+        if (quote.status !== quoteStatus.Estimated) {
+            return res.status(409).json({ message: 'There is no returned estimate to send back.' });
+        }
+        // The job re-enters presales as a brand-new job: back in the New tab, to be assigned again.
+        const previous: any = await enquiryModel.findOne({ _id: quote.enqId, 'preSale.origin': 'quote', 'preSale.quoteId': quote._id });
+        if (!previous) return res.status(409).json({ message: 'The presale job for this quote could not be found.' });
+        const presalePerson = String(previous.reAssigned || previous.preSale?.presalePerson || '');
+        const assignApproval = await buildAssignmentChain();
+        const enquiry: any = await enquiryModel.findOneAndUpdate(
+            { _id: previous._id },
+            {
+                $push: { 'preSale.revisionComment': comment },
+                $set: {
+                    'preSale.status': 'new', 'preSale.seenbyEmployee': false, 'preSale.seenbySalesPerson': false,
+                    'preSale.newFeedbackAccess': true, 'preSale.createdDate': new Date(),
+                    ...(assignApproval ? { 'preSale.assignApproval': assignApproval } : {}),
+                },
+                $unset: { reAssigned: '', reAssignedDate: '', 'preSale.presalePerson': '', ...(assignApproval ? {} : { 'preSale.assignApproval': '' }) },
+            },
+            { new: true }
+        );
+        if (!enquiry) return res.status(409).json({ message: 'The presale job for this quote could not be found.' });
+
+        const now = new Date();
+        await quotationModel.updateOne(
+            { _id: quote._id },
+            {
+                $set: { status: quoteStatus.InPresales, 'presaleRevision.sendBackNote': comment },
+                $unset: { 'presaleRevision.proposedEstimate': '', 'presaleRevision.returnedAt': '', 'presaleRevision.returnedBy': '' },
+                $push: {
+                    editHistory: {
+                        editedBy: actor?._id, editedAt: now, action: 'PresaleSentBack',
+                        fromStatus: quoteStatus.Estimated, toStatus: quoteStatus.InPresales, reason: comment,
+                    },
+                },
+            }
+        );
+        await logEnquiryAudit(req, enquiry._id, 'quote-presale-sent-back', `Estimate for quote ${quote.quoteId} sent back to presales`,
+            [{ label: 'Comment', to: comment }]);
+
+        // Notify whoever handled the job before (captured above, before the assignee was cleared)
+        await notifyByPrivilege(
+            {
+                type: 'AssignedJob',
+                referenceModel: 'Enquiry',
+                title: 'Estimate sent back',
+                message: `The estimate for quote ${quote.quoteId} was sent back for revision: ${comment}`,
+                sentBy: actor?._id?.toString() || presalePerson,
+                referenceId: enquiry._id,
+                additionalData: { enquiryId: enquiry._id.toString() }
             },
             {
                 privilegeKey: 'assignedJob',
-                checkFunction: (privileges, employeeId) => {
-                    return employeeId === presalePerson &&
-                           privileges.assignedJob?.viewReport !== 'none';
-                }
+                checkFunction: (privileges, employeeId) => employeeId === presalePerson && privileges.assignedJob?.viewReport !== 'none'
             }
         );
+        return res.status(200).json({ success: true, status: quoteStatus.InPresales });
+    } catch (error) {
+        console.log(error);
+        next(error);
+    }
+};
 
-        if (!result) {
-            return res.status(404).send('Enquiry not found or comment not added.');
+/** The job is still waiting (unassigned or assigned) and no estimate has been uploaded: presales has not started. */
+const QUOTE_PRESALE_NOT_STARTED = ['new', 'assigned'];
+
+/** Sales withdraws the request before presales has started on it: the quote returns to the status it had. */
+export const cancelQuotePresale = async (req: any, res: Response, next: NextFunction) => {
+    try {
+        const loaded = await loadOwnedQuote(req, res);
+        if (!loaded) return;
+        const { quote, actor } = loaded;
+        if (quote.status !== quoteStatus.InPresales) {
+            return res.status(409).json({ message: 'This quote is not waiting for presales.' });
+        }
+        const pr = quote.presaleRevision || {};
+        // Matching on the job status makes this atomic: an upload (status 'in review') that lands first wins.
+        const enquiry: any = await enquiryModel.findOneAndUpdate(
+            {
+                _id: quote.enqId, 'preSale.origin': 'quote', 'preSale.quoteId': quote._id,
+                'preSale.status': { $in: QUOTE_PRESALE_NOT_STARTED },
+                $or: [{ 'preSale.quoteBaselineVersion': { $exists: false } }, { 'preSale.estimations.version': { $exists: false } }, { $expr: { $lte: ['$preSale.estimations.version', '$preSale.quoteBaselineVersion'] } }],
+            },
+            {
+                $set: { 'preSale.status': 'completed', 'preSale.seenbySalesPerson': true },
+                $unset: { 'preSale.origin': '', 'preSale.quoteId': '', 'preSale.quoteBaselineVersion': '', 'preSale.assignApproval': '', 'preSale.presalePerson': '', reAssigned: '', reAssignedDate: '' },
+                ...(pr.note ? { $pull: { 'preSale.revisionComment': pr.note } } : {}),
+            },
+            { new: false }
+        );
+        if (!enquiry) {
+            return res.status(409).json({ message: 'Presales has already started on this quote, so the request can no longer be cancelled.' });
         }
 
-        return res.status(200).json({ success: true })
-    } catch (error) {
-        console.log(error)
-        next(error)
-    }
-}
+        const now = new Date();
+        const restoredStatus = pr.previousStatus || quoteStatus.WorkInProgress;
+        await quotationModel.updateOne(
+            { _id: quote._id },
+            {
+                $set: { status: restoredStatus },
+                $unset: { 'presaleRevision.proposedEstimate': '', 'presaleRevision.dealUnderRevision': '', 'presaleRevision.returnedAt': '', 'presaleRevision.returnedBy': '' },
+                $push: {
+                    'presaleRevision.history': {
+                        round: pr.round, requestedBy: pr.requestedBy, requestedAt: pr.requestedAt, requestNote: pr.note,
+                        returnedAt: now, outcome: 'cancelled', outcomeNote: 'Cancelled by sales before presales started',
+                    },
+                    editHistory: {
+                        editedBy: actor?._id, editedAt: now, action: 'PresaleCancelled',
+                        fromStatus: quoteStatus.InPresales, toStatus: restoredStatus, reason: 'Presale update request cancelled',
+                    },
+                },
+            }
+        );
+        await logEnquiryAudit(req, enquiry._id, 'quote-presale-cancelled', `Presale update request for quote ${quote.quoteId} was cancelled by sales`);
 
-export const uploadEstimations = async (req: any, res: Response, next: NextFunction) => {
+        const presalePerson = String(enquiry.reAssigned || enquiry.preSale?.presalePerson || '');
+        await notifyByPrivilege(
+            {
+                type: 'AssignedJob',
+                referenceModel: 'Enquiry',
+                title: 'Presale request cancelled',
+                message: `Sales cancelled the presale update request for quote ${quote.quoteId} (enquiry ${enquiry.enquiryId}). No work is needed.`,
+                sentBy: actor?._id?.toString() || String(quote.createdBy),
+                referenceId: enquiry._id,
+                additionalData: { enquiryId: enquiry._id.toString() }
+            },
+            {
+                privilegeKey: 'assignedJob',
+                checkFunction: (privileges, employeeId) => presalePerson
+                    ? employeeId === presalePerson
+                    : privileges.assignedJob?.assign === true,
+            }
+        );
+        return res.status(200).json({ success: true, status: restoredStatus });
+    } catch (error) {
+        console.log(error);
+        next(error);
+    }
+};
+
+export const uploadEstimations =async (req: any, res: Response, next: NextFunction) => {
     try {
         let { optionalItems, enquiryId, currency, totalDiscount, preSaleNote, selectedOption } = req.body;
         const blocked = await presaleStepBlock(enquiryId, ['assigned', 'in revision', 'in review'])
@@ -2264,7 +2704,10 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
             return res.status(400).json({ message: 'optionalItems must be a list' });
         }
 
-        const quote =await quotationModel.findOne({ enqId: enquiryId })
+        // A quote-origin job stages its estimate on the quote only when it is handed back; nothing is written to the quote here.
+        const originDoc: any = await enquiryModel.findById(enquiryId).select('preSale.origin preSale.quoteBaselineVersion').lean();
+        const fromQuote = originDoc?.preSale?.origin === 'quote';
+        const quote = fromQuote ? null : await quotationModel.findOne({ enqId: enquiryId })
         if (quote) {
             let quoteData = await quotationModel.updateOne(
                 { _id: quote._id },
@@ -2285,7 +2728,10 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
         const existing: any = current?.preSale?.estimations;
         const historyCount = (current?.preSale?.estimationHistory || []).length;
         const hasExisting = !!existing?.optionalItems?.length || !!existing?.currency;
-        const isNewVersion = hasExisting && current?.preSale?.status === 'in revision';
+        // For a quote-origin job the estimate from before the request is the baseline: the first upload of the round archives it.
+        const baselineVersion = originDoc?.preSale?.quoteBaselineVersion;
+        const isNewVersion = hasExisting && (current?.preSale?.status === 'in revision'
+            || (fromQuote && typeof baselineVersion === 'number' && (existing.version || historyCount + 1) <= baselineVersion));
         const version = hasExisting
             ? (isNewVersion ? (existing.version || historyCount + 1) + 1 : (existing.version || historyCount + 1))
             : historyCount + 1;
@@ -2309,6 +2755,7 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
                 'preSale.estimations.currency': currency,
                 'preSale.estimations.presaleNote': preSaleNote,
                 'preSale.estimations.version': version,
+                ...(fromQuote && totalDiscount !== undefined ? { 'preSale.estimations.totalDiscount': totalDiscount } : {}),
                 // The enquiry itself stays "in presales"; only the presale job moves to review.
                 'preSale.status': 'in review',
             },
@@ -2397,7 +2844,7 @@ export const presalesCount = async (req: Request, res: Response, next: NextFunct
     try {
         const { access, scopeIds } = await presaleViewScope(req);
 
-        let accessFilter: any = { $or: [{ status: { $in: ['Assigned To Presale Manager', 'Assigned To Presale Engineer'] } }, { 'preSale.status': { $in: ['assigned', 'in review'] } }] };
+        let accessFilter: any = { $or: [{ status: { $in: ['Assigned To Presale Manager', 'Assigned To Presale Engineer'] } }, { 'preSale.status': { $in: ['assigned', 'in review', 'pending approval'] } }] };
 
         switch (access) {
             case 'assigned':
@@ -2616,7 +3063,9 @@ export const RejectPresaleJob = async (req: Request, res: Response, next: NextFu
         enquiry.preSale.newFeedbackAccess = true;
 
         // An engineer's rejection waits for the manager to review it; a manager's rejection is final, so it goes straight back to sales for resend.
-        enquiry.status = 'rejected';
+        // A quote-origin job never moves the enquiry's own status.
+        const fromQuote = (enquiry.preSale as any)?.origin === 'quote';
+        if (!fromQuote) enquiry.status = 'rejected';
         enquiry.preSale.status = role === 'Engineer' ? 'rejected' : 'returned';
 
         const result = await enquiry.save();
@@ -2631,32 +3080,23 @@ export const RejectPresaleJob = async (req: Request, res: Response, next: NextFu
         const presalePerson = String(result.preSale.presalePerson || '');
         const userData = rejecter;
 
-        // With a presale workflow, an engineer's rejection puts the job back in front of the assigners:
-        // the assignee is cleared and the escalation chain restarts, so someone must reassign it in time.
-        const assignApproval = role === 'Engineer' ? await buildAssignmentChain() : null;
-        if (assignApproval) {
-            await enquiryModel.updateOne(
-                { _id: result._id },
-                {
-                    $set: { status: 'in presales', 'preSale.status': 'new', 'preSale.assignApproval': assignApproval },
-                    $unset: { reAssigned: '', reAssignedDate: '', 'preSale.presalePerson': '' }
-                }
-            );
-            await logEnquiryAudit(req, result._id, 'presale-returned-to-assigner', 'Rejected by assignee; back to presale for reassignment');
+        // An engineer's rejection goes to whoever assigned the job (usually the manager), who reads the reason and
+        // decides: return it to sales, or reassign it (to the same or another engineer) with a note.
+        if (role === 'Engineer') {
+            const assignerId = assignerOf(result);
             await notifyByPrivilege(
                 {
                     type: 'AssignedJob',
                     referenceModel: 'Enquiry',
                     title: 'Presale Job Rejected by Engineer',
-                    message: `Enquiry ${result.enquiryId} was rejected by the assigned engineer and needs to be reassigned`,
+                    message: `Enquiry ${result.enquiryId} was rejected by the assigned engineer: ${comment}`,
                     sentBy: userData?._id?.toString() || presalePerson,
                     referenceId: result._id,
                     additionalData: { enquiryId: result._id.toString() }
                 },
-                {
-                    privilegeKey: 'assignedJob',
-                    checkFunction: (privileges) => privileges.assignedJob?.assign === true
-                }
+                assignerId
+                    ? { privilegeKey: 'assignedJob', checkFunction: (_privileges, employeeId) => employeeId === assignerId }
+                    : { privilegeKey: 'assignedJob', checkFunction: (privileges) => privileges.assignedJob?.assign === true }
             );
             return res.status(200).json({ success: true });
         }
@@ -2664,7 +3104,12 @@ export const RejectPresaleJob = async (req: Request, res: Response, next: NextFu
         // An engineer's own rejection waits for the manager's review and notifies no one: the rejecting engineer
         // has the on-screen confirmation. A manager's rejection is final, so the enquiry owner has to act on it.
         if (role !== 'Engineer') {
-            const owner = String(result.salesPerson ?? '');
+            let owner = String(result.salesPerson ?? '');
+            if (fromQuote && (result.preSale as any)?.quoteId) {
+                // The quote goes back to its previous status with the presale comment; its owner is the one to act.
+                const restored: any = await restoreQuoteAfterPresale((result.preSale as any).quoteId, comment, 'rejected');
+                if (restored?.createdBy) owner = String(restored.createdBy);
+            }
             await notifyByPrivilege(
                 {
                     type: 'PresaleRejected',
@@ -2744,7 +3189,7 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
                 return res.status(403).json({ message: 'You can only assign this job to someone in your team' });
             }
         }
-        const existing = await enquiryModel.findById(enquiryId).select('preSale.presalePerson preSale.assignApproval preSale.status');
+        const existing = await enquiryModel.findById(enquiryId).select('preSale.presalePerson preSale.assignApproval preSale.status preSale.origin');
         // First assignment of a job sent straight to presale: no presalePerson yet, and the
         // feedback / reject / send routes all read it as the person holding the job.
         const isFirstAssignment = !existing?.preSale?.presalePerson;
@@ -2778,7 +3223,7 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
             { _id: enquiryId },
             {
                 $set: {
-                    reAssigned: employeeId, reAssignedDate: reAssignEntry.date, status: 'in presales', 'preSale.status': wasInRevision ? 'in revision' : 'assigned', reAssignedSeen: false,
+                    reAssigned: employeeId, reAssignedDate: reAssignEntry.date, ...(existing?.preSale?.origin === 'quote' ? {} : { status: 'in presales' }), 'preSale.status': wasInRevision ? 'in revision' : 'assigned', reAssignedSeen: false,
                     ...(isFirstAssignment ? { 'preSale.presalePerson': employeeId } : {}),
                     ...(typeof comment === 'string' && comment.trim() ? { 'preSale.comment': comment.trim() } : {}),
                     ...(resolvedAssignApproval ? { 'preSale.assignApproval': resolvedAssignApproval } : {}),
@@ -2829,16 +3274,22 @@ export const returnPresaleJob = async (req: Request, res: Response, next: NextFu
         if (!isRejected) {
             return res.status(400).json({ success: false, message: 'Only rejected jobs can be returned to the enquiry' });
         }
+        const fromQuote = (enquiry.preSale as any)?.origin === 'quote';
 
         await enquiryModel.updateOne(
             { _id: enqId },
-            { $set: { status: 'rejected', 'preSale.status': 'returned', 'preSale.seenbySalesPerson': false } }
+            { $set: { ...(fromQuote ? {} : { status: 'rejected' }), 'preSale.status': 'returned', 'preSale.seenbySalesPerson': false } }
         );
         await logEnquiryAudit(req, enquiry._id, 'presale-returned', note ? `Rejected job returned to enquiry: ${note}` : 'Rejected job returned to enquiry',
-            [{ label: 'Status', from: enquiry.status, to: 'rejected' }]);
+            [{ label: 'Status', from: enquiry.status, to: fromQuote ? enquiry.status : 'rejected' }]);
 
         const userData = await getEmployeeData(req.user);
-        const salesPerson = enquiry.salesPerson?.toString();
+        let salesPerson = enquiry.salesPerson?.toString();
+        if (fromQuote && (enquiry.preSale as any)?.quoteId) {
+            const lastReason = (enquiry.preSale as any).rejectionHistory?.slice(-1)[0]?.rejectionReason;
+            const restored: any = await restoreQuoteAfterPresale((enquiry.preSale as any).quoteId, note || lastReason || 'Rejected by presales', 'rejected');
+            if (restored?.createdBy) salesPerson = String(restored.createdBy);
+        }
         await notifyByPrivilege(
             {
                 type: 'PresaleRejected',
@@ -3011,7 +3462,7 @@ export const selfAssignPresaleJob = async (req: Request, res: Response, next: Ne
         if (!me?._id) {
             return res.status(401).json({ success: false, message: 'Employee not found' });
         }
-        const current: any = await enquiryModel.findById(enqId).select('preSale.presalePerson preSale.assignApproval').lean();
+        const current: any = await enquiryModel.findById(enqId).select('preSale.presalePerson preSale.assignApproval preSale.origin').lean();
         if (current && !current.preSale?.presalePerson) {
             const stageBlock = await assignmentStageBlock(current.preSale?.assignApproval, me);
             if (stageBlock) return res.status(stageBlock.code).json({ success: false, message: stageBlock.message });
@@ -3033,7 +3484,7 @@ export const selfAssignPresaleJob = async (req: Request, res: Response, next: Ne
             },
             {
                 $set: {
-                    reAssigned: me._id, reAssignedDate: entry.date, status: 'in presales', 'preSale.status': 'assigned',
+                    reAssigned: me._id, reAssignedDate: entry.date, ...(current?.preSale?.origin === 'quote' ? {} : { status: 'in presales' }), 'preSale.status': 'assigned',
                     'preSale.presalePerson': me._id, reAssignedSeen: true,
                 },
                 $push: { assignmentHistory: entry }

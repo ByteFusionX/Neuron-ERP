@@ -155,6 +155,8 @@ export interface Quotatation {
     editHistory?: EditHistoryEntry[];
     /** Bumped when a sent quote's commercial content is edited. 0 on quotes that never were. */
     revision?: number;
+    /** Presale-update request state (status In Presales / Estimated). */
+    presaleRevision?: PresaleRevision;
     /** The date printed on the PDF. `date` is the created date and never changes. Older quotes fall back to `date`. */
     quotedDate?: string;
 }
@@ -212,6 +214,7 @@ export interface getQuotatation {
     editHistory?: EditHistoryEntry[];
     /** Bumped when a sent quote's commercial content is edited. 0 on quotes that never were. */
     revision?: number;
+    presaleRevision?: PresaleRevision;
     events?: any[];
 }
 
@@ -311,6 +314,9 @@ export enum QuoteStatus {
     Won = 'Won',
     Lost = 'Lost',
     Expired = 'Expired',
+    // Set only by the presale-update flow; never picked from the status menu.
+    InPresales = 'In Presales',
+    Estimated = 'Estimated',
 }
 
 export const quoteStatusLabel = (status: QuoteStatus | string): string => ({
@@ -536,7 +542,55 @@ export const QuoteStatusColors: { [key in QuoteStatus]: string } = {
     [QuoteStatus.Won]: '#228B22',  // Forest Green
     [QuoteStatus.Lost]: '#FF0000', // Red
     [QuoteStatus.Expired]: '#6B7280', // Gray
+    [QuoteStatus.InPresales]: '#8B5CF6', // Violet
+    [QuoteStatus.Estimated]: '#14B8A6', // Teal
 };
+
+/** The estimate presales returned for a quote; staged until the owner accepts it. */
+export interface PresaleProposedEstimate {
+    optionalItems?: any[];
+    currency?: string;
+    totalDiscount?: number;
+    presaleNote?: string;
+    version?: number;
+}
+
+export interface PresaleRevision {
+    note?: string;
+    requestedAt?: string | Date;
+    requestedBy?: any;
+    previousStatus?: string;
+    round?: number;
+    proposedEstimate?: PresaleProposedEstimate;
+    returnedAt?: string | Date;
+    sendBackNote?: string;
+    /** A rejected deal sheet is flagged while presales reworks the estimate; it is invalidated on accept. */
+    dealUnderRevision?: boolean;
+    history?: { round?: number; outcome?: string; outcomeNote?: string; returnedAt?: string | Date; requestNote?: string }[];
+}
+
+/** True while presales holds the quote (or a returned estimate waits for the owner): the quote is locked. */
+export const isPresaleLocked = (q: { status?: string } | null | undefined): boolean =>
+    q?.status === QuoteStatus.InPresales || q?.status === QuoteStatus.Estimated;
+
+/**
+ * Whether the Request Presale Update button is offered. Hidden (not disabled) when the quote is Won/Lost, already with
+ * presales, or its Deal Sheet is pending or approved; the server applies the same rules.
+ */
+export const canRequestPresaleUpdate = (q: { status?: string; dealData?: { status?: string } | null; approval?: { status?: string } | null } | null | undefined): boolean => {
+    if (!q?.status) return false;
+    if ([QuoteStatus.Won, QuoteStatus.Lost, QuoteStatus.InPresales, QuoteStatus.Estimated].includes(q.status as QuoteStatus)) return false;
+    const deal = q.dealData?.status;
+    if (deal === 'pending' || deal === 'approved') return false;
+    return true;
+};
+
+/**
+ * Whether the owner may still withdraw a presale request: the quote is with presales and nothing has come back yet.
+ * The server is the final check (presales may already have started).
+ */
+export const canCancelPresaleRequest = (q: { status?: string; presaleRevision?: { sendBackNote?: string } | null } | null | undefined): boolean =>
+    q?.status === QuoteStatus.InPresales && !q.presaleRevision?.sendBackNote;
 
 export interface DealWaiting {
     step: number;

@@ -11,3 +11,9 @@
 :host-context(html.dark) .qt-meta + .qt-meta { border-left-color: #262626; }
 :host-context(html.dark) .qt-meta-label { color: #a1a1a1; }
 :host-context(html.dark) .qt-meta-value { color: #ededed; }
+
+@media (max-width: 639px) {
+  .qt-meta:nth-child(odd) { border-left: 0 !important; }
+  .qt-meta:nth-child(n + 3) { border-top: 1px solid #e5e7eb; }
+  :host-context(html.dark) .qt-meta:nth-child(n + 3) { border-top-color: #262626; }
+}

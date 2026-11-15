@@ -521,7 +521,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
     try {
         const expiredFilter = expiredQuoteFilter();
         const pastDateFilter = pastDateQuoteFilter();
-        let { page, search, row, salesPerson, customer, fromDate, toDate, department, quoteStatus, dealStatus, access, userId, sortKey, sortDir, followUpView, followUpFromDate, followUpToDate } = req.body;
+        let { page, search, row, salesPerson, customer, fromDate, toDate, department, quoteStatus, dealStatus, access, userId, sortKey, sortDir, followUpView, followUpFromDate, followUpToDate, presaleView } = req.body;
 
         page = Math.max(1, parseInt(page) || 1);
         row = Math.min(100, Math.max(1, parseInt(row) || 10));
@@ -555,6 +555,8 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             status: { $ne: 'revised' },
             $and: [
                 // "Expired" is derived from the date; any other status excludes the open quotes that are past it.
+                // "In Presales" tab: every quote with presales (waiting, or with a returned estimate), whoever owns it within the caller's access.
+                ...(presaleView ? [{ status: { $in: ['In Presales', 'Estimated'] } }] : []),
                 ...(quoteStatus === 'Expired' ? [expiredFilter] : quoteStatus ? [{ status: quoteStatus }, { $nor: [pastDateFilter] }] : []),
                 // "pending" also covers Won quotes that have no deal sheet yet (waiting to be converted).
                 ...(dealStatus === 'pending'
@@ -597,7 +599,17 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             accessFilter = { $or: [{ createdBy: actingUserId }, { createdByUser: actingUserId }] };
         }
 
-        const filters = { $and: [matchFilters, accessFilter] }
+        // "In Presales" is visible only to the quote's owner, the people they report up to, and Super Admins,
+        // whatever scope the viewer has on the rest of the list.
+        const presaleAccessFilter: any = await (async () => {
+            if (!actingUserId) return { _id: null };
+            const me: any = await Employee.findById(actingUserId).select('category').populate('category', 'role').lean();
+            if (/^superadmin$/i.test(String(me?.category?.role ?? ''))) return {};
+            const reportees = (await getAllReportedEmployees(userId)).filter(Boolean);
+            return { createdBy: { $in: [actingUserId, ...reportees] } };
+        })();
+
+        const filters = { $and: [matchFilters, presaleView ? presaleAccessFilter : accessFilter] }
 
         // Total, page and tab badge counts are independent of each other, so they all run together.
         // An aggregate, not countDocuments: the date clause can hold an Invalid Date when no range is sent,
@@ -625,7 +637,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
         const baseView = { isDeleted: { $ne: true }, status: { $ne: 'revised' } };
         const countOf = (extra: any) => Quotation.countDocuments({ $and: [baseView, accessFilter, extra] });
         const followUpCount = (view: string) => countOf({ ...followUpViewFilter('followUp.nextFollowUpDate', view), status: { $nin: QUOTE_FOLLOW_UP_CLOSED }, $nor: [pastDateFilter] });
-        const [total, quoteData, vAll, vPending, vRejected, vApproved, vMine, vOverdue, vToday, vUpcoming] = await Promise.all([
+        const [total, quoteData, vAll, vPending, vRejected, vApproved, vMine, vOverdue, vToday, vUpcoming, vPresale] = await Promise.all([
             totalQuery,
             quoteDataQuery,
             countOf({}),
@@ -636,6 +648,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             followUpCount('overdue'),
             followUpCount('today'),
             followUpCount('upcoming'),
+            Quotation.countDocuments({ $and: [baseView, presaleAccessFilter, { status: { $in: ['In Presales', 'Estimated'] } }] }),
         ]);
 
         quoteData.forEach((q: any) => {
@@ -646,7 +659,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
         });
         const viewCounts = {
             all: vAll, 'pending-deal': vPending, 'rejected-deal': vRejected, 'ready-for-job': vApproved,
-            mine: vMine, 'fu-overdue': vOverdue, 'fu-today': vToday, 'fu-upcoming': vUpcoming,
+            mine: vMine, 'in-presales': vPresale, 'fu-overdue': vOverdue, 'fu-today': vToday, 'fu-upcoming': vUpcoming,
         };
         return res.status(200).json({ total: total, quotations: quoteData ?? [], viewCounts })
 
@@ -1697,7 +1710,9 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
         if (!statusCheck) {
             return res.status(404).json({ message: "Quote not found" });
         }
-        if (!isKnownQuoteStatus(status) || status === quoteStatus.Expired) {
+        const presaleLock = presaleLockMessage(statusCheck.status);
+        if (presaleLock) return res.status(409).json({ message: presaleLock });
+        if (!isKnownQuoteStatus(status) || status === quoteStatus.Expired || status === quoteStatus.InPresales || status === quoteStatus.Estimated) {
             return res.status(400).json({ message: "Invalid quote status" });
         }
 
@@ -1801,6 +1816,12 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
         next(error);
     }
 }
+
+/** While presales reworks the estimate (or a returned estimate waits for the owner) the quote is locked: no edit, send or status change. */
+const presaleLockMessage = (status: string): string | null =>
+    status === quoteStatus.InPresales || status === quoteStatus.Estimated
+        ? 'This quote is with presales for an estimate update, so it cannot be changed, sent or closed until that is finished.'
+        : null;
 
 /** Statuses before the quote has gone to the customer: edits there don't create revisions. */
 const UNSENT_QUOTE_STATUSES: string[] = [quoteStatus.Draft, quoteStatus.WorkInProgress, quoteStatus.ReadyForSubmission];
@@ -2109,6 +2130,8 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         const existingQuote = await Quotation.findById(quoteId).lean();
         let reopened = false;
         if (existingQuote) {
+            const presaleLock = presaleLockMessage(existingQuote.status);
+            if (presaleLock) return res.status(409).json({ message: presaleLock });
             // Content is frozen once the quote expires or its deal sheet is approved (the order is in handover).
             if (isQuoteExpired(existingQuote)) {
                 // An expired quote is reopened by moving its closing date forward. Its real status is kept; only a quote
@@ -2230,6 +2253,8 @@ export const sendQuote = async (req: Request, res: Response, next: NextFunction)
         const { recipient, emailStatus = 'prepared', pdfFileName, note } = req.body;
         const quote = await Quotation.findById(quoteId);
         if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
+        const presaleLock = presaleLockMessage(quote.status);
+        if (presaleLock) return res.status(409).json({ message: presaleLock });
         if (!String(recipient || '').trim()) return res.status(400).json({ message: "Recipient is required" });
         const actor = await getEmployeeData(req.user);
         const now = new Date();
@@ -2379,6 +2404,8 @@ export const recordCustomerDecision = async (req: Request, res: Response, next: 
         }
         const quote = await Quotation.findById(quoteId);
         if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
+        const presaleLock = presaleLockMessage(quote.status);
+        if (presaleLock) return res.status(409).json({ message: presaleLock });
         const actor = await getEmployeeData(req.user);
         const nextStatus = decision === 'accepted' ? quoteStatus.Won : decision === 'rejected' ? quoteStatus.Lost : quote.status;
         if (nextStatus !== quote.status) {
@@ -2918,7 +2945,10 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
                         {
                             privilegeKey: 'quotation',
                             checkFunction: (privileges, employeeId) => {
-                                return employeeId === quotation.createdBy.toString() && 
+                                const ownerIds = [quotation.createdBy, (quotation as any).dealData?.requestedBy]
+                                    .filter(Boolean)
+                                    .map((id: any) => id.toString());
+                                return ownerIds.includes(employeeId) &&
                                        privileges.quotation?.viewReport !== 'none';
                             }
                         },
@@ -3009,7 +3039,10 @@ export const rejectDeal = async (req: Request, res: Response, next: NextFunction
             {
                 privilegeKey: 'quotation',
                 checkFunction: (privileges, employeeId) => {
-                    return employeeId === savedDeal.createdBy.toString() && 
+                    const ownerIds = [savedDeal.createdBy, savedDeal.dealData?.requestedBy]
+                        .filter(Boolean)
+                        .map((id: any) => id.toString());
+                    return ownerIds.includes(employeeId) &&
                            privileges.quotation?.viewReport !== 'none';
                 }
             },
@@ -3150,8 +3183,14 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
                 },
                 {
                     privilegeKey: 'dealSheet',
-                    checkFunction: (privileges) => {
-                        return dealSheetCan(privileges, "view");
+                    // Approvers see every revoke; view-only users only see their own deals.
+                    checkFunction: (privileges, employeeId) => {
+                        if (!dealSheetCan(privileges, "view")) return false;
+                        if (dealSheetCan(privileges, "approve") || dealSheetCan(privileges, "reject")) return true;
+                        const ownerIds = [deal.createdBy, deal.dealData?.requestedBy]
+                            .filter(Boolean)
+                            .map((id: any) => id.toString());
+                        return ownerIds.includes(employeeId);
                     }
                 },
                 socket
