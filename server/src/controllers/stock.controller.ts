@@ -181,7 +181,8 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
                 quarantinedQuantity: entry.quarantined,
                 quarantineRef: quarantineRefs.get(id) || '',
                 lastMovementDate: entry.lastDate,
-                stockValue: totalQuantity * unitCost,
+                // With nothing in hand the value stays at the last PO price instead of dropping to 0.
+                stockValue: totalQuantity > 0 ? totalQuantity * unitCost : unitCost,
                 warehouses: entry.warehouses
                     .map((w) => ({ warehouseId: w.warehouseId, warehouseName: warehouseName.get(w.warehouseId) || 'Warehouse', quantity: w.quantity, quarantined: w.quarantined }))
                     .sort((a, b) => b.quantity - a.quantity),
