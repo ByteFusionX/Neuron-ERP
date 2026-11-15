@@ -121,8 +121,17 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                     case 'ReAssignedJob':
                     case 'FeedbackRequest':
                         return privileges.assignedJob?.viewReport !== 'none';
-                    case 'DealSheet':
-                        return dealSheetCan(privileges, "view");
+                    case 'DealSheet': {
+                        if (!dealSheetCan(privileges, "view")) return false;
+                        // Approvers see every deal sheet notification; view-only users only their own deals.
+                        if (dealSheetCan(privileges, "approve") || dealSheetCan(privileges, "reject")) return true;
+                        const ref: any = notification.referenceId;
+                        const me = String(employee._id);
+                        const ownerIds = [ref?.createdBy, ref?.dealData?.requestedBy]
+                            .filter(Boolean)
+                            .map((id: any) => String(id?._id ?? id));
+                        return ownerIds.includes(me);
+                    }
                     case 'DealSheetResponse':
                     case 'Quotation':
                         return privileges.quotation?.viewReport !== 'none';
