@@ -114,8 +114,9 @@ export const listCustomerInvoices = async (req: Request, res: Response) => {
         if (!access) return res.status(401).json({ message: 'Unauthorized' });
         const page = Math.max(1, parseInt(String(req.query.page)) || 1);
         const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 15));
-        const base: any = { ...access.filter };
         const dnFilter = clean(req.query.deliveryNote);
+        // Dispatch users must see the invoice of a DN they can open, whatever their invoice report scope is.
+        const base: any = { ...(dnFilter ? {} : access.filter) };
         if (dnFilter) {
             if (!Types.ObjectId.isValid(dnFilter)) return res.status(400).json({ message: 'Invalid delivery note' });
             base.deliveryNote = new Types.ObjectId(dnFilter);

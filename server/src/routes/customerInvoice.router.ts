@@ -16,7 +16,8 @@ const bySource = (isDn: (req: any) => Promise<boolean> | boolean) => async (req:
     }
 };
 
-router.get('/', requirePrivilege('invoice'), listCustomerInvoices);
+// Dispatch users look up the invoice raised against a delivery note, so the DN-filtered list is open to them too.
+router.get('/', (req: any, res: any, next: any) => (req.query?.deliveryNote ? requireAnyPrivilege('invoice', 'dispatch') : requirePrivilege('invoice'))(req, res, next), listCustomerInvoices);
 router.get('/pdc', requirePrivilege('invoice'), listPdc);
 router.patch('/pdc/:id/status', requirePrivilege('invoice', 'pdcApprove'), updatePdcStatus);
 router.get('/purchase-order/:id', financeInvoice, customerInvoicePo);
