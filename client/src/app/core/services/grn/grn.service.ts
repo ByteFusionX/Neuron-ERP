@@ -160,10 +160,11 @@ export class GrnService {
       footer: (currentPage: number) => ({
         stack: [
           { text: `Page | ${currentPage}`, fontSize: 9, color: '#888', alignment: 'right', margin: [0, 0, 45, 2] },
-          { image: footerImage, width: 600, alignment: 'center' },
+          // one 9pt text line (~12pt) + 13pt = the 25pt top offset the other PDFs use
+          { image: footerImage, width: 600, alignment: 'center', margin: [0, 13, 0, 0] },
         ],
       }),
-      pageMargins: [45, 115, 45, 110],
+      pageMargins: [45, 115, 45, 100],
       content: [
         {
           table: {

@@ -288,10 +288,11 @@ export class PurchaseService {
             margin: [45, 0, 45, 0]
           },
           { text: `Page | ${currentPage}`, fontSize: 9, color: '#888', alignment: 'right', margin: [0, 0, 45, 2] },
-          { image: footerImage, width: 600, alignment: 'center' },
+          // two 9pt text lines (~23pt) + 2pt = the 25pt top offset the other PDFs use
+          { image: footerImage, width: 600, alignment: 'center', margin: [0, 2, 0, 0] },
         ],
       }),
-      pageMargins: [45, 115, 45, 110],
+      pageMargins: [45, 115, 45, 100],
       content: [
         {
           table: {

@@ -183,8 +183,10 @@ export class InvoiceService {
         // Proforma layout: boxed client block, blue item table, claim rows, then bank details and sign-off.
         const box = { hLineWidth: () => 1.5, vLineWidth: () => 1.5 };
         // same type as the invoice / DN: EBGaramond, 12pt info block, 10pt table text
-        const cell = (text: string, extra: any = {}) => ({ text, fontSize: 12, margin: [2, 2, 2, 2], ...extra });
-        const tcell = (text: string, extra: any = {}) => cell(text, { fontSize: 10, margin: [5, 5, 5, 5], ...extra });
+        // proforma: one font (Times New Roman) and one size (10pt) for every label/value/table/bank/sign-off text
+        const PF_SIZE = 10;
+        const cell = (text: string, extra: any = {}) => ({ text, fontSize: PF_SIZE, margin: [2, 2, 2, 2], ...extra });
+        const tcell = (text: string, extra: any = {}) => cell(text, { fontSize: PF_SIZE, margin: [5, 5, 5, 5], ...extra });
         const proformaContent: any[] | null = invoice.isProforma ? [
             {
                 table: {
@@ -210,7 +212,7 @@ export class InvoiceService {
                     headerRows: 1,
                     widths: [35, '*', 30, 55, 60],
                     body: [
-                        ['SL.\nNo.', 'Description', 'Qty', `Unit Price\n(${currency})`, `Total Cost\n(${currency})`].map((t, i) => ({ text: t, bold: true, color: 'white', fillColor: '#1E3964', fontSize: 9, alignment: 'center', margin: [0, 4, 0, 4] })),
+                        ['SL.\nNo.', 'Description', 'Qty', `Unit Price\n(${currency})`, `Total Cost\n(${currency})`].map((t, i) => ({ text: t, bold: true, color: 'white', fillColor: '#1E3964', fontSize: PF_SIZE, alignment: 'center', margin: [0, 4, 0, 4] })),
                         ...items.map((item: any, index: number) => [
                             tcell(String(index + 1).padStart(2, '0'), { alignment: 'center' }),
                             tcell(item.description || '-'),
@@ -228,7 +230,7 @@ export class InvoiceService {
                     ]
                 }
             },
-            { stack: bankStack, alignment: 'left', margin: [0, 0, 0, 25] },
+            { stack: bankStack.map((b: any) => invoice.isProforma ? { ...b, ...(b.text && Array.isArray(b.text) ? { text: b.text.map((t: any) => ({ ...t, fontSize: PF_SIZE })) } : { fontSize: PF_SIZE }) } : b), alignment: 'left', margin: [0, 0, 0, 25] },
             {
                 unbreakable: true,
                 stack: [
@@ -248,9 +250,9 @@ export class InvoiceService {
                     {
                         width: 250,
                         stack: [
-                            { text: `For, ${(invoice.customer?.companyName || '').toUpperCase()}`, fontSize: 12, bold: true, margin: [0, 0, 0, 25] },
-                            { text: 'Received by : ____________________________', fontSize: 12, margin: [0, 0, 0, 15] },
-                            { text: 'Date : ________________________________', fontSize: 12 },
+                            { text: `For, ${(invoice.customer?.companyName || '').toUpperCase()}`, fontSize: PF_SIZE, bold: true, margin: [0, 0, 0, 25] },
+                            { text: 'Received by : ____________________________', fontSize: PF_SIZE, margin: [0, 0, 0, 15] },
+                            { text: 'Date : ________________________________', fontSize: PF_SIZE },
                         ]
                     },
                 ]
@@ -259,7 +261,8 @@ export class InvoiceService {
 
         const documentDefinition: any = {
             defaultStyle: {
-                font: 'EBGaramond'
+                font: 'EBGaramond',
+                fontSize: 10
             },
             background: {
                 image: await this.getBase64ImageFromURL(
@@ -404,12 +407,12 @@ export class InvoiceService {
                     margin: [0, 0, 0, 0]
                 },
                 bankLabel: {
-                    fontSize: 11,
+                    fontSize: 10,
                     bold: true,
                     margin: [0, 2, 0, 2]
                 },
                 bankValue: {
-                    fontSize: 11,
+                    fontSize: 10,
                     margin: [0, 0, 0, 0]
                 },
                 tableHeader: {

@@ -153,7 +153,8 @@ export class DeliveryNoteService {
 
     const documentDefinition: any = {
       defaultStyle: {
-        font: 'EBGaramond'
+        font: 'EBGaramond',
+        fontSize: 10
       },
       background: {
         image: await this.getBase64ImageFromURL(
