@@ -318,7 +318,7 @@ export class PurchaseService {
               infoRow('Address', addressText, 'Place of Delivery', purchaseData.placeOfDelivery),
               infoRow('Contact Person', contact.name, 'Payment Terms', paymentTerms),
               infoRow('Phone', contact.phoneNumber, 'Shipping Terms', purchaseData.shippingTerms),
-              infoRow('E-mail', contact.email, 'Job ID:', jobNo),
+              infoRow('E-mail', contact.email, 'Job No:', jobNo),
               // Subject spans both rows on the left; PO Date with PO No beneath it on the right
               [
                 { style: 'tableHead', text: 'Subject:', rowSpan: 2 },
