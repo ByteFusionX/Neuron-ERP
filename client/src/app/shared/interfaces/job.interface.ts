@@ -49,6 +49,7 @@ export interface getJob {
     allocateStatus: allocateStatus
     allocateType: allocateType
     productDistribution?: boolean;
+    deadline?: string;
     projectInstallation?: boolean;
     amc?: boolean;
     hasPurchaseRequest?: boolean;

@@ -975,6 +975,15 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
             }
         }
 
+        // Product distribution carries the date the supply is due.
+        let deadline: Date | null = null;
+        if (productDistribution) {
+            deadline = req.body.deadline ? new Date(req.body.deadline) : null;
+            if (!deadline || isNaN(deadline.getTime())) {
+                return res.status(400).json({ success: false, message: 'Select the deadline for product distribution' });
+            }
+        }
+
         const currentJob = await jobModel.findOne({ _id: id, isDeleted: { $ne: true } });
         if (!currentJob) {
             return res.status(404).json({ success: false, message: 'Job not found' });
@@ -1003,6 +1012,7 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
                 ...(allocator ? { allocatedBy: allocator._id } : {}), allocatedAt: new Date(),
                 allocateType: derivedType, productDistribution, projectInstallation, amc, allocateStatus: allocateStatus.OpenToWork, updatedDate: new Date(),
                 ...(buyer ? { procurementPerson: buyer._id } : {}),
+                ...(deadline ? { deadline } : {}),
             },
             { new: true }
         );
@@ -1194,10 +1204,19 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
         if (existingJob.allocateStatus !== allocateStatus.Pending && existingJob.allocateStatus !== allocateStatus.OpenToWork && existingJob.allocateStatus !== allocateStatus.WorkInProgress) {
             return res.status(409).json({ success: false, message: 'Procurement can only be reallocated while the job is Pending, Open To Work or Work In Progress' });
         }
+        // Product distribution needs a deadline; it can be changed on reallocation too.
+        let deadline: Date | null = null;
+        if (scopeGiven && productDistribution) {
+            deadline = req.body.deadline ? new Date(req.body.deadline) : null;
+            if (!deadline || isNaN(deadline.getTime())) {
+                return res.status(400).json({ success: false, message: 'Select the deadline for product distribution' });
+            }
+        }
+        const sameDeadline = !deadline || (!!existingJob.deadline && new Date(existingJob.deadline).toISOString().slice(0, 10) === deadline.toISOString().slice(0, 10));
         const sameBuyer = !!procurementPersonId && existingJob.procurementPerson?.toString() === String(procurementPersonId);
         const sameScope = scopeGiven && !!existingJob.productDistribution === productDistribution
             && !!existingJob.projectInstallation === projectInstallation && !!existingJob.amc === amc;
-        if (needsBuyer && sameBuyer && (!scopeGiven || sameScope)) {
+        if (needsBuyer && sameBuyer && (!scopeGiven || sameScope) && sameDeadline) {
             return res.status(400).json({ success: false, message: scopeGiven ? 'Nothing to change: same scope and procurement person' : 'That employee is already the procurement person for this job' });
         }
         if (needsBuyer) {
@@ -1231,6 +1250,7 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
                         : projectInstallation ? allocateType.ProjectsWithOutSupply
                         : allocateType.AMC,
                 } : {}),
+                ...(deadline ? { deadline } : {}),
                 allocatedBy: employee._id, allocatedAt: new Date(),
                 updatedDate: new Date()
             },

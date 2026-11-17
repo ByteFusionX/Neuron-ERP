@@ -28,6 +28,7 @@ export interface AllocateTypeResult {
   projectInstallation: boolean;
   amc: boolean;
   procurementPersonId?: string;
+  deadline?: string;
 }
 
 /** Picks what a pending job covers: product distribution, project installation, AMC, or any mix. Product distribution also needs the buyer who will handle its purchase. Closes with the choice, or undefined on cancel. */
@@ -75,6 +76,9 @@ export interface AllocateTypeResult {
             <app-sf-field label="Assign to" hint="Handles the purchase request for this job." [control]="form.controls.procurementPerson">
               <app-sf-combobox formControlName="procurementPerson" [options]="buyerOptions" placeholder="Select person"></app-sf-combobox>
             </app-sf-field>
+            <app-sf-field label="Deadline" hint="Date the product distribution is due." [control]="form.controls.deadline">
+              <app-sf-date formControlName="deadline" [min]="today"></app-sf-date>
+            </app-sf-field>
           </app-sf-section>
         }
       </form>
@@ -89,6 +93,7 @@ export class AllocateTypeModalComponent implements OnInit {
   data = inject(MODAL_DATA, { optional: true }) as getJob | null;
 
   readonly scopes = ALLOCATE_SCOPES;
+  readonly today = new Date().toISOString().slice(0, 10);
 
   submitted = false;
   buyerOptions: SfOption[] = [];
@@ -97,6 +102,7 @@ export class AllocateTypeModalComponent implements OnInit {
     projectInstallation: false,
     amc: false,
     procurementPerson: [''],
+    deadline: [''],
   }, { validators: (g) => (g.value.productDistribution || g.value.projectInstallation || g.value.amc ? null : { scopeRequired: true }) });
 
   ngOnInit(): void {
@@ -111,10 +117,11 @@ export class AllocateTypeModalComponent implements OnInit {
     });
     // A buyer is only needed while product distribution is ticked.
     this.form.controls.productDistribution.valueChanges.subscribe((on) => {
-      const control = this.form.controls.procurementPerson;
-      control.setValidators(on ? [Validators.required] : []);
-      if (!on) control.setValue('');
-      control.updateValueAndValidity();
+      for (const control of [this.form.controls.procurementPerson, this.form.controls.deadline]) {
+        control.setValidators(on ? [Validators.required] : []);
+        if (!on) control.setValue('');
+        control.updateValueAndValidity();
+      }
     });
   }
 
@@ -135,10 +142,10 @@ export class AllocateTypeModalComponent implements OnInit {
       this.form.markAllAsTouched();
       return;
     }
-    const { productDistribution, projectInstallation, amc, procurementPerson } = this.form.getRawValue();
+    const { productDistribution, projectInstallation, amc, procurementPerson, deadline } = this.form.getRawValue();
     this.dialogRef.close({
       id: this.data._id, jobId: this.data.jobId, productDistribution, projectInstallation, amc,
-      ...(productDistribution ? { procurementPersonId: procurementPerson } : {}),
+      ...(productDistribution ? { procurementPersonId: procurementPerson, deadline } : {}),
     });
   }
 }

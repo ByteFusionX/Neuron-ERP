@@ -254,6 +254,7 @@ export class PurchaseRequestListComponent {
         { key: 'allocatedBy', label: 'Allocated By', valueGetter: (r) => r.allocatedBy?.firstName ? `${r.allocatedBy.firstName} ${r.allocatedBy.lastName}` : '-' },
         { key: 'quoteId', label: 'Quote Id', valueGetter: (r) => r.quoteNo ?? r.jobId?.quoteId?.quoteId },
         { key: 'dealId', label: 'Deal Id', valueGetter: (r) => r.dealNo ?? r.jobId?.quoteId?.dealData?.dealId },
+        { key: 'deadline', label: 'Deadline', type: 'date', valueGetter: (r) => r.jobId?.deadline },
       ];
       return;
     }
@@ -263,6 +264,7 @@ export class PurchaseRequestListComponent {
       { key: 'purchaseNo', label: 'PR NO', sortable: true },
       { key: 'nextFollowUpDate', label: 'Next Follow-up', type: 'date', sortable: true, valueGetter: (r) => r.followUp?.nextFollowUpDate, cellClass: (r) => followUpCellClass(r.followUp?.nextFollowUpDate, false) },
       { key: 'jobId', label: 'Job ID', sortable: true, valueGetter: (r) => r.jobId?.jobId },
+      { key: 'deadline', label: 'Deadline', type: 'date', valueGetter: (r) => r.jobId?.deadline },
       {
         key: 'totalLpo', label: 'LPO Value', sortable: true,
         valueGetter: (r) => {

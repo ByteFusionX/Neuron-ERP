@@ -290,6 +290,8 @@ export class JobListComponent {
       { key: 'department', label: 'Department', sortable: true, valueGetter: (r) => r.departmentDetails?.[0]?.departmentName ?? '' },
       { key: 'quoteId', label: 'Quote Id', sortable: true, valueGetter: (r) => r.quotation?.quoteId },
       { key: 'dealId', label: 'Deal Id', sortable: true, valueGetter: (r) => (r.quotation?.dealData as any)?.dealId ?? '' },
+      { key: 'paymentTerms', label: 'Payment Terms', valueGetter: (r) => (r.quotation?.dealData as any)?.paymentTerms || '—' },
+      { key: 'deadline', label: 'Deadline', type: 'date', valueGetter: (r) => r.deadline },
     ];
   }
 
@@ -604,12 +606,12 @@ export class JobListComponent {
       width: '520px',
       data: {
         jobId: row._id, jobLabel: row.jobId, currentProcurementPerson: row.procurementPerson,
-        allocateType: row.allocateType, productDistribution: row.productDistribution, projectInstallation: row.projectInstallation, amc: row.amc,
+        allocateType: row.allocateType, productDistribution: row.productDistribution, projectInstallation: row.projectInstallation, amc: row.amc, deadline: row.deadline,
       },
     }).afterClosed().subscribe((result) => {
       if (!result) return;
-      const { procurementPersonId, ...scope } = result;
-      this._jobService.transferProcurementPerson(row._id, procurementPersonId, scope).subscribe({
+      const { procurementPersonId, deadline, ...scope } = result;
+      this._jobService.transferProcurementPerson(row._id, procurementPersonId, scope, deadline).subscribe({
         next: (response) => {
           if (response.success) {
             this.toast.success('Job reallocated successfully');
@@ -695,6 +697,7 @@ export class JobListComponent {
           { type: 'field', label: 'Quote Id', value: row.quotation?.quoteId, numeric: true },
           { type: 'field', label: 'Deal Id', value: (row.quotation?.dealData as any)?.dealId || '—' },
           { type: 'field', label: 'Subject', value: row.quotation?.subject },
+          { type: 'field', label: 'Payment Terms', value: (row.quotation?.dealData as any)?.paymentTerms || '—' },
           { type: 'field', label: 'LPO Value', value: `${this.numberFormat.transform(row.lpoValue ?? 0)} QAR`, numeric: true },
         ],
       },

@@ -14,6 +14,8 @@ interface Job extends Document {
     allocatedBy?: Types.ObjectId;
     allocatedAt?: Date;
     productDistribution?: boolean;
+    // Set at allocation when product distribution is chosen; older jobs have none.
+    deadline?: Date;
     projectInstallation?: boolean;
     amc?: boolean;
     holdReason?: string;
@@ -95,6 +97,7 @@ const jobSchema = new Schema<Job>({
         enum : Object.values(allocateType)
     },
     productDistribution: { type: Boolean },
+    deadline: { type: Date },
     projectInstallation: { type: Boolean },
     amc: { type: Boolean },
     procurementPerson: {

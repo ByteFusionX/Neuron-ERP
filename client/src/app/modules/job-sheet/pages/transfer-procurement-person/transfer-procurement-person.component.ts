@@ -17,10 +17,13 @@ export interface TransferProcurementPersonData {
   productDistribution?: boolean;
   projectInstallation?: boolean;
   amc?: boolean;
+  /** The job's current deadline, pre-filled. */
+  deadline?: string;
 }
 
 export interface TransferProcurementPersonResult {
   procurementPersonId?: string;
+  deadline?: string;
   productDistribution: boolean;
   projectInstallation: boolean;
   amc: boolean;
@@ -42,6 +45,7 @@ export class TransferProcurementPersonComponent implements OnInit {
   data = inject(MODAL_DATA, { optional: true }) as TransferProcurementPersonData | null;
 
   readonly scopes = ALLOCATE_SCOPES;
+  readonly today = new Date().toISOString().slice(0, 10);
   employeeOptions: SfOption[] = [];
   submitted = false;
   form = this.fb.nonNullable.group({
@@ -49,15 +53,21 @@ export class TransferProcurementPersonComponent implements OnInit {
     projectInstallation: false,
     amc: false,
     procurementPerson: [''],
+    deadline: [''],
   }, { validators: (g) => (g.value.productDistribution || g.value.projectInstallation || g.value.amc ? null : { scopeRequired: true }) });
 
   ngOnInit(): void {
-    this.form.patchValue({ ...this.currentScope(), procurementPerson: this.currentId ?? '' });
-    // A buyer is only needed while product distribution is ticked.
+    this.form.patchValue({
+      ...this.currentScope(),
+      procurementPerson: this.currentId ?? '',
+      deadline: this.data?.deadline ? String(this.data.deadline).slice(0, 10) : '',
+    });
+    // A buyer and deadline are only needed while product distribution is ticked.
     const sync = (on: boolean) => {
-      const control = this.form.controls.procurementPerson;
-      control.setValidators(on ? [Validators.required] : []);
-      control.updateValueAndValidity();
+      for (const control of [this.form.controls.procurementPerson, this.form.controls.deadline]) {
+        control.setValidators(on ? [Validators.required] : []);
+        control.updateValueAndValidity();
+      }
     };
     sync(this.form.controls.productDistribution.value);
     this.form.controls.productDistribution.valueChanges.subscribe(sync);
@@ -112,10 +122,10 @@ export class TransferProcurementPersonComponent implements OnInit {
       this.form.markAllAsTouched();
       return;
     }
-    const { productDistribution, projectInstallation, amc, procurementPerson } = this.form.getRawValue();
+    const { productDistribution, projectInstallation, amc, procurementPerson, deadline } = this.form.getRawValue();
     this.dialogRef.close({
       productDistribution, projectInstallation, amc,
-      ...(productDistribution ? { procurementPersonId: procurementPerson } : {}),
+      ...(productDistribution ? { procurementPersonId: procurementPerson, deadline } : {}),
     });
   }
 }

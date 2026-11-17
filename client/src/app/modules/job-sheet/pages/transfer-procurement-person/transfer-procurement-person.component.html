@@ -48,11 +48,14 @@
 
     @if (form.controls.productDistribution.value) {
       <app-sf-section title="Purchase" columns="1">
-        <app-sf-field label="Procurement person" hint="Handles the purchase request for this job." [control]="form.controls.procurementPerson">
+        <app-sf-field label="Procurement person" [control]="form.controls.procurementPerson">
           <app-sf-combobox
             formControlName="procurementPerson"
             [options]="employeeOptions"
             placeholder="Select procurement person"></app-sf-combobox>
+        </app-sf-field>
+        <app-sf-field label="Deadline" [control]="form.controls.deadline">
+          <app-sf-date formControlName="deadline" [min]="today"></app-sf-date>
         </app-sf-field>
       </app-sf-section>
     }
