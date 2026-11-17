@@ -459,9 +459,10 @@
       <ng-container *ngIf="visibleRowActions(actionMenu.row).length; else noRowActions">
         <ng-container *ngFor="let a of visibleRowActions(actionMenu.row)">
           <div *ngIf="a.divider" class="my-1 h-px bg-gray-100 dark:bg-erp-border-dark"></div>
-          <button type="button" role="menuitem" (click)="runRowAction(a)"
+          <button type="button" role="menuitem" (click)="runRowAction(a)" [disabled]="a.disabled?.(actionMenu.row)"
+            [title]="a.disabled?.(actionMenu.row) ? (a.disabledReason || '') : ''"
             class="w-full flex items-center gap-1.5 px-2.5 h-8 text-sm rounded-lg text-left transition-colors"
-            [ngClass]="a.variant === 'danger' ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'">
+            [ngClass]="a.disabled?.(actionMenu.row) ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed' : a.variant === 'danger' ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'">
             <span *ngIf="hasActionBadge(a, actionMenu.row)" class="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0"></span>
             {{ a.label }}
           </button>

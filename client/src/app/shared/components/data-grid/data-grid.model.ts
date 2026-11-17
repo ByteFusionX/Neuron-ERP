@@ -42,6 +42,10 @@ export interface DataGridRowAction<T = any> {
   divider?: boolean;
   /** Hide the action for specific rows */
   hidden?: (row: T) => boolean;
+  /** Show the action greyed out and unclickable for specific rows */
+  disabled?: (row: T) => boolean;
+  /** Tooltip shown on a disabled action */
+  disabledReason?: string;
   /** Also show as an icon button on row hover, so common actions skip the menu */
   quick?: boolean;
   /** Keep the quick button visible without hovering the row (and on touch devices) */

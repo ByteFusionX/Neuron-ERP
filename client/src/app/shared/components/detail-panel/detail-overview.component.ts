@@ -80,7 +80,11 @@ import { DetailOverviewField, DetailOverviewSection } from './detail-panel.model
                 <app-detail-badge *ngIf="f.pill && f.value; else plainValue" class="capitalize" [label]="f.value" [tone]="f.tone || 'neutral'"></app-detail-badge>
                 <ng-template #plainValue>
                   <a *ngIf="f.link && f.value; else textValue" [routerLink]="f.link" class="text-violet-600 dark:text-violet-400 hover:underline" [class.tabular-nums]="f.numeric">{{ f.value }}</a>
-                  <ng-template #textValue><span [class.tabular-nums]="f.numeric">{{ f.value ?? '—' }}</span></ng-template>
+                  <ng-template #textValue>
+                    <textarea *ngIf="f.editor === 'textarea'; else spanValue" readonly rows="3" [value]="f.value ?? ''" [attr.aria-label]="f.label || ''"
+                      class="w-full resize-y rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm text-gray-800 dark:border-erp-border-dark dark:bg-transparent dark:text-gray-100"></textarea>
+                    <ng-template #spanValue><span [class.tabular-nums]="f.numeric">{{ f.value ?? '—' }}</span></ng-template>
+                  </ng-template>
                 </ng-template>
               </ng-template>
               </ng-template>

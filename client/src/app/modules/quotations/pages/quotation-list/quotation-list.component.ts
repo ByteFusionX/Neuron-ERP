@@ -441,6 +441,12 @@ export class QuotationListComponent implements AfterViewInit {
         hidden: (r) => r.status !== QuoteStatus.Estimated || !this.isQuoteOwnerOrAdmin(r),
       },
       {
+        // Menu only, not a hover button. Disabled until stock reservation from quotes is built.
+        id: 'reserveStock', label: 'Reserve Stock', icon: 'clipboardCheck',
+        disabled: () => true, disabledReason: 'Coming soon',
+        hidden: (r) => this.isCreatorOnlyView(r),
+      },
+      {
         id: 'updateStatus', label: 'Update Status', icon: 'refresh',
         hidden: (r) => this.isCreatorOnlyView(r) || r.status === 'Expired' || this.isStatusLocked(r),
       },
