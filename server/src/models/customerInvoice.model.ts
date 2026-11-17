@@ -1,7 +1,7 @@
 import { Schema, model } from 'mongoose';
 
 import { DEFAULT_CURRENCY } from '../common/currency';
-export const CUSTOMER_INVOICE_STATUSES = ['Pending', 'Approved', 'Rejected'] as const;
+export const CUSTOMER_INVOICE_STATUSES = ['Pending', 'Approved', 'Rejected', 'Completed'] as const;
 export const PDC_STATUSES = ['Pending', 'Approved', 'Rejected', 'Revoked'] as const;
 export const CUSTOMER_PAYMENT_METHODS = ['PDC', 'Cash', 'Bank Transfer', 'Open Credit', 'Other'] as const;
 

@@ -39,6 +39,9 @@ export class CustomerInvoiceService {
   update(id: string, payload: Partial<CustomerInvoicePayload>) {
     return this.http.put<any>(`${this.url}/${id}`, payload, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) });
   }
+  confirmPayment(id: string) {
+    return this.http.patch<any>(`${this.url}/${id}/confirm-payment`, {}, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) });
+  }
   prepareDn(deliveryNote: string) {
     return this.http.get<any>(`${this.url}/delivery-note/${deliveryNote}`, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) });
   }

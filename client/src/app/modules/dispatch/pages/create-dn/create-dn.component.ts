@@ -125,7 +125,9 @@ export class CreateDnComponent implements OnInit, OnChanges {
     this.loadJobIds();
 
     const editId = this.editId || this.route.snapshot.queryParams['id'];
-    if (editId) {
+    if (this.drawerMode && !this.open) {
+      // Drawer starts closed (e.g. embedded in the DN view page): ngOnChanges loads when it is opened.
+    } else if (editId) {
       this.loadDraftForEdit(editId);
     } else {
       this.generateDnNumber();

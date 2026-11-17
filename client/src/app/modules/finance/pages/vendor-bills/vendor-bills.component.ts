@@ -36,6 +36,7 @@ const STATUS_CLASSES: Record<string, string> = {
   Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200',
   Placed: 'bg-teal-50 text-teal-700 ring-teal-200 border-teal-200',
   Closed: 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200',
+  Completed: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200',
 };
 
 const RECEIPT_CLASSES: Record<string, string> = {

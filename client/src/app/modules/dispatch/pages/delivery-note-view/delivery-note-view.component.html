@@ -44,6 +44,7 @@
       <app-action-button *ngIf="canEditInvoice()" variant="outline" icon="edit" [disabled]="openingInvoice" (click)="openEditInvoice()">Edit Invoice</app-action-button>
       <app-action-button *ngIf="dn.status === 'Draft' || dn.status === 'Ready to Deliver'" variant="outline" icon="edit" (click)="onEdit()">Edit DN</app-action-button>
       <app-action-menu label="Delivery note" [items]="dnPdfItems" (selected)="onPdfMenu($event)"></app-action-menu>
+      <app-action-button *ngIf="canConfirmPayment()" variant="primary" icon="check" [disabled]="confirmingPayment" (click)="confirmPayment()">Confirm Payment</app-action-button>
       <app-action-menu *ngIf="hasInvoice" label="Invoice" [items]="invoicePdfItems" (selected)="onPdfMenu($event)"></app-action-menu>
       <app-action-button *ngIf="canCreateInvoice()" variant="outline" [disabled]="openingInvoice" (click)="openCreateInvoice()">Create Invoice</app-action-button>
       <app-action-button *ngIf="dn.status === 'Ready to Deliver'" variant="primary" icon="send" [disabled]="isDispatching" (click)="onDispatch()">

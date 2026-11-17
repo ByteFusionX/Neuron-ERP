@@ -267,6 +267,34 @@ export const updateCustomerInvoice = async (req: Request, res: Response) => {
     }
 };
 
+/** Confirms the customer paid a DN invoice: allowed once the DN is Delivered; moves the invoice to Completed. */
+export const confirmCustomerInvoicePayment = async (req: Request, res: Response) => {
+    try {
+        const access = await scope(req);
+        if (!access) return res.status(401).json({ message: 'Unauthorized' });
+        if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid invoice' });
+        const invoice: any = await CustomerInvoice.findById(req.params.id);
+        if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
+        if (!invoice.deliveryNote) return res.status(400).json({ message: 'Only an invoice raised from a delivery note can be confirmed here' });
+        if (invoice.status === 'Completed') return res.status(409).json({ message: 'Payment is already confirmed for this invoice' });
+        if (invoice.status === 'Rejected') return res.status(409).json({ message: 'A rejected invoice cannot be completed' });
+        const dn: any = await DeliveryNote.findById(invoice.deliveryNote).select('status dnNo').lean();
+        if (!dn || dn.status !== 'Delivered') return res.status(400).json({ message: 'Payment can be confirmed only after the delivery note is delivered' });
+        const updated = await CustomerInvoice.findOneAndUpdate(
+            { _id: invoice._id, status: invoice.status },
+            { $set: { status: 'Completed' } },
+            { new: true },
+        );
+        if (!updated) return res.status(409).json({ message: 'The invoice status has changed. Refresh and try again.' });
+        await logAudit(req, { entityType: 'customerInvoice', entityId: updated._id, entityLabel: updated.invoiceNo, action: 'updated', summary: `Payment confirmed; customer invoice ${updated.invoiceNo} completed` });
+        await logAudit(req, { entityType: 'deliveryNote', entityId: invoice.deliveryNote, entityLabel: invoice.dnNo, action: 'updated', summary: `Payment confirmed for invoice ${updated.invoiceNo}` });
+        return res.json({ success: true, data: updated });
+    } catch (error) {
+        console.error('Confirm customer invoice payment:', error);
+        return res.status(500).json({ message: 'Failed to confirm payment' });
+    }
+};
+
 // PDC approval is independent of invoice approval.
 export const listPdc = async (req: Request, res: Response) => {
     try {

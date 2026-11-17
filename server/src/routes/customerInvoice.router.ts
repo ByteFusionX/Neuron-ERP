@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requirePrivilege, requireAnyPrivilege } from '../common/middlewares/privilege.middleware';
 import { CustomerInvoice } from '../models/customerInvoice.model';
-import { createCustomerInvoice, listCustomerInvoices, customerInvoicePo, customerInvoiceDn, listPdc, updatePdcStatus, getCustomerInvoice, updateCustomerInvoice } from '../controllers/customerInvoice.controller';
+import { createCustomerInvoice, listCustomerInvoices, customerInvoicePo, customerInvoiceDn, listPdc, updatePdcStatus, getCustomerInvoice, updateCustomerInvoice, confirmCustomerInvoicePayment } from '../controllers/customerInvoice.controller';
 const router = Router();
 
 // Invoices raised from a delivery note belong to Dispatch; the rest (proforma, supplier bill) to Finance.
@@ -24,5 +24,6 @@ router.get('/purchase-order/:id', financeInvoice, customerInvoicePo);
 router.get('/delivery-note/:id', dispatchInvoice, customerInvoiceDn);
 router.get('/:id', requireAnyPrivilege('invoice', 'dispatch'), getCustomerInvoice);
 router.post('/', bySource((req) => !!req.body?.deliveryNote), createCustomerInvoice);
+router.patch('/:id/confirm-payment', dispatchInvoice, confirmCustomerInvoicePayment);
 router.put('/:id', bySource(async (req) => !!(await CustomerInvoice.exists({ _id: req.params.id, deliveryNote: { $exists: true, $ne: null } }))), updateCustomerInvoice);
 export default router;

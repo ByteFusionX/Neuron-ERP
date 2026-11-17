@@ -245,7 +245,8 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
       { id: 'editDn', label: 'Edit DN', icon: 'edit', hidden: row => row.status !== DnStatus.DRAFT && row.status !== DnStatus.READY_TO_DELIVER },
       { id: 'placeOrder', label: 'Place order', icon: 'check', quick: true, hidden: row => row.status !== DnStatus.READY_TO_DELIVER },
       { id: 'confirmDelivery', label: 'Confirm delivery', icon: 'check', quick: true, hidden: row => row.status !== DnStatus.DISPATCHED },
-      { id: 'returnDn', label: 'Return', icon: 'close', quick: true, variant: 'danger', hidden: row => !this.canReturn(row) },
+      { id: 'confirmPayment', label: 'Confirm payment', icon: 'check', quick: true, hidden: row => !this.canConfirmPayment(row) },
+      { id: 'returnDn', label: 'Return', icon: 'close', variant: 'danger', hidden: row => !this.canReturn(row) },
       { id: 'previewDn', label: 'Preview DN', icon: 'files', quick: true },
       { id: 'downloadDn', label: 'Download DN', icon: 'download' },
       { id: 'editInvoice', label: 'Edit invoice', icon: 'edit', hidden: row => !this.canInvoice || !this.hasInvoice(row) },
@@ -426,6 +427,9 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
       case 'confirmDelivery':
         this.openConfirmDelivery(row);
         break;
+      case 'confirmPayment':
+        void this.confirmPayment(row);
+        break;
       case 'returnDn':
         this.returnDnRow = row;
         break;
@@ -565,6 +569,33 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
 
   viewDnDetails(dn: DeliveryNote): void {
     this._router.navigate(['/dispatch/view', dn._id]);
+  }
+
+  /** Delivered DN whose invoice exists and is not yet Completed/Rejected. */
+  canConfirmPayment(row: DeliveryNote): boolean {
+    const r: any = row;
+    return this.canInvoice && row.status === DnStatus.DELIVERED && !!r.customerInvoiceId
+      && !['Completed', 'Rejected'].includes(r.customerInvoiceStatus);
+  }
+
+  async confirmPayment(row: DeliveryNote): Promise<void> {
+    const r: any = row;
+    if (!this.canConfirmPayment(row)) return;
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Confirm payment?',
+      message: 'The invoice will be marked as Completed.',
+      details: [{ label: 'Delivery note', value: row.dnNo }, { label: 'Invoice', value: r.customerInvoiceNo }],
+      confirmLabel: 'Confirm payment',
+    });
+    if (!confirmed) return;
+    this.customerInvoices.confirmPayment(r.customerInvoiceId).subscribe({
+      next: () => {
+        this.toaster.success('Payment confirmed; invoice completed');
+        this.loadData(this.activeFilters);
+      },
+      error: (error) => this.toaster.error(error?.error?.message || 'Failed to confirm payment'),
+    });
   }
 
   /** Place Order confirms, then dispatches the DN (stock leaves the warehouse). */

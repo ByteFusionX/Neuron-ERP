@@ -216,6 +216,37 @@ export class DeliveryNoteViewComponent {
     });
   }
 
+  confirmingPayment = false;
+
+  /** Once the DN is Delivered, an invoice that is not yet Completed/Rejected can have its payment confirmed. */
+  canConfirmPayment(): boolean {
+    return this.canInvoice && !!this.invoice?._id && this.deliveryNote?.status === 'Delivered' && !['Completed', 'Rejected'].includes(this.invoice.status);
+  }
+
+  async confirmPayment(): Promise<void> {
+    if (!this.invoice?._id || this.confirmingPayment) return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Confirm payment?',
+      message: 'The invoice will be marked as Completed.',
+      details: [{ label: 'Invoice', value: this.invoice.invoiceNo }],
+      confirmLabel: 'Confirm payment',
+    });
+    if (!confirmed) return;
+    this.confirmingPayment = true;
+    this.customerInvoices.confirmPayment(this.invoice._id).subscribe({
+      next: (res) => {
+        this.confirmingPayment = false;
+        this.invoice = res?.data || { ...this.invoice, status: 'Completed' };
+        this.notificationService.success(`Invoice ${this.invoice.invoiceNo} completed`);
+      },
+      error: (error) => {
+        this.confirmingPayment = false;
+        this.notificationService.error(error?.error?.message || 'Failed to confirm payment');
+      },
+    });
+  }
+
   /** Offered from DN creation (Ready to Deliver) until it is invoiced or delivered. */
   canCreateInvoice(): boolean {
     return this.canInvoice && !this.hasInvoice && ['Ready to Deliver', 'Dispatched'].includes(this.deliveryNote?.status || '');

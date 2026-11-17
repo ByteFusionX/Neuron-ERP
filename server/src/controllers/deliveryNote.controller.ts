@@ -390,11 +390,13 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
             d.grnNumbers = usedGrns.map((g) => g.grnNo).filter(Boolean);
         });
         // Customer invoice raised against each DN, so the register can offer preview/download instead of Create invoice.
-        const invoices: any[] = await CustomerInvoice.find({ deliveryNote: { $in: dns.map((d: any) => d._id) } }).select('deliveryNote invoiceNo paymentTerms').lean();
+        const invoices: any[] = await CustomerInvoice.find({ deliveryNote: { $in: dns.map((d: any) => d._id) } }).select('deliveryNote invoiceNo paymentTerms status').lean();
         dns.forEach((d: any) => {
             const inv = invoices.find((i) => String(i.deliveryNote) === String(d._id));
             d.customerInvoiceNo = inv?.invoiceNo || '';
             d.customerInvoicePaymentTerms = inv?.paymentTerms || '';
+            d.customerInvoiceId = inv?._id ? String(inv._id) : '';
+            d.customerInvoiceStatus = inv?.status || '';
         });
         return res.status(200).json({ total: total, dns: dns });
 
