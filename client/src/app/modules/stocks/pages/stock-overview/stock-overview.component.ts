@@ -10,6 +10,7 @@ import { DetailMetaComponent } from 'src/app/shared/components/detail-panel/deta
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailMetaItem, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/form-prompt.service';
@@ -22,7 +23,7 @@ import { StockAdjustDrawerComponent } from '../stock-adjust-drawer/stock-adjust-
 @Component({
   selector: 'app-stock-overview',
   standalone: true,
-  imports: [CommonModule, DataGridComponent, DetailMetaComponent, DetailOverviewComponent,DetailTimelineComponent, StockAdjustDrawerComponent],
+  imports: [CommonModule, DataGridComponent, DetailMetaComponent, DetailOverviewComponent,DetailTimelineComponent, DetailTableComponent, StockAdjustDrawerComponent],
   templateUrl: './stock-overview.component.html',
   styleUrl: './stock-overview.component.css'
 })
@@ -46,6 +47,7 @@ export class StockOverviewComponent implements OnInit {
   reservations = signal<StockReservationRow[]>([]);
   details = signal<StockItemDetails | null>(null);
   historyEntries = signal<DetailTimelineEntry[]>([]);
+  stockEntries = signal<Record<string, any>[]>([]);
 
   adjustOpen = false;
   adjustProductId = '';
@@ -60,8 +62,37 @@ export class StockOverviewComponent implements OnInit {
 
   readonly detailTabs = [
     { id: 'details', label: 'Details', icon: 'info' },
+    { id: 'entries', label: 'Ledger', icon: 'transfer' },
+    { id: 'notes', label: 'Serial & Note', icon: 'pencil' },
     { id: 'history', label: 'History', icon: 'files' },
   ];
+  /** Remarks entered on this item's stock movements (adjustments, returns, quarantine). */
+  readonly stockNotes = signal<{ date?: string; type: string; reason?: string; remarks: string }[]>([]);
+  readonly entryColumns: DetailTableColumn[] = [
+    { key: 'arrivalDate', label: 'Arrival', type: 'date' },
+    { key: 'createdBy', label: 'Created By' },
+    { key: 'quantity', label: 'Qty', type: 'number', total: true },
+    // days since the arrival / created date
+    { key: 'aging', label: 'Aging' },
+    { key: 'unitCost', label: 'Cost', type: 'currency' },
+    // quantity × unit cost; stock out is negative, so the footer is the cost of the net stock
+    { key: 'totalCost', label: 'Total Cost', type: 'currency', total: true },
+    { key: 'movementType', label: 'Type' },
+    { key: 'warehouseName', label: 'Warehouse' },
+    { key: 'area', label: 'Area' },
+  ];
+  /** Whole days from the given date to today, e.g. "12 days". */
+  private agingText(date?: string): string {
+    if (!date) return '-';
+    const from = new Date(date);
+    if (isNaN(from.getTime())) return '-';
+    from.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days = Math.max(Math.floor((today.getTime() - from.getTime()) / 86400000), 0);
+    return `${days} ${days === 1 ? 'day' : 'days'}`;
+  }
+
   readonly warehouseColumns: DetailTableColumn[] = [
     { key: 'warehouseName', label: 'Warehouse' },
     { key: 'quantity', label: 'On hand', type: 'number', total: true },
@@ -73,6 +104,7 @@ export class StockOverviewComponent implements OnInit {
     { key: 'status', label: 'Status' },
     { key: 'reservedQty', label: 'Reserved', type: 'number', total: true },
     { key: 'reservedOn', label: 'Reserved on', type: 'date' },
+    { key: 'reservedUntil', label: 'Reserved until', type: 'date' },
   ];
 
   rowActions: DataGridRowAction<StockRow>[] = [
@@ -105,6 +137,7 @@ export class StockOverviewComponent implements OnInit {
       { key: 'productDescription', label: 'Description', sortable: true },
       { key: 'productCategory', label: 'Category', sortable: true },
       { key: 'uom', label: 'UOM', sortable: true },
+      { key: 'arrivalDate', label: 'Arrival Date', type: 'date', sortable: true },
       { key: 'warehouseText', label: 'Warehouses', visible: false },
       { key: 'onHandQuantity', label: 'On Hand', type: 'number', sortable: true },
       { key: 'reservedQuantity', label: 'Reserved', type: 'number', sortable: true, cellClass: () => 'text-amber-600 font-semibold' },
@@ -113,7 +146,8 @@ export class StockOverviewComponent implements OnInit {
         cellClass: (r) => (r.availableQuantity > 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold')
       },
       { key: 'quarantinedQuantity', label: 'Quarantine', type: 'number', sortable: true, cellClass: (r) => (r.quarantinedQuantity > 0 ? 'text-red-600 font-semibold' : '') },
-      { key: 'stockValue', label: 'Value', type: 'currency', sortable: true },
+      { key: 'unitCost', label: 'Unit Cost', type: 'currency', sortable: true },
+      { key: 'stockValue', label: 'Total Cost', type: 'currency', sortable: true },
     ];
   }
 
@@ -181,6 +215,33 @@ export class StockOverviewComponent implements OnInit {
     this.reservations.set([]);
     this.details.set(null);
     this.historyEntries.set([]);
+    this.stockEntries.set([]);
+    // full ledger for the item: receipts, deliveries, returns and adjustments (in and out)
+    this.stockService.getLedger({ page: 1, row: 500, product: row.productId }).subscribe({
+      next: (res) => {
+        this.stockNotes.set((res.data?.movements || []).filter((m) => (m.remarks || '').trim()).map((m) => ({
+          date: m.movementDate || m.createdDate,
+          type: m.movementType,
+          reason: m.reason,
+          remarks: m.remarks as string,
+        })));
+        this.stockEntries.set((res.data?.movements || []).map((m) => ({
+        // arrival date when one was entered, otherwise when the movement was created (e.g. GRN receipts)
+        arrivalDate: m.arrivalDate || m.createdDate || m.movementDate,
+        // signed: stock in is positive, stock out negative, so the total is the net balance
+        quantity: (m.quantityIn || 0) - (m.quantityOut || 0),
+        aging: this.agingText(m.arrivalDate || m.createdDate || m.movementDate),
+        movementType: m.movementType,
+        warehouseName: m.warehouse?.wareHouseName || '-',
+        area: m.area || '-',
+        unitCost: m.unitCost,
+        totalCost: ((m.quantityIn || 0) - (m.quantityOut || 0)) * (m.unitCost || 0),
+        createdBy: [m.createdBy?.firstName, m.createdBy?.lastName].filter(Boolean).join(' ') || '-',
+        })));
+      },
+      error: () => this.stockEntries.set([]),
+    });
+    this.stockNotes.set([]);
     this.stockService.getItemDetails(row.productId).subscribe({
       next: (res) => this.details.set(res.data),
       error: () => this.details.set(null),
@@ -225,8 +286,8 @@ export class StockOverviewComponent implements OnInit {
     return [
       { label: 'On hand', value: row.onHandQuantity },
       { label: 'Reserved', value: row.reservedQuantity, tone: row.reservedQuantity > 0 ? 'warn' : undefined },
-      { label: 'Available', value: row.availableQuantity, tone: row.availableQuantity > 0 ? 'good' : 'bad' },
-      { label: 'Stock value', value: row.stockValue, format: 'currency' },
+      { label: 'Unit cost', value: row.unitCost, format: 'currency' },
+      { label: 'Total cost', value: row.stockValue, format: 'currency' },
     ];
   }
 
@@ -283,6 +344,32 @@ export class StockOverviewComponent implements OnInit {
     return sections;
   }
 
+  notesSections(row: StockRow): DetailOverviewSection[] {
+    const notes = this.stockNotes();
+    const serials = row.serialNos || [];
+    return [
+      {
+        title: 'Remarks',
+        columns: '1',
+        fields: notes.length
+          ? notes.map((n) => ({
+              type: 'field' as const,
+              label: [n.date ? new Date(n.date).toLocaleDateString('en-GB') : '', n.type, n.reason].filter(Boolean).join(' · '),
+              value: n.remarks,
+              fullRow: true,
+            }))
+          : [{ type: 'field' as const, label: 'Remarks', value: 'No remarks entered for this item.' }],
+      },
+      {
+        title: `Serial numbers (${serials.length})`,
+        columns: '1',
+        fields: serials.length
+          ? [{ type: 'field' as const, label: 'Serial no', value: serials.join('\n'), editor: 'textarea', fullRow: true }]
+          : [{ type: 'field' as const, label: 'Serial no', value: 'No serial numbers in stock.' }],
+      },
+    ];
+  }
+
   overviewSections(row: StockRow): DetailOverviewSection[] {
     return [
       {
@@ -293,6 +380,8 @@ export class StockOverviewComponent implements OnInit {
           { type: 'field', label: 'Part no', value: row.partNo || '-' },
           { type: 'field', label: 'Category', value: row.productCategory || '-' },
           { type: 'field', label: 'UOM', value: row.uom || '-' },
+          { type: 'field', label: 'Arrival date', value: row.arrivalDate ? new Date(row.arrivalDate).toLocaleDateString('en-GB') : '-' },
+          { type: 'field', label: 'Serial no', value: (row.serialNos || []).join('\n'), editor: 'textarea', fullRow: true },
         ],
       },
       {
@@ -305,7 +394,7 @@ export class StockOverviewComponent implements OnInit {
           { type: 'field', label: 'Quarantine', value: row.quarantinedQuantity, numeric: true, tone: row.quarantinedQuantity > 0 ? 'bad' : undefined },
           { type: 'field', label: 'Short (reserved beyond stock)', value: row.shortfallQuantity, numeric: true, tone: 'bad', visible: row.shortfallQuantity > 0 },
           { type: 'field', label: 'Reorder point', value: row.reorderPoint || '-', numeric: true },
-          { type: 'field', label: 'Stock value', value: row.stockValue.toFixed(2), numeric: true },
+          { type: 'field', label: 'Total cost', value: row.stockValue.toFixed(2), numeric: true },
         ],
       },
     ];

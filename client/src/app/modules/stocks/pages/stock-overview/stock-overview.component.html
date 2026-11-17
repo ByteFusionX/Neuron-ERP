@@ -39,6 +39,13 @@
         <ng-container *ngSwitchCase="'details'">
           <app-detail-overview [grid]="grid" [row]="row" [sections]="detailSections()"></app-detail-overview>
         </ng-container>
+        <ng-container *ngSwitchCase="'entries'">
+          <app-detail-table *ngIf="stockEntries().length; else noEntries" [columns]="entryColumns" [rows]="stockEntries()" showTotals numbered></app-detail-table>
+          <ng-template #noEntries><p class="text-sm text-gray-500 dark:text-gray-400">No stock movements recorded for this item yet.</p></ng-template>
+        </ng-container>
+        <ng-container *ngSwitchCase="'notes'">
+          <app-detail-overview [grid]="grid" [row]="row" [sections]="notesSections(row)"></app-detail-overview>
+        </ng-container>
         <app-detail-timeline *ngSwitchCase="'history'" [entries]="historyEntries()" emptyMessage="No history recorded yet."></app-detail-timeline>
       </ng-container>
     </ng-template>

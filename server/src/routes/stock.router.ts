@@ -10,6 +10,7 @@ import {
     resolveSupplierReturn,
     getStockReservations,
     getStockItemDetails,
+    getStockEntries,
     releaseStockReservation
 } from "../controllers/stock.controller";
 import { requirePrivilege, requireAnyPrivilege } from "../common/middlewares/privilege.middleware";
@@ -29,6 +30,7 @@ stockRouter.get('/overview', stockView("stockBalance"), getStockOverview);
 stockRouter.get('/ledger', stockView("stockMovements"), getStockLedger);
 stockRouter.get('/reservations', getStockReservations);
 stockRouter.get('/item-details', getStockItemDetails);
+stockRouter.get('/entries', stockView("stockBalance"), getStockEntries);
 stockRouter.get('/returns/:kind/:id', getReturnSource);
 stockRouter.post('/adjust', adjustStock);
 stockRouter.post('/quarantine', releaseQuarantine);

@@ -87,6 +87,67 @@ const quarantineRefsByProduct = async (productIds: string[]): Promise<Map<string
 };
 
 /**
+ * Serial numbers still in stock per product: serials captured on GRN receipts, minus serials sent out on
+ * delivery notes. Receipts or deliveries that were reversed (cancelled) are ignored.
+ */
+const serialNosByProduct = async (productIds: string[]): Promise<Map<string, string[]>> => {
+    const result = new Map<string, string[]>();
+    if (!productIds.length) return result;
+    const moves: any[] = await StockMovement.find({
+        product: { $in: productIds.map(asObjectId) }, reversalOf: { $exists: false }, ...notDeleted,
+        $or: [
+            { movementType: { $in: ['Receipt', 'Delivery'] }, referenceType: { $in: ['GRN', 'DeliveryNote'] } },
+            { movementType: 'Adjustment', 'serialNos.0': { $exists: true } },
+        ],
+    }).select('_id product movementType referenceId quantityIn serialNos').lean();
+    if (!moves.length) return result;
+    const reversed = new Set((await StockMovement.find({ reversalOf: { $in: moves.map((m) => m._id) }, ...notDeleted }).select('reversalOf').lean())
+        .map((r: any) => String(r.reversalOf)));
+    const live = moves.filter((m) => !reversed.has(String(m._id)) && (m.referenceId || m.movementType === 'Adjustment'));
+    const adds = (m: any) => m.movementType === 'Receipt' || (m.movementType === 'Adjustment' && m.quantityIn > 0);
+
+    const products: any[] = await Product.find({ _id: { $in: productIds.map(asObjectId) } }).select('itemCode partNo').lean();
+    const codesOf = new Map(products.map((p) => [String(p._id), new Set([p.itemCode, p.partNo].filter(Boolean).map((c: string) => c.trim().toLowerCase()))]));
+    const lineMatches = (productId: string, line: any) => {
+        const codes = codesOf.get(productId);
+        return !!codes && [line?.itemCode, line?.partNo].some((c) => c && codes.has(String(c).trim().toLowerCase()));
+    };
+
+    const grnIds = [...new Set(live.filter((m) => m.movementType === 'Receipt').map((m) => String(m.referenceId)))];
+    const dnIds = [...new Set(live.filter((m) => m.movementType === 'Delivery').map((m) => String(m.referenceId)))];
+    const [grns, dns]: any[][] = await Promise.all([
+        GRN.find({ _id: { $in: grnIds } }).select('items.itemCode items.partNo items.serialNos').lean(),
+        DeliveryNote.find({ _id: { $in: dnIds } }).select('items.itemCode items.partNo items.serialNos').lean(),
+    ]);
+    const grnById = new Map(grns.map((g) => [String(g._id), g]));
+    const dnById = new Map(dns.map((d) => [String(d._id), d]));
+
+    const pairs = new Set<string>();
+    // Receipts first, so a delivery can always take its serial back out.
+    const ordered = [...live].sort((a, b) => (adds(a) ? 0 : 1) - (adds(b) ? 0 : 1));
+    ordered.forEach((m) => {
+        const pid = String(m.product);
+        let serials: string[];
+        if (m.movementType === 'Adjustment') {
+            serials = m.serialNos || [];
+        } else {
+            const key = `${pid}|${m.movementType}|${m.referenceId}`;
+            if (pairs.has(key)) return; // one document can post several rows (one per warehouse)
+            pairs.add(key);
+            const doc = m.movementType === 'Receipt' ? grnById.get(String(m.referenceId)) : dnById.get(String(m.referenceId));
+            serials = (doc?.items || []).filter((line: any) => lineMatches(pid, line)).flatMap((line: any) => line.serialNos || []);
+        }
+        if (!result.has(pid)) result.set(pid, []);
+        const list = result.get(pid)!;
+        serials.map((s) => String(s).trim()).filter(Boolean).forEach((s) => {
+            if (adds(m)) { if (!list.includes(s)) list.push(s); }
+            else { const idx = list.indexOf(s); if (idx >= 0) list.splice(idx, 1); }
+        });
+    });
+    return result;
+};
+
+/**
  * Stock by product: on hand, reserved, available and quarantined, with the warehouse split.
  * A product shows once it has any stock movement or an active reservation.
  */
@@ -156,13 +217,30 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
         ]);
         const adjustCosts = new Map<string, { cost: number; date: number }>(adjustRows.map((r) => [String(r._id), { cost: Number(r.unitCost), date: new Date(r.date || 0).getTime() }]));
         const costFor = (id: string): number => {
-            const po = poCosts.get(id);
+            // Latest of the last goods receipt and the last stock-in adjustment with a cost; the PO price is the fallback.
+            const g = costs.get(id);
+            const grn = g && g.unitCost > 0 ? { cost: g.unitCost, date: new Date(g.date || 0).getTime() } : undefined;
             const adj = adjustCosts.get(id);
-            if (po && adj) return adj.date >= po.date ? adj.cost : po.cost;
-            return adj?.cost || po?.cost || costs.get(id)?.unitCost || 0;
+            if (grn && adj) return adj.date >= grn.date ? adj.cost : grn.cost;
+            return adj?.cost || grn?.cost || poCosts.get(id)?.cost || 0;
+        };
+        // Arrival dates entered on stock-in adjustments (e.g. opening stock).
+        const adjustArrivalRows: any[] = await StockMovement.aggregate([
+            { $match: { ...notDeleted, product: { $in: productKeys.map(asObjectId) }, movementType: 'Adjustment', quantityIn: { $gt: 0 }, arrivalDate: { $ne: null }, reversalOf: { $exists: false } } },
+            { $group: { _id: '$product', date: { $max: '$arrivalDate' } } },
+        ]);
+        const adjustArrival = new Map<string, Date>(adjustArrivalRows.map((r) => [String(r._id), r.date]));
+        const arrivalFor = (id: string): Date | null => {
+            const grn = costs.get(id)?.date ? new Date(costs.get(id)!.date) : null;
+            const adj = adjustArrival.get(id) ? new Date(adjustArrival.get(id)!) : null;
+            if (grn && adj) return adj > grn ? adj : grn;
+            return grn || adj;
         };
         const warehouseName = new Map<string, string>(warehouses.map((w: any) => [String(w._id), w.wareHouseName]));
-        const quarantineRefs = await quarantineRefsByProduct(products.filter((p: any) => (byProduct.get(String(p._id))?.quarantined || 0) > 0).map((p: any) => String(p._id)));
+        const [quarantineRefs, serialNos] = await Promise.all([
+            quarantineRefsByProduct(products.filter((p: any) => (byProduct.get(String(p._id))?.quarantined || 0) > 0).map((p: any) => String(p._id))),
+            serialNosByProduct(products.map((p: any) => String(p._id))),
+        ]);
 
         let rows = products.map((product: any) => {
             const id = String(product._id);
@@ -181,8 +259,13 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
                 quarantinedQuantity: entry.quarantined,
                 quarantineRef: quarantineRefs.get(id) || '',
                 lastMovementDate: entry.lastDate,
-                // With nothing in hand the value stays at the last PO price instead of dropping to 0.
-                stockValue: totalQuantity > 0 ? totalQuantity * unitCost : unitCost,
+                // Latest goods receipt, or arrival date entered on a stock-in adjustment.
+                arrivalDate: arrivalFor(id),
+                serialNos: serialNos.get(id) || [],
+                serialNoText: (serialNos.get(id) || []).join(', '),
+                unitCost,
+                // Total cost = quantity on hand x latest unit cost.
+                stockValue: totalQuantity * unitCost,
                 warehouses: entry.warehouses
                     .map((w) => ({ warehouseId: w.warehouseId, warehouseName: warehouseName.get(w.warehouseId) || 'Warehouse', quantity: w.quantity, quarantined: w.quarantined }))
                     .sort((a, b) => b.quantity - a.quantity),
@@ -205,7 +288,7 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
         const dir = hasSort ? (sortDir === 'desc' ? -1 : 1) : -1;
         rows.sort((a: any, b: any) => {
             let av = a[key], bv = b[key];
-            if (av instanceof Date || bv instanceof Date || key === 'lastMovementDate') {
+            if (av instanceof Date || bv instanceof Date || key === 'lastMovementDate' || key === 'arrivalDate') {
                 av = av ? new Date(av).getTime() : 0;
                 bv = bv ? new Date(bv).getTime() : 0;
             }
@@ -275,6 +358,56 @@ export const getStockLedger = async (req: Request, res: Response, next: NextFunc
     }
 };
 
+/**
+ * Every time stock entered for one product: GRN receipts and stock-adjust additions, newest first.
+ * Reversed entries and the reversals themselves are left out. Aging counts days from the arrival date.
+ */
+export const getStockEntries = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { product } = req.query;
+        if (!product || !ObjectId.isValid(String(product))) return res.status(400).json({ success: false, message: 'product is required' });
+
+        const moves = await StockMovement.find({
+            ...notDeleted,
+            product: asObjectId(product),
+            $or: [{ movementType: 'Receipt' }, { movementType: 'Adjustment', quantityIn: { $gt: 0 } }, { reversalOf: { $exists: true } }],
+        })
+            .populate('warehouse', 'wareHouseName')
+            .populate('createdBy', 'firstName lastName')
+            .sort({ movementDate: -1, createdDate: -1, _id: -1 })
+            .lean();
+
+        const reversed = new Set(moves.filter((m: any) => m.reversalOf).map((m: any) => String(m.reversalOf)));
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const entries = moves
+            .filter((m: any) => !m.reversalOf && !reversed.has(String(m._id)) && Number(m.quantityIn) > 0)
+            .map((m: any) => {
+                const arrival = m.arrivalDate || m.movementDate || m.createdDate;
+                const day = new Date(arrival);
+                day.setHours(0, 0, 0, 0);
+                const unitCost = Number(m.unitCost) || 0;
+                const quantity = Number(m.quantityIn) || 0;
+                return {
+                    _id: m._id,
+                    arrivalDate: arrival,
+                    source: m.movementType === 'Receipt' ? 'GRN' : 'Stock adjust',
+                    referenceNo: m.referenceNo || '',
+                    reason: m.reason || '',
+                    warehouse: m.warehouse?.wareHouseName || '',
+                    createdBy: m.createdBy ? `${m.createdBy.firstName || ''} ${m.createdBy.lastName || ''}`.trim() : '',
+                    quantity,
+                    unitCost,
+                    totalCost: quantity * unitCost,
+                    agingDays: Math.max(Math.floor((today.getTime() - day.getTime()) / 86400000), 0),
+                };
+            });
+        return res.status(200).json({ success: true, data: entries });
+    } catch (error) {
+        return fail(res, next, error);
+    }
+};
+
 /** Availability for any module: ?productIds=a,b&warehouse=. Open to every signed-in user, read-only. */
 export const getStockAvailability = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -294,7 +427,12 @@ const REMOVE_ONLY = new Set(['Damaged', 'Lost / missing']);
 /** A manual stock correction. A reason is always required; Other also needs remarks. */
 export const adjustStock = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { product, warehouse, direction, quantity, reason, remarks, unitCost } = req.body || {};
+        const { product, warehouse, direction, quantity, reason, remarks, unitCost, arrivalDate, area } = req.body || {};
+        const rawSerials = Array.isArray(req.body?.serialNos) ? req.body.serialNos : String(req.body?.serialNos || '').split(/[\n,]/);
+        const serialNos: string[] = [...new Set<string>(rawSerials.map((s: any) => String(s).trim()).filter(Boolean))];
+        const arrival = arrivalDate ? new Date(arrivalDate) : undefined;
+        if (arrival && isNaN(arrival.getTime())) throw new StockError('Arrival date is not a valid date', 400);
+        if (serialNos.length > Number(quantity)) throw new StockError(`${serialNos.length} serial numbers entered for a quantity of ${Number(quantity)}`, 400);
         const employee = await getEmployeeData((req as any).user);
         if (!employee) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
@@ -322,6 +460,9 @@ export const adjustStock = async (req: Request, res: Response, next: NextFunctio
             referenceNo: `ADJ-${Date.now().toString(36).toUpperCase()}`,
             reason,
             remarks,
+            arrivalDate: direction === 'add' ? arrival : undefined,
+            area: area ? String(area) : undefined,
+            serialNos,
             createdBy: employee._id,
         });
         return res.status(201).json({ success: true, message: 'Stock adjusted', data: movement });
@@ -630,6 +771,7 @@ export const getStockItemDetails = async (req: Request, res: Response, next: Nex
             customer: r.customer?.companyName || '-',
             reservedQty: r.quantity,
             reservedOn: r.createdDate,
+            reservedUntil: r.expiresAt || null,
         }));
 
         return res.status(200).json({

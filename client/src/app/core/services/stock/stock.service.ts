@@ -29,6 +29,9 @@ export interface StockRow {
   productDescription: string;
   productCategory: string;
   uom: string;
+  arrivalDate?: string | null;
+  serialNos?: string[];
+  serialNoText?: string;
   reorderPoint: number;
   onHandQuantity: number;
   reservedQuantity: number;
@@ -37,6 +40,7 @@ export interface StockRow {
   quarantinedQuantity: number;
   /** Job id (or the PO number when there is no job) the quarantined stock came from. */
   quarantineRef?: string;
+  unitCost: number;
   stockValue: number;
   warehouses: StockWarehouseSplit[];
   warehouseText: string;
@@ -75,8 +79,11 @@ export interface StockMovement {
   referenceNo?: string;
   reason?: string;
   remarks?: string;
+  area?: string;
   reversalOf?: string;
   movementDate: string;
+  arrivalDate?: string;
+  createdDate?: string;
   createdBy?: { firstName?: string; lastName?: string } | null;
 }
 
@@ -104,6 +111,9 @@ export interface StockAdjustPayload {
   reason: string;
   remarks?: string;
   unitCost?: number;
+  arrivalDate?: string;
+  area?: string;
+  serialNos?: string[];
 }
 
 export interface StockQuarantinePayload {
@@ -160,7 +170,22 @@ export interface StockItemDetails {
   item: Record<string, any>;
   lastPo: Record<string, any> | null;
   lastGrn: Record<string, any> | null;
-  jobs: { jobId: string; status: string; customer: string; reservedQty: number; reservedOn: string }[];
+  jobs: { jobId: string; status: string; customer: string; reservedQty: number; reservedOn: string; reservedUntil?: string | null }[];
+}
+
+/** One time stock entered for a product, from a GRN or a stock adjustment. */
+export interface StockEntry {
+  _id: string;
+  arrivalDate: string;
+  source: 'GRN' | 'Stock adjust';
+  referenceNo: string;
+  reason: string;
+  warehouse: string;
+  createdBy: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  agingDays: number;
 }
 
 export const ADJUSTMENT_REASONS = ['Opening stock', 'Count correction', 'Damaged', 'Lost / missing', 'Other'] as const;
@@ -223,6 +248,10 @@ export class StockService {
 
   getItemDetails(product: string): Observable<{ success: boolean; data: StockItemDetails }> {
     return this.http.get<{ success: boolean; data: StockItemDetails }>(`${this.api}/item-details`, { params: this.toParams({ product }), context: context() });
+  }
+
+  getEntries(product: string): Observable<{ success: boolean; data: StockEntry[] }> {
+    return this.http.get<{ success: boolean; data: StockEntry[] }>(`${this.api}/entries`, { params: this.toParams({ product }), context: context() });
   }
 
   getReservations(product?: string): Observable<{ success: boolean; data: StockReservationRow[] }> {

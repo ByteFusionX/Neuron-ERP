@@ -27,6 +27,11 @@ interface StockMovement {
     referenceNo?: string;
     reason?: string;
     remarks?: string;
+    /** Stock adjustments only: when the stock physically arrived, and the serials added or removed. */
+    arrivalDate?: Date;
+    /** Stock adjustments only: where in the warehouse the stock sits (shelf, rack, zone). */
+    area?: string;
+    serialNos?: string[];
     supplier?: Types.ObjectId;
     lpoNo?: string;
     reversalOf?: Types.ObjectId;
@@ -92,6 +97,17 @@ const stockMovementSchema = new Schema<StockMovement>({
     remarks: {
         type: String,
         trim: true,
+    },
+    arrivalDate: {
+        type: Date,
+    },
+    area: {
+        type: String,
+        trim: true,
+    },
+    serialNos: {
+        type: [String],
+        default: undefined,
     },
     supplier: {
         type: Schema.Types.ObjectId,

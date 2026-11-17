@@ -119,6 +119,9 @@ export interface PostInput {
     referenceNo?: string;
     reason?: string;
     remarks?: string;
+    arrivalDate?: Date;
+    area?: string;
+    serialNos?: string[];
     supplier?: any;
     lpoNo?: string;
     reversalOf?: any;
@@ -165,6 +168,9 @@ export const post = async (input: PostInput) => {
         referenceNo: input.referenceNo,
         reason: input.reason,
         remarks: input.remarks?.trim() || undefined,
+        arrivalDate: input.arrivalDate,
+        area: input.area?.trim() || undefined,
+        serialNos: input.serialNos?.length ? input.serialNos : undefined,
         supplier: input.supplier ? oid(input.supplier) : undefined,
         lpoNo: input.lpoNo,
         reversalOf: input.reversalOf ? oid(input.reversalOf) : undefined,

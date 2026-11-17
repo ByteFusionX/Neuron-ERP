@@ -5,6 +5,7 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { ModalService } from 'src/app/shared/components/modal';
 import { ProductCategoryService } from 'src/app/core/services/product-category/product-category.service';
 import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.service';
+import { StockAreaService } from 'src/app/core/services/stock-area/stock-area.service';
 import { QuickAddDialogComponent, QuickAddDialogData } from 'src/app/modules/products/modals/quick-add-dialog/quick-add-dialog.component';
 import { MasterCustomRow, MasterDataGridComponent, MasterTab } from './master-data-grid.component';
 
@@ -23,6 +24,7 @@ export class ProductDataComponent {
   private confirm = inject(ConfirmDialogService);
   private categoryService = inject(ProductCategoryService);
   private warehouseService = inject(WarehouseService);
+  private areaService = inject(StockAreaService);
 
   tabs: MasterTab[] = [
     { id: 'brand', label: 'Brands', title: 'Brand', list: 'brand', hint: 'Used by the Brand field on Product records.' },
@@ -44,6 +46,16 @@ export class ProductDataComponent {
         create: (name, isActive) => this.warehouseService.createWarehouse({ wareHouseName: name, createdDate: new Date(), isActive } as any),
         update: (id, name, isActive) => this.warehouseService.updateWarehouse(id, { wareHouseName: name, isActive } as any),
         remove: (id) => this.warehouseService.deleteWarehouse(id),
+      }),
+    },
+    {
+      id: 'area', label: 'Areas', title: 'Area', hint: 'Shelf, rack or zone inside a warehouse. Used by the Area field on stock adjustments.',
+      custom: this.named('Area', {
+        load: () => this.areaService.getAreas(),
+        nameOf: (a: any) => a.areaName,
+        create: (name, isActive) => this.areaService.createArea({ areaName: name, createdDate: new Date(), isActive }),
+        update: (id, name, isActive) => this.areaService.updateArea(id, { areaName: name, isActive }),
+        remove: (id) => this.areaService.deleteArea(id),
       }),
     },
     { id: 'unit', label: 'Units of Measure', title: 'Unit', list: 'unit', hint: 'Used by Product records and quantity-based sales documents.' },
