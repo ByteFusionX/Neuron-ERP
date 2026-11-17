@@ -42,7 +42,8 @@ export class StockLedgerComponent implements OnInit, OnDestroy {
 
   columns: DataGridColumn<StockMovement>[] = [
     { key: 'movementDate', label: 'Date', type: 'date' },
-    { key: 'product', label: 'Item', valueGetter: (r) => [r.product?.itemCode || r.product?.partNo, r.product?.productDescription].filter(Boolean).join(' - ') },
+    { key: 'itemCode', label: 'Item Code', valueGetter: (r) => r.product?.itemCode || '-' },
+    { key: 'productDescription', label: 'Item Description', valueGetter: (r) => r.product?.productDescription || '-' },
     { key: 'warehouse', label: 'Warehouse', valueGetter: (r) => r.warehouse?.wareHouseName || '-' },
     { key: 'movementType', label: 'Type' },
     { key: 'quantityIn', label: 'In', type: 'number', cellClass: (r) => (r.quantityIn ? 'text-emerald-600 font-semibold' : '') },
@@ -50,7 +51,7 @@ export class StockLedgerComponent implements OnInit, OnDestroy {
     { key: 'stockStatus', label: 'Stock', valueGetter: (r) => (r.stockStatus === 'Quarantine' ? 'Quarantine' : 'Available') },
     { key: 'referenceNo', label: 'Document', valueGetter: (r) => [r.referenceType, r.referenceNo].filter(Boolean).join(' ') || '-' },
     { key: 'reason', label: 'Reason', valueGetter: (r) => r.reason || r.remarks || '' },
-    { key: 'createdBy', label: 'By', valueGetter: (r) => [r.createdBy?.firstName, r.createdBy?.lastName].filter(Boolean).join(' ') },
+    { key: 'createdBy', label: 'Created By', valueGetter: (r) => [r.createdBy?.firstName, r.createdBy?.lastName].filter(Boolean).join(' ') },
   ];
 
   readonly detailTabs = [{ id: 'overview', label: 'Details', icon: 'info' }];
