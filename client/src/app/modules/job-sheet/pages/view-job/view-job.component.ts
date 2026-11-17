@@ -344,7 +344,8 @@ export class ViewJobComponent implements OnInit {
   stagesStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
   private readonly stageRoutes: Record<StageKey, string> = {
     pr: '/purchase/view-purchase', po: '/purchase-order/view-lpo', grn: '/grn/view-grn', dn: '/dispatch/view',
-    invoice: '/finance/vendor-bills',
+    // Invoice rows carry the id of the delivery note they were raised from; there is no invoice view page.
+    invoice: '/dispatch/view',
   };
 
   private readonly allItemColumns: DetailTableColumn[] = [

@@ -2309,7 +2309,7 @@ export const getJobProcurement = async (req: Request, res: Response, next: NextF
         const invoice = invs.flatMap((inv) => {
             const lines: any[] = inv.items?.length ? inv.items : [{ description: '', quantity: 0, totalCost: inv.amount }];
             return lines.map((it: any) => ({
-                docId: inv._id, docNo: inv.invoiceNo, description: it.description,
+                docId: inv.deliveryNote ?? inv._id, docNo: inv.invoiceNo, description: it.description,
                 totalQty: Number(it.quantity) || 0, acceptedQty: null, rejectedQty: null,
                 value: Number(it.totalCost) || 0,
                 party: inv.client?.name ?? '', status: inv.status, date: inv.createdAt,
