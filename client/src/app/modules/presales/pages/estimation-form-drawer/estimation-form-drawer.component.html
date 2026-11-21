@@ -32,7 +32,8 @@
             <app-item-entry #itemEntry [paletteTargetLabel]="open ? 'Estimation' : null" [externalAddButtons]="true" [optionalItems]="optionalItems"
                 [seedOptionalItems]="seedOptionalItems" [suggestionScopeIds]="[]" [currency]="form.controls.currency.value || defaultCurrency" [currencyChoices]="currencyCodes"
                 (currencyChange)="form.controls.currency.setValue($event); form.controls.currency.markAsDirty()"
-                (totals)="onItemTotals($event)" (createProductRequested)="openCreateProduct($event)" [allowEditProduct]="true" (editProductRequested)="openEditProduct($event)"></app-item-entry>
+                (totals)="onItemTotals($event)" (createProductRequested)="openCreateProduct($event)" [allowEditProduct]="true" (editProductRequested)="openEditProduct($event)"
+                [allowExcelImport]="true" [excelToolbar]="false" excelFileName="estimation-items"></app-item-entry>
         </div>
 
         <!-- Step 2 — currency, discount & note -->
@@ -77,6 +78,8 @@
             <app-action-button *ngIf="itemEntry.optionalItemsEnabled" variant="secondary" (click)="itemEntry.addItemAndJump(true)">
                 <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add optional item
             </app-action-button>
+            <app-action-button variant="secondary" icon="download" (click)="itemEntry.downloadExcelTemplate()" title="Download a blank Excel sheet in the import format">Excel template</app-action-button>
+            <app-action-button variant="secondary" icon="upload" [disabled]="itemEntry.excelBusy" (click)="itemEntry.pickExcelFile()" title="Add lines from a filled-in Excel template, one per row">Import Excel</app-action-button>
         </div>
         <span *ngIf="!isStepValid(step) && form.touched" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
 
