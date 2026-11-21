@@ -89,7 +89,7 @@ export interface DataGridSortState {
 }
 
 export type DataGridFilterOperator =
-  | 'contains' | 'notContains' | 'is' | 'isNot' | 'eq' | 'gt' | 'lt' | 'before' | 'after' | 'on' | 'empty';
+  | 'contains' | 'notContains' | 'is' | 'isNot' | 'eq' | 'neq' | 'gt' | 'lt' | 'before' | 'after' | 'on' | 'notOn' | 'empty';
 
 export interface DataGridFilter {
   id: number;

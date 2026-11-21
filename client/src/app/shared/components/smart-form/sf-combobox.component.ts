@@ -79,6 +79,8 @@ export class SfComboboxComponent extends SfControl {
   /** Lines an option label may wrap to before it is cut with an ellipsis (1 = single truncated line). */
   @Input() optionLines = 1;
   @Input({ transform: booleanAttribute }) multiple = false;
+  /** Multiple only: close the list after each pick; clicking the field again reopens it to add more. */
+  @Input({ transform: booleanAttribute }) closeOnSelect = false;
   /** Smaller field height and text, for toolbars and footers. */
   @Input({ transform: booleanAttribute }) compact = false;
   /** Single-select only: shows a button that resets the value to null. */
@@ -95,6 +97,7 @@ export class SfComboboxComponent extends SfControl {
   @ViewChild('wrapper') private wrapper!: ElementRef<HTMLElement>;
 
   open = false;
+  private justPicked = false;
   query = '';
   active = 0;
 
@@ -121,6 +124,7 @@ export class SfComboboxComponent extends SfControl {
 
   /** A field that kept focus after a choice gets no new focus event on click, so reopen the list here. */
   reopen(): void {
+    if (this.justPicked) return;
     if (!this.open && !this.disabled) this.onFocus();
   }
 
@@ -182,6 +186,12 @@ export class SfComboboxComponent extends SfControl {
     if (this.multiple) {
       this.toggle(o);
       this.query = '';
+      if (this.closeOnSelect) {
+        this.open = false;
+        // The click that ends this pick can land on the field (a new chip grows it) and would reopen the list.
+        this.justPicked = true;
+        setTimeout(() => (this.justPicked = false), 300);
+      }
     } else {
       this.update(o.value);
       this.open = false;

@@ -83,8 +83,14 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   private lastRouteViewParam: string | null = null;
   @Input() pageSizeOptions = [5, 15, 30, 50];
 
+  private pageSizeSfCache: { src: number[]; options: { label: string; value: number }[] } | null = null;
+
+  /** Cached: a fresh array on every change detection makes the combobox re-create its <li>s mid-click, so picks are lost. */
   get pageSizeSfOptions(): { label: string; value: number }[] {
-    return this.pageSizeOptions.map((s) => ({ label: String(s), value: s }));
+    if (this.pageSizeSfCache?.src !== this.pageSizeOptions) {
+      this.pageSizeSfCache = { src: this.pageSizeOptions, options: this.pageSizeOptions.map((s) => ({ label: String(s), value: s })) };
+    }
+    return this.pageSizeSfCache.options;
   }
   @Input() pageSize = 15;
   @Input() maxHeight = '600px';
@@ -149,7 +155,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   /** "on" a date column can collect several days in one field. */
   get draftMultiDate(): boolean {
-    return this.multiSelectEnabled && this.draftColumn?.type === 'date' && this.draftFilter.op === 'on';
+    return this.multiSelectEnabled && this.draftColumn?.type === 'date' && (this.draftFilter.op === 'on' || this.draftFilter.op === 'notOn');
   }
 
   /** Days picked so far for the draft "on" filter. */
@@ -219,7 +225,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   searchTerm = '';
   filters: DataGridFilter[] = [];
   filterMenuOpen = false;
-  draftFilter: { key: string; op: DataGridFilterOperator; value: any; or?: boolean } = { key: '', op: 'contains', value: '' };
+  draftFilter: { key: string; op: DataGridFilterOperator; value: any; or?: boolean } = { key: '', op: 'is', value: '' };
   /** Filter being edited from its pill; null while adding a new one. */
   editingFilterId: number | null = null;
   toasts: DataGridToast[] = [];
@@ -260,7 +266,13 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.prefs) this.loadPrefs();
+    if (!this.prefs) {
+      const hostPageSize = this.pageSize;
+      this.loadPrefs();
+      // The saved page size replaced the host's: tell a server-paged host, or it keeps fetching its own default
+      // while the pager shows the saved size.
+      if (this.serverSide && this.pageSize !== hostPageSize) Promise.resolve().then(() => this.emitQuery());
+    }
     if (changes['columns']) {
       this.columns.forEach((c) => (c.visible = c.visible ?? true));
       // Capture the true defaults only once. The host can rebuild/replace the `columns` input later
@@ -560,7 +572,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
       return f.value.map((v: any, i: number) => ({
         ...f,
         value: v,
-        or: i === 0 ? f.or : f.op === 'is' || f.op === 'on',
+        or: i === 0 ? f.or : f.op === 'is' || f.op === 'on' || f.op === 'eq',
       }));
     });
   }
@@ -750,19 +762,16 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   operatorsFor(col?: DataGridColumn<T>): { value: DataGridFilterOperator; label: string }[] {
+    // Every column type offers the same core set: is, is not, before, after (numbers read "less than" / "greater than").
     switch (col?.type) {
       case 'number':
       case 'currency':
-        return [{ value: 'eq', label: 'equals' }, { value: 'gt', label: 'greater than' }, { value: 'lt', label: 'less than' }, { value: 'empty', label: 'is empty' }];
+        return [{ value: 'eq', label: 'is' }, { value: 'neq', label: 'is not' }, { value: 'lt', label: 'less than' }, { value: 'gt', label: 'greater than' }];
       case 'date':
-        return [{ value: 'on', label: 'on' }, { value: 'before', label: 'before' }, { value: 'after', label: 'after' }, { value: 'empty', label: 'is empty' }];
-      default:
-        if (this.optionsFor(col).length) return [{ value: 'is', label: 'is' }, { value: 'isNot', label: 'is not' }];
-        // Short lists of distinct values (sales person, customer, department…) read as a dropdown: "is" first.
-        if (this.suggestionsFor(col).length) {
-          return [{ value: 'is', label: 'is' }, { value: 'isNot', label: 'is not' }, { value: 'contains', label: 'contains' }, { value: 'notContains', label: 'does not contain' }, { value: 'empty', label: 'is empty' }];
-        }
-        return [{ value: 'contains', label: 'contains' }, { value: 'notContains', label: 'does not contain' }, { value: 'is', label: 'is' }, { value: 'isNot', label: 'is not' }, { value: 'empty', label: 'is empty' }];
+        return [{ value: 'on', label: 'is' }, { value: 'notOn', label: 'is not' }, { value: 'before', label: 'before' }, { value: 'after', label: 'after' }];
+      default: {
+        return [{ value: 'is', label: 'is' }, { value: 'isNot', label: 'is not' }];
+      }
     }
   }
 
@@ -885,7 +894,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   onDraftOpChange(op: DataGridFilterOperator): void {
     this.draftFilter.op = op;
     // A multi-pick only makes sense for "is" / "is not"; other operators take a single typed value.
-    const multiOp = op === 'is' || op === 'isNot' || (op === 'on' && this.draftColumn?.type === 'date');
+    const multiOp = op === 'is' || op === 'isNot' || ((op === 'on' || op === 'notOn') && this.draftColumn?.type === 'date');
     if (!multiOp && Array.isArray(this.draftFilter.value)) this.draftFilter.value = '';
   }
 
@@ -1013,12 +1022,12 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     if (!col) return true;
     const raw = this.rawValue(row, col);
     if (f.op === 'empty') return raw == null || raw === '';
-    if (raw == null || raw === '') return f.op === 'isNot' || f.op === 'notContains';
+    if (raw == null || raw === '') return f.op === 'isNot' || f.op === 'notContains' || f.op === 'neq' || f.op === 'notOn';
     const text = String(raw).trim().toLowerCase();
     if (Array.isArray(f.value) && col.type === 'date') {
       const d = new Date(raw);
       const ymd = isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      return f.value.includes(ymd);
+      return f.op === 'notOn' ? !f.value.includes(ymd) : f.value.includes(ymd);
     }
     if (Array.isArray(f.value)) {
       const hit = f.value.some((v: any) => String(v ?? '').trim().toLowerCase() === text);
@@ -1031,18 +1040,35 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
       if (isNaN(d.getTime())) return '';
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
-    if ((f.op === 'on' || f.op === 'before' || f.op === 'after') && !day()) return false;
+    if (col.type === 'date') {
+      if (!day()) return f.op === 'notOn';
+      switch (f.op) {
+        case 'on': return day() === f.value;
+        case 'notOn': return day() !== f.value;
+        case 'before': return day() < f.value;
+        case 'after': return day() > f.value;
+      }
+      return true;
+    }
+    // Text "before" / "after": option columns follow their list order (status flow), others go A–Z.
+    const order = (): number => {
+      const opts = this.optionsFor(col);
+      const a = opts.findIndex((o) => String(o.value).toLowerCase() === text);
+      const b = opts.findIndex((o) => String(o.value).toLowerCase() === needle);
+      if (a >= 0 && b >= 0) return a - b;
+      return text.localeCompare(needle, undefined, { numeric: true, sensitivity: 'base' });
+    };
     switch (f.op) {
       case 'contains': return text.includes(needle);
       case 'notContains': return !text.includes(needle);
       case 'is': return text === needle;
       case 'isNot': return text !== needle;
+      case 'before': return order() < 0;
+      case 'after': return order() > 0;
       case 'eq': return Number(raw) === Number(f.value);
+      case 'neq': return Number(raw) !== Number(f.value);
       case 'gt': return Number(raw) > Number(f.value);
       case 'lt': return Number(raw) < Number(f.value);
-      case 'on': return day() === f.value;
-      case 'before': return day() < f.value;
-      case 'after': return day() > f.value;
     }
     return true;
   }

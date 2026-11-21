@@ -36,6 +36,7 @@ const conditionFor = (filter: GridFilter, field: GridField): any | null => {
         const n = Number(value);
         if (value === '' || value == null || isNaN(n)) return null;
         if (filter.op === 'eq') return { [path]: n };
+        if (filter.op === 'neq') return { [path]: { $ne: n } };
         if (filter.op === 'gt') return { [path]: { $gt: n } };
         if (filter.op === 'lt') return { [path]: { $lt: n } };
         return null;
@@ -45,6 +46,7 @@ const conditionFor = (filter: GridFilter, field: GridField): any | null => {
         const range = dayRange(value);
         if (!range) return null;
         if (filter.op === 'on') return { [path]: { $gte: range.start, $lt: range.end } };
+        if (filter.op === 'notOn') return { $or: [{ [path]: { $lt: range.start } }, { [path]: { $gte: range.end } }, { [path]: null }] };
         if (filter.op === 'before') return { [path]: { $lt: range.start } };
         if (filter.op === 'after') return { [path]: { $gte: range.end } };
         return null;
@@ -57,6 +59,9 @@ const conditionFor = (filter: GridFilter, field: GridField): any | null => {
         case 'notContains': return { [path]: { $not: { $regex: escapeRegex(text), $options: 'i' } } };
         case 'is': return { [path]: { $regex: `^${escapeRegex(text)}$`, $options: 'i' } };
         case 'isNot': return { [path]: { $not: { $regex: `^${escapeRegex(text)}$`, $options: 'i' } } };
+        // Alphabetical. Mongo string compare is case-sensitive, so this is a best effort for mixed-case data.
+        case 'before': return { [path]: { $lt: text } };
+        case 'after': return { [path]: { $gt: text } };
     }
     return null;
 };

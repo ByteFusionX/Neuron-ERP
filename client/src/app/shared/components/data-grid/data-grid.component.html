@@ -81,7 +81,7 @@
             <app-sf-combobox [options]="operatorSelectOptions" placeholder="Select operator" [ngModel]="draftFilter.op" (ngModelChange)="onDraftOpChange($event)"></app-sf-combobox>
             <ng-container *ngIf="draftFilter.op !== 'empty'">
               <div *ngIf="draftUsesList; else freeValue">
-                <app-sf-combobox [options]="valueSelectOptions" [multiple]="draftMulti" placeholder="Search or select values" emptyText="No values to pick"
+                <app-sf-combobox [options]="valueSelectOptions" [multiple]="draftMulti" closeOnSelect placeholder="Search or select values" emptyText="No values to pick"
                   [(ngModel)]="draftFilter.value"></app-sf-combobox>
               </div>
               <ng-template #freeValue>
