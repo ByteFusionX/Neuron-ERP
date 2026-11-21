@@ -1,0 +1,161 @@
+<div class="dr-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-2 sm:p-6 flex flex-col gap-3 sm:gap-5">
+
+    <!-- Header — same shell as the grid's toolbar, so List and Report read as one screen. -->
+    <div class="dr-card shrink-0" style="overflow: visible">
+        <div class="relative flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
+            <div class="min-w-0">
+                <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate" aria-current="page">Deal Sheets</h2>
+                <p class="mt-1 text-xs leading-4 text-gray-500 dark:text-gray-400 truncate">Deal value, margin and approvals at a glance</p>
+            </div>
+
+            <div class="flex max-lg:order-last max-lg:w-full lg:absolute lg:left-1/2 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 items-center justify-center">
+                <app-view-toggle label="Deal Sheet" active="report" listLink="/deal-sheet/dealsheets" reportLink="/deal-sheet/report"></app-view-toggle>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+                <app-report-filters #rf [fields]="filterFields" [values]="filters" dateLabel="Submitted Date" (valuesChange)="onFilterChange($event)"></app-report-filters>
+                <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!deals.length">
+                    <ng-icon name="heroArrowDownTray" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
+                    Excel
+                </app-action-button>
+            </div>
+        </div>
+
+        <app-filter-pills [bar]="rf.bar"></app-filter-pills>
+    </div>
+
+    <div *ngIf="loading" class="dr-card grid place-content-center py-20 text-sm text-gray-500 dark:text-gray-400">
+        Building report…
+    </div>
+
+    <div *ngIf="!loading && failed" class="dr-card grid place-content-center gap-3 py-20 text-center">
+        <p class="text-sm text-gray-600 dark:text-gray-300">The report could not be generated.</p>
+        <p class="text-xs text-gray-500 dark:text-gray-500">Reload the page to try again.</p>
+    </div>
+
+    <ng-container *ngIf="!loading && !failed">
+
+        <!-- KPI strip -->
+        <div class="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-5">
+            <app-kpi-card class="col-span-2 lg:col-span-1" clickable (click)="openList()" label="Total Deal Value"
+                [value]="(totalValue | numberFormatter) + ' ' + currency" [foot]="deals.length + ' deals'" [delta]="delta('value')"></app-kpi-card>
+            <app-kpi-card clickable (click)="openList('approved')" label="Approved" [value]="(approvedValue | numberFormatter) + ' ' + currency"
+                valueClass="text-emerald-600 dark:text-emerald-400" [foot]="countFor('approved') + ' deals · ' + (approvalRate | number:'1.0-0') + '% approval rate'" [delta]="delta('approvedValue')"></app-kpi-card>
+            <app-kpi-card label="Approved Margin" [value]="(approvedMargin | number:'1.1-1') + '%'"
+                [foot]="(approvedProfit | numberFormatter) + ' ' + currency + ' profit'"></app-kpi-card>
+            <app-kpi-card clickable (click)="openList('pending')" label="Pending" [value]="countFor('pending')" valueClass="text-amber-600 dark:text-amber-400"
+                [foot]="(valueFor('pending') | numberFormatter) + ' ' + currency + (revokedCount ? ' · ' + revokedCount + ' revoked' : '')"></app-kpi-card>
+            <app-kpi-card clickable (click)="openList('rejected')" label="Rejected" [value]="countFor('rejected')" valueClass="text-red-600 dark:text-red-400"
+                [foot]="(valueFor('rejected') | numberFormatter) + ' ' + currency"></app-kpi-card>
+        </div>
+
+        <!-- Sections: one at a time on screen. -->
+        <div class="dr-toggle self-start max-sm:self-stretch max-sm:overflow-x-auto" role="tablist" aria-label="Report section">
+            <button type="button" role="tab" class="dr-toggle-btn" [attr.aria-selected]="section === 'overview'"
+                [ngClass]="section === 'overview' ? 'dr-toggle-on' : ''" (click)="section = 'overview'">Overview</button>
+            <button type="button" role="tab" class="dr-toggle-btn" [attr.aria-selected]="section === 'breakdown'"
+                [ngClass]="section === 'breakdown' ? 'dr-toggle-on' : ''" (click)="section = 'breakdown'">Breakdown</button>
+            <button type="button" role="tab" class="dr-toggle-btn" [attr.aria-selected]="section === 'attention'"
+                [ngClass]="section === 'attention' ? 'dr-toggle-on' : ''" (click)="section = 'attention'">
+                Attention <span class="dr-count">{{ attentionTotal }}</span>
+            </button>
+        </div>
+
+        <!-- Overview -->
+        <div class="dr-section grid grid-cols-1 gap-3 sm:gap-5 lg:grid-cols-3" [class.dr-hidden]="section !== 'overview'">
+            <div class="dr-card p-4 sm:p-5 lg:col-span-2">
+                <div class="mb-2 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="dr-heading">Submitted vs Approved</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-500">Last 12 months. A deal counts as approved in the month it was first approved.</p>
+                    </div>
+                    <div class="dr-toggle">
+                        <button type="button" class="dr-toggle-btn" [ngClass]="trendMetric === 'value' ? 'dr-toggle-on' : ''" (click)="setTrendMetric('value')">Value</button>
+                        <button type="button" class="dr-toggle-btn" [ngClass]="trendMetric === 'count' ? 'dr-toggle-on' : ''" (click)="setTrendMetric('count')">Count</button>
+                    </div>
+                </div>
+                <apx-chart *ngIf="trendChart"
+                    [series]="trendChart.series" [chart]="trendChart.chart" [xaxis]="trendChart.xaxis" [yaxis]="trendChart.yaxis"
+                    [stroke]="trendChart.stroke" [fill]="trendChart.fill" [grid]="trendChart.grid" [legend]="trendChart.legend"
+                    [tooltip]="trendChart.tooltip" [dataLabels]="trendChart.dataLabels" [colors]="trendChart.colors">
+                </apx-chart>
+                <p *ngIf="!trendChart" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">Nothing to trend for these filters.</p>
+            </div>
+
+            <div class="dr-card p-4 sm:p-5">
+                <h3 class="dr-heading mb-2">Status</h3>
+                <apx-chart *ngIf="statusChart"
+                    [series]="statusChart.series" [chart]="statusChart.chart" [labels]="statusChart.labels" [colors]="statusChart.colors"
+                    [stroke]="statusChart.stroke" [plotOptions]="statusChart.plotOptions" [legend]="statusChart.legend"
+                    [tooltip]="statusChart.tooltip" [dataLabels]="statusChart.dataLabels">
+                </apx-chart>
+                <p *ngIf="!statusChart" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">No deals for these filters.</p>
+            </div>
+        </div>
+
+        <!-- Breakdown -->
+        <div class="dr-section flex flex-col gap-3" [class.dr-hidden]="section !== 'breakdown'">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="dr-heading">Breakdown</h3>
+                <div class="dr-toggle">
+                    <button *ngFor="let t of breakdownTabs" type="button" class="dr-toggle-btn"
+                        [ngClass]="breakdownKey === t.key ? 'dr-toggle-on' : ''" (click)="breakdownKey = t.key">{{ t.label }}</button>
+                </div>
+            </div>
+            <app-data-grid
+                rowKey="id"
+                [title]="breakdownTitle"
+                [data]="breakdownRows"
+                [columns]="breakdownColumns"
+                [selectable]="false"
+                [pageSize]="15"
+                searchPlaceholder="Search"
+                emptyMessage="Nothing to break down for these filters"
+                exportFileName="deal-sheet-breakdown.xlsx"
+                exportable>
+            </app-data-grid>
+            <p class="text-xs text-gray-500 dark:text-gray-500">Value, profit and margin leave out rejected deals.</p>
+        </div>
+
+        <!-- Attention -->
+        <div class="dr-section grid grid-cols-1" [class.dr-hidden]="section !== 'attention'">
+            <div class="dr-card flex flex-col">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-5 py-3">
+                    <h3 class="dr-heading">Needs Attention</h3>
+                    <div class="dr-toggle">
+                        <button type="button" class="dr-toggle-btn" [ngClass]="attentionKey === 'waiting' ? 'dr-toggle-on' : ''" (click)="attentionKey = 'waiting'">
+                            Awaiting approval <span class="dr-count">{{ attentionCount('waiting') }}</span>
+                        </button>
+                        <button type="button" class="dr-toggle-btn" [ngClass]="attentionKey === 'lowMargin' ? 'dr-toggle-on' : ''" (click)="attentionKey = 'lowMargin'">
+                            Low margin <span class="dr-count">{{ attentionCount('lowMargin') }}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-erp-border-dark">
+                    <button *ngFor="let item of attentionItems; trackBy: trackById" type="button"
+                        class="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                        (click)="openDeal(item)">
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ item.dealId }} — {{ item.customer }}</span>
+                            <span class="block truncate text-xs text-gray-500 dark:text-gray-400">{{ statusMeta[item.status].label }}{{ item.revoked ? ' (revoked)' : '' }} · {{ item.salesPerson }}</span>
+                        </span>
+                        <span class="shrink-0 text-right">
+                            <span class="block text-[13px] tabular-nums font-medium text-gray-900 dark:text-gray-100">{{ item.value | numberFormatter }} {{ currency }}</span>
+                            <span class="block text-xs tabular-nums text-amber-600 dark:text-amber-400">
+                                {{ attentionKey === 'waiting' ? item.daysWaiting + 'd waiting' : (item.margin | number:'1.1-1') + '% margin' }}
+                            </span>
+                        </span>
+                    </button>
+                    <p *ngIf="!attentionItems.length" class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Nothing here — every deal is on track.
+                    </p>
+                </div>
+
+                <p class="border-t border-gray-100 dark:border-erp-border-dark px-5 py-2 text-[11px] text-gray-500 dark:text-gray-500">
+                    Awaiting approval: pending for {{ waitingDays }}+ days since submission. Low margin: below {{ lowMargin }}%, rejected deals left out.
+                </p>
+            </div>
+        </div>
+    </ng-container>
+</div>

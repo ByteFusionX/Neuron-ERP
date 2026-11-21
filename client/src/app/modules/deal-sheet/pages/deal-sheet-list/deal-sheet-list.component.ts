@@ -59,6 +59,7 @@ import { describeApprovalGateError } from 'src/app/shared/utils/approval-gate-er
 import { dealSheetPriceDetails, selectedDealItems } from 'src/app/shared/utils/deal-pricing.util';
 import { statusLabel } from 'src/app/shared/utils/text-format.util';
 import { ModalService } from 'src/app/shared/components/modal';
+import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 import { ResetWorkflowComponent, ResetWorkflowModalData } from 'src/app/modules/presales/pages/reset-workflow/reset-workflow.component';
 import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { ApprovalStep, WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
@@ -79,6 +80,7 @@ const DEFAULT_PAGE_SIZE = 15;
   styleUrls: ['./deal-sheet-list.component.css'],
   providers: [NumberFormatterPipe, DatePipe],
   imports: [
+    ViewToggleComponent,
     DealFormComponent,
     NgIf,
     AsyncPipe,
@@ -321,7 +323,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       {
         key: 'amount',
         sortable: true,
-        label: 'Amount',
+        label: 'LPO Value',
         valueGetter: (r) => this.formatAmount(r),
       },
       {

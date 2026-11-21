@@ -31,6 +31,8 @@
         (rowOpen)="onRowOpen($event)"
         (rowAction)="onRowAction($event)">
 
+        <app-view-toggle dgToolbarExtra label="Deal Sheet" active="list" listLink="/deal-sheet/dealsheets" reportLink="/deal-sheet/report"></app-view-toggle>
+
         <ng-template #detailAsideTemplate let-row>
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <span *ngIf="row.dealData?.status; else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"

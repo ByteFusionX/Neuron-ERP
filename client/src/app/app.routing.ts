@@ -146,6 +146,7 @@ export const routes: Routes = [
       { path: 'rejected', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'rejected' } },
       { path: 'rejecteds', redirectTo: 'rejected', pathMatch: 'full' },
       { path: 'revokeds', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'revoked' } },
+      { path: 'report', canActivate: [RoleGuard], loadComponent: () => import('./modules/deal-sheet/pages/deal-report/deal-report.component').then((c) => c.DealReportComponent) },
       { path: 'view/:id', canActivate: [RoleGuard], component: ViewDealsheetComponent },
     ]
   },
