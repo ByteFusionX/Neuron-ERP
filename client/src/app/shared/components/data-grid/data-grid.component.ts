@@ -5,7 +5,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { Observable, Subscription, firstValueFrom } from 'rxjs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import {
   DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridCellEditEvent,
@@ -117,6 +117,10 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   /** Shows an Export button that downloads the filtered rows (visible columns) as .xlsx. Defaults to `<title>.xlsx`. */
   @Input({ transform: booleanAttribute }) exportable = false;
   @Input() exportFileName = '';
+  /** Server-side grids: fetches one page of the host's current query (same filters, tab and role scope).
+   *  When set, Export walks every page and downloads the whole collection, not just the rows on screen. */
+  @Input() exportFetch?: (page: number, row: number) => Observable<{ rows: T[]; total: number }>;
+  exporting = false;
   /** When true, `data` is treated as already filtered/sorted/paginated by the host; search, filter, sort,
    *  view and page changes emit `queryChange` instead of being computed client-side. */
   @Input({ transform: booleanAttribute }) serverSide = false;
@@ -1228,8 +1232,31 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   onExportClick(): void {
-    if (this.exportRequest.observed) this.exportRequest.emit();
+    if (this.exportFetch) void this.exportAllPages();
+    else if (this.exportRequest.observed) this.exportRequest.emit();
     else void this.exportToExcel();
+  }
+
+  /** Pages through `exportFetch` (100 rows a request; servers cap page size) and exports everything it returns. */
+  private async exportAllPages(): Promise<void> {
+    if (this.exporting || !this.exportFetch) return;
+    this.exporting = true;
+    const pageSize = 100;
+    const all: T[] = [];
+    try {
+      for (let page = 1; page <= 1000; page++) {
+        const res = await firstValueFrom(this.exportFetch(page, pageSize));
+        const rows = res?.rows ?? [];
+        all.push(...rows);
+        if (!rows.length || all.length >= (res?.total ?? 0)) break;
+        if (page === 1 && (res?.total ?? 0) > pageSize) this.notify(`Exporting ${res.total} rows…`, 'info');
+      }
+      await this.exportToExcel(all);
+    } catch {
+      this.notify('Export failed', 'error');
+    } finally {
+      this.exporting = false;
+    }
   }
 
   /** Downloads rows (default: all filtered rows) as .xlsx using the visible columns in their current order. */

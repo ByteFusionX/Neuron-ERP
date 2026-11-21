@@ -134,7 +134,7 @@
       </div>
 
       <!-- Excel export -->
-      <button *ngIf="exportable" type="button" class="dg-tool-btn" (click)="onExportClick()" [disabled]="loading">
+      <button *ngIf="exportable" type="button" class="dg-tool-btn" (click)="onExportClick()" [disabled]="loading || exporting">
         <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14" />
         </svg>
