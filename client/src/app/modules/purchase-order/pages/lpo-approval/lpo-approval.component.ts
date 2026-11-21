@@ -3,7 +3,7 @@ import { poShareDiscount } from 'src/app/shared/utils/po-discount.util';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { BehaviorSubject, Observable, forkJoin, Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, forkJoin, Subscription, map } from 'rxjs';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
@@ -269,6 +269,15 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     if (wasRejected !== (this.activeViewId === 'rejected')) this.buildColumns();
     this.loadData();
   }
+
+  /** Export: every page of the current tab and search. */
+  exportFetch = (page: number, row: number) =>
+    this.purchaseOrderService.getAllPurchaseOrders({
+      page,
+      row,
+      search: this.searchQuery || undefined,
+      status: this.statusesForView(this.activeViewId),
+    }).pipe(map((response: any) => ({ rows: response?.data ?? [], total: response?.pagination?.total ?? 0 })));
 
   private loadData(): void {
     this.isLoading = true;

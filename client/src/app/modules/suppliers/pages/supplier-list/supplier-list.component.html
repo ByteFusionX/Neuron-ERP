@@ -27,6 +27,7 @@
         (viewChange)="onViewChange($event)"
         storageKey="supplier-list"
         exportable
+        [exportFetch]="exportFetch"
         exportFileName="suppliers.xlsx"
         [detailTabs]="detailTabs"
         [detailTitle]="supplierTitle"

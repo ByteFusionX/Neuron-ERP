@@ -3,7 +3,7 @@ import { AsyncPipe, DatePipe, DecimalPipe, NgClass, NgFor, NgIf, NgSwitch, NgSwi
 import { Component, ViewChild, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, Router } from '@angular/router';
-import { BehaviorSubject, Observable, Subscription, firstValueFrom, switchMap, take } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, firstValueFrom, switchMap, take, map } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import * as FileSaver from 'file-saver';
 
@@ -396,6 +396,27 @@ export class JobListComponent {
   /** Skips a reload when the URL-driven and grid-driven triggers ask for the same query back to back. */
   private lastQueryKey = '';
   private loadSub?: Subscription;
+
+  /** Export: every page of the current tab/filters with the same role scope as the list. */
+  exportFetch = (page: number, row: number) =>
+    this._employeeService.employeeData$.pipe(
+      take(1),
+      switchMap((employee) => this._jobService.getJobs({
+        search: this.searchQuery,
+        page,
+        row,
+        status: null,
+        salesPerson: this.selectedEmployee,
+        ...this.scope,
+        access: employee?.category?.privileges?.jobSheet?.viewReport,
+        userId: employee?._id,
+        allocateStatus: this.currentAllocateStatus(),
+        filters: this.gridFilters,
+        sortKey: this.sortKey,
+        sortDir: this.sortDir,
+      } as filterJob)),
+      map((data: JobTable) => ({ rows: data?.job ?? [], total: data?.total ?? 0 }))
+    );
 
   getJobs(force = false): void {
     const queryKey = [this.activeViewId, this.page, this.row, this.searchQuery, this.selectedEmployee, JSON.stringify(this.scope), JSON.stringify(this.gridFilters), this.sortKey, this.sortDir].join('|');

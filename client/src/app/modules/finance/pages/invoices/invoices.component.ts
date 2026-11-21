@@ -498,12 +498,43 @@ export class InvoicesComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     // A newer request supersedes an older one, so a slow earlier response can never overwrite the current page.
     this.loadSub?.unsubscribe();
-    this.loadSub = this.employeeService.employeeData$.pipe(
+    this.loadSub = this.fetchPage(this.page, this.pageSize).subscribe({
+      next: ({ data, pis, invoiced }) => {
+        this.invoicedPis = invoiced;
+        this.rows = this.toRows(data, pis);
+        this.total = data?.total ?? 0;
+        this.setCount(this.viewId, this.total);
+        this.isLoading = false;
+      },
+      error: () => {
+        this.notificationService.error('Failed to load jobs');
+        this.isLoading = false;
+      },
+    });
+  }
+
+  /** Export: every page of the current tab and search, same role scope and PI columns as the list. */
+  exportFetch = (page: number, row: number) =>
+    this.fetchPage(page, row).pipe(map(({ data, pis }) => ({ rows: this.toRows(data, pis), total: data?.total ?? 0 })));
+
+  private toRows(data: JobTable, pis: ProformaInvoice[]): any[] {
+    const latest = new Map<string, ProformaInvoice>();
+    // The API returns newest first, so the first one seen per job is the latest.
+    pis.forEach((pi) => { const key = String((pi as any).job?._id ?? pi.job); if (!latest.has(key)) latest.set(key, pi); });
+    return data?.job ? data.job.map((j: any) => {
+      const proforma = latest.get(String(j._id)) ?? null;
+      // PI Id / PI Status come from the attached proforma, so set them after it is known.
+      return { ...this.jobToAllRow(j), proforma, piNo: proforma?.piNo || '-', piStatus: proforma?.status || '' };
+    }) : [];
+  }
+
+  private fetchPage(page: number, row: number) {
+    return this.employeeService.employeeData$.pipe(
       take(1),
       switchMap((employee) => {
         const { statuses, piState, onHoldType } = this.tabFilter(this.viewId);
         return this.jobService.getJobs({
-          search: this.search, page: this.page, row: this.pageSize, status: null,
+          search: this.search, page, row, status: null,
           access: employee?.category?.privileges?.jobSheet?.viewReport, userId: employee?._id,
           allocateStatuses: statuses, piState, onHoldType, skipStatusCounts: true,
         });
@@ -527,26 +558,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
           catchError(() => of(none)),
         );
       }),
-    ).subscribe({
-      next: ({ data, pis, invoiced }) => {
-        this.invoicedPis = invoiced;
-        const latest = new Map<string, ProformaInvoice>();
-        // The API returns newest first, so the first one seen per job is the latest.
-        pis.forEach((pi) => { const key = String((pi as any).job?._id ?? pi.job); if (!latest.has(key)) latest.set(key, pi); });
-        this.rows = data?.job ? data.job.map((j: any) => {
-          const proforma = latest.get(String(j._id)) ?? null;
-          // PI Id / PI Status come from the attached proforma, so set them after it is known.
-          return { ...this.jobToAllRow(j), proforma, piNo: proforma?.piNo || '-', piStatus: proforma?.status || '' };
-        }) : [];
-        this.total = data?.total ?? 0;
-        this.setCount(this.viewId, this.total);
-        this.isLoading = false;
-      },
-      error: () => {
-        this.notificationService.error('Failed to load jobs');
-        this.isLoading = false;
-      },
-    });
+    );
   }
 
   /** Loads the invoice raised for this PI and prints it with the standard invoice layout. */

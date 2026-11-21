@@ -262,6 +262,14 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
       : [];
   }
 
+  /** Export: every page of the current tab, filters and search. */
+  exportFetch = (page: number, row: number) => {
+    const search = this.searchQuery() || undefined;
+    return this.activeViewId === 'ready'
+      ? this._dnService.getReadyForDnReceipts({ page, row, search }).pipe(map((r: any) => ({ rows: r?.grns ?? [], total: r?.total ?? 0 })))
+      : this._dnService.getAllDeliveryNotes({ search, ...this.activeFilters, page, row } as FilterParams).pipe(map((r: any) => ({ rows: r?.dns ?? [], total: r?.total ?? 0 })));
+  };
+
   loadData(filters?: Partial<FilterParams>): void {
     this.isLoading.set(true);
     this.historyCache.clear();

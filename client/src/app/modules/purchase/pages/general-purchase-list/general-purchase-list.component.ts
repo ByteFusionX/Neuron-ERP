@@ -3,7 +3,7 @@ import { InitiateLpoComponent } from 'src/app/modules/purchase-order/pages/initi
 import { Component, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { BehaviorSubject, forkJoin, Observable, Subscription } from 'rxjs';
+import { BehaviorSubject, forkJoin, map, Observable, Subscription } from 'rxjs';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
@@ -159,17 +159,26 @@ export class GeneralPurchaseListComponent {
     this.updateUrlParams();
   }
 
+  private purchaseParams(page: number, row: number): any {
+    return {
+      page,
+      row,
+      status: this.statusesForView(this.activeViewId),
+      search: this.searchQuery || undefined,
+      sourceType: 'manual',
+      poProgress: this.poProgressForView(this.activeViewId),
+    };
+  }
+
+  /** Export pulls every general purchase on the current tab, not just the visible page. */
+  exportFetch = (page: number, row: number): Observable<{ rows: any[]; total: number }> =>
+    this.purchaseService.getPurchases(this.purchaseParams(page, row))
+      .pipe(map((res: any) => ({ rows: res?.purchase?.data ?? [], total: res?.purchase?.total ?? 0 })));
+
   getPurchases(): void {
     this.isLoading = true;
     this.subscriptions.add(
-      this.purchaseService.getPurchases({
-        page: this.page,
-        row: this.row,
-        status: this.statusesForView(this.activeViewId),
-        search: this.searchQuery || undefined,
-        sourceType: 'manual',
-        poProgress: this.poProgressForView(this.activeViewId),
-      }).subscribe({
+      this.purchaseService.getPurchases(this.purchaseParams(this.page, this.row)).subscribe({
         next: (response) => {
           this.rows = response.purchase.data;
           this.historyCache.clear();

@@ -214,6 +214,15 @@ export class GrnListComponent implements OnInit {
     this.rowActions = this.grnActions;
   }
 
+  /** Export: every page of the current tab and search. */
+  exportFetch = (page: number, row: number) => {
+    const params: any = { page, row, search: this.searchQuery };
+    if (this.activeViewId !== 'all' && !this.isArrivingView) params.status = this.activeViewId;
+    if (this.isArrivingView) params.stage = this.activeViewId === 'pending' ? 'missed' : this.activeViewId;
+    const request = this.isArrivingView ? this.grnService.getArrivingPurchaseOrders(params) : this.grnService.getAllGRNs(params);
+    return request.pipe(map((r: any) => ({ rows: r?.data ?? [], total: r?.pagination?.total ?? 0 })));
+  };
+
   getGRNs(query?: Partial<DataGridQuery>): void {
     this.isLoading = true;
     this.historyCache.clear();

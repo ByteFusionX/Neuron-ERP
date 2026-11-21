@@ -15,7 +15,7 @@ import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/share
 import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/follow-up-panel/follow-up-panel.component';
 import { FollowUpViewModel, followUpCellClass, followUpViewer } from 'src/app/shared/utils/follow-up.util';
 import { dealSheetPriceDetails, selectedDealItems } from 'src/app/shared/utils/deal-pricing.util';
-import { BehaviorSubject, Observable, Subscription, catchError, filter, forkJoin, of, shareReplay, switchMap, take } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, catchError, filter, forkJoin, map, of, shareReplay, switchMap, take } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
@@ -702,34 +702,18 @@ export class QuotationListComponent implements AfterViewInit {
     });
   }
 
+  /** Export walks every page of the current tab/filters with the same role scope as the list. */
+  exportFetch = (page: number, row: number) =>
+    this._quoteService.getQuotation(this.buildQuotationFilter(page, row)).pipe(
+      map((data: getQuotation) => ({
+        rows: (data?.quotations ?? []).map((q) => (q.isExpired ? { ...q, status: QuoteStatus.Expired } : q)),
+        total: data?.total ?? 0,
+      }))
+    );
+
   getQuotations() {
     this.isLoading = true;
-    let access;
-    let userId;
-    this._employeeService.employeeData$.subscribe((employee) => {
-      access = employee?.category.privileges.quotation.viewReport;
-      userId = employee?._id;
-      this.userId = userId;
-    });
-
-    let filterData = {
-      search: this.searchQuery,
-      page: this.page,
-      row: this.row,
-      sortKey: this.sortKey,
-      sortDir: this.sortDir,
-      salesPerson: this.selectedSalesPerson,
-      customer: this.selectedCustomer,
-      fromDate: this.fromDate,
-      toDate: this.toDate,
-      department: this.selectedDepartment,
-      quoteStatus: this.selectedQuoteStatus,
-      dealStatus: this.selectedDealStatus,
-      followUpView: this.activeViewId.startsWith('fu-') ? this.activeViewId.slice(3) : null,
-      presaleView: this.activeViewId === 'in-presales',
-      access: access,
-      userId: userId
-    };
+    const filterData = this.buildQuotationFilter(this.page, this.row);
 
     // Only the newest request may fill the grid: a slower, older one (e.g. the unfiltered first load that
     // runs while a restored filtered tab re-queries) must not overwrite it.
@@ -749,6 +733,36 @@ export class QuotationListComponent implements AfterViewInit {
         }
       });
     this.subscriptions.add(this.loadSub);
+  }
+
+  private buildQuotationFilter(page: number, row: number) {
+    let access;
+    let userId;
+    this._employeeService.employeeData$.subscribe((employee) => {
+      access = employee?.category.privileges.quotation.viewReport;
+      userId = employee?._id;
+      this.userId = userId;
+    });
+
+    let filterData = {
+      search: this.searchQuery,
+      page,
+      row,
+      sortKey: this.sortKey,
+      sortDir: this.sortDir,
+      salesPerson: this.selectedSalesPerson,
+      customer: this.selectedCustomer,
+      fromDate: this.fromDate,
+      toDate: this.toDate,
+      department: this.selectedDepartment,
+      quoteStatus: this.selectedQuoteStatus,
+      dealStatus: this.selectedDealStatus,
+      followUpView: this.activeViewId.startsWith('fu-') ? this.activeViewId.slice(3) : null,
+      presaleView: this.activeViewId === 'in-presales',
+      access: access,
+      userId: userId
+    };
+    return filterData;
   }
   private loadSub?: Subscription;
 

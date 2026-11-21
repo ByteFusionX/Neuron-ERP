@@ -27,6 +27,7 @@
         (viewChange)="onViewChange($event)"
         storageKey="job-sheet-list"
         exportable
+        [exportFetch]="exportFetch"
         exportFileName="jobs.xlsx"
         [detailLoading]="detailLoading"
         [detailTabs]="detailTabs"

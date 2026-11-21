@@ -1,7 +1,7 @@
 import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { BehaviorSubject, Observable, Subscription, forkJoin, of } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, forkJoin, map, of } from 'rxjs';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
@@ -236,6 +236,25 @@ export class CustomersListComponent implements OnInit, OnDestroy {
   }
 
   // --- Data ----------------------------------------------------------------------
+
+  /** Export: every page of the current tab/filters, same access scope as the list. */
+  exportFetch = (page: number, row: number) =>
+    this._customerService.getCustomers(this.customerFilter(page, row)).pipe(
+      map((data: getFilteredCustomer) => ({ rows: data?.customers ?? [], total: data?.total ?? 0 }))
+    );
+
+  private customerFilter(page: number, row: number) {
+    return {
+      page,
+      row,
+      createdBy: this.selectedEmployee,
+      access: this.viewReport,
+      userId: this.userId,
+      search: this.searchQuery,
+      creditStatus: this.creditStatusFilter,
+      status: this.statusFilter,
+    };
+  }
 
   getAllCustomers(afterLoad?: () => void) {
     this.isLoading = true;

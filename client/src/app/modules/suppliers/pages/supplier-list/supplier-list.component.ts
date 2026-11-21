@@ -4,7 +4,7 @@ import { DatePipe, DecimalPipe, NgClass, NgIf, NgSwitch, NgSwitchCase } from '@a
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpEventType } from '@angular/common/http';
-import { Subscription } from 'rxjs';
+import { Subscription, map } from 'rxjs';
 import { saveAs } from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
 
@@ -350,6 +350,28 @@ export class SupplierListComponent implements OnInit, OnDestroy {
       toDate: this.toDate,
     };
     this._router.navigate([], { relativeTo: this._route, queryParams, queryParamsHandling: 'merge', replaceUrl: true });
+  }
+
+  /** Export: every page of the current tab/filters. */
+  exportFetch = (page: number, row: number) =>
+    this._supplierService.getSuppliers(this.supplierParams(page, row)).pipe(
+      map((res: SupplierListResponse) => ({ rows: res?.data?.suppliers ?? [], total: res?.data?.pagination?.total ?? 0 }))
+    );
+
+  private supplierParams(page: number, row: number) {
+    return {
+      page,
+      row,
+      status: this.selectedStatus ? [this.selectedStatus] : undefined,
+      category: this.selectedCategory || undefined,
+      supplierType: this.selectedSupplierType || undefined,
+      fromDate: this.fromDate || undefined,
+      toDate: this.toDate || undefined,
+      search: this.searchQuery || undefined,
+      filters: this.columnFilters.length ? this.columnFilters : undefined,
+      sortKey: this.sortKey && this.sortDir ? this.sortKey : undefined,
+      sortDir: this.sortKey && this.sortDir ? this.sortDir : undefined,
+    };
   }
 
   getSuppliers(): void {

@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { Subscription, map } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import { StockItemDetails, StockLedgerParams, StockMovement, StockService } from 'src/app/core/services/stock/stock.service';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
@@ -140,6 +140,16 @@ export class StockLedgerComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.subscription.unsubscribe();
   }
+
+  /** Export: every page of the current tab and search. */
+  exportFetch = (page: number, row: number) =>
+    this.stockService.getLedger({
+      page,
+      row,
+      search: this.searchTerm || undefined,
+      movementType: this.movementType || undefined,
+      product: this.product || undefined,
+    }).pipe(map((res) => ({ rows: res.data.movements, total: res.data.pagination.total })));
 
   load(): void {
     this.isLoading.set(true);

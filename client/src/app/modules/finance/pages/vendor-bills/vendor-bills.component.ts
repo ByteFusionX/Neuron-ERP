@@ -426,6 +426,17 @@ export class VendorBillsComponent implements OnInit {
     });
   }
 
+  /** Export: every page of the current tab and search. */
+  exportFetch = (page: number, row: number) =>
+    this.purchaseOrderService.getAllPurchaseOrders({
+      page,
+      row,
+      search: this.search || undefined,
+      receiptStatus: this.receiptStatus(),
+      status: this.activeViewId === 'upcoming' ? ['Placed'] : undefined,
+      vendorBills: true,
+    }).pipe(map((response: any) => ({ rows: response?.data ?? [], total: response?.pagination?.total ?? 0 })));
+
   private load(): void {
     this.loadSub?.unsubscribe();
     this.isLoading = true;

@@ -291,6 +291,10 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
   // ---- data ----
 
   /** `withQuery` adds the grid sort and filters; the tab counts are fetched without them. */
+  /** Export pulls every record on the current tab with the grid's search, sort and filters. */
+  exportFetch = (page: number, row: number): Observable<PageResult> =>
+    this.fetchView(this.activeViewId, page, row, this.searchQuery, true);
+
   private fetchView(id: ViewId, page: number, row: number, search: string, withQuery = false): Observable<PageResult> {
     const text = search || undefined;
     const query = withQuery

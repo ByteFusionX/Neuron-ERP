@@ -1,7 +1,7 @@
 import { AsyncPipe, DatePipe, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
-import { BehaviorSubject, Observable, Subscription, forkJoin } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, forkJoin, map } from 'rxjs';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -180,6 +180,20 @@ export class EmployeesComponent implements OnInit, OnDestroy {
   private refreshViewCounts(): void {
     this.views = this.views.map((v) => ({ ...v, count: v.id === this.activeViewId ? this.total : undefined, hideCount: v.id !== this.activeViewId }));
   }
+
+  /** Export: every page of the current filters, same access scope as the list. */
+  exportFetch = (page: number, row: number) => {
+    let access;
+    let userId;
+    this._employeeService.employeeData$.subscribe((employee) => {
+      access = employee?.category.privileges.employee.viewReport;
+      userId = employee?._id;
+    }).unsubscribe();
+    return this._employeeService.getEmployees({
+      page, row, search: this.searchQuery, access, userId,
+      department: this.department, status: this.status, sortKey: this.sortKey, sortDir: this.sortDir,
+    }).pipe(map((data: { total: number, employees: getEmployee[] }) => ({ rows: data?.employees ?? [], total: data?.total ?? 0 })));
+  };
 
   getEmployees(): void {
     this.isLoading = true;

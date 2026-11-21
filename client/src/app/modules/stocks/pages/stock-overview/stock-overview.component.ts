@@ -1,3 +1,4 @@
+import { map } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
@@ -159,6 +160,22 @@ export class StockOverviewComponent implements OnInit {
       }
     });
   }
+
+  /** Export: every page of the current tab, filters, sort and search. */
+  exportFetch = (page: number, row: number) =>
+    this.stockService.getOverview({
+      search: this.searchTerm || undefined,
+      view: this.activeViewId,
+      sortKey: this.sortKey || undefined,
+      sortDir: this.sortDir || undefined,
+      ...this.appliedFilters,
+      page,
+      row,
+    } as StockOverviewParams).pipe(map((res) => {
+      const p = res.data.pagination;
+      const start = (p.page - 1) * p.limit;
+      return { rows: res.data.overview.map((item, i) => ({ ...item, rowNo: start + i + 1 })), total: p.total };
+    }));
 
   loadStock(extra: Partial<StockOverviewParams> = {}): void {
     this.isLoading.set(true);

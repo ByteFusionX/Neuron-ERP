@@ -14,7 +14,7 @@ import { HttpEventType } from '@angular/common/http';
 import { inject } from '@angular/core';
 import saveAs from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
-import { BehaviorSubject, Observable, Subscription, take } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, map, take } from 'rxjs';
 
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -505,11 +505,8 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     this.updateUrlParams();
   }
 
-  getDeals(force = false): void {
-    const queryKey = [this.activeViewId, this.page, this.row, this.searchQuery, this.searchCriteria, JSON.stringify(this.gridFilters), this.sortKey, this.sortDir, this.wonFrom, this.wonTo, this.wonPerson, this.wonCustomer].join('|');
-    if (!force && queryKey === this.lastQueryKey) return;
-    this.lastQueryKey = queryKey;
-    this.isLoading = true;
+  /** Builds the same role-scoped, tab-scoped request as the list for any page/row size. */
+  private dealRequest(page: number, row: number): Observable<getDealSheet> {
     let access: string | undefined;
     let userId: string | undefined;
     let role: string | undefined;
@@ -519,10 +516,9 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       userId = employee?._id;
       this.userId = userId;
     });
-
     const filterData: any = {
-      page: this.page,
-      row: this.row,
+      page,
+      row,
       access,
       userId,
       role,
@@ -534,11 +530,21 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       sortDir: this.sortDir,
       ...(this.activeViewId === 'revenue' ? { wonFrom: this.wonFrom, wonTo: this.wonTo, salesPerson: this.wonPerson, customer: this.wonCustomer } : {}),
     };
+    return this.activeViewId === 'approved' || this.activeViewId === 'revenue'
+      ? this._quoteService.getApprovedDealSheet(filterData)
+      : this._quoteService.getDealSheet(filterData);
+  }
 
-    const request =
-      this.activeViewId === 'approved' || this.activeViewId === 'revenue'
-        ? this._quoteService.getApprovedDealSheet(filterData)
-        : this._quoteService.getDealSheet(filterData);
+  /** Export pages through every deal in the current tab/filters, not just the visible page. */
+  exportFetch = (page: number, row: number) =>
+    this.dealRequest(page, row).pipe(map((data) => ({ rows: data?.dealSheet ?? [], total: data?.total ?? 0 })));
+
+  getDeals(force = false): void {
+    const queryKey = [this.activeViewId, this.page, this.row, this.searchQuery, this.searchCriteria, JSON.stringify(this.gridFilters), this.sortKey, this.sortDir, this.wonFrom, this.wonTo, this.wonPerson, this.wonCustomer].join('|');
+    if (!force && queryKey === this.lastQueryKey) return;
+    this.lastQueryKey = queryKey;
+    this.isLoading = true;
+    const request = this.dealRequest(this.page, this.row);
 
     this.subscriptions.add(
       request.subscribe({

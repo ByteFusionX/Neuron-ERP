@@ -9,7 +9,7 @@ import {
   ReactiveFormsModule,
 } from '@angular/forms';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { BehaviorSubject, Observable, Subscription, forkJoin, of, switchMap } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, forkJoin, of, switchMap, map } from 'rxjs';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
@@ -1238,8 +1238,13 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Set when the last list request failed; the page shows it with a Retry button instead of a blank grid. */
   loadError = '';
 
-  getEnquiries() {
-    this.isLoading = true;
+  /** Export: every page of the current tab/filters with the same role scope as the list. */
+  exportFetch = (page: number, row: number) =>
+    this._enquiryService.getEnquiry(this.enquiryFilter(page, row)).pipe(
+      map((data: any) => ({ rows: data?.enquiry ?? [], total: data?.total ?? 0 }))
+    );
+
+  private enquiryFilter(page: number, row: number) {
     let access;
     let userId;
     this._employeeService.employeeData$.subscribe((employee) => {
@@ -1248,8 +1253,8 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     });
 
     let filterData = {
-      page: this.page,
-      row: this.row,
+      page,
+      row,
       search: this.searchQuery,
       sortKey: this.sortKey,
       sortDir: this.sortDir,
@@ -1274,6 +1279,12 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       userId: userId,
       createdBy: this.activeViewId === 'mine' ? userId : null,
     };
+    return filterData;
+  }
+
+  getEnquiries() {
+    this.isLoading = true;
+    const filterData = this.enquiryFilter(this.page, this.row);
 
     // Drop the in-flight request: a slow earlier response must not overwrite the rows of the tab/page just chosen.
     this.listRequest?.unsubscribe();

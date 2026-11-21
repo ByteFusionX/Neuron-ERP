@@ -6,6 +6,8 @@
         subtitle="Track pending, approved, rejected and revoked deals"
         rowKey="_id"
         [serverSide]="true"
+        [exportable]="true"
+        [exportFetch]="exportFetch"
         [fullFilters]="true"
         [totalCount]="total"
         [data]="rows"

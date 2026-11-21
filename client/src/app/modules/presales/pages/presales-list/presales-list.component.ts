@@ -2,7 +2,7 @@ import { AfterViewInit, Component, OnDestroy, OnInit, ViewChild, inject } from '
 import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, Router, } from '@angular/router';
 import { AsyncPipe, NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
-import { BehaviorSubject, Observable, Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, map } from 'rxjs';
 import { EnquiryService, PresaleTabCounts } from 'src/app/core/services/enquiry/enquiry.service';
 import { EstimationHistoryEntry, Estimations, feedback, getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { saveAs } from 'file-saver';
@@ -474,6 +474,16 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       case 'sendQuote': this.onSendClicked(row); break;
     }
   }
+
+  /** Export: every page of the current tab/filters with the same role scope as the list. */
+  exportFetch = (page: number, row: number) => {
+    let access;
+    this._employeeService.employeeData$.subscribe((employee) => {
+      access = employee?.category.privileges.assignedJob.viewReport;
+    }).unsubscribe();
+    return this._enquiryService.getPresale(page, row, this.serverFilter, access, this.userId, this.searchQuery, this.sort, this.tabs.find((t) => t.id === this.activeTab)?.followUp)
+      .pipe(map((data: any) => ({ rows: data?.enquiry ?? [], total: data?.total ?? 0 })));
+  };
 
   getJobsData() {
     // Whatever triggered this reload changed a job, so any history already fetched is stale.

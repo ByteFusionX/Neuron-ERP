@@ -13,7 +13,7 @@ import { Component, ViewChild, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { BehaviorSubject, Observable, Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, map, of } from 'rxjs';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
@@ -451,6 +451,28 @@ export class PurchaseRequestListComponent {
     this.updateUrlParams();
   }
 
+  private purchaseParams(page: number, row: number) {
+    return {
+      page,
+      row,
+      status: this.statusesForView(this.activeViewId),
+      search: this.searchQuery || undefined,
+      sortKey: this.sortKey || undefined,
+      sortDir: this.sortDir || undefined,
+      sourceType: this.sourceTypeForView(this.activeViewId),
+      poProgress: this.poProgressForView(this.activeViewId),
+      allocation: this.allocationForView(this.activeViewId),
+      followUpView: this.activeViewId === 'followUp' ? 'followUp' : undefined,
+    };
+  }
+
+  /** Export pulls every PR on the current tab with the same filters, not just the visible page. */
+  exportFetch = (page: number, row: number): Observable<{ rows: any[]; total: number }> =>
+    this.activeViewId === 'remainingJobs'
+      ? of({ rows: [], total: 0 })
+      : this.purchaseService.getPurchases(this.purchaseParams(page, row) as any)
+          .pipe(map((res: any) => ({ rows: res?.purchase?.data ?? [], total: res?.purchase?.total ?? 0 })));
+
   getPurchases(): void {
     // Remaining Jobs is a placeholder tab for now: nothing to load yet.
     if (this.activeViewId === 'remainingJobs') {
@@ -461,19 +483,7 @@ export class PurchaseRequestListComponent {
     }
     this.isLoading = true;
 
-    const filterParams = {
-      page: this.page,
-      row: this.row,
-      status: this.statusesForView(this.activeViewId),
-      search: this.searchQuery || undefined,
-      sortKey: this.sortKey || undefined,
-      sortDir: this.sortDir || undefined,
-      sourceType: this.sourceTypeForView(this.activeViewId),
-      poProgress: this.poProgressForView(this.activeViewId),
-      allocation: this.allocationForView(this.activeViewId),
-      followUpView: this.activeViewId === 'followUp' ? 'followUp' : undefined,
-    };
-
+    const filterParams = this.purchaseParams(this.page, this.row);
     this.subscriptions.add(
       this.purchaseService.getPurchases(filterParams).subscribe({
         next: (response) => {

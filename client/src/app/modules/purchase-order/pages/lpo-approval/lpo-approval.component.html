@@ -23,6 +23,7 @@
     [detailTitle]="lpoTitle"
     [detailSubtitle]="lpoSubtitle"
     exportable
+    [exportFetch]="exportFetch"
     exportFileName="purchase-orders.xlsx"
     (queryChange)="onQueryChange($event)"
     (rowOpen)="onRowOpen()"

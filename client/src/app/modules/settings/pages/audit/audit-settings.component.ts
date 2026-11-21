@@ -1,3 +1,4 @@
+import { map } from 'rxjs';
 import { Component, OnInit, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
@@ -102,6 +103,15 @@ export class AuditSettingsComponent implements OnInit {
     this.query = query;
     this.load();
   }
+
+  /** Export: every page of the current tab and search. */
+  exportFetch = (page: number, row: number) =>
+    this.auditLog.list({
+      page,
+      limit: row,
+      entityType: this.query.viewId === 'all' ? '' : this.query.viewId,
+      search: this.query.search,
+    }).pipe(map((res) => ({ rows: res.data, total: res.total })));
 
   load(): void {
     const seq = ++this.requestSeq;
