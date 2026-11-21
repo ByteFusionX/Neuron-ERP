@@ -204,7 +204,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         route: '/purchase/general',
         privilegeKey: 'purchase',
         privilegeValue: 'none',
-        notificationKey: 'purchaseCount',
+        notificationKey: 'generalPurchaseCount',
       },
     ],
   },

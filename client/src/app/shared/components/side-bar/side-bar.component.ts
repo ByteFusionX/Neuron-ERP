@@ -472,8 +472,12 @@ export class SideBarComponent
     // so it lines up with what the list shows instead of the number of messages.
     const seenEnquiries = new Set<string>();
     for (const notification of unviewed || []) {
-      const key = this.notificationTypeToKey[notification.type];
+      let key = this.notificationTypeToKey[notification.type];
       if (!key) continue;
+      // PR and General share the purchase notification types; a manual (non-job) purchase belongs to General.
+      if (key === 'purchaseCount' && (notification.referenceId as any)?.sourceType === 'manual') {
+        key = 'generalPurchaseCount';
+      }
       if (key === 'enquiryCount') {
         const ref = notification.additionalData?.enquiryId ?? notification.referenceId?._id ?? notification.referenceId;
         const id = ref ? String(ref) : '';

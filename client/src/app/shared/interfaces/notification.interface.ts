@@ -7,6 +7,7 @@ export interface NotificationCounts {
     quotationCount: number,
     enquiryCount: number,
     purchaseCount: number,
+    generalPurchaseCount: number,
     purchaseApprovedCount: number,
     lpoApprovalCount: number,
     lpoApprovedCount: number,
