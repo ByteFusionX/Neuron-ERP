@@ -360,10 +360,12 @@ export interface FilterQuote {
     page: number;
     row: number;
     search: string;
-    salesPerson: string | null;
-    customer: string | null;
+    salesPerson: string | string[] | null;
+    customer: string | string[] | null;
     fromDate: string | null;
     toDate: string | null;
+    salesPersonNot?: boolean;
+    customerNot?: boolean;
     sortKey?: string | null;
     sortDir?: 'asc' | 'desc' | null;
     followUpView?: string | null;

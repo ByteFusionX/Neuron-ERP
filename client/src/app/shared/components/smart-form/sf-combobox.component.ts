@@ -13,6 +13,7 @@ import { SF_STYLES, SfOption } from './sf.model';
   template: `
     <div class="relative" #wrapper>
       <div class="sf-input flex cursor-text flex-wrap items-center gap-1 !pr-8" [class.py-1]="multiple && selected.length"
+        [class.!min-h-[1.75rem]]="compact" [class.!text-xs]="compact" [class.!pl-2]="compact" [class.!pr-6]="compact"
         [class.sf-disabled]="disabled" (click)="input.focus(); reopen()">
         <ng-container *ngIf="multiple">
           <span *ngFor="let o of selected" class="inline-flex items-center gap-1 rounded-md bg-violet-50 dark:bg-violet-950/40 py-0.5 pl-1.5 pr-1 text-xs text-violet-700 dark:text-violet-300">
@@ -21,7 +22,7 @@ import { SF_STYLES, SfOption } from './sf.model';
               (click)="toggle(o); $event.stopPropagation()">&times;</button>
           </span>
         </ng-container>
-        <input #input class="sf-bare min-w-[5rem]" [class.!h-7]="multiple && selected.length" role="combobox" autocomplete="off"
+        <input #input class="sf-bare min-w-[5rem]" [class.!h-7]="multiple && selected.length" [class.!h-6]="compact" role="combobox" autocomplete="off"
           [id]="inputId" [attr.aria-expanded]="open" [value]="open || multiple ? query : selectedLabel"
           [placeholder]="multiple && selected.length ? '' : (selectedLabel || placeholder)" [disabled]="disabled" [readOnly]="readonly"
           (focus)="onFocus()" (blur)="close()" (input)="query = $any($event.target).value; open = true; active = 0; positionDropdown()"
@@ -30,13 +31,14 @@ import { SF_STYLES, SfOption } from './sf.model';
       <button *ngIf="clearable && !multiple && value && !disabled && !readonly" type="button" aria-label="Clear selection"
         class="sf-focus absolute right-7 top-2 h-5 w-5 rounded text-base leading-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
         (mousedown)="$event.preventDefault()" (click)="update(null); query = ''; open = false">&times;</button>
-      <svg class="pointer-events-none absolute right-2.5 top-2.5 h-4 w-4 text-gray-400 dark:text-gray-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <svg class="pointer-events-none absolute h-4 w-4 text-gray-400 dark:text-gray-500" [ngClass]="compact ? 'right-1.5 top-1.5' : 'right-2.5 top-2.5'" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
       </svg>
       <ul *ngIf="open" role="listbox" class="fixed z-[999] max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark py-1 shadow-lg"
-        [style.top.px]="dropdownTop" [style.left.px]="dropdownLeft" [style.width.px]="dropdownWidth">
+        [style.top.px]="dropUp ? null : dropdownTop" [style.bottom.px]="dropUp ? dropdownBottom : null" [style.left.px]="dropdownLeft" [style.width.px]="dropdownWidth">
         <li *ngFor="let o of filtered; let i = index" role="option" [attr.aria-selected]="isSelected(o)"
           class="flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-[13px] text-gray-800 dark:text-gray-200"
+          [class.!px-2]="compact" [class.!py-1]="compact" [class.!text-xs]="compact"
           [ngClass]="{ 'bg-gray-50 dark:bg-gray-800': i === active, 'cursor-not-allowed text-gray-300 dark:text-gray-600': o.disabled }"
           (mousedown)="$event.preventDefault(); choose(o)" (mouseenter)="active = i">
           <span class="min-w-0">
@@ -44,7 +46,7 @@ import { SF_STYLES, SfOption } from './sf.model';
             <ng-template #oneLine><span class="block truncate">{{ o.label }}</span></ng-template>
             <span *ngIf="o.description" class="block truncate text-xs text-gray-500 dark:text-gray-500">{{ o.description }}</span>
           </span>
-          <svg *ngIf="isSelected(o)" class="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <svg *ngIf="isSelected(o)" class="h-3.5 w-3.5 shrink-0 text-violet-600 dark:text-violet-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.58l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd" />
           </svg>
         </li>
@@ -77,6 +79,8 @@ export class SfComboboxComponent extends SfControl {
   /** Lines an option label may wrap to before it is cut with an ellipsis (1 = single truncated line). */
   @Input() optionLines = 1;
   @Input({ transform: booleanAttribute }) multiple = false;
+  /** Smaller field height and text, for toolbars and footers. */
+  @Input({ transform: booleanAttribute }) compact = false;
   /** Single-select only: shows a button that resets the value to null. */
   @Input({ transform: booleanAttribute }) clearable = false;
 
@@ -97,6 +101,8 @@ export class SfComboboxComponent extends SfControl {
   dropdownTop = 0;
   dropdownLeft = 0;
   dropdownWidth = 0;
+  dropdownBottom = 0;
+  dropUp = false;
 
   private elementRef = inject(ElementRef);
 
@@ -128,8 +134,13 @@ export class SfComboboxComponent extends SfControl {
   positionDropdown(): void {
     const rect = this.wrapper.nativeElement.getBoundingClientRect();
     this.dropdownTop = rect.bottom + 4;
+    // Flip above the field when the list would not fit below (e.g. a footer at the bottom of the page).
+    const listHeight = Math.min(240, this.filtered.length * 32 + 8 + (this.footerLabel || this.creatable ? 40 : 0));
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    this.dropUp = spaceBelow < listHeight && rect.top > spaceBelow;
+    this.dropdownBottom = window.innerHeight - rect.top + 4;
     // A narrow field (e.g. a UoM cell) still gets a list wide enough to read, kept inside the viewport.
-    this.dropdownWidth = Math.max(rect.width, 200);
+    this.dropdownWidth = this.compact ? Math.max(rect.width, 64) : Math.max(rect.width, 200);
     this.dropdownLeft = Math.max(8, Math.min(rect.left, window.innerWidth - this.dropdownWidth - 8));
   }
 

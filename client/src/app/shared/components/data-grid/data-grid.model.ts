@@ -146,4 +146,6 @@ export interface DataGridView<T = any> {
   searchTerm?: string;
   filters?: DataGridFilter[];
   columns?: { key: string; visible: boolean }[];
+  /** Server-paged grids: last known row count of a custom view, so its tab shows a count before it is opened. */
+  savedCount?: number;
 }

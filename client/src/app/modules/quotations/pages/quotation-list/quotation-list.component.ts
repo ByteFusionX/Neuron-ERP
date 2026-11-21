@@ -187,11 +187,20 @@ export class QuotationListComponent implements AfterViewInit {
   sortDir: 'asc' | 'desc' | null = null;
   fromDate: string | null = null
   toDate: string | null = null
-  selectedCustomer: string | null = null;
-  selectedSalesPerson: string | null = null;
-  selectedDepartment: string | null = null;
-  selectedQuoteStatus: string | null = null;
-  selectedDealStatus: string | null = null;
+  /** Dates picked with "on": a quote matches when it falls on any of them. */
+  onDates: string[] = [];
+  // A filter holds one value, or a list when several were picked in the grid's multi-select.
+  selectedCustomer: string | string[] | null = null;
+  selectedSalesPerson: string | string[] | null = null;
+  selectedDepartment: string | string[] | null = null;
+  selectedQuoteStatus: string | string[] | null = null;
+  selectedDealStatus: string | string[] | null = null;
+  /** "is not" filters: the server excludes the values instead of matching them. */
+  quoteStatusNot = false;
+  dealStatusNot = false;
+  customerNot = false;
+  salesPersonNot = false;
+  departmentNot = false;
 
   private confirm = inject(ConfirmDialogService);
   private auditLog = inject(AuditLogService);
@@ -242,6 +251,7 @@ export class QuotationListComponent implements AfterViewInit {
       this.searchQuery = params['search'] || '';
       this.fromDate = params['fromDate'] || null;
       this.toDate = params['toDate'] || null;
+      this.onDates = params['onDates'] ? String(params['onDates']).split(',').filter(Boolean) : [];
       this.selectedCustomer = params['customer'] || null;
       this.selectedSalesPerson = params['salesPerson'] || null;
       this.selectedDepartment = params['department'] || null;
@@ -249,7 +259,7 @@ export class QuotationListComponent implements AfterViewInit {
       this.selectedDealStatus = params['dealStatus'] || null;
 
       // Set isFiltered flag if any filter is applied
-      this.isFiltered = !!(this.searchQuery || this.fromDate || this.toDate ||
+      this.isFiltered = !!(this.searchQuery || this.fromDate || this.toDate || this.onDates.length ||
                          this.selectedCustomer || this.selectedSalesPerson ||
                          this.selectedDepartment || this.selectedQuoteStatus ||
                          this.selectedDealStatus);
@@ -273,8 +283,8 @@ export class QuotationListComponent implements AfterViewInit {
   private showUrlFiltersInGrid(): void {
     if (!this.grid) return;
     const filters: Omit<DataGridFilter, 'id'>[] = [];
-    const add = (key: string, op: DataGridFilter['op'], value: string | null) => {
-      if (value) filters.push({ key, op, value });
+    const add = (key: string, op: DataGridFilter['op'], value: string | string[] | null) => {
+      if (Array.isArray(value) ? value.length : value) filters.push({ key, op, value });
     };
     add('customerName', 'is', this.selectedCustomer);
     add('salesPerson', 'is', this.selectedSalesPerson);
@@ -283,6 +293,7 @@ export class QuotationListComponent implements AfterViewInit {
     add('dealStatus', 'is', this.selectedDealStatus);
     if (this.fromDate) add('date', 'after', this.fromDate);
     if (this.toDate) add('date', 'before', this.toDate);
+    add('date', 'on', this.onDates.length === 1 ? this.onDates[0] : this.onDates);
     if (!this.searchQuery && !filters.length) return;
     this.grid.setQueryState(this.searchQuery, filters);
   }
@@ -650,24 +661,31 @@ export class QuotationListComponent implements AfterViewInit {
     this.selectedDepartment = null;
     this.selectedQuoteStatus = null;
     this.selectedDealStatus = null;
+    this.quoteStatusNot = false;
+    this.dealStatusNot = false;
+    this.customerNot = false;
+    this.salesPersonNot = false;
+    this.departmentNot = false;
     this.fromDate = null;
     this.toDate = null;
+    this.onDates = [];
 
     for (const f of query.filters) {
       switch (f.key) {
-        case 'customerName': this.selectedCustomer = f.value; break;
-        case 'salesPerson': this.selectedSalesPerson = f.value; break;
-        case 'department': this.selectedDepartment = f.value; break;
-        case 'status': this.selectedQuoteStatus = f.value; break;
-        case 'dealStatus': this.selectedDealStatus = f.value; break;
+        case 'customerName': this.selectedCustomer = f.value; this.customerNot = f.op === 'isNot'; break;
+        case 'salesPerson': this.selectedSalesPerson = f.value; this.salesPersonNot = f.op === 'isNot'; break;
+        case 'department': this.selectedDepartment = f.value; this.departmentNot = f.op === 'isNot'; break;
+        case 'status': this.selectedQuoteStatus = f.value; this.quoteStatusNot = f.op === 'isNot'; break;
+        case 'dealStatus': this.selectedDealStatus = f.value; this.dealStatusNot = f.op === 'isNot'; break;
         case 'date':
-          if (f.op === 'after' || f.op === 'on') this.fromDate = f.value;
-          if (f.op === 'before' || f.op === 'on') this.toDate = f.value;
+          if (f.op === 'after') this.fromDate = f.value;
+          if (f.op === 'before') this.toDate = f.value;
+          if (f.op === 'on') this.onDates = (Array.isArray(f.value) ? f.value : [f.value]).map(String);
           break;
       }
     }
 
-    this.isFiltered = !!(this.searchQuery || this.fromDate || this.toDate ||
+    this.isFiltered = !!(this.searchQuery || this.fromDate || this.toDate || this.onDates.length ||
       this.selectedCustomer || this.selectedSalesPerson || this.selectedDepartment ||
       this.selectedQuoteStatus || this.selectedDealStatus);
 
@@ -687,6 +705,7 @@ export class QuotationListComponent implements AfterViewInit {
     queryParams.search = this.searchQuery ? this.searchQuery : null;
     if (this.fromDate) queryParams.fromDate = this.fromDate;
     if (this.toDate) queryParams.toDate = this.toDate;
+    queryParams.onDates = this.onDates.length ? this.onDates.join(',') : null;
     queryParams.customer = this.selectedCustomer;
     queryParams.salesPerson = this.selectedSalesPerson;
     queryParams.department = this.selectedDepartment;
@@ -754,9 +773,15 @@ export class QuotationListComponent implements AfterViewInit {
       customer: this.selectedCustomer,
       fromDate: this.fromDate,
       toDate: this.toDate,
+      onDates: this.onDates,
       department: this.selectedDepartment,
+      customerNot: this.customerNot,
+      salesPersonNot: this.salesPersonNot,
+      departmentNot: this.departmentNot,
       quoteStatus: this.selectedQuoteStatus,
+      quoteStatusNot: this.quoteStatusNot,
       dealStatus: this.selectedDealStatus,
+      dealStatusNot: this.dealStatusNot,
       followUpView: this.activeViewId.startsWith('fu-') ? this.activeViewId.slice(3) : null,
       presaleView: this.activeViewId === 'in-presales',
       access: access,
@@ -840,10 +865,12 @@ export class QuotationListComponent implements AfterViewInit {
   /** Filters handed to the Report tab, so switching keeps the same slice of data.
    *  Search, status and deal status are list-only concerns and stay behind. */
   get reportQueryParams(): Record<string, string | null> {
+    // The report takes one value per filter, so a multi-pick hands over its first value.
+    const one = (v: string | string[] | null) => (Array.isArray(v) ? v[0] ?? null : v);
     return {
-      salesPerson: this.selectedSalesPerson,
-      customer: this.selectedCustomer,
-      department: this.selectedDepartment,
+      salesPerson: one(this.selectedSalesPerson),
+      customer: one(this.selectedCustomer),
+      department: one(this.selectedDepartment),
       fromDate: this.fromDate,
       toDate: this.toDate,
     };
@@ -1142,9 +1169,15 @@ export class QuotationListComponent implements AfterViewInit {
       customer: this.selectedCustomer,
       fromDate: this.fromDate,
       toDate: this.toDate,
+      onDates: this.onDates,
       department: this.selectedDepartment,
+      customerNot: this.customerNot,
+      salesPersonNot: this.salesPersonNot,
+      departmentNot: this.departmentNot,
       quoteStatus: this.selectedQuoteStatus,
+      quoteStatusNot: this.quoteStatusNot,
       dealStatus: this.selectedDealStatus,
+      dealStatusNot: this.dealStatusNot,
       access: access,
       userId: userId
     };

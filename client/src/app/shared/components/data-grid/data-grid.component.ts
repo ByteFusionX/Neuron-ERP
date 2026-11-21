@@ -82,6 +82,10 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input() detailBreadcrumb = '';
   private lastRouteViewParam: string | null = null;
   @Input() pageSizeOptions = [5, 15, 30, 50];
+
+  get pageSizeSfOptions(): { label: string; value: number }[] {
+    return this.pageSizeOptions.map((s) => ({ label: String(s), value: s }));
+  }
   @Input() pageSize = 15;
   @Input() maxHeight = '600px';
   @Input() emptyMessage = 'No records found';
@@ -129,6 +133,48 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   /** Server-side only: the host's API understands every operator and "OR with last". Without it the grid offers AND only,
    *  because hosts that map filters to single request params silently ignore the OR connector. */
   @Input({ transform: booleanAttribute }) fullFilters = false;
+
+  /** Server-side only: the host reads an array `value` for "is" / "is not" (one filter, several picks). `fullFilters` hosts
+   *  need nothing extra, the grid splits the array into OR / AND filters before emitting. */
+  @Input({ transform: booleanAttribute }) multiValues = false;
+
+  /** "is" / "is not" on a list column can pick several values in one field. */
+  get multiSelectEnabled(): boolean {
+    return !this.serverSide || this.fullFilters || this.multiValues;
+  }
+
+  get draftMulti(): boolean {
+    return this.multiSelectEnabled && (this.draftFilter.op === 'is' || this.draftFilter.op === 'isNot');
+  }
+
+  /** "on" a date column can collect several days in one field. */
+  get draftMultiDate(): boolean {
+    return this.multiSelectEnabled && this.draftColumn?.type === 'date' && this.draftFilter.op === 'on';
+  }
+
+  /** Days picked so far for the draft "on" filter. */
+  get draftDates(): string[] {
+    const v = this.draftFilter.value;
+    return Array.isArray(v) ? v : v ? [v] : [];
+  }
+
+  datePick: string | null = null;
+
+  addDraftDate(day: string | null): void {
+    if (!day) return;
+    const days = this.draftDates;
+    if (!days.includes(day)) this.draftFilter.value = [...days, day].sort();
+    // Clear the picker so the next day can be chosen straight away.
+    setTimeout(() => (this.datePick = null));
+  }
+
+  removeDraftDate(day: string): void {
+    this.draftFilter.value = this.draftDates.filter((d) => d !== day);
+  }
+
+  formatDay(day: string): string {
+    return this.formatDate(day);
+  }
 
   /** AND/OR connector is only offered where the filters are evaluated with it. */
   get orSupported(): boolean {
@@ -403,8 +449,27 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     return view.custom ? this.views.find((v) => v.id === view.baseViewId)?.predicate : view.predicate;
   }
 
+  private customCountCache = new Map<string, number>();
+
+  /** Server-paged grids only hold the current page, so a custom tab's count is the server total while it is active, remembered afterwards. */
+  showViewCount(view: DataGridView<T>): boolean {
+    if (view.hideCount) return false;
+    return !(this.serverSide && view.custom && view.count == null && view.id !== this.activeViewId && view.savedCount == null && !this.customCountCache.has(view.id));
+  }
+
   viewCount(view: DataGridView<T>): number {
     if (view.count != null) return view.count;
+    if (this.serverSide && view.custom) {
+      if (view.id === this.activeViewId) {
+        this.customCountCache.set(view.id, this.totalCount);
+        if (!this.loading && view.savedCount !== this.totalCount) {
+          view.savedCount = this.totalCount;
+          this.savePrefs();
+        }
+        return this.totalCount;
+      }
+      return this.customCountCache.get(view.id) ?? view.savedCount ?? 0;
+    }
     const pred = this.basePredicate(view);
     const rows = pred ? this.data.filter(pred) : this.data;
     if (!view.custom) return rows.length;
@@ -480,11 +545,23 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     if (!this.serverSide) return;
     this.queryChange.emit({
       search: this.searchTerm,
-      filters: this.filters,
+      filters: this.fullFilters ? this.splitMultiFilters(this.filters) : this.filters,
       sort: this.sort,
       page: this.page,
       pageSize: this.pageSize,
       viewId: this.activeViewId,
+    });
+  }
+
+  /** Hosts with full filter support get one filter per picked value: "is" values are OR'd, "is not" values AND'd. */
+  private splitMultiFilters(filters: DataGridFilter[]): DataGridFilter[] {
+    return filters.flatMap((f) => {
+      if (!Array.isArray(f.value)) return [f];
+      return f.value.map((v: any, i: number) => ({
+        ...f,
+        value: v,
+        or: i === 0 ? f.or : f.op === 'is' || f.op === 'on',
+      }));
     });
   }
 
@@ -506,6 +583,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
       filters: this.filters.map((f) => ({ ...f })),
       sort: { ...this.sort },
       columns: this.columnState,
+      savedCount: this.serverSide ? this.totalCount : undefined,
     };
     this.customViews = [...this.customViews, view];
     this.activeViewId = view.id;
@@ -720,6 +798,11 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     return (this.draftFilter.op === 'is' || this.draftFilter.op === 'isNot') && this.suggestionsFor(col).length > 0;
   }
 
+  private draftUsesListFor(f: DataGridFilter): boolean {
+    const col = this.columns.find((c) => c.key === f.key);
+    return this.optionsFor(col).length > 0 || this.suggestionsFor(col).length > 0;
+  }
+
   /** Shows a query state that was restored from outside (URL) without emitting a query. */
   setQueryState(
     search: string,
@@ -795,11 +878,22 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   get canApplyDraft(): boolean {
     const { key, op, value } = this.draftFilter;
+    if (Array.isArray(value)) return !!key && value.length > 0;
     return !!key && (op === 'empty' || (value !== '' && value != null));
+  }
+
+  onDraftOpChange(op: DataGridFilterOperator): void {
+    this.draftFilter.op = op;
+    // A multi-pick only makes sense for "is" / "is not"; other operators take a single typed value.
+    const multiOp = op === 'is' || op === 'isNot' || (op === 'on' && this.draftColumn?.type === 'date');
+    if (!multiOp && Array.isArray(this.draftFilter.value)) this.draftFilter.value = '';
   }
 
   applyDraftFilter(): void {
     if (!this.canApplyDraft) return;
+    if (Array.isArray(this.draftFilter.value) && this.draftFilter.value.length === 1) {
+      this.draftFilter = { ...this.draftFilter, value: this.draftFilter.value[0] };
+    }
     if (this.editingFilterId != null) {
       const id = this.editingFilterId;
       this.filters = this.filters.map((f) => (f.id === id ? { ...f, ...this.draftFilter, or: f.or } : f));
@@ -813,13 +907,15 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     this.editingFilterId = null;
     this.filterMenuOpen = false;
     this.page = 1;
+    this.moveToAllTab();
     this.emitQuery();
   }
 
   /** Reopen the builder prefilled with a pill's condition. */
   editFilter(f: DataGridFilter): void {
     this.editingFilterId = f.id;
-    this.draftFilter = { key: f.key, op: f.op, value: f.value, or: f.or };
+    const multi = this.multiSelectEnabled && (f.op === 'is' || f.op === 'isNot') && this.draftUsesListFor(f);
+    this.draftFilter = { key: f.key, op: f.op, value: multi && !Array.isArray(f.value) ? [f.value] : f.value, or: f.or };
     this.filterMenuOpen = true;
   }
 
@@ -857,10 +953,35 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   clearFilters(): void {
+    const all = this.allTabView;
+    if (all && all.id !== this.activeViewId) {
+      this.selectView(all);
+      this.filters = [];
+      this.searchTerm = '';
+      this.page = 1;
+      this.emitQuery();
+      return;
+    }
     this.filters = [];
     this.searchTerm = '';
     this.page = 1;
     this.emitQuery();
+  }
+
+  /** The "All" tab: a view with id/label "all", otherwise the first built-in view. */
+  private get allTabView(): DataGridView<T> | undefined {
+    const vs = this.allViews;
+    return vs.find((v) => !v.custom && (v.id.toLowerCase() === 'all' || v.label?.trim().toLowerCase() === 'all')) ?? vs.find((v) => !v.custom);
+  }
+
+  /** Applying or editing a filter always lands on the All tab, keeping the filter that was just set. */
+  private moveToAllTab(): void {
+    const all = this.allTabView;
+    if (!all || all.id === this.activeViewId) return;
+    const { filters, searchTerm } = this;
+    this.selectView(all);
+    this.filters = filters;
+    this.searchTerm = searchTerm;
   }
 
   /** True when search/filters differ from what the active view holds, so "Save view" makes sense. */
@@ -875,9 +996,14 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   filterLabel(f: DataGridFilter): { field: string; op: string; value: string } {
     const col = this.columns.find((c) => c.key === f.key);
     const op = this.operatorsFor(col).find((o) => o.value === f.op)?.label ?? f.op;
+    const options = this.optionsFor(col);
+    if (Array.isArray(f.value)) {
+      const labels = f.value.map((v: any) => (col?.type === 'date' ? this.formatDate(v) : options.find((o) => o.value === v)?.label ?? String(v)));
+      return { field: col?.label ?? f.key, op, value: labels.join(', ') };
+    }
     let value = f.op === 'empty' ? '' : String(f.value);
     if (col?.type === 'date' && f.value) value = this.formatDate(f.value);
-    const opt = this.optionsFor(col).find((o) => o.value === f.value);
+    const opt = options.find((o) => o.value === f.value);
     if (opt) value = opt.label;
     return { field: col?.label ?? f.key, op, value };
   }
@@ -889,6 +1015,15 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     if (f.op === 'empty') return raw == null || raw === '';
     if (raw == null || raw === '') return f.op === 'isNot' || f.op === 'notContains';
     const text = String(raw).trim().toLowerCase();
+    if (Array.isArray(f.value) && col.type === 'date') {
+      const d = new Date(raw);
+      const ymd = isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return f.value.includes(ymd);
+    }
+    if (Array.isArray(f.value)) {
+      const hit = f.value.some((v: any) => String(v ?? '').trim().toLowerCase() === text);
+      return f.op === 'isNot' ? !hit : hit;
+    }
     const needle = String(f.value ?? '').trim().toLowerCase();
     // Local calendar day, so a record dated late/early in the day is not shifted by the UTC offset.
     const day = () => {

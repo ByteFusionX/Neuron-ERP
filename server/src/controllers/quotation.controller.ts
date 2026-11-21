@@ -521,7 +521,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
     try {
         const expiredFilter = expiredQuoteFilter();
         const pastDateFilter = pastDateQuoteFilter();
-        let { page, search, row, salesPerson, customer, fromDate, toDate, department, quoteStatus, dealStatus, access, userId, sortKey, sortDir, followUpView, followUpFromDate, followUpToDate, presaleView } = req.body;
+        let { page, search, row, salesPerson, customer, fromDate, toDate, onDates, department, quoteStatus, quoteStatusNot, dealStatus, dealStatusNot, salesPersonNot, customerNot, departmentNot, access, userId, sortKey, sortDir, followUpView, followUpFromDate, followUpToDate, presaleView } = req.body;
 
         page = Math.max(1, parseInt(page) || 1);
         row = Math.min(100, Math.max(1, parseInt(row) || 10));
@@ -532,10 +532,32 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             ? { [sortableFields[sortKey]]: sortDir === 'desc' ? -1 : 1, _id: -1 }
             : { _id: -1 };
 
-        let isSalesPerson = salesPerson == null ? true : false;
-        let isCustomer = customer == null ? true : false;
-        let isDate = fromDate == null || toDate == null ? true : false;
-        let isDepartment = department == null ? true : false;
+        const toList = (v: unknown): string[] => (Array.isArray(v) ? v : v == null || v === '' ? [] : [v]).map(String);
+        // Date filters: "after" / "before" bound the range (whole days, both inclusive), "on" matches any of the picked days.
+        const dayStart = (v: unknown) => { const d = new Date(String(v)); return Number.isNaN(d.getTime()) ? null : d; };
+        const from = fromDate ? dayStart(fromDate) : null;
+        const to = toDate ? dayStart(toDate) : null;
+        const onDays = toList(onDates).map(dayStart).filter((d): d is Date => !!d);
+        const dateClauses: any[] = [
+            ...(from ? [{ date: { $gte: from } }] : []),
+            ...(to ? [{ date: { $lt: new Date(to.getTime() + 86_400_000) } }] : []),
+            // Exactly two picked days read as a range: from the earlier to the later day, both inclusive.
+            ...(onDays.length === 2 ? [{ date: {
+                $gte: new Date(Math.min(...onDays.map((d) => d.getTime()))),
+                $lt: new Date(Math.max(...onDays.map((d) => d.getTime())) + 86_400_000),
+            } }] : []),
+            ...(onDays.length !== 0 && onDays.length !== 2 ? [{ $or: onDays.map((d) => ({ date: { $gte: d, $lt: new Date(d.getTime() + 86_400_000) } })) }] : []),
+        ];
+
+        // Filters arrive as one value or a list of values (the grid's multi-select).
+        const toIds = (v: unknown): InstanceType<typeof ObjectId>[] => toList(v).filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+        const idClause = (field: string, ids: InstanceType<typeof ObjectId>[], not: boolean) =>
+            ids.length ? [{ [field]: not ? { $nin: ids } : { $in: ids } }] : [];
+        const statusList = toList(quoteStatus);
+        const dealStatusList = toList(dealStatus);
+        const salesPersonIds = toIds(salesPerson);
+        const customerIds = toIds(customer);
+        const departmentIds = toIds(department);
 
         // Search matches the quote id, the subject and the customer's company name.
         const searchText = String(search ?? '').trim();
@@ -557,11 +579,20 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
                 // "Expired" is derived from the date; any other status excludes the open quotes that are past it.
                 // "In Presales" tab: every quote with presales (waiting, or with a returned estimate), whoever owns it within the caller's access.
                 ...(presaleView ? [{ status: { $in: ['In Presales', 'Estimated'] } }] : []),
-                ...(quoteStatus === 'Expired' ? [expiredFilter] : quoteStatus ? [{ status: quoteStatus }, { $nor: [pastDateFilter] }] : []),
+                // "is not" excludes the status instead (Expired is derived from the date, so it negates that filter).
+                // The grid can send several values: "is" matches any of them, "is not" excludes all of them.
+                ...(statusList.length
+                    ? [quoteStatusNot
+                        ? { $and: statusList.map((s) => s === 'Expired' ? { $nor: [expiredFilter] } : { status: { $ne: s } }) }
+                        : { $or: statusList.map((s) => s === 'Expired' ? expiredFilter : { $and: [{ status: s }, { $nor: [pastDateFilter] }] }) }]
+                    : []),
                 // "pending" also covers Won quotes that have no deal sheet yet (waiting to be converted).
-                ...(dealStatus === 'pending'
-                    ? [{ $or: [{ 'dealData.status': 'pending' }, { status: 'Won', 'dealData.status': { $exists: false } }] }]
-                    : dealStatus ? [{ 'dealData.status': dealStatus }] : []),
+                ...(() => {
+                    const pendingDeal = { $or: [{ 'dealData.status': 'pending' }, { status: 'Won', 'dealData.status': { $exists: false } }] };
+                    if (!dealStatusList.length) return [];
+                    if (dealStatusNot) return [{ $and: dealStatusList.map((s) => s === 'pending' ? { $nor: [pendingDeal] } : { 'dealData.status': { $ne: s } }) }];
+                    return [{ $or: dealStatusList.map((s) => s === 'pending' ? pendingDeal : { 'dealData.status': s }) }];
+                })(),
                 searchFilter,
                 // Overdue / Today / Upcoming only list quotes that are still being chased.
                 ...(followUpView ? [{ ...followUpViewFilter('followUp.nextFollowUpDate', followUpView), status: { $nin: QUOTE_FOLLOW_UP_CLOSED }, $nor: [pastDateFilter] }] : []),
@@ -569,17 +600,10 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
                     ...(followUpFromDate ? { $gte: new Date(followUpFromDate) } : {}),
                     ...(followUpToDate ? { $lt: new Date(new Date(followUpToDate).getTime() + 86_400_000) } : {}),
                 } }] : []),
-                { $or: [{ createdBy: new ObjectId(salesPerson) }, { createdBy: { $exists: isSalesPerson } }] },
-                { $or: [{ client: new ObjectId(customer) }, { client: { $exists: isCustomer } }] },
-                {
-                    $or: [
-                        { $and: [{ date: { $gte: new Date(fromDate) } }, { date: { $lte: new Date(toDate) } }] },
-                        { date: { $exists: isDate } }
-                    ]
-                },
-                {
-                    $or: [{ department: new ObjectId(department) }, { department: { $exists: isDepartment } }]
-                }
+                ...idClause('createdBy', salesPersonIds, salesPersonNot),
+                ...idClause('client', customerIds, customerNot),
+                ...dateClauses,
+                ...idClause('department', departmentIds, departmentNot),
             ]
         }
 
