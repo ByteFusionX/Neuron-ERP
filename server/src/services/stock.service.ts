@@ -120,6 +120,7 @@ export interface PostInput {
     reason?: string;
     remarks?: string;
     arrivalDate?: Date;
+    expiryDate?: Date;
     area?: string;
     serialNos?: string[];
     supplier?: any;
@@ -169,6 +170,7 @@ export const post = async (input: PostInput) => {
         reason: input.reason,
         remarks: input.remarks?.trim() || undefined,
         arrivalDate: input.arrivalDate,
+        expiryDate: input.expiryDate,
         area: input.area?.trim() || undefined,
         serialNos: input.serialNos?.length ? input.serialNos : undefined,
         supplier: input.supplier ? oid(input.supplier) : undefined,

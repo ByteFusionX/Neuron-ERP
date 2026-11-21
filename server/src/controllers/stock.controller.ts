@@ -391,6 +391,7 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
                 return {
                     _id: m._id,
                     arrivalDate: arrival,
+                    expiryDate: m.expiryDate || null,
                     source: m.movementType === 'Receipt' ? 'GRN' : 'Stock adjust',
                     referenceNo: m.referenceNo || '',
                     reason: m.reason || '',
@@ -427,11 +428,13 @@ const REMOVE_ONLY = new Set(['Damaged', 'Lost / missing']);
 /** A manual stock correction. A reason is always required; Other also needs remarks. */
 export const adjustStock = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { product, warehouse, direction, quantity, reason, remarks, unitCost, arrivalDate, area } = req.body || {};
+        const { product, warehouse, direction, quantity, reason, remarks, unitCost, arrivalDate, expiryDate, area } = req.body || {};
         const rawSerials = Array.isArray(req.body?.serialNos) ? req.body.serialNos : String(req.body?.serialNos || '').split(/[\n,]/);
         const serialNos: string[] = [...new Set<string>(rawSerials.map((s: any) => String(s).trim()).filter(Boolean))];
         const arrival = arrivalDate ? new Date(arrivalDate) : undefined;
         if (arrival && isNaN(arrival.getTime())) throw new StockError('Arrival date is not a valid date', 400);
+        const expiry = expiryDate ? new Date(expiryDate) : undefined;
+        if (expiry && isNaN(expiry.getTime())) throw new StockError('Expire on date is not a valid date', 400);
         if (serialNos.length > Number(quantity)) throw new StockError(`${serialNos.length} serial numbers entered for a quantity of ${Number(quantity)}`, 400);
         const employee = await getEmployeeData((req as any).user);
         if (!employee) return res.status(401).json({ success: false, message: 'Unauthorized' });
@@ -461,6 +464,7 @@ export const adjustStock = async (req: Request, res: Response, next: NextFunctio
             reason,
             remarks,
             arrivalDate: direction === 'add' ? arrival : undefined,
+            expiryDate: direction === 'add' ? expiry : undefined,
             area: area ? String(area) : undefined,
             serialNos,
             createdBy: employee._id,

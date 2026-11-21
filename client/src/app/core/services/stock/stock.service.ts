@@ -83,6 +83,7 @@ export interface StockMovement {
   reversalOf?: string;
   movementDate: string;
   arrivalDate?: string;
+  expiryDate?: string;
   createdDate?: string;
   createdBy?: { firstName?: string; lastName?: string } | null;
 }
@@ -112,6 +113,7 @@ export interface StockAdjustPayload {
   remarks?: string;
   unitCost?: number;
   arrivalDate?: string;
+  expiryDate?: string;
   area?: string;
   serialNos?: string[];
 }
@@ -177,6 +179,7 @@ export interface StockItemDetails {
 export interface StockEntry {
   _id: string;
   arrivalDate: string;
+  expiryDate?: string | null;
   source: 'GRN' | 'Stock adjust';
   referenceNo: string;
   reason: string;

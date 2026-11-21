@@ -1,5 +1,5 @@
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnInit, Output, SimpleChanges, inject } from '@angular/core';
-import { NgFor, NgIf } from '@angular/common';
+import { NgClass, NgFor, NgIf } from '@angular/common';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ToastrService } from 'ngx-toastr';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
@@ -26,7 +26,7 @@ const REMOVE_REASONS = ['Count correction', 'Damaged', 'Lost / missing', 'Other'
   selector: 'app-stock-adjust-drawer',
   standalone: true,
   templateUrl: './stock-adjust-drawer.component.html',
-  imports: [NgIf, NgFor,ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ProductFormDrawerComponent],
+  imports: [NgIf, NgFor, NgClass, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ProductFormDrawerComponent],
   providers: [CatalogueSuggestionSource],
 })
 export class StockAdjustDrawerComponent implements OnInit, OnChanges {
@@ -73,6 +73,7 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
     reason: ['', Validators.required],
     unitCost: [null as number | null],
     arrivalDate: [''],
+    expiryDate: [''],
     area: [''],
     serialNos: [''],
     remarks: [''],
@@ -136,6 +137,31 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
     });
   }
 
+  /** Highlighted suggestion for keyboard navigation; -1 means none. */
+  activeSuggestion = -1;
+
+  onProductKeydown(event: KeyboardEvent): void {
+    const list = this.productSuggestions;
+    if (!this.showSuggestions || !list.length) {
+      if (event.key === 'ArrowDown' && list.length) { this.showSuggestions = true; this.activeSuggestion = 0; event.preventDefault(); }
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      this.activeSuggestion = (this.activeSuggestion + 1) % list.length;
+    } else if (event.key === 'ArrowUp') {
+      this.activeSuggestion = this.activeSuggestion <= 0 ? list.length - 1 : this.activeSuggestion - 1;
+    } else if (event.key === 'Enter' && this.activeSuggestion >= 0) {
+      this.selectProduct(list[this.activeSuggestion]);
+    } else if (event.key === 'Escape') {
+      this.showSuggestions = false;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setTimeout(() => document.getElementById(`stock-adjust-sugg-${this.activeSuggestion}`)?.scrollIntoView({ block: 'nearest' }));
+  }
+
   hideSuggestionsSoon(): void {
     setTimeout(() => (this.showSuggestions = false), 150);
   }
@@ -171,7 +197,7 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
       debounceTime(250),
       distinctUntilChanged(),
       switchMap((search) => this.catalogue.search({ search, scopeIds: [], limit: 20 }).pipe(catchError(() => of([])))),
-    ).subscribe((list) => (this.productSuggestions = list));
+    ).subscribe((list) => { this.productSuggestions = list; this.activeSuggestion = -1; });
     this.form.controls.direction.valueChanges.subscribe(() => {
       // a reason that does not fit the new direction is cleared
       if (!this.reasonOptions.some((o) => o.value === this.form.controls.reason.value)) this.form.controls.reason.setValue('');
@@ -278,6 +304,7 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
       area: v.area?.trim() || undefined,
       unitCost: v.direction === 'add' && v.unitCost !== null && v.unitCost !== undefined ? Number(v.unitCost) : undefined,
       arrivalDate: v.direction === 'add' && v.arrivalDate ? String(v.arrivalDate) : undefined,
+      expiryDate: v.direction === 'add' && v.expiryDate ? String(v.expiryDate) : undefined,
       serialNos: serialNos.length ? serialNos : undefined,
     }).subscribe({
       next: () => {
@@ -313,7 +340,7 @@ export class StockAdjustDrawerComponent implements OnInit, OnChanges {
   }
 
   private reset(): void {
-    this.form.reset({ product: '', warehouse: this.warehouseOptions.length === 1 ? this.warehouseOptions[0].value : '', direction: 'add', quantity: null, reason: '', unitCost: null, arrivalDate: '', area: '', serialNos: '', remarks: '' });
+    this.form.reset({ product: '', warehouse: this.warehouseOptions.length === 1 ? this.warehouseOptions[0].value : '', direction: 'add', quantity: null, reason: '', unitCost: null, arrivalDate: '', expiryDate: '', area: '', serialNos: '', remarks: '' });
     this.current = null;
     this.productQuery = '';
     this.showSuggestions = false;

@@ -29,6 +29,8 @@ interface StockMovement {
     remarks?: string;
     /** Stock adjustments only: when the stock physically arrived, and the serials added or removed. */
     arrivalDate?: Date;
+    /** Stock adjustments only: when the added stock expires. */
+    expiryDate?: Date;
     /** Stock adjustments only: where in the warehouse the stock sits (shelf, rack, zone). */
     area?: string;
     serialNos?: string[];
@@ -99,6 +101,9 @@ const stockMovementSchema = new Schema<StockMovement>({
         trim: true,
     },
     arrivalDate: {
+        type: Date,
+    },
+    expiryDate: {
         type: Date,
     },
     area: {

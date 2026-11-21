@@ -19,12 +19,15 @@
     <form id="stock-adjust-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
         <app-sf-section title="Stock" columns="2">
             <app-sf-field full label="Product" [optional]="isEdit" [control]="form.controls.product">
-                <div class="relative" (focusin)="onProductFocus()" (focusout)="hideSuggestionsSoon()">
+                <div class="relative" (focusin)="onProductFocus()" (focusout)="hideSuggestionsSoon()"
+                    (keydown)="onProductKeydown($event)">
                     <app-sf-textarea [formControl]="productText" [rows]="3" expandOnFocus noEnter
                         placeholder="Type part no or description"></app-sf-textarea>
                     <ul *ngIf="showSuggestions && productSuggestions.length"
                         class="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg text-sm">
-                        <li *ngFor="let o of productSuggestions" (mousedown)="selectProduct(o)"
+                        <li *ngFor="let o of productSuggestions; let i = index" [id]="'stock-adjust-sugg-' + i"
+                            (mousedown)="selectProduct(o)" (mouseenter)="activeSuggestion = i"
+                            [ngClass]="{ 'bg-gray-100 dark:bg-gray-700': i === activeSuggestion }"
                             class="cursor-pointer px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-100 whitespace-pre-line">{{ o.description || o.productName }}</li>
                     </ul>
                 </div>
@@ -55,6 +58,9 @@
             </app-sf-field>
             <app-sf-field *ngIf="form.controls.direction.value === 'add'" label="Arrival date" optional [control]="form.controls.arrivalDate">
                 <app-sf-date formControlName="arrivalDate"></app-sf-date>
+            </app-sf-field>
+            <app-sf-field *ngIf="form.controls.direction.value === 'add'" label="Expire on" optional [control]="form.controls.expiryDate">
+                <app-sf-date formControlName="expiryDate"></app-sf-date>
             </app-sf-field>
             <app-sf-field full label="Serial no" optional [control]="form.controls.serialNos"
                 [hint]="form.controls.direction.value === 'add' ? 'One per line. Added to the item\'s serials in stock.' : 'One per line. Removed from the item\'s serials in stock.'">
