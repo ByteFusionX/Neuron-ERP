@@ -408,12 +408,21 @@ export interface PieChartData {
 }
 
 /** Filters the report is generated for. Mirrors the quotation list's own filters. */
+/** Report filters use the list's URL params: a value or a list of values, `<name>Not` to exclude them. */
 export interface ReportFilter {
-    salesPerson: string | null;
-    customer: string | null;
-    department: string | null;
-    fromDate: string | null;
-    toDate: string | null;
+    salesPerson?: string | string[] | null;
+    customer?: string | string[] | null;
+    department?: string | string[] | null;
+    quoteStatus?: string | string[] | null;
+    dealStatus?: string | string[] | null;
+    salesPersonNot?: string | null;
+    customerNot?: string | null;
+    departmentNot?: string | null;
+    quoteStatusNot?: string | null;
+    dealStatusNot?: string | null;
+    fromDate?: string | null;
+    toDate?: string | null;
+    onDates?: string | null;
     access?: string;
     userId?: string;
 }
@@ -601,4 +610,26 @@ export interface DealWaiting {
     roleName: string;
     escalated: boolean;
     dueAt: string | null;
+}
+
+/** One deal on the Deal Sheet report; money is already in QAR. */
+export interface DealReportRow {
+  _id: string;
+  dealId: string;
+  quoteId: string;
+  customerId: string | null;
+  customer: string;
+  salesPersonId: string | null;
+  salesPerson: string;
+  departmentId: string | null;
+  department: string;
+  status: 'pending' | 'approved' | 'rejected';
+  revoked: boolean;
+  savedDate: string | null;
+  approvedDate: string | null;
+  value: number;
+  cost: number;
+  profit: number;
+  margin: number;
+  daysWaiting: number | null;
 }

@@ -69,3 +69,8 @@
     box-shadow: none;
   }
 }
+
+:host(.kpi-clickable) { cursor: pointer; border-radius: 0.75rem; }
+:host(.kpi-clickable) .kpi { transition: border-color 120ms ease, box-shadow 120ms ease; }
+:host(.kpi-clickable:hover) .kpi { border-color: rgba(139, 92, 246, 0.5); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
+:host(.kpi-clickable:focus-visible) { outline: 2px solid #8b5cf6; outline-offset: 2px; }

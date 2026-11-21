@@ -1,7 +1,7 @@
 <div class="er-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-2 sm:p-6 flex flex-col gap-3 sm:gap-5">
 
     <!-- Header — same shell and spacing as the grid's toolbar, so List and Report read as one screen. -->
-    <div class="er-card shrink-0">
+    <div class="er-card shrink-0" style="overflow: visible">
         <div class="relative flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
             <div class="min-w-0">
                 <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate" aria-current="page">Enquiries</h2>
@@ -14,19 +14,15 @@
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
+                <app-report-filters #rf [fields]="filterFields" [values]="filters" (valuesChange)="onFilterChange($event)"></app-report-filters>
                 <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!report">
                     <ng-icon name="heroArrowDownTray" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
                     Excel
                 </app-action-button>
-                <app-action-button variant="tool" (click)="exportPdf()" [disabled]="!report">
-                    <ng-icon name="heroPrinter" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
-                    PDF
-                </app-action-button>
             </div>
         </div>
 
-        <app-report-filters [fields]="filterFields" [values]="filters" hint="Showing a filtered slice of the enquiries."
-            (valuesChange)="onFilterChange($event)"></app-report-filters>
+        <app-filter-pills [bar]="rf.bar"></app-filter-pills>
     </div>
 
     <!-- Loading -->
@@ -43,13 +39,13 @@
 
         <!-- KPI strip -->
         <div class="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
-            <app-kpi-card label="Enquiries" [value]="r.kpi.totalCount"
+            <app-kpi-card clickable (click)="openList()" label="Enquiries" [value]="r.kpi.totalCount"
                 [foot]="r.kpi.openCount + ' still open'" [delta]="delta('totalCount')"></app-kpi-card>
-            <app-kpi-card label="Quoted" [value]="r.kpi.quotedCount" valueClass="text-emerald-600 dark:text-emerald-400"
+            <app-kpi-card clickable (click)="openList('Quoted')" label="Quoted" [value]="r.kpi.quotedCount" valueClass="text-emerald-600 dark:text-emerald-400"
                 [foot]="'converted to a quotation'" [delta]="delta('quotedCount')"></app-kpi-card>
-            <app-kpi-card label="With Presales" [value]="r.kpi.presalesCount"
+            <app-kpi-card clickable (click)="openList('Sent to Presales')" label="With Presales" [value]="r.kpi.presalesCount"
                 [foot]="r.kpi.estimatedCount + ' estimated, ready to quote'"></app-kpi-card>
-            <app-kpi-card label="Needs Attention" [value]="attentionTotal"
+            <app-kpi-card clickable (click)="section = 'attention'" label="Needs Attention" [value]="attentionTotal"
                 [foot]="'items to follow up'"></app-kpi-card>
         </div>
 

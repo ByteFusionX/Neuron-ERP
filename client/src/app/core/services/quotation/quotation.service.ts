@@ -1,7 +1,7 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
-import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails, ReportFilter, QuoteRevisionsResponse, QuoteFollowUp } from 'src/app/shared/interfaces/quotation.interface';
+import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails, ReportFilter, QuoteRevisionsResponse, QuoteFollowUp, DealReportRow } from 'src/app/shared/interfaces/quotation.interface';
 import { environment } from 'src/environments/environment';
 
 import pdfMake from 'pdfmake/build/pdfmake';
@@ -90,6 +90,11 @@ export class QuotationService {
 
   getApprovedDealSheet(filterData: FilterDeal): Observable<getDealSheet> {
     return this.http.post<getDealSheet>(`${this.api}/quotation/deal/approved/get`, filterData)
+  }
+
+  /** Flat deal rows (QAR value/cost/margin) for the Deal Sheet report. */
+  getDealReport(access?: string, userId?: string): Observable<{ currency: string; deals: DealReportRow[] }> {
+    return this.http.post<{ currency: string; deals: DealReportRow[] }>(`${this.api}/quotation/deal/report`, { access, userId })
   }
 
   /** Live QAR-per-USD rate. */

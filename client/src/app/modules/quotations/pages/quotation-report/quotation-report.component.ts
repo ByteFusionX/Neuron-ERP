@@ -14,14 +14,17 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
-import { ReportAttentionItem, ReportBreakdownRow, ReportDetails, ReportFilter, ReportKpi, QuoteStatusColors } from 'src/app/shared/interfaces/quotation.interface';
+import { ReportAttentionItem, ReportBreakdownRow, ReportDetails, ReportFilter, ReportKpi, QuoteStatus, QuoteStatusColors, quoteStatusLabel } from 'src/app/shared/interfaces/quotation.interface';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { KpiCardComponent, KpiDelta } from 'src/app/shared/components/kpi-card/kpi-card.component';
-import { ReportFilterField, ReportFilterValues, ReportFiltersComponent } from 'src/app/shared/components/report-filters/report-filters.component';
-import { DataGridBreadcrumb, DataGridColumn } from 'src/app/shared/components/data-grid/data-grid.model';
+import { FilterBarComponent } from 'src/app/shared/components/filter-bar/filter-bar.component';
+import { FilterPillsComponent } from 'src/app/shared/components/filter-bar/filter-pills.component';
+import { filtersToParams, paramsToFilters } from 'src/app/shared/components/filter-bar/url-filters';
+import { QUOTATION_URL_FILTERS } from '../../quotation-url-filters';
+import { DataGridBreadcrumb, DataGridColumn, DataGridFilter } from 'src/app/shared/components/data-grid/data-grid.model';
 
 type TrendChart = {
   series: ApexAxisChartSeries;
@@ -80,7 +83,7 @@ import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
   providers: [NumberFormatterPipe, DatePipe],
   imports: [ViewToggleComponent, 
     NgIf, NgFor, NgClass, DecimalPipe, DatePipe, FormsModule, NgIcon,
-    ChartComponent, SmartFormModule, ActionButtonComponent, DataGridComponent, NumberFormatterPipe, KpiCardComponent, ReportFiltersComponent,
+    ChartComponent, SmartFormModule, ActionButtonComponent, DataGridComponent, NumberFormatterPipe, KpiCardComponent, FilterBarComponent, FilterPillsComponent,
   ],
 })
 export class QuotationReportComponent implements OnInit, OnDestroy {
@@ -95,15 +98,18 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
   loading = true;
   failed = false;
 
-  // --- Filters (mirrored into the URL so the List | Report toggle keeps them) ---------------
-  filters: ReportFilterValues = { salesPerson: null, customer: null, department: null, fromDate: null, toDate: null };
+  // --- Filters: the list grid's columns and URL params, so List and Report share one filter set ---
+  filters: Omit<DataGridFilter, 'id'>[] = [];
+  /** The request params the filters map to (customer, quoteStatus, customerNot, fromDate, ...). */
+  private filterParams: Record<string, any> = {};
 
-  filterFields: ReportFilterField[] = [
-    { key: 'department', label: 'Department', type: 'select', options: [], placeholder: 'All departments' },
-    { key: 'salesPerson', label: 'Sales Person', type: 'combobox', options: [], placeholder: 'Everyone' },
-    { key: 'customer', label: 'Customer', type: 'combobox', options: [], placeholder: 'All customers' },
-    { key: 'fromDate', label: 'From', type: 'date' },
-    { key: 'toDate', label: 'To', type: 'date' },
+  filterColumns: DataGridColumn[] = [
+    { key: 'date', label: 'Quoted Date', type: 'date' },
+    { key: 'customerName', label: 'Customer', filterOptions: [] },
+    { key: 'status', label: 'Status', type: 'badge', filterOptions: Object.values(QuoteStatus).map((s) => ({ label: quoteStatusLabel(s), value: s })) },
+    { key: 'dealStatus', label: 'Deal Status', type: 'badge', filterOptions: ['pending', 'approved', 'rejected'].map((s) => ({ label: s.charAt(0).toUpperCase() + s.slice(1), value: s })) },
+    { key: 'salesPerson', label: 'Sales Person', filterOptions: [] },
+    { key: 'department', label: 'Department', filterOptions: [] },
   ];
 
   breakdownKey: BreakdownKey = 'department';
@@ -151,7 +157,8 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
 
     this.subscriptions.add(
       this._route.queryParams.subscribe((params) => {
-        this.filters = Object.fromEntries(this.filterFields.map((f) => [f.key, params[f.key] || null]));
+        this.filters = paramsToFilters(params, QUOTATION_URL_FILTERS);
+        this.filterParams = filtersToParams(this.filters, QUOTATION_URL_FILTERS);
         this.fetch();
       })
     );
@@ -194,13 +201,13 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
     );
     this.subscriptions.add(
       customers$.subscribe((customers) => {
-        this.setOptions('customer', customers.map((c) => ({ label: c.companyName, value: c._id })));
+        this.setOptions('customerName', customers.map((c) => ({ label: c.companyName, value: c._id })));
       })
     );
   }
 
   private setOptions(key: string, options: SfOption[]): void {
-    this.filterFields = this.filterFields.map((f) => (f.key === key ? { ...f, options } : f));
+    this.filterColumns = this.filterColumns.map((c) => (c.key === key ? { ...c, filterOptions: options } : c));
   }
 
   private currentFilter(): ReportFilter {
@@ -210,7 +217,7 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
     }).unsubscribe();
 
     return {
-      ...(this.filters as Pick<ReportFilter, "salesPerson" | "customer" | "department" | "fromDate" | "toDate">),
+      ...(this.filterParams as Partial<ReportFilter>),
       access: this.access,
       userId: this.userId,
     };
@@ -285,18 +292,18 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
   }
 
   /** Filter changes go through the URL, so a refresh or a switch to the list keeps them. */
-  onFilterChange(values: ReportFilterValues): void {
+  onFilterChange(filters: Omit<DataGridFilter, 'id'>[]): void {
     this._router.navigate([], {
       relativeTo: this._route,
-      queryParams: values,
+      queryParams: filtersToParams(filters, QUOTATION_URL_FILTERS),
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });
   }
 
-  /** Query params handed to the List tab, so switching back keeps the same slice of data. */
-  get listQueryParams(): Record<string, string | null> {
-    return { ...this.filters };
+  /** Query params handed to the List tab: the same params the list reads, so its grid shows the same filters. */
+  get listQueryParams(): Record<string, any> {
+    return this.filterParams;
   }
 
   // --- Funnel -------------------------------------------------------------------------------
@@ -534,9 +541,18 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
     this.breakdownGrid?.closeDetail();
     const param = { department: 'department', salesPerson: 'salesPerson', customer: 'customer' }[this.breakdownKey];
     this._router.navigate(['/quotations'], {
-      queryParams: { ...this.listQueryParams, [param]: row.id },
+      queryParams: { ...this.listQueryParams, [param]: row.id, [param + 'Not']: null },
     });
   }
+
+  /** A KPI card opens the list with the report's filters plus the card's own status slice. */
+  openList(statuses?: string[]): void {
+    this._router.navigate(['/quotations'], {
+      queryParams: { ...this.listQueryParams, ...(statuses ? { quoteStatus: statuses.length === 1 ? statuses[0] : statuses, quoteStatusNot: null } : {}) },
+    });
+  }
+
+  readonly openStatuses = ['Draft', 'Work In Progress', 'Ready for submission', 'Quote Submitted', 'Under review', 'Under negotiation'];
 
   // --- Attention ----------------------------------------------------------------------------
 
@@ -669,10 +685,6 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
     void this.excelExport.download('quotation-report.xlsx', sheets);
   }
 
-  /** The browser's own print-to-PDF, against a print stylesheet — no second rendering to keep in step. */
-  exportPdf(): void {
-    window.print();
-  }
 
   // --- Helpers used by the template ----------------------------------------------------------
 

@@ -12,7 +12,8 @@ import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { KpiCardComponent } from 'src/app/shared/components/kpi-card/kpi-card.component';
-import { ReportFilterField, ReportFilterValues, ReportFiltersComponent } from 'src/app/shared/components/report-filters/report-filters.component';
+import { FilterPillsComponent } from 'src/app/shared/components/filter-bar/filter-pills.component';
+import { ReportFilterField, ReportFilterValues, ReportFiltersComponent, listParamsFrom, matchesReportValue, readReportValues } from 'src/app/shared/components/report-filters/report-filters.component';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { DataGridBreadcrumb, DataGridColumn } from 'src/app/shared/components/data-grid/data-grid.model';
@@ -32,7 +33,7 @@ type BreakdownRow = SupplierReportRow;
   providers: [NumberFormatterPipe],
   imports: [
     NgIf, NgFor, DecimalPipe,
-    ActionButtonComponent, KpiCardComponent, ReportFiltersComponent, ViewToggleComponent, DataGridComponent,
+    ActionButtonComponent, KpiCardComponent, ReportFiltersComponent, FilterPillsComponent, ViewToggleComponent, DataGridComponent,
   ],
 })
 export class SupplierReportComponent implements OnInit, OnDestroy {
@@ -78,7 +79,7 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
 
     this.subscriptions.add(
       this._route.queryParams.subscribe((params) => {
-        this.filters = Object.fromEntries(this.filterFields.map((f) => [f.key, params[f.key] || null]));
+        this.filters = readReportValues(params, this.filterFields);
         this.fetch();
       })
     );
@@ -107,6 +108,8 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
     return {
       category: this.filters['category'] || undefined,
       supplierType: this.filters['supplierType'] || undefined,
+      categoryNot: this.filters['categoryNot'] || undefined,
+      supplierTypeNot: this.filters['supplierTypeNot'] || undefined,
       fromDate: this.filters['fromDate'] || undefined,
       toDate: this.filters['toDate'] || undefined,
     };
@@ -139,7 +142,7 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
   }
 
   get listQueryParams(): Record<string, string | null> {
-    return { ...this.filters };
+    return listParamsFrom(this.filters);
   }
 
   // --- KPIs ------------------------------------------------------------------------------
@@ -171,6 +174,11 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
   private rebuildBreakdown(): void {
     const rows = this.breakdownKey === 'category' ? this.summary.byCategory : this.summary.bySupplierType;
     this.breakdownRows = [...rows].sort((x, y) => y.total - x.total);
+  }
+
+  /** The Total card opens the list with the report's filters; the list can't filter by approval status. */
+  openList(): void {
+    this._router.navigate(['/suppliers'], { queryParams: this.listQueryParams });
   }
 
   onBreakdownRowOpen(row: BreakdownRow): void {

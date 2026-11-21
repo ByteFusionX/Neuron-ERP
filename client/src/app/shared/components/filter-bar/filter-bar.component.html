@@ -1,0 +1,46 @@
+<div class="relative">
+    <button type="button" (click)="toggleMenu()" class="fb-tool-btn" [ngClass]="menuOpen ? 'ring-2 ring-violet-100 dark:ring-violet-900' : ''">
+      <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 5h16l-6 7.5V19l-4-2v-4.5L4 5z" />
+      </svg>
+      Filter
+      <span *ngIf="applied.length" class="px-1.5 rounded-full bg-violet-600 text-white text-[10px] tabular-nums">{{ applied.length }}</span>
+    </button>
+    <ng-container *ngIf="menuOpen">
+      <div class="fixed inset-0 z-20" (click)="menuOpen = false"></div>
+      <div class="fb-pop absolute right-0 mt-2 w-72 z-30 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl shadow-lg p-3 space-y-2">
+        <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">{{ editingId != null ? 'Edit filter' : 'Add filter' }}</p>
+        <app-sf-combobox [options]="columnSelectOptions" placeholder="Select column" [ngModel]="draft.key" (ngModelChange)="onColumnChange($event)"></app-sf-combobox>
+        <app-sf-combobox [options]="operatorSelectOptions" placeholder="Select operator" [ngModel]="draft.op" (ngModelChange)="onOpChange($event)"></app-sf-combobox>
+        <div *ngIf="draftUsesList; else freeValue">
+          <app-sf-combobox [options]="valueSelectOptions" [multiple]="draftMulti" closeOnSelect placeholder="Search or select values" emptyText="No values to pick"
+            [(ngModel)]="draft.value"></app-sf-combobox>
+        </div>
+        <ng-template #freeValue>
+          <div (keydown.enter)="apply()">
+            <ng-container *ngIf="draftColumn?.type === 'date'; else notDate">
+              <app-sf-date *ngIf="!draftMultiDate" [(ngModel)]="draft.value"></app-sf-date>
+              <div *ngIf="draftMultiDate" class="relative flex flex-wrap items-center gap-1 min-h-[2.25rem] px-2 py-1 pr-8 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 cursor-pointer text-sm"
+                (click)="dateInput.showPicker()">
+                <span *ngFor="let day of draftDates" class="inline-flex items-center gap-1 rounded-md bg-violet-50 dark:bg-violet-950/40 py-0.5 pl-1.5 pr-1 text-xs text-violet-700 dark:text-violet-300">
+                  {{ formatDate(day) }}
+                  <button type="button" class="rounded px-0.5 hover:bg-violet-100 dark:hover:bg-violet-900/50" [attr.aria-label]="'Remove ' + formatDate(day)" (click)="removeDraftDate(day); $event.stopPropagation()">×</button>
+                </span>
+                <span *ngIf="!draftDates.length" class="text-gray-400">Add a date</span>
+                <input #dateInput type="date" tabindex="-1" aria-hidden="true" class="pointer-events-none absolute left-0 bottom-0 h-0 w-full opacity-0"
+                  (change)="addDraftDate($any($event.target).value); $any($event.target).value = ''" />
+              </div>
+            </ng-container>
+            <ng-template #notDate>
+              <app-sf-number *ngIf="draftColumn?.type === 'number' || draftColumn?.type === 'currency'; else textValue" [stepper]="false" placeholder="Value" [(ngModel)]="draft.value"></app-sf-number>
+              <ng-template #textValue><app-sf-input placeholder="Value" [(ngModel)]="draft.value"></app-sf-input></ng-template>
+            </ng-template>
+          </div>
+        </ng-template>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" class="fb-tool-btn" (click)="menuOpen = false">Cancel</button>
+          <button type="button" class="fb-primary-btn" [disabled]="!canApply" (click)="apply()">{{ editingId != null ? 'Update' : 'Apply' }}</button>
+        </div>
+      </div>
+    </ng-container>
+  </div>

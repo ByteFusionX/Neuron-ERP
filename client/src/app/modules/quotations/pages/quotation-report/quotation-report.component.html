@@ -1,7 +1,7 @@
 <div class="qr-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-2 sm:p-6 flex flex-col gap-3 sm:gap-5">
 
     <!-- Header — same shell and spacing as the grid's toolbar, so List and Report read as one screen. -->
-    <div class="qr-card shrink-0">
+    <div class="qr-card shrink-0" style="overflow: visible">
         <div class="relative flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
             <div class="min-w-0">
                 <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate" aria-current="page">Quotations</h2>
@@ -14,19 +14,15 @@
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
+                <app-filter-bar #filterBar [columns]="filterColumns" [filters]="filters" (filtersChange)="onFilterChange($event)"></app-filter-bar>
                 <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!report">
                     <ng-icon name="heroArrowDownTray" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
                     Excel
                 </app-action-button>
-                <app-action-button variant="tool" (click)="exportPdf()" [disabled]="!report">
-                    <ng-icon name="heroPrinter" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
-                    PDF
-                </app-action-button>
             </div>
         </div>
 
-        <app-report-filters [fields]="filterFields" [values]="filters" hint="Showing a filtered slice of the quotations."
-            (valuesChange)="onFilterChange($event)"></app-report-filters>
+        <app-filter-pills [bar]="filterBar"></app-filter-pills>
     </div>
 
     <!-- Loading -->
@@ -43,16 +39,16 @@
 
         <!-- KPI strip -->
         <div class="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-5 max-lg:[&>*:last-child]:col-span-2">
-            <app-kpi-card label="Total Quoted" [value]="r.kpi.totalValue | numberFormatter" [unit]="r.currency"
+            <app-kpi-card clickable (click)="openList()" label="Total Quoted" [value]="r.kpi.totalValue | numberFormatter" [unit]="r.currency"
                 [foot]="r.kpi.totalCount + ' quotation' + (r.kpi.totalCount === 1 ? '' : 's')" [delta]="delta('totalValue')"></app-kpi-card>
-            <app-kpi-card label="Won" [value]="r.kpi.wonValue | numberFormatter" [unit]="r.currency" valueClass="text-emerald-600 dark:text-emerald-400"
+            <app-kpi-card clickable (click)="openList(['Won'])" label="Won" [value]="r.kpi.wonValue | numberFormatter" [unit]="r.currency" valueClass="text-emerald-600 dark:text-emerald-400"
                 [foot]="r.kpi.wonCount + ' won · ' + r.kpi.lostCount + ' lost'" [delta]="delta('wonValue')"></app-kpi-card>
             <!-- Said out loud, because a win rate over "everything" would be misleading while quotes are still open. -->
-            <app-kpi-card label="Win Rate" [value]="(r.kpi.winRate | number: '1.0-1') + ''" unit="%"
+            <app-kpi-card clickable (click)="openList(['Won', 'Lost'])" label="Win Rate" [value]="(r.kpi.winRate | number: '1.0-1') + ''" unit="%"
                 [foot]="'of ' + r.kpi.closedCount + ' closed quotation' + (r.kpi.closedCount === 1 ? '' : 's')" [delta]="delta('winRate')"></app-kpi-card>
-            <app-kpi-card label="Open Pipeline" [value]="r.kpi.openValue | numberFormatter" [unit]="r.currency"
+            <app-kpi-card clickable (click)="openList(openStatuses)" label="Open Pipeline" [value]="r.kpi.openValue | numberFormatter" [unit]="r.currency"
                 [foot]="r.kpi.openCount + ' still in play'"></app-kpi-card>
-            <app-kpi-card label="Average Quote" [value]="r.kpi.avgQuoteValue | numberFormatter" [unit]="r.currency"
+            <app-kpi-card clickable (click)="openList()" label="Average Quote" [value]="r.kpi.avgQuoteValue | numberFormatter" [unit]="r.currency"
                 [foot]="r.kpi.avgDaysToClose !== null ? (r.kpi.avgDaysToClose | number: '1.0-0') + ' days to close' : 'No closed quotes to measure'"
                 [delta]="delta('avgQuoteValue')"></app-kpi-card>
         </div>

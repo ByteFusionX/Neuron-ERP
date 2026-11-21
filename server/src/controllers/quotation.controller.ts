@@ -517,11 +517,66 @@ const quotationLookupStages = [
 /** A quote in these states is no longer chased, so its open follow-up is closed and list views skip it. */
 const QUOTE_FOLLOW_UP_CLOSED: string[] = [quoteStatus.Won, quoteStatus.Lost, quoteStatus.Expired];
 
+/**
+ * Match clauses for the quotation grid's filters (status, deal status, sales person, customer, department, date).
+ * The list and the report both use it, so a filter means the same on either tab. Each list filter takes one
+ * value or several ("is" matches any, `<name>Not` excludes all).
+ */
+const quotationFilterClauses = (body: any): any[] => {
+    const { salesPerson, customer, fromDate, toDate, onDates, department, quoteStatus, quoteStatusNot, dealStatus, dealStatusNot, salesPersonNot, customerNot, departmentNot } = body;
+    const expiredFilter = expiredQuoteFilter();
+    const pastDateFilter = pastDateQuoteFilter();
+    const toList = (v: unknown): string[] => (Array.isArray(v) ? v : v == null || v === '' ? [] : String(v).split(',')).map(String).filter(Boolean);
+    // Date filters: "after" / "before" bound the range (whole days, both inclusive), "on" matches any of the picked days.
+    const dayStart = (v: unknown) => { const d = new Date(String(v)); return Number.isNaN(d.getTime()) ? null : d; };
+    const from = fromDate ? dayStart(fromDate) : null;
+    const to = toDate ? dayStart(toDate) : null;
+    const onDays = toList(onDates).map(dayStart).filter((d): d is Date => !!d);
+    const toIds = (v: unknown): InstanceType<typeof ObjectId>[] => toList(v).filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+    const idClause = (field: string, ids: InstanceType<typeof ObjectId>[], not: unknown) =>
+        ids.length ? [{ [field]: not ? { $nin: ids } : { $in: ids } }] : [];
+    const statusList = toList(quoteStatus);
+    const dealStatusList = toList(dealStatus);
+    const departmentIds = toIds(department);
+    const pendingDeal = { $or: [{ 'dealData.status': 'pending' }, { status: 'Won', 'dealData.status': { $exists: false } }] };
+
+    return [
+        ...(from ? [{ date: { $gte: from } }] : []),
+        ...(to ? [{ date: { $lt: new Date(to.getTime() + 86_400_000) } }] : []),
+        // Exactly two picked days read as a range: from the earlier to the later day, both inclusive.
+        ...(onDays.length === 2 ? [{ date: {
+            $gte: new Date(Math.min(...onDays.map((d) => d.getTime()))),
+            $lt: new Date(Math.max(...onDays.map((d) => d.getTime())) + 86_400_000),
+        } }] : []),
+        ...(onDays.length !== 0 && onDays.length !== 2 ? [{ $or: onDays.map((d) => ({ date: { $gte: d, $lt: new Date(d.getTime() + 86_400_000) } })) }] : []),
+        // "Expired" is derived from the date; any other status excludes the open quotes that are past it.
+        ...(statusList.length
+            ? [quoteStatusNot
+                ? { $and: statusList.map((st) => st === 'Expired' ? { $nor: [expiredFilter] } : { status: { $ne: st } }) }
+                : { $or: statusList.map((st) => st === 'Expired' ? expiredFilter : { $and: [{ status: st }, { $nor: [pastDateFilter] }] }) }]
+            : []),
+        // "pending" also covers Won quotes that have no deal sheet yet (waiting to be converted).
+        ...(dealStatusList.length
+            ? [dealStatusNot
+                ? { $and: dealStatusList.map((st) => st === 'pending' ? { $nor: [pendingDeal] } : { 'dealData.status': { $ne: st } }) }
+                : { $or: dealStatusList.map((st) => st === 'pending' ? pendingDeal : { 'dealData.status': st }) }]
+            : []),
+        ...idClause('createdBy', toIds(salesPerson), salesPersonNot),
+        ...idClause('client', toIds(customer), customerNot),
+        // Quotes carry either the legacy single `department` or the newer `departments[]`.
+        ...(departmentIds.length
+            ? [departmentNot
+                ? { department: { $nin: departmentIds }, departments: { $nin: departmentIds } }
+                : { $or: [{ department: { $in: departmentIds } }, { departments: { $in: departmentIds } }] }]
+            : []),
+    ];
+};
+
 export const getQuotations = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const expiredFilter = expiredQuoteFilter();
         const pastDateFilter = pastDateQuoteFilter();
-        let { page, search, row, salesPerson, customer, fromDate, toDate, onDates, department, quoteStatus, quoteStatusNot, dealStatus, dealStatusNot, salesPersonNot, customerNot, departmentNot, access, userId, sortKey, sortDir, followUpView, followUpFromDate, followUpToDate, presaleView } = req.body;
+        let { page, search, row, access, userId, sortKey, sortDir, followUpView, followUpFromDate, followUpToDate, presaleView } = req.body;
 
         page = Math.max(1, parseInt(page) || 1);
         row = Math.min(100, Math.max(1, parseInt(row) || 10));
@@ -531,33 +586,6 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
         const sortStage: Record<string, 1 | -1> = sortKey && sortableFields[sortKey]
             ? { [sortableFields[sortKey]]: sortDir === 'desc' ? -1 : 1, _id: -1 }
             : { _id: -1 };
-
-        const toList = (v: unknown): string[] => (Array.isArray(v) ? v : v == null || v === '' ? [] : [v]).map(String);
-        // Date filters: "after" / "before" bound the range (whole days, both inclusive), "on" matches any of the picked days.
-        const dayStart = (v: unknown) => { const d = new Date(String(v)); return Number.isNaN(d.getTime()) ? null : d; };
-        const from = fromDate ? dayStart(fromDate) : null;
-        const to = toDate ? dayStart(toDate) : null;
-        const onDays = toList(onDates).map(dayStart).filter((d): d is Date => !!d);
-        const dateClauses: any[] = [
-            ...(from ? [{ date: { $gte: from } }] : []),
-            ...(to ? [{ date: { $lt: new Date(to.getTime() + 86_400_000) } }] : []),
-            // Exactly two picked days read as a range: from the earlier to the later day, both inclusive.
-            ...(onDays.length === 2 ? [{ date: {
-                $gte: new Date(Math.min(...onDays.map((d) => d.getTime()))),
-                $lt: new Date(Math.max(...onDays.map((d) => d.getTime())) + 86_400_000),
-            } }] : []),
-            ...(onDays.length !== 0 && onDays.length !== 2 ? [{ $or: onDays.map((d) => ({ date: { $gte: d, $lt: new Date(d.getTime() + 86_400_000) } })) }] : []),
-        ];
-
-        // Filters arrive as one value or a list of values (the grid's multi-select).
-        const toIds = (v: unknown): InstanceType<typeof ObjectId>[] => toList(v).filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
-        const idClause = (field: string, ids: InstanceType<typeof ObjectId>[], not: boolean) =>
-            ids.length ? [{ [field]: not ? { $nin: ids } : { $in: ids } }] : [];
-        const statusList = toList(quoteStatus);
-        const dealStatusList = toList(dealStatus);
-        const salesPersonIds = toIds(salesPerson);
-        const customerIds = toIds(customer);
-        const departmentIds = toIds(department);
 
         // Search matches the quote id, the subject and the customer's company name.
         const searchText = String(search ?? '').trim();
@@ -579,20 +607,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
                 // "Expired" is derived from the date; any other status excludes the open quotes that are past it.
                 // "In Presales" tab: every quote with presales (waiting, or with a returned estimate), whoever owns it within the caller's access.
                 ...(presaleView ? [{ status: { $in: ['In Presales', 'Estimated'] } }] : []),
-                // "is not" excludes the status instead (Expired is derived from the date, so it negates that filter).
-                // The grid can send several values: "is" matches any of them, "is not" excludes all of them.
-                ...(statusList.length
-                    ? [quoteStatusNot
-                        ? { $and: statusList.map((s) => s === 'Expired' ? { $nor: [expiredFilter] } : { status: { $ne: s } }) }
-                        : { $or: statusList.map((s) => s === 'Expired' ? expiredFilter : { $and: [{ status: s }, { $nor: [pastDateFilter] }] }) }]
-                    : []),
-                // "pending" also covers Won quotes that have no deal sheet yet (waiting to be converted).
-                ...(() => {
-                    const pendingDeal = { $or: [{ 'dealData.status': 'pending' }, { status: 'Won', 'dealData.status': { $exists: false } }] };
-                    if (!dealStatusList.length) return [];
-                    if (dealStatusNot) return [{ $and: dealStatusList.map((s) => s === 'pending' ? { $nor: [pendingDeal] } : { 'dealData.status': { $ne: s } }) }];
-                    return [{ $or: dealStatusList.map((s) => s === 'pending' ? pendingDeal : { 'dealData.status': s }) }];
-                })(),
+                ...quotationFilterClauses(req.body),
                 searchFilter,
                 // Overdue / Today / Upcoming only list quotes that are still being chased.
                 ...(followUpView ? [{ ...followUpViewFilter('followUp.nextFollowUpDate', followUpView), status: { $nin: QUOTE_FOLLOW_UP_CLOSED }, $nor: [pastDateFilter] }] : []),
@@ -600,10 +615,6 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
                     ...(followUpFromDate ? { $gte: new Date(followUpFromDate) } : {}),
                     ...(followUpToDate ? { $lt: new Date(new Date(followUpToDate).getTime() + 86_400_000) } : {}),
                 } }] : []),
-                ...idClause('createdBy', salesPersonIds, salesPersonNot),
-                ...idClause('client', customerIds, customerNot),
-                ...dateClauses,
-                ...idClause('department', departmentIds, departmentNot),
             ]
         }
 
@@ -1304,6 +1315,76 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
         next(error)
     }
 }
+
+/**
+ * Rows for the Deal Sheet report: one per deal the user may see, with its value, cost and margin
+ * already worked out in QAR. The page groups and filters these itself, so this stays a flat list.
+ * Access follows the deal sheet list (dealSheet.viewReport), admin-authored deals included.
+ */
+export const getDealReport = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { access, userId } = req.body;
+
+        let accessFilter = {};
+        if (access === 'created') {
+            accessFilter = { createdBy: new ObjectId(userId) };
+        } else if (access === 'reported' || access === 'createdAndReported') {
+            const ids = await getAllReportedEmployees(userId);
+            if (access === 'createdAndReported') ids.push(new ObjectId(userId));
+            accessFilter = { createdBy: { $in: [...ids, ...await getAdminAuthoredEmployeeIds()] } };
+        }
+
+        const quotes = await Quotation.find({ $and: [{ isDeleted: { $ne: true }, dealData: { $exists: true }, ...validDealSheetFilter }, accessFilter] })
+            .select('quoteId currency client createdBy department editHistory.action dealData.dealId dealData.status dealData.currency dealData.exchangeRate dealData.savedDate dealData.approvedDate dealData.revokeResubmittedDate dealData.updatedItems dealData.additionalCosts dealData.totalDiscount')
+            .populate('client', 'companyName')
+            .populate('createdBy', 'firstName lastName')
+            .populate('department', 'departmentName')
+            .lean();
+
+        const liveUsdRate = Number(await getUSDRated()) || 0;
+        const DAY = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+
+        const deals = quotes.map((quote: any) => {
+            const deal = quote.dealData || {};
+            const lines = selectedDealLines(deal.updatedItems);
+            // Same sums as the deal sheet's own price panel (dealSheetPriceDetails on the client).
+            const value = sumSelectedDealSelling(lines) - dealCustomerDiscount(deal);
+            const cost = sumSelectedDealCost(lines) + dealAdditionalCostImpact(deal);
+            const usd = (deal.currency || quote.currency) === 'USD';
+            const rate = usd ? (Number(deal.exchangeRate) || liveUsdRate) : 1;
+            const revoked = deal.status !== 'approved' && deal.status !== 'rejected'
+                && (quote.editHistory || []).some((h: any) => h?.action === 'DealRevoked');
+            const status = deal.status === 'approved' || deal.status === 'rejected' ? deal.status : 'pending';
+            // A pending deal waits from its last submission; a revoked one from its resubmission.
+            const waitingSince = deal.revokeResubmittedDate || deal.savedDate;
+            return {
+                _id: quote._id,
+                dealId: deal.dealId,
+                quoteId: quote.quoteId,
+                customerId: quote.client?._id ?? null,
+                customer: quote.client?.companyName ?? '',
+                salesPersonId: quote.createdBy?._id ?? null,
+                salesPerson: quote.createdBy ? `${quote.createdBy.firstName ?? ''} ${quote.createdBy.lastName ?? ''}`.trim() : '',
+                departmentId: quote.department?._id ?? null,
+                department: quote.department?.departmentName ?? '',
+                status,
+                revoked,
+                savedDate: deal.savedDate ?? null,
+                approvedDate: deal.approvedDate ?? null,
+                value: value * rate,
+                cost: cost * rate,
+                profit: (value - cost) * rate,
+                margin: value > 0 ? ((value - cost) / value) * 100 : 0,
+                daysWaiting: status === 'pending' && waitingSince ? Math.floor((now - new Date(waitingSince).getTime()) / DAY) : null,
+            };
+        });
+
+        res.status(200).json({ currency: 'QAR', deals });
+    } catch (error) {
+        next(error);
+    }
+};
 
 export const getApprovedDealSheet = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -3384,7 +3465,9 @@ const DEAL_STATUSES = ['pending', 'approved', 'rejected'];
 const quoteGrossValue = (quote: any): number => {
     const option = quote?.optionalItems?.[0];
     if (!option?.items?.length) return 0;
-    return calculateDiscountPrice(option.totalDiscount || 0, option.items);
+    // A draft line with no price or quantity yet comes out as NaN, which would blank every total it joins.
+    const value = Number(calculateDiscountPrice(Number(option.totalDiscount) || 0, option.items));
+    return Number.isFinite(value) ? value : 0;
 };
 
 /** The last time anything was recorded against the quote — used to spot quotes that have gone quiet. */
@@ -3416,32 +3499,11 @@ const tally = (map: Map<string, any>, id: string, name: string, value: number, w
 
 export const getReportDetails = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { salesPerson, customer, fromDate, toDate, department, access, userId } = req.body;
-        let isSalesPerson = salesPerson == null ? true : false;
-        let isCustomer = customer == null ? true : false;
-        let isDate = fromDate == null || toDate == null ? true : false;
-        let isDepartment = department == null ? true : false;
+        const { access, userId } = req.body;
 
-        // Basic match filters
-        let matchFilters = {
-            $and: [
-                { $or: [{ createdBy: new ObjectId(salesPerson) }, { createdBy: { $exists: isSalesPerson } }] },
-                { $or: [{ client: new ObjectId(customer) }, { client: { $exists: isCustomer } }] },
-                {
-                    $or: [
-                        { $and: [{ date: { $gte: new Date(fromDate) } }, { date: { $lte: new Date(toDate) } }] },
-                        { date: { $exists: isDate } }
-                    ]
-                },
-                {
-                    // Quotes carry either the legacy single `department` or the newer `departments[]`,
-                    // so a department filter has to look at both.
-                    $or: isDepartment
-                        ? [{ department: { $exists: true } }]
-                        : [{ department: new ObjectId(department) }, { departments: new ObjectId(department) }]
-                }
-            ]
-        }
+        // Same filters as the list grid, so the report covers exactly the quotes the list shows.
+        const clauses = quotationFilterClauses(req.body);
+        const matchFilters = clauses.length ? { $and: clauses } : {};
 
         // Access filter logic
         let accessFilter = {};
@@ -3491,7 +3553,7 @@ export const getReportDetails = async (req: Request, res: Response, next: NextFu
             const outcome = won ? outcomeEntry(quote, quoteStatus.Won) : lost ? outcomeEntry(quote, quoteStatus.Lost) : null;
             return {
                 quote,
-                value: quote.currency === 'USD' ? gross * usdRate : gross,
+                value: quote.currency === 'USD' ? gross * (Number(usdRate) || 0) : gross,
                 won,
                 lost,
                 open: OPEN_STATUSES.indexOf(quote.status) !== -1,

@@ -12,7 +12,8 @@ import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { KpiCardComponent, KpiDelta } from 'src/app/shared/components/kpi-card/kpi-card.component';
-import { ReportFilterField, ReportFilterValues, ReportFiltersComponent } from 'src/app/shared/components/report-filters/report-filters.component';
+import { FilterPillsComponent } from 'src/app/shared/components/filter-bar/filter-pills.component';
+import { ReportFilterField, ReportFilterValues, ReportFiltersComponent, listParamsFrom, matchesReportValue, readReportValues } from 'src/app/shared/components/report-filters/report-filters.component';
 import { DataGridBreadcrumb, DataGridColumn } from 'src/app/shared/components/data-grid/data-grid.model';
 
 type BreakdownKey = 'presale' | 'department';
@@ -34,7 +35,7 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
   selector: 'app-presale-report',
   templateUrl: './presale-report.component.html',
   styleUrls: ['./presale-report.component.css'],
-  imports: [ViewToggleComponent, NgIf, NgFor, NgClass, DecimalPipe, DatePipe, NgIcon, ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, ReportFiltersComponent],
+  imports: [ViewToggleComponent, NgIf, NgFor, NgClass, DecimalPipe, DatePipe, NgIcon, ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, ReportFiltersComponent, FilterPillsComponent],
 })
 export class PresaleReportComponent implements OnInit, OnDestroy {
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }];
@@ -108,7 +109,7 @@ export class PresaleReportComponent implements OnInit, OnDestroy {
       this.setOptions('department', departments.map((d) => ({ label: d.departmentName, value: d._id as string })));
     }));
     this.subscriptions.add(this._route.queryParams.subscribe((params) => {
-      this.filters = Object.fromEntries(this.filterFields.map((f) => [f.key, params[f.key] || null]));
+      this.filters = readReportValues(params, this.filterFields);
       this.fetch();
     }));
     // ApexCharts bakes colours in at build time, so rebuild when the theme class flips.
@@ -289,6 +290,11 @@ export class PresaleReportComponent implements OnInit, OnDestroy {
     return this.report?.attention?.[key]?.length || 0;
   }
 
+  /** A KPI card opens the presale list on the matching tab. */
+  openList(tab: string): void {
+    this._router.navigate(['/presales'], { queryParams: { tab } });
+  }
+
   /** Opens the presale list on the matching tab. */
   openJob(_item: { enquiryId: string }): void {
     this._router.navigate(['/presales'], { queryParams: { tab: this.attentionKey } });
@@ -338,9 +344,6 @@ export class PresaleReportComponent implements OnInit, OnDestroy {
     void this.excelExport.download('presale-report.xlsx', sheets);
   }
 
-  exportPdf(): void {
-    window.print();
-  }
 
   trackById = (_: number, r: { id: string }) => r.id;
 }

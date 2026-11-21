@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { booleanAttribute, ChangeDetectionStrategy, Component, HostBinding, HostListener, Input } from '@angular/core';
 import { NgClass, NgIf } from '@angular/common';
 
 /** How a metric moved against a comparison period. */
@@ -29,4 +29,15 @@ export class KpiCardComponent {
   @Input() delta: KpiDelta | null = null;
   @Input() deltaNote = 'vs previous period';
   @Input() deltaTitle = 'Compared with the previous period of the same length';
+  /** Styles the card as a link; the host's own (click) does the navigating. */
+  @Input({ transform: booleanAttribute }) clickable = false;
+
+  @HostBinding('class.kpi-clickable') get isClickable(): boolean { return this.clickable; }
+  @HostBinding('attr.role') get role(): string | null { return this.clickable ? 'link' : null; }
+  @HostBinding('attr.tabindex') get tabIndex(): number | null { return this.clickable ? 0 : null; }
+
+  @HostListener('keydown.enter', ['$event'])
+  onEnter(e: Event): void {
+    if (this.clickable) (e.target as HTMLElement).click();
+  }
 }

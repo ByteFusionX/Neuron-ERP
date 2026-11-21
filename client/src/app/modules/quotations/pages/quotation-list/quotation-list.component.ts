@@ -62,6 +62,8 @@ import { formatAuditDate, toTimelineEntries } from 'src/app/shared/utils/audit-t
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
+import { filtersToParams, paramsToFilters } from 'src/app/shared/components/filter-bar/url-filters';
+import { QUOTATION_URL_FILTERS } from '../../quotation-url-filters';
 /** Statuses that offer Download PDF: from Ready For Submission onward, everything except Lost. */
 const PDF_STATUSES: QuoteStatus[] = [
   QuoteStatus.ReadyForSubmission,
@@ -257,6 +259,11 @@ export class QuotationListComponent implements AfterViewInit {
       this.selectedDepartment = params['department'] || null;
       this.selectedQuoteStatus = params['quoteStatus'] || null;
       this.selectedDealStatus = params['dealStatus'] || null;
+      this.customerNot = !!params['customerNot'];
+      this.salesPersonNot = !!params['salesPersonNot'];
+      this.departmentNot = !!params['departmentNot'];
+      this.quoteStatusNot = !!params['quoteStatusNot'];
+      this.dealStatusNot = !!params['dealStatusNot'];
 
       // Set isFiltered flag if any filter is applied
       this.isFiltered = !!(this.searchQuery || this.fromDate || this.toDate || this.onDates.length ||
@@ -282,18 +289,7 @@ export class QuotationListComponent implements AfterViewInit {
   /** A search or filter that arrived through the URL (reload, shared link, Back) filters the data; show it in the toolbar too. */
   private showUrlFiltersInGrid(): void {
     if (!this.grid) return;
-    const filters: Omit<DataGridFilter, 'id'>[] = [];
-    const add = (key: string, op: DataGridFilter['op'], value: string | string[] | null) => {
-      if (Array.isArray(value) ? value.length : value) filters.push({ key, op, value });
-    };
-    add('customerName', 'is', this.selectedCustomer);
-    add('salesPerson', 'is', this.selectedSalesPerson);
-    add('department', 'is', this.selectedDepartment);
-    add('status', 'is', this.selectedQuoteStatus);
-    add('dealStatus', 'is', this.selectedDealStatus);
-    if (this.fromDate) add('date', 'after', this.fromDate);
-    if (this.toDate) add('date', 'before', this.toDate);
-    add('date', 'on', this.onDates.length === 1 ? this.onDates[0] : this.onDates);
+    const filters = paramsToFilters(this._route.snapshot.queryParams, QUOTATION_URL_FILTERS);
     if (!this.searchQuery && !filters.length) return;
     this.grid.setQueryState(this.searchQuery, filters);
   }
@@ -398,7 +394,7 @@ export class QuotationListComponent implements AfterViewInit {
         badgeLabel: (v) => (v ? String(v).charAt(0).toUpperCase() + String(v).slice(1) : ''),
       },
       { key: 'nextFollowUpDate', label: 'Next Follow-up', type: 'date', sortable: true, width: '140px', valueGetter: (r) => r.followUp?.nextFollowUpDate ?? null, cellClass: (r) => followUpCellClass(r.followUp?.nextFollowUpDate, this.isFollowUpClosed(r)) },
-      { key: 'totalCost', label: 'Amount', width: '150px', align: 'right', valueGetter: (r) => `${this.numberFormat.transform(this.calculateDiscoutPrice(r))} ${r.currency}` },
+      { key: 'totalCost', label: 'LPO Value', width: '150px', align: 'right', valueGetter: (r) => `${this.numberFormat.transform(this.calculateDiscoutPrice(r))} ${r.currency}` },
       { key: 'description', label: 'Description', width: '220px', valueGetter: (r) => r.subject },
       { key: 'salesPerson', label: 'Sales Person', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '' },
       { key: 'department', label: 'Department', width: '130px', valueGetter: (r) => this.departmentNames(r) },
@@ -711,6 +707,11 @@ export class QuotationListComponent implements AfterViewInit {
     queryParams.department = this.selectedDepartment;
     queryParams.quoteStatus = this.selectedQuoteStatus;
     queryParams.dealStatus = this.selectedDealStatus;
+    queryParams.customerNot = this.selectedCustomer && this.customerNot ? '1' : null;
+    queryParams.salesPersonNot = this.selectedSalesPerson && this.salesPersonNot ? '1' : null;
+    queryParams.departmentNot = this.selectedDepartment && this.departmentNot ? '1' : null;
+    queryParams.quoteStatusNot = this.selectedQuoteStatus && this.quoteStatusNot ? '1' : null;
+    queryParams.dealStatusNot = this.selectedDealStatus && this.dealStatusNot ? '1' : null;
     
     // Update URL without reloading the page
     this._router.navigate([], {
@@ -862,19 +863,18 @@ export class QuotationListComponent implements AfterViewInit {
     this.updateUrlParams();
   }
 
-  /** Filters handed to the Report tab, so switching keeps the same slice of data.
-   *  Search, status and deal status are list-only concerns and stay behind. */
-  get reportQueryParams(): Record<string, string | null> {
-    // The report takes one value per filter, so a multi-pick hands over its first value.
-    const one = (v: string | string[] | null) => (Array.isArray(v) ? v[0] ?? null : v);
-    return {
-      salesPerson: one(this.selectedSalesPerson),
-      customer: one(this.selectedCustomer),
-      department: one(this.selectedDepartment),
-      fromDate: this.fromDate,
-      toDate: this.toDate,
-    };
+  /** Filters handed to the Report tab: the same params the list keeps in the URL, so the report applies
+   *  exactly the grid's filters. Search and the active tab are list-only and stay behind. */
+  get reportQueryParams(): Record<string, any> {
+    const params = this._route.snapshot.queryParams;
+    if (params !== this.reportParamsFrom) {
+      this.reportParamsFrom = params;
+      this.reportParamsCache = filtersToParams(paramsToFilters(params, QUOTATION_URL_FILTERS), QUOTATION_URL_FILTERS);
+    }
+    return this.reportParamsCache;
   }
+  private reportParamsFrom: any = null;
+  private reportParamsCache: Record<string, any> = {};
 
   onViewLpo(data: Quotatation, event: Event) {
     event.stopPropagation();

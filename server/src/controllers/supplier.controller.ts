@@ -1,3 +1,4 @@
+import { reportIds, reportMatch, reportValues } from '../common/utils/reportFilter';
 import { NextFunction, Request, Response } from 'express';
 import Supplier, { supplierStatus } from '../models/supplier.model';
 import MasterListItemModel from '../models/masterListItem.model';
@@ -418,13 +419,10 @@ export const getSupplierReportSummary = async (req: Request, res: Response) => {
             filter.createdDate.$lte = end;
          }
       }
-      if (category) {
-         if (!Types.ObjectId.isValid(category)) {
-            return res.status(400).json({ success: false, message: 'Invalid category' });
-         }
-         filter.category = new Types.ObjectId(category);
-      }
-      if (supplierType) filter.supplierType = String(supplierType);
+      const categoryMatch = reportMatch(reportIds(category), req.body.categoryNot);
+      if (categoryMatch) filter.category = categoryMatch;
+      const typeMatch = reportMatch(reportValues(supplierType), req.body.supplierTypeNot);
+      if (typeMatch) filter.supplierType = typeMatch;
 
       const counters = {
          total: { $sum: 1 },

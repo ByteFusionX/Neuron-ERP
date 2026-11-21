@@ -1,3 +1,4 @@
+import { reportIds, reportMatch } from '../common/utils/reportFilter';
 import Workflow from "../models/workflow.model";
 import type { PipelineStage } from 'mongoose';
 import { NextFunction, Request, Response } from "express"
@@ -1266,15 +1267,19 @@ export const getPresaleReport = async (req: Request, res: Response, next: NextFu
             ...NOT_WITH_SALES,
             $and: [{ $or: [{ status: { $nin: ['Quoted', 'quoted'] } }, { 'preSale.origin': 'quote' }] }, { $or: [{ 'preSale.presalePerson': { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }, { 'preSale.origin': 'quote', 'preSale.status': 'new' }] }],
         };
-        if (department) match.department = new ObjectId(department);
+        const departmentMatch = reportMatch(reportIds(department), req.body.departmentNot);
+        if (departmentMatch) match.department = departmentMatch;
         const dateFilter: Record<string, Date> = {};
         if (fromDate) dateFilter.$gte = new Date(fromDate);
         if (toDate) { const end = new Date(toDate); end.setDate(end.getDate() + 1); dateFilter.$lt = end; }
         if (Object.keys(dateFilter).length) match.date = dateFilter;
         if (access === 'assigned') {
             match.$and.push({ $or: [{ 'preSale.presalePerson': { $in: scopeIds } }, { reAssigned: { $in: scopeIds } }] });
-        } else if (presale) {
-            match.$and.push({ $or: [{ 'preSale.presalePerson': new ObjectId(presale) }, { reAssigned: new ObjectId(presale) }] });
+        } else if (reportIds(presale).length) {
+            const ids = reportIds(presale);
+            match.$and.push(req.body.presaleNot
+                ? { 'preSale.presalePerson': { $nin: ids }, reAssigned: { $nin: ids } }
+                : { $or: [{ 'preSale.presalePerson': { $in: ids } }, { reAssigned: { $in: ids } }] });
         }
 
         const rows: any[] = await enquiryModel.find(match)
@@ -3551,10 +3556,13 @@ export const getEnquiryReport = async (req: Request, res: Response, next: NextFu
         const { salesPerson, customer, fromDate, toDate, department, userId } = req.body;
         const access = await widenAccessForDepartmentHead(req.body.access, userId);
 
-        const match: any = { isDeleted: { $ne: true } };
-        if (salesPerson) match.salesPerson = new ObjectId(salesPerson);
-        if (customer) match.client = new ObjectId(customer);
-        if (department) match.department = new ObjectId(department);
+        const match: any = { isDeleted: { $ne: true }, $and: [] as any[] };
+        const salesPersonMatch = reportMatch(reportIds(salesPerson), req.body.salesPersonNot);
+        if (salesPersonMatch) match.$and.push({ salesPerson: salesPersonMatch });
+        const customerMatch = reportMatch(reportIds(customer), req.body.customerNot);
+        if (customerMatch) match.client = customerMatch;
+        const departmentMatch = reportMatch(reportIds(department), req.body.departmentNot);
+        if (departmentMatch) match.department = departmentMatch;
         const dateFilter: Record<string, Date> = {};
         if (fromDate) dateFilter.$gte = new Date(fromDate);
         if (toDate) {
@@ -3571,6 +3579,7 @@ export const getEnquiryReport = async (req: Request, res: Response, next: NextFu
         if (access === 'created') match.salesPerson = new ObjectId(userId);
         else if (access === 'reported') match.salesPerson = { $in: reportedToUserIds };
         else if (access === 'createdAndReported') match.salesPerson = { $in: [...reportedToUserIds, new ObjectId(userId)] };
+        if (!match.$and.length) delete match.$and;
 
         const enquiries: any[] = await enquiryModel.find(match)
             .select('enquiryId title status date nextFollowUpDate client salesPerson department assignmentHistory preSale.presalePerson preSale.createdDate preSale.rejectionHistory')

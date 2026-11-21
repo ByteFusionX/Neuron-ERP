@@ -22,7 +22,8 @@ import { DataGridBreadcrumb, DataGridColumn } from 'src/app/shared/components/da
 import { KpiCardComponent, KpiDelta } from 'src/app/shared/components/kpi-card/kpi-card.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
-import { ReportFilterField, ReportFilterValues, ReportFiltersComponent } from 'src/app/shared/components/report-filters/report-filters.component';
+import { FilterPillsComponent } from 'src/app/shared/components/filter-bar/filter-pills.component';
+import { ReportFilterField, ReportFilterValues, ReportFiltersComponent, listParamsFrom, matchesReportValue, readReportValues } from 'src/app/shared/components/report-filters/report-filters.component';
 import { SfOption } from 'src/app/shared/components/smart-form';
 
 type TrendChart = {
@@ -121,7 +122,7 @@ const STAGE_LABELS: Record<allocateStatus, string> = {
   providers: [NumberFormatterPipe, DatePipe],
   imports: [
     ViewToggleComponent, NgIf, NgFor, NgClass, FormsModule, NgIcon,
-    ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, NumberFormatterPipe, ReportFiltersComponent,
+    ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, NumberFormatterPipe, ReportFiltersComponent, FilterPillsComponent,
   ],
 })
 export class JobReportComponent implements OnInit, OnDestroy {
@@ -189,7 +190,7 @@ export class JobReportComponent implements OnInit, OnDestroy {
 
     this.subscriptions.add(
       this._route.queryParams.subscribe((params) => {
-        this.filters = Object.fromEntries(this.filterFields.map((f) => [f.key, params[f.key] || null]));
+        this.filters = readReportValues(params, this.filterFields);
         // Filters are applied in the browser, so the jobs are fetched once and only re-sliced on later filter changes.
         if (this.loaded) this.applyFilters();
         else this.fetch();
@@ -282,9 +283,9 @@ export class JobReportComponent implements OnInit, OnDestroy {
     const to = this.filters['toDate'] ? Date.parse(this.filters['toDate']!) + 86400000 - 1 : null;
 
     this.jobs = this.allJobs.filter((j) => {
-      if (this.filters['salesPerson'] && j.salesPersonDetails?.[0]?._id !== this.filters['salesPerson']) return false;
-      if (this.filters['department'] && j.departmentDetails?.[0]?._id !== this.filters['department']) return false;
-      if (this.filters['customer'] && j.clientDetails?._id !== this.filters['customer']) return false;
+      if (!matchesReportValue(this.filters, 'salesPerson', j.salesPersonDetails?.[0]?._id)) return false;
+      if (!matchesReportValue(this.filters, 'department', j.departmentDetails?.[0]?._id)) return false;
+      if (!matchesReportValue(this.filters, 'customer', j.clientDetails?._id)) return false;
       const created = Date.parse(j.createdDate);
       if (from !== null && created < from) return false;
       if (to !== null && created > to) return false;
@@ -316,9 +317,9 @@ export class JobReportComponent implements OnInit, OnDestroy {
     const prevFrom = prevTo - (spanDays - 1) * day;
 
     this.previousJobs = this.allJobs.filter((j) => {
-      if (this.filters['salesPerson'] && j.salesPersonDetails?.[0]?._id !== this.filters['salesPerson']) return false;
-      if (this.filters['department'] && j.departmentDetails?.[0]?._id !== this.filters['department']) return false;
-      if (this.filters['customer'] && j.clientDetails?._id !== this.filters['customer']) return false;
+      if (!matchesReportValue(this.filters, 'salesPerson', j.salesPersonDetails?.[0]?._id)) return false;
+      if (!matchesReportValue(this.filters, 'department', j.departmentDetails?.[0]?._id)) return false;
+      if (!matchesReportValue(this.filters, 'customer', j.clientDetails?._id)) return false;
       const created = Date.parse(j.createdDate);
       return created >= prevFrom && created <= prevTo;
     });
@@ -350,7 +351,7 @@ export class JobReportComponent implements OnInit, OnDestroy {
 
   /** Query params handed to the List tab, so switching back keeps the same slice of data. */
   get listQueryParams(): Record<string, string | null> {
-    return { ...this.filters };
+    return listParamsFrom(this.filters);
   }
 
   // ---- KPIs ----------------------------------------------------------------------------------
@@ -589,6 +590,11 @@ export class JobReportComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** A KPI card opens the list on the matching status view, keeping the report's filters. */
+  openList(view = 'all'): void {
+    this._router.navigate(['/job-sheet'], { queryParams: { ...this.listQueryParams, view: view === 'all' ? null : view } });
+  }
+
   // ---- Attention -------------------------------------------------------------------------------
 
   private ageDays(date?: string): number {
@@ -708,8 +714,4 @@ export class JobReportComponent implements OnInit, OnDestroy {
     void this.excelExport.download('job-sheet-report.xlsx', sheets);
   }
 
-  /** The browser's own print-to-PDF, against a print stylesheet — no second rendering to keep in step. */
-  exportPdf(): void {
-    window.print();
-  }
 }

@@ -1,6 +1,6 @@
 <div class="er-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-2 sm:p-6 flex flex-col gap-3 sm:gap-5">
 
-    <div class="er-card shrink-0">
+    <div class="er-card shrink-0" style="overflow: visible">
         <div class="relative flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
             <div class="min-w-0">
                 <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate" aria-current="page">Presale</h2>
@@ -13,19 +13,15 @@
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
+                <app-report-filters #rf [fields]="filterFields" [values]="filters" (valuesChange)="onFilterChange($event)"></app-report-filters>
                 <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!report">
                     <ng-icon name="heroArrowDownTray" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
                     Excel
                 </app-action-button>
-                <app-action-button variant="tool" (click)="exportPdf()" [disabled]="!report">
-                    <ng-icon name="heroPrinter" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
-                    PDF
-                </app-action-button>
             </div>
         </div>
 
-        <app-report-filters [fields]="filterFields" [values]="filters" hint="Showing a filtered slice of the presale jobs."
-            (valuesChange)="onFilterChange($event)"></app-report-filters>
+        <app-filter-pills [bar]="rf.bar"></app-filter-pills>
     </div>
 
     <div *ngIf="loading" class="er-card grid place-content-center py-20 text-sm text-gray-500 dark:text-gray-400">Building report…</div>
@@ -37,12 +33,12 @@
 
     <ng-container *ngIf="!loading && report as r">
         <div class="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-5">
-            <app-kpi-card label="Total Jobs" [value]="r.kpi.count" [foot]="'sent to presale'" [delta]="delta('count')"></app-kpi-card>
-            <app-kpi-card label="Waiting" [value]="r.kpi.new" [foot]="r.avgWaitDays !== null ? 'avg ' + (r.avgWaitDays | number: '1.0-1') + ' days unassigned' : 'nothing unassigned'"></app-kpi-card>
-            <app-kpi-card label="With Engineers" [value]="r.kpi.assigned" [foot]="'assigned, in progress'"></app-kpi-card>
-            <app-kpi-card label="Completed" [value]="r.kpi.completed" valueClass="text-emerald-600 dark:text-emerald-400"
+            <app-kpi-card clickable (click)="openList('all')" label="Total Jobs" [value]="r.kpi.count" [foot]="'sent to presale'" [delta]="delta('count')"></app-kpi-card>
+            <app-kpi-card clickable (click)="openList('new')" label="Waiting" [value]="r.kpi.new" [foot]="r.avgWaitDays !== null ? 'avg ' + (r.avgWaitDays | number: '1.0-1') + ' days unassigned' : 'nothing unassigned'"></app-kpi-card>
+            <app-kpi-card clickable (click)="openList('assigned')" label="With Engineers" [value]="r.kpi.assigned" [foot]="'assigned, in progress'"></app-kpi-card>
+            <app-kpi-card clickable (click)="openList('completed')" label="Completed" [value]="r.kpi.completed" valueClass="text-emerald-600 dark:text-emerald-400"
                 [foot]="(r.kpi.completionRate | number: '1.0-0') + '% of all jobs'" [delta]="delta('completed')"></app-kpi-card>
-            <app-kpi-card class="max-lg:col-span-2" label="Rejected" [value]="r.kpi.rejected" valueClass="text-red-600 dark:text-red-400"
+            <app-kpi-card class="max-lg:col-span-2" clickable (click)="openList('resolve')" label="Rejected" [value]="r.kpi.rejected" valueClass="text-red-600 dark:text-red-400"
                 [foot]="(r.kpi.rejectionRate | number: '1.0-0') + '% of all jobs'" [delta]="delta('rejected')"></app-kpi-card>
         </div>
 

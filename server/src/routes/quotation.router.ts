@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     approveDeal,
     getApprovedDealSheet,
+    getDealReport,
     getDealSheet,
     getNextQuoteId,
     getLiveExchangeRate,
@@ -58,6 +59,7 @@ quoteRouter.post('/deal/revoke', requirePrivilege("dealSheet", "revoke", "dealSh
 quoteRouter.post('/deal/reset-workflow', requirePrivilege("dealSheet", "approve", "dealSheet"), resetDealWorkflow)
 quoteRouter.post('/deal/get', requirePrivilege("dealSheet"), getDealSheet)
 quoteRouter.post('/deal/approved/get', requirePrivilege("dealSheet"), getApprovedDealSheet)
+quoteRouter.post('/deal/report', requirePrivilege("dealSheet"), getDealReport)
 
 quoteRouter.use(requirePrivilege("quotation"));
 

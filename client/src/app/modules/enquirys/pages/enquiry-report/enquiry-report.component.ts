@@ -24,7 +24,8 @@ import { SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { KpiCardComponent, KpiDelta } from 'src/app/shared/components/kpi-card/kpi-card.component';
-import { ReportFilterField, ReportFilterValues, ReportFiltersComponent } from 'src/app/shared/components/report-filters/report-filters.component';
+import { FilterPillsComponent } from 'src/app/shared/components/filter-bar/filter-pills.component';
+import { ReportFilterField, ReportFilterValues, ReportFiltersComponent, listParamsFrom, matchesReportValue, readReportValues } from 'src/app/shared/components/report-filters/report-filters.component';
 import { DataGridBreadcrumb, DataGridColumn } from 'src/app/shared/components/data-grid/data-grid.model';
 
 type TrendChart = {
@@ -84,7 +85,7 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
   styleUrls: ['./enquiry-report.component.css'],
   imports: [ViewToggleComponent,
     NgIf, NgFor, NgClass, DatePipe, NgIcon,
-    ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, ReportFiltersComponent,
+    ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, ReportFiltersComponent, FilterPillsComponent,
   ],
 })
 export class EnquiryReportComponent implements OnInit, OnDestroy {
@@ -175,7 +176,7 @@ export class EnquiryReportComponent implements OnInit, OnDestroy {
 
     this.subscriptions.add(
       this._route.queryParams.subscribe((params) => {
-        this.filters = Object.fromEntries(this.filterFields.map((f) => [f.key, params[f.key] || null]));
+        this.filters = readReportValues(params, this.filterFields);
         this.fetch();
       })
     );
@@ -324,7 +325,7 @@ export class EnquiryReportComponent implements OnInit, OnDestroy {
 
   /** Query params handed to the List tab, so switching back keeps the same slice of data. */
   get listQueryParams(): Record<string, string | null> {
-    return { ...this.filters };
+    return listParamsFrom(this.filters);
   }
 
   // --- Pipeline -----------------------------------------------------------------------------
@@ -542,6 +543,11 @@ export class EnquiryReportComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** A KPI card opens the list with the report's filters plus the card's own status. */
+  openList(status?: string): void {
+    this._router.navigate(['/enquiry'], { queryParams: { ...this.listQueryParams, ...(status ? { status } : {}) } });
+  }
+
   // --- Attention ----------------------------------------------------------------------------
 
   get attentionItems(): EnquiryReportAttentionItem[] {
@@ -662,10 +668,6 @@ export class EnquiryReportComponent implements OnInit, OnDestroy {
     void this.excelExport.download('enquiry-report.xlsx', sheets);
   }
 
-  /** The browser's own print-to-PDF, against a print stylesheet — no second rendering to keep in step. */
-  exportPdf(): void {
-    window.print();
-  }
 
   trackById = (_: number, r: { _id?: string; id?: string }) => r._id ?? r.id ?? '';
 }
