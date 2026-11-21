@@ -272,7 +272,9 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Why Edit is disabled for this job, or '' when editing is allowed. */
   editBlockedReason(r: any): string {
-    if (this.activeTab === 'assigned' && ['assigned', 'in review', 'in revision'].includes(r?.preSale?.status ?? 'assigned')) return '';
+    // Follow the row's own stage, so a job opened from the All / follow-up tabs is editable too.
+    if (this.isQuoteOrigin(r) && this.rowStage(r) === 'new' && (r?.preSale?.status ?? 'new') === 'new') return '';
+    if (this.rowStage(r) === 'assigned' &&['assigned', 'in review', 'in revision'].includes(r?.preSale?.status ?? 'assigned')) return '';
     return this.nextStep(r) || 'This estimation can only be edited while the job is assigned to you.';
   }
 

@@ -2697,7 +2697,10 @@ export const cancelQuotePresale = async (req: any, res: Response, next: NextFunc
 export const uploadEstimations =async (req: any, res: Response, next: NextFunction) => {
     try {
         let { optionalItems, enquiryId, currency, totalDiscount, preSaleNote, selectedOption } = req.body;
-        const blocked = await presaleStepBlock(enquiryId, ['assigned', 'in revision', 'in review'])
+        // A job sent from a quote already carries its estimate, so it can be edited while still "new".
+        const originCheck: any = await enquiryModel.findById(enquiryId).select('preSale.origin').lean();
+        const quoteOrigin = originCheck?.preSale?.origin === 'quote';
+        const blocked = await presaleStepBlock(enquiryId, quoteOrigin ? ['new', 'assigned', 'in revision', 'in review'] : ['assigned', 'in revision', 'in review'])
             || await holderBlock(req, enquiryId);
         if (blocked) return res.status(blocked.code).json({ message: blocked.message });
         if (optionalItems !== undefined && !Array.isArray(optionalItems)) {
@@ -2757,7 +2760,8 @@ export const uploadEstimations =async (req: any, res: Response, next: NextFuncti
                 'preSale.estimations.version': version,
                 ...(fromQuote && totalDiscount !== undefined ? { 'preSale.estimations.totalDiscount': totalDiscount } : {}),
                 // The enquiry itself stays "in presales"; only the presale job moves to review.
-                'preSale.status': 'in review',
+                // A quote job edited before anyone is assigned stays in New.
+                'preSale.status': current?.preSale?.status === 'new' ? 'new' : 'in review',
             },
             $unset: {
                 'preSale.revisionComment': ''
