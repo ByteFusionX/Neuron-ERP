@@ -101,11 +101,12 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
     optionalItems: this.fb.array([] as any[]),
     totalDiscount: ['0', Validators.required],
     presaleNote: ['', Validators.required],
+    documents: [[] as File[]],
   });
 
   private readonly stepControls: Record<1 | 2, string[]> = {
     1: ['optionalItems'],
-    2: ['currency', 'totalDiscount', 'presaleNote'],
+    2: ['currency', 'totalDiscount', 'presaleNote', 'documents'],
   };
 
   get optionalItems(): FormArray {
@@ -156,7 +157,7 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
   private resetWizard(): void {
     this.seedOptionalItems = null;
     this.itemEntry ? this.itemEntry.reset() : this.optionalItems.clear();
-    this.form.reset({ currency: DEFAULT_CURRENCY, totalDiscount: '0', presaleNote: '' });
+    this.form.reset({ currency: DEFAULT_CURRENCY, totalDiscount: '0', presaleNote: '', documents: [] });
     this.step = 1;
   }
 
@@ -224,13 +225,14 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
       });
     });
 
-    const postBody = {
-      optionalItems,
-      enquiryId: this.enqId,
-      currency: v.currency,
-      preSaleNote: v.presaleNote,
-      totalDiscount: v.totalDiscount,
-    };
+    // Multipart so attached documents travel with the estimation; the item list goes as JSON.
+    const postBody = new FormData();
+    postBody.append('optionalItems', JSON.stringify(optionalItems));
+    postBody.append('enquiryId', this.enqId);
+    postBody.append('currency', v.currency || DEFAULT_CURRENCY);
+    postBody.append('preSaleNote', v.presaleNote || '');
+    postBody.append('totalDiscount', String(v.totalDiscount ?? '0'));
+    (v.documents || []).forEach((file: File) => postBody.append('presaleFiles', file, file.name));
 
     this._enquiryService.uploadEstimations(postBody).subscribe({
       next: (res) => {

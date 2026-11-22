@@ -73,6 +73,8 @@ export interface DetailDocument {
   size?: string;
   uploadedBy?: string;
   date?: string;
+  /** Set false to lock a single file when the list is removable. */
+  removable?: boolean;
 }
 
 export interface DetailTableColumn {

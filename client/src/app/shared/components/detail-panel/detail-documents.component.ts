@@ -47,7 +47,7 @@ const KIND_CLASSES: Record<string, string> = {
           class="grid h-7 w-7 shrink-0 place-content-center rounded-md text-gray-400 opacity-0 transition hover:bg-gray-100 hover:text-gray-700 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-gray-700 dark:hover:text-gray-200">
           <app-dp-icon name="download"></app-dp-icon>
         </button>
-        <button *ngIf="removable" type="button" (click)="onRemove(d)" [attr.aria-label]="'Remove ' + d.name"
+        <button *ngIf="removable && d.removable !== false" type="button" (click)="onRemove(d)" [attr.aria-label]="'Remove ' + d.name"
           class="grid h-7 w-7 shrink-0 place-content-center rounded-md text-gray-400 opacity-0 transition hover:bg-red-50 hover:text-red-600 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-red-950/40 dark:hover:text-red-400">
           <app-dp-icon name="close"></app-dp-icon>
         </button>

@@ -60,6 +60,7 @@ import { RevisionHistoryModalComponent, RevisionHistoryModalData } from 'src/app
 import { AuditLogEntry, AuditLogService } from 'src/app/core/services/audit-log.service';
 import { formatAuditDate, toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { presaleDocs, presaleFilesOf } from 'src/app/shared/utils/presale-documents';
 import { DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 import { filtersToParams, paramsToFilters } from 'src/app/shared/components/filter-bar/url-filters';
@@ -1037,7 +1038,7 @@ export class QuotationListComponent implements AfterViewInit {
       id: file.fileName,
       name: file.originalname,
       kind: this.lpoFileKind(file),
-    }));
+    })).concat(presaleDocs(row.enqId));
   }
 
   lpoRemoveDetails(row: Quotatation) {
@@ -1049,7 +1050,8 @@ export class QuotationListComponent implements AfterViewInit {
   }
 
   private findLpoFile(row: Quotatation, doc: DetailDocument): any {
-    return row.lpoFiles?.find((file: any) => file.fileName === doc.id);
+    return row.lpoFiles?.find((file: any) => file.fileName === doc.id)
+      ?? presaleFilesOf(row.enqId).find((file: any) => file.fileName === doc.id);
   }
 
   onLpoPreviewDoc(row: Quotatation, doc: DetailDocument): void {
@@ -1064,7 +1066,10 @@ export class QuotationListComponent implements AfterViewInit {
 
   onLpoRemoveDoc(row: Quotatation, doc: DetailDocument): void {
     const index = row.lpoFiles?.findIndex((file: any) => file.fileName === doc.id) ?? -1;
-    if (index < 0) { return; }
+    if (index < 0) {
+      if (presaleFilesOf(row.enqId).some((file: any) => file.fileName === doc.id)) this.toaster.warning('Presale documents can only be removed by presales');
+      return;
+    }
     this.onLpoRemoveFile(row, index);
   }
 

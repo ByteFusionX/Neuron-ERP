@@ -104,7 +104,7 @@ equiRouter.post('/quote-presale/:quoteId/accept', requireUnlessDenied("quotation
 equiRouter.post('/quote-presale/:quoteId/send-back', requireUnlessDenied("quotation", "edit"), sendBackQuotePresale);
 equiRouter.post('/quote-presale/:quoteId/cancel', requireUnlessDenied("quotation", "edit"), cancelQuotePresale);
 equiRouter.get('/feedback-request/:employeeId', getFeedbackRequestsById);
-equiRouter.post('/upload-estimation', requireUnlessDenied("assignedJob", "estimate", STRICT), uploadEstimations)
+equiRouter.post('/upload-estimation', requireUnlessDenied("assignedJob", "estimate", STRICT), upload.fields([{ name: 'presaleFiles' }]), uploadEstimations)
 equiRouter.post('/markAsSeenEstimation', markAsSeenEstimation);
 equiRouter.post('/markAsSeenedJob', markAsSeenJob);
 equiRouter.post('/markAsSeenedReassingedJob', markAsSeenReAssingedJob);

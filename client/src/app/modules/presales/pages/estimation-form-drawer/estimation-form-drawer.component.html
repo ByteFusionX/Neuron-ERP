@@ -53,6 +53,12 @@
                 </app-sf-field>
             </app-sf-section>
 
+            <app-sf-section title="Documents">
+                <app-sf-field full label="Attachments" hint="Added to the presale documents on save" [control]="form.controls.documents">
+                    <app-sf-file formControlName="documents"></app-sf-file>
+                </app-sf-field>
+            </app-sf-section>
+
             <app-sf-section title="Summary" columns="3">
                 <app-sf-field label="Total cost">
                     <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ itemTotals.totalCost | number: '1.2-2' }}</p>
@@ -78,7 +84,7 @@
             <app-action-button *ngIf="itemEntry.optionalItemsEnabled" variant="secondary" (click)="itemEntry.addItemAndJump(true)">
                 <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add optional item
             </app-action-button>
-            <app-action-button variant="secondary" icon="download" (click)="itemEntry.downloadExcelTemplate()" title="Download a blank Excel sheet in the import format">Excel template</app-action-button>
+            <app-action-button variant="secondary" icon="download" (click)="itemEntry.exportExcel()" title="Download the entered items as an Excel sheet in the import format">Export Excel</app-action-button>
             <app-action-button variant="secondary" icon="upload" [disabled]="itemEntry.excelBusy" (click)="itemEntry.pickExcelFile()" title="Add lines from a filled-in Excel template, one per row">Import Excel</app-action-button>
         </div>
         <span *ngIf="!isStepValid(step) && form.touched" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>

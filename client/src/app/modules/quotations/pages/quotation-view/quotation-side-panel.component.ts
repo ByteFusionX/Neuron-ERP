@@ -19,6 +19,7 @@ import { DetailTaskListComponent } from 'src/app/shared/components/detail-panel/
 import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
 import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/follow-up-panel/follow-up-panel.component';
 import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/follow-up-create-modal.component';
+import { presaleDocs, presaleFilesOf } from 'src/app/shared/utils/presale-documents';
 import { DetailDocument, DetailOverviewSection, DetailTableColumn, DetailTaskItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DataGridDetailTab } from 'src/app/shared/components/data-grid/data-grid.model';
 import { FollowUpViewModel, followUpViewer } from 'src/app/shared/utils/follow-up.util';
@@ -201,7 +202,7 @@ export class QuotationSidePanelComponent implements OnChanges {
       id: file.fileName,
       name: file.originalname,
       kind: this.lpoFileKind(file),
-    }));
+    })).concat(presaleDocs(row.enqId));
   }
 
   get canUploadLpo(): boolean {
@@ -468,7 +469,8 @@ export class QuotationSidePanelComponent implements OnChanges {
   ];
 
   private findLpoFile(doc: DetailDocument): any {
-    return this.quote.lpoFiles?.find((file: any) => file.fileName === doc.id);
+    return this.quote.lpoFiles?.find((file: any) => file.fileName === doc.id)
+      ?? presaleFilesOf(this.quote.enqId).find((file: any) => file.fileName === doc.id);
   }
 
   onLpoPreviewDoc(doc: DetailDocument): void {
@@ -504,7 +506,10 @@ export class QuotationSidePanelComponent implements OnChanges {
   onLpoRemoveDoc(doc: DetailDocument): void {
     const index = this.quote.lpoFiles?.findIndex((file: any) => file.fileName === doc.id) ?? -1;
     const file = this.quote.lpoFiles?.[index];
-    if (!file) return;
+    if (!file) {
+      if (presaleFilesOf(this.quote.enqId).some((f: any) => f.fileName === doc.id)) this.toaster.warning('Presale documents can only be removed by presales');
+      return;
+    }
     this._quoteService.removeLpo(file.fileName, this.quote._id as string).subscribe((response: any) => {
       if (response?.success) {
         this.quote.lpoFiles?.splice(index, 1);

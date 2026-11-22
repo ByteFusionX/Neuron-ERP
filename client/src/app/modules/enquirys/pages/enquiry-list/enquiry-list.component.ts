@@ -54,6 +54,7 @@ import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { DetailTaskListComponent } from 'src/app/shared/components/detail-panel/detail-task-list.component';
 import { DetailDocument, DetailOverviewSection, DetailTaskItem, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { presaleDocs } from 'src/app/shared/utils/presale-documents';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { ApprovalJourneyComponent } from 'src/app/shared/components/approval-journey/approval-journey.component';
 import { ApprovalJourneyStage } from 'src/app/shared/components/approval-journey/approval-journey.model';
@@ -971,12 +972,18 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   enquiryDocuments(row: getEnquiry): DetailDocument[] {
-    return (row.attachments ?? []).map((file: any) => ({
+    const own = (row.attachments ?? []).map((file: any) => ({
       id: file.fileName ?? file.filename,
       name: file.originalname,
       kind: file.mimetype?.split('/').pop(),
       size: file.size ? `${Math.max(1, Math.round(file.size / 1024))} KB` : undefined,
     }));
+    return [...own, ...presaleDocs(row)];
+  }
+
+  /** Presale files are owned by the presale job; they can be opened here but not removed. */
+  private isPresaleDoc(row: getEnquiry, id: string): boolean {
+    return !!(row.preSale as any)?.presaleFiles?.some((f: any) => f.fileName === id);
   }
 
   documentRemoveDetails(row: getEnquiry) {
@@ -993,7 +1000,8 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   };
 
   onDocumentOpen(row: getEnquiry, document: DetailDocument): void {
-    const fileName = row.attachments?.map((f: any) => f.fileName ?? f.filename).find((n: string) => n === document.id);
+    const fileName = row.attachments?.map((f: any) => f.fileName ?? f.filename).find((n: string) => n === document.id)
+      ?? (this.isPresaleDoc(row, document.id) ? document.id : undefined);
     if (!fileName) return;
     this._enquiryService.getFile(fileName).subscribe({
       next: (blob: Blob) => {
@@ -1012,6 +1020,10 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onDocumentRemove(row: getEnquiry, document: DetailDocument): void {
+    if (this.isPresaleDoc(row, document.id)) {
+      this.toaster.warning('Presale documents can only be removed by presales');
+      return;
+    }
     this._enquiryService.removeEnquiryAttachment(row._id, document.id).subscribe({
       next: (res: any) => {
         row.attachments = res?.data?.attachments ?? (row.attachments ?? []).filter((f: any) => (f.fileName ?? f.filename) !== document.id);
@@ -1023,7 +1035,8 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onDocumentDownload(row: getEnquiry, document: DetailDocument): void {
-    const file = row.attachments?.find((item: any) => (item.fileName ?? item.filename) === document.id);
+    const file = row.attachments?.find((item: any) => (item.fileName ?? item.filename) === document.id)
+      ?? (row.preSale as any)?.presaleFiles?.find((f: any) => f.fileName === document.id);
     if (file) this.onDownloadClicks({ ...file, fileName: (file as any).fileName ?? file.filename });
   }
 

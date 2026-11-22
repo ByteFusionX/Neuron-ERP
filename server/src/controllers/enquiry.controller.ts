@@ -2702,6 +2702,10 @@ export const cancelQuotePresale = async (req: any, res: Response, next: NextFunc
 export const uploadEstimations =async (req: any, res: Response, next: NextFunction) => {
     try {
         let { optionalItems, enquiryId, currency, totalDiscount, preSaleNote, selectedOption } = req.body;
+        // Multipart submissions (with attached documents) send the item list as a JSON string.
+        if (typeof optionalItems === 'string') {
+            try { optionalItems = JSON.parse(optionalItems); } catch { return res.status(400).json({ message: 'optionalItems must be a list' }); }
+        }
         // A job sent from a quote already carries its estimate, so it can be edited while still "new".
         const originCheck: any = await enquiryModel.findById(enquiryId).select('preSale.origin').lean();
         const quoteOrigin = originCheck?.preSale?.origin === 'quote';
@@ -2772,9 +2776,18 @@ export const uploadEstimations =async (req: any, res: Response, next: NextFuncti
                 'preSale.revisionComment': ''
             }
         };
+        // Documents attached in the estimation drawer join the job's presale files.
+        const newFiles = req.files?.presaleFiles ? await Promise.all(req.files.presaleFiles.map(async (file: any) => {
+            await uploadFileToAws(file.filename, file.path);
+            return { fileName: file.filename, originalname: file.originalname };
+        })) : [];
+        if (newFiles.length) update.$push = { 'preSale.presaleFiles': { $each: newFiles } };
+
         if (isNewVersion) {
             const submitter = await getEmployeeData(req.user);
+            update.$push = update.$push || {};
             update.$push = {
+                ...update.$push,
                 'preSale.estimationHistory': {
                     version: existing.version || historyCount + 1,
                     optionalItems: existing.optionalItems,
