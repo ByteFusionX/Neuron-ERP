@@ -89,7 +89,7 @@ export const getPresignedUploadUrl = async (
     return { uploadUrl, key };
 };
 
-// Export function to get a signed URL for downloading a file from AWS S3
+// Signed S3 download URL. Short-lived (5 min default) so a link handed to a since-blocked employee dies quickly.
 export const getFileUrlFromAws = async (fileName: string, expireTime: number | null = null): Promise<string> => {
     try {
         // Check if the file is available in the AWS S3 bucket
@@ -102,7 +102,7 @@ export const getFileUrlFromAws = async (fileName: string, expireTime: number | n
                 Key: fileName, // Specify the file name
             };
             const command = new GetObjectCommand(objectGetParams);
-            const url = await getSignedUrl(s3Client, command, { expiresIn: expireTime ?? undefined });
+            const url = await getSignedUrl(s3Client, command, { expiresIn: expireTime ?? 300 });
             return url;
         } else {
             // Return an error message if the file is not available in the bucket

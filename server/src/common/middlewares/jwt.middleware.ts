@@ -11,7 +11,7 @@ import Employee from "../../models/employee.model";
 //     return passport.authenticate('oauth-bearer', { session: false })(req, res, next);
 // }
 
-const EXEMPT_PATHS = ['/uploads', '/employee/login', '/employee/login-microsoft', '/employee/check', '/employee/refresh', '/employee/logout'];
+const EXEMPT_PATHS = ['/employee/login', '/employee/login-microsoft', '/employee/check', '/employee/refresh', '/employee/logout'];
 
 // Phone scanning a QR code is never logged in; the scan session id itself (unguessable,
 // only ever shared via the QR) is the security boundary for this one read-only lookup.

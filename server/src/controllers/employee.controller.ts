@@ -1367,6 +1367,8 @@ export const blockEmployee = async (
           celeb: true,
           $or: [{ employee: employee._id }, { title: new RegExp(fullName, "i") }],
         });
+        // Force logout now: revoke refresh sessions (renewal fails) and drop live sockets (open tabs react at once).
+        await revokeAllSessions(employee._id);
       }
       await logAudit(req, { entityType: 'employee', entityId: employee._id, entityLabel: employeeName(employee), action: isBlocked ? 'blocked' : 'unblocked', summary: `Employee ${isBlocked ? 'blocked' : 'unblocked'}` });
       return res.status(200).json({ isBlocked });

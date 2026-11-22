@@ -187,7 +187,7 @@ app.use('/search', searchRouter);
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');
-app.use('/uploads', express.static(uploadFolderPath));
+// /uploads is only multer's temp staging before S3; it is not served (files go through the authenticated /file routes).
 
 app.use(apiErrorHandler);
 

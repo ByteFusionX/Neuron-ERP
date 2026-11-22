@@ -316,7 +316,12 @@ export class NotificationService {
                 this.socket.connect(); // 'connect' handler re-auths with the fresh token
                 this.getEmployeeTextNotifications(); // catch up on anything missed while offline
             },
-            error: () => { this.recovering = false; },
+            error: (err) => {
+                this.recovering = false;
+                // Session revoked (e.g. account blocked): an ordinary request now 401s, and the error
+                // interceptor's failed renewal signs the user out and sends them to the login page.
+                if (err?.status === 401) this.getEmployeeTextNotifications();
+            },
         });
     }
 
