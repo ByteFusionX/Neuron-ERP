@@ -12,14 +12,15 @@ import {
     getQuoteViewers,
     getQuoteNote,
     getQuoteRevisions,
+    restoreQuoteRevision,
     getReportDetails,
     markAsQuotationSeened,
     markAsSeenDeal,
     rejectDeal,
     removeLpo,
-    revokeDeal,
     uploadDealDocuments,
     removeDealDocument,
+    revokeDeal,
     resetDealWorkflow,
     saveDealSheet,
     saveQuotation,
@@ -59,9 +60,9 @@ quoteRouter.post('/deal/approve', requirePrivilege("dealSheet", "approve", "deal
 quoteRouter.post('/deal/reject', requirePrivilege("dealSheet", "reject", "dealSheet"), rejectDeal)
 quoteRouter.post('/deal/revoke', requirePrivilege("dealSheet", "revoke", "dealSheet"), revokeDeal)
 quoteRouter.post('/deal/reset-workflow', requirePrivilege("dealSheet", "approve", "dealSheet"), resetDealWorkflow)
-quoteRouter.post('/deal/get', requirePrivilege("dealSheet"), getDealSheet)
 quoteRouter.post('/deal/:quoteId/documents', requirePrivilege("dealSheet"), upload.array('files'), uploadDealDocuments)
 quoteRouter.delete('/deal/:quoteId/documents/:fileName', requirePrivilege("dealSheet"), removeDealDocument)
+quoteRouter.post('/deal/get', requirePrivilege("dealSheet"), getDealSheet)
 quoteRouter.post('/deal/approved/get', requirePrivilege("dealSheet"), getApprovedDealSheet)
 quoteRouter.post('/deal/report', requirePrivilege("dealSheet"), getDealReport)
 
@@ -87,6 +88,7 @@ quoteRouter.post('/get/:id', getQuotationById)
 quoteRouter.get('/viewers/:quoteId', getQuoteViewers)
 quoteRouter.get('/note/:quoteId', getQuoteNote)
 quoteRouter.get('/revisions/:quoteId', getQuoteRevisions)
+quoteRouter.post('/revisions/:quoteId/restore', requireUnlessDenied("quotation", "edit"), restoreQuoteRevision)
 quoteRouter.post('/report', getReportDetails)
 quoteRouter.get('/total', totalQuotation)
 quoteRouter.post('/nextQuoteId', getNextQuoteId)

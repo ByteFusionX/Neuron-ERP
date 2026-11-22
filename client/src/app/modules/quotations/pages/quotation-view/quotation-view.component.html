@@ -96,9 +96,19 @@
 
       <!-- revisions (shown in the side panel) -->
       <ng-template #revisionsTpl><div>
-        <div *ngIf="viewedRevision !== null" class="mb-3 flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200">
-          <span>PDF download and preview use Rev {{ viewedRevision }}, dated {{ revisionDateLabel }}.</span>
-          <button type="button" class="font-semibold underline" (click)="clearViewedRevision()">Use current</button>
+        <div *ngIf="viewedRevision !== null" class="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200">
+          <div class="flex items-center justify-between gap-2">
+            <span>PDF download and preview use Rev {{ viewedRevision }}, dated {{ revisionDateLabel }}.</span>
+            <button type="button" class="shrink-0 font-semibold underline" (click)="clearViewedRevision()">Back to current</button>
+          </div>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <button type="button" class="rounded-md bg-violet-600 px-2.5 py-1 font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="isEditDisabled" [title]="isEditDisabled ? editDisabledReason : 'Make this revision the live quote; the deal sheet and purchasing then use it'"
+              (click)="restoreViewedRevision()">Restore as current</button>
+            <button type="button" class="rounded-md border border-violet-300 bg-white px-2.5 py-1 font-semibold text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-500/40 dark:bg-transparent dark:text-violet-200"
+              [disabled]="isEditDisabled" [title]="isEditDisabled ? editDisabledReason : 'Open the editor filled with this revision'"
+              (click)="editFromViewedRevision()">Edit from this revision</button>
+          </div>
         </div>
         <app-revision-history compact [data]="revisionSource" [reloadKey]="revision" (revisionSelected)="onRevisionSelected($event)"></app-revision-history>
       </div></ng-template>
@@ -190,8 +200,8 @@
     </ng-container>
   </app-view-estimation>
 
-  <app-quote-form-drawer [open]="editOpen" mode="edit" [quote]="quoteData"
-    (saved)="onQuoteEdited()" (closed)="editOpen = false"></app-quote-form-drawer>
+  <app-quote-form-drawer [open]="editOpen" mode="edit" [quote]="editSeed || quoteData"
+    (saved)="onQuoteEdited()" (closed)="editOpen = false; editSeed = null"></app-quote-form-drawer>
 
   <app-deal-form class="contents" [quotation]="dealQuote" (saved)="onDealSaved()" (closed)="dealQuote = null"></app-deal-form>
 

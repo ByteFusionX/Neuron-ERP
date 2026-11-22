@@ -873,7 +873,45 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     if (this.isEditDisabled) {
       return;
     }
+    this.editSeed = null;
     this.editOpen = true;
+  }
+
+  /** Quote the edit drawer starts from; set when editing from a past revision, otherwise the live quote. */
+  editSeed: any = null;
+
+  /** Opens the edit drawer filled with the viewed revision's content; dates stay as they are now. Saving makes it a new revision. */
+  editFromViewedRevision(): void {
+    if (this.isEditDisabled || this.viewedRevision === null) return;
+    const merged: any = this.quoteForActiveRevision();
+    const live: any = this.quoteData;
+    this.editSeed = { ...merged, date: live.date, quotedDate: live.quotedDate, closingDate: live.closingDate, validityDate: live.validityDate };
+    this.editOpen = true;
+  }
+
+  /** Puts the viewed revision's content back as the live quote, so the deal sheet and purchasing work from it. */
+  async restoreViewedRevision(): Promise<void> {
+    const q = this.quoteData;
+    const rev = this.viewedRevision;
+    if (!q?._id || rev === null || this.isEditDisabled) return;
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'warning',
+      title: `Restore Rev ${rev} as current`,
+      message: `The items, terms and notes of Rev ${rev} replace the current content. The current content (Rev ${this.revision}) is kept in the revision history, and the dates stay as they are.`,
+      details: [{ label: 'Quote', value: q.quoteId ?? '' }],
+      reason: true,
+      reasonLabel: 'Reason (optional)',
+      confirmLabel: 'Restore',
+    });
+    if (!confirmed) return;
+    this.quotationService.restoreQuoteRevision(q._id as string, rev, reason).subscribe({
+      next: () => {
+        this.toast.success(`Rev ${rev} is now the current content`);
+        this.viewedRevision = null;
+        this.reload$.next();
+      },
+      error: (e) => this.toast.error(e?.error?.message || 'Could not restore the revision.'),
+    });
   }
 
   onQuoteEdited(): void {

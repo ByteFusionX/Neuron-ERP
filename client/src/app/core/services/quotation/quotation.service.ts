@@ -754,4 +754,9 @@ export class QuotationService {
     return this.http.get<QuoteRevisionsResponse>(`${this.api}/quotation/revisions/${quoteId}`);
   }
 
+  /** Makes a past revision the live content again; the replaced content is kept as a new revision. */
+  restoreQuoteRevision(quoteId: string, revision: number, reason?: string): Observable<any> {
+    return this.http.post(`${this.api}/quotation/revisions/${quoteId}/restore`, { revision, reason });
+  }
+
 }

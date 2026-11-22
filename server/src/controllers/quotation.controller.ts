@@ -4325,3 +4325,36 @@ export const buildFieldChanges =(existingDoc: any, updatedData: any): { field: s
     }
     return changes;
 }
+
+/**
+ * Makes a past revision's content the live quote again. It goes through the normal edit, so every edit lock still
+ * applies, and the content being replaced is kept as its own revision. Dates are left as they are now, so restoring
+ * an old revision does not bring back a closing date that has already passed.
+ */
+export const restoreQuoteRevision = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId } = req.params;
+        const rev = Number(req.body?.revision);
+        const quote = await Quotation.findById(quoteId).select('+revisions revision').lean();
+        if (!quote) return res.status(404).json({ message: 'Quote not found' });
+        if (rev === (quote.revision ?? 0)) return res.status(400).json({ message: 'That revision is already the current one' });
+        const snap = ((quote.revisions || []) as any[]).find((r) => r.revision === rev)?.snapshot;
+        if (!snap) return res.status(404).json({ message: `Revision ${rev} was not found` });
+
+        req.body = {
+            subject: snap.subject,
+            currency: snap.currency,
+            optionalItems: snap.optionalItems,
+            customerNote: snap.customerNote,
+            termsAndCondition: snap.termsAndCondition,
+            paymentTerms: snap.paymentTerms,
+            deliveryTerms: snap.deliveryTerms,
+            deliveryLocation: snap.deliveryLocation,
+            editReason: String(req.body?.reason || '').trim() || `Restored from Rev ${rev}`,
+        };
+        Object.keys(req.body).forEach((k) => req.body[k] === undefined && delete req.body[k]);
+        return updateQuotation(req, res, next);
+    } catch (error) {
+        next(error);
+    }
+}
