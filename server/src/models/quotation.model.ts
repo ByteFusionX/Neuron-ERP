@@ -198,6 +198,7 @@ interface Quotation extends Document {
     createdByUser?: Types.ObjectId;
     lpoFiles: [];
     dealData: Deal;
+    dealDocuments?: any[];
     enqId: Types.ObjectId;
     isDeleted: boolean;
     rfqNo: string;
@@ -689,6 +690,8 @@ const quotationSchema = new Schema<Quotation>({
     dealData: {
         type: dealDatas
     },
+    // Files added on the deal sheet itself, any status; removable unlike the quote's LPO/convert attachments.
+    dealDocuments: [],
     enqId: {
         type: Schema.Types.ObjectId,
         ref: 'Enquiry'

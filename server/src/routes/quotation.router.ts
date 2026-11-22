@@ -18,6 +18,8 @@ import {
     rejectDeal,
     removeLpo,
     revokeDeal,
+    uploadDealDocuments,
+    removeDealDocument,
     resetDealWorkflow,
     saveDealSheet,
     saveQuotation,
@@ -58,6 +60,8 @@ quoteRouter.post('/deal/reject', requirePrivilege("dealSheet", "reject", "dealSh
 quoteRouter.post('/deal/revoke', requirePrivilege("dealSheet", "revoke", "dealSheet"), revokeDeal)
 quoteRouter.post('/deal/reset-workflow', requirePrivilege("dealSheet", "approve", "dealSheet"), resetDealWorkflow)
 quoteRouter.post('/deal/get', requirePrivilege("dealSheet"), getDealSheet)
+quoteRouter.post('/deal/:quoteId/documents', requirePrivilege("dealSheet"), upload.array('files'), uploadDealDocuments)
+quoteRouter.delete('/deal/:quoteId/documents/:fileName', requirePrivilege("dealSheet"), removeDealDocument)
 quoteRouter.post('/deal/approved/get', requirePrivilege("dealSheet"), getApprovedDealSheet)
 quoteRouter.post('/deal/report', requirePrivilege("dealSheet"), getDealReport)
 

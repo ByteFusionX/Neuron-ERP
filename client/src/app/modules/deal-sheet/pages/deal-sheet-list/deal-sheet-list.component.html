@@ -41,6 +41,11 @@
             </div>
         </ng-template>
 
+        <!-- left: Documents tab only (outline) -->
+        <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
+            <app-action-button *ngIf="tab === 'documents'" variant="outline" icon="upload" (click)="startDealDocUpload(row)">Upload</app-action-button>
+        </ng-template>
+
         <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row let-tab="tab">
             <app-action-button variant="primary" (click)="openDealSheetView(row)" icon="view">Detail view</app-action-button>
@@ -70,9 +75,11 @@
 
                 <ng-container *ngSwitchCase="'documents'">
                     <app-detail-documents
-                        title="Customer LPO"
-                        emptyMessage="No customer LPO files available."
+                        title="Documents"
+                        emptyMessage="No documents yet."
+                        removable
                         [documents]="dealDocuments(row)"
+                        (remove)="onDealDocRemove(row, $event)"
                         (open)="onDealDocPreview(row, $event)"
                         (download)="onDealDocDownload(row, $event)"></app-detail-documents>
                 </ng-container>

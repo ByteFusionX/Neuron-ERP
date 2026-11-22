@@ -131,9 +131,12 @@
                 </ng-container>
 
                 <app-detail-documents *ngSwitchCase="'documents'"
-                    title="Customer LPO"
+                    title="Documents"
                     [documents]="documents"
-                    emptyMessage="No customer LPO files available."
+                    emptyMessage="No documents yet."
+                    uploadable removable
+                    (upload)="startDocumentUpload()"
+                    (remove)="onDocumentRemove($event)"
                     (open)="onDocumentOpen($event)"
                     (download)="onDocumentDownload($event)"></app-detail-documents>
 

@@ -59,6 +59,8 @@ import { describeApprovalGateError } from 'src/app/shared/utils/approval-gate-er
 import { dealSheetPriceDetails, selectedDealItems } from 'src/app/shared/utils/deal-pricing.util';
 import { statusLabel } from 'src/app/shared/utils/text-format.util';
 import { ModalService } from 'src/app/shared/components/modal';
+import { DocumentUploadModalComponent, DocumentUploadModalResult } from 'src/app/shared/components/detail-panel/document-upload-modal/document-upload-modal.component';
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 import { ResetWorkflowComponent, ResetWorkflowModalData } from 'src/app/modules/presales/pages/reset-workflow/reset-workflow.component';
 import { WorkflowService } from 'src/app/core/services/workflow.service';
@@ -809,22 +811,61 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     return rows;
   }
 
+  /** LPO files and convert-time attachments come from the quote and stay locked; deal uploads can be removed. */
   dealDocuments(row: Quotatation): DetailDocument[] {
     const docs: DetailDocument[] = [];
-    (row.lpoFiles || []).forEach((file: any) =>
-      docs.push(this.fileDocument(file, 'LPO')),
-    );
+    (row.lpoFiles || []).forEach((file: any) => docs.push(this.fileDocument(file, 'LPO', 'LPO', false)));
+    ((row.dealData as any)?.attachments || []).forEach((file: any) => docs.push(this.fileDocument(file, 'QUOTE', 'From quotation', false)));
+    ((row as any).dealDocuments || []).forEach((file: any) => docs.push(this.fileDocument(file, 'DEAL', file.uploadedBy || 'Deal sheet', true, file.uploadedAt)));
     return docs;
   }
 
-  private fileDocument(file: any, source: string): DetailDocument {
+  private fileDocument(file: any, source: string, label: string, removable: boolean, date?: string): DetailDocument {
     const name = file.originalname || file.fileName || 'Document';
     return {
       id: `${source}:${file.fileName}`,
       name,
-      uploadedBy: source,
+      uploadedBy: label,
+      date,
+      removable,
       kind: (name.split('.').pop() || 'FILE').toUpperCase().slice(0, 4),
     };
+  }
+
+  readonly acceptedFiles = ALLOWED_UPLOAD_TYPES;
+  uploadingDealDocs = false;
+
+  startDealDocUpload(row: Quotatation): void {
+    this.modal.open<DocumentUploadModalResult>(DocumentUploadModalComponent, {
+      width: '680px',
+      data: { context: row.dealData?.dealId || row.quoteId, acceptedFiles: this.acceptedFiles, title: 'Upload deal documents' },
+    }).afterClosed().subscribe((result) => {
+      if (!result?.files?.length || !row._id) return;
+      this.uploadingDealDocs = true;
+      this._quoteService.uploadDealDocuments(row._id, result.files).subscribe({
+        next: (res) => {
+          (row as any).dealDocuments = res.data || [];
+          this.uploadingDealDocs = false;
+          this.toaster.success('Documents uploaded');
+        },
+        error: (err) => {
+          this.uploadingDealDocs = false;
+          this.toaster.error(err?.error?.message || 'Failed to upload documents');
+        },
+      });
+    });
+  }
+
+  onDealDocRemove(row: Quotatation, doc: DetailDocument): void {
+    const [source, ...rest] = doc.id.split(':');
+    if (source !== 'DEAL' || !row._id) return;
+    this._quoteService.removeDealDocument(row._id, rest.join(':')).subscribe({
+      next: (res) => {
+        (row as any).dealDocuments = res.data || [];
+        this.toaster.success('Document deleted');
+      },
+      error: (err) => this.toaster.error(err?.error?.message || 'Failed to delete document'),
+    });
   }
 
   onDealDocPreview(row: Quotatation, doc: DetailDocument): void {
@@ -838,8 +879,10 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   }
 
   private findDocumentFile(row: Quotatation, id: string): any {
-    const [, fileName] = id.split(':');
-    return (row.lpoFiles || []).find((f: any) => f.fileName === (fileName || id));
+    const [source, ...rest] = id.split(':');
+    const fileName = rest.join(':') || id;
+    const pool = source === 'DEAL' ? (row as any).dealDocuments : source === 'QUOTE' ? (row.dealData as any)?.attachments : row.lpoFiles;
+    return (pool || []).find((f: any) => f.fileName === fileName);
   }
 
   historyFor(row: Quotatation): Observable<DetailTimelineEntry[]> {

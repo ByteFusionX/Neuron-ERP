@@ -4110,6 +4110,58 @@ export const getQuoteRevisions = async (req: Request, res: Response, next: NextF
     }
 }
 
+/** Adds files to a deal sheet's own documents; allowed at any deal status. */
+export const uploadDealDocuments = async (req: any, res: Response, next: NextFunction) => {
+    try {
+        const files = req.files || [];
+        if (!files.length) return res.status(400).json({ success: false, message: 'No files uploaded' });
+        const quote = await Quotation.findById(req.params.quoteId);
+        if (!quote || quote.isDeleted || !quote.dealData) {
+            return res.status(404).json({ success: false, message: 'Deal sheet not found' });
+        }
+        const userData = await getEmployeeData(req.user);
+        const uploadedBy = [userData?.firstName, userData?.lastName].filter(Boolean).join(' ');
+        const newFiles = await Promise.all(files.map(async (file: any) => {
+            await uploadFileToAws(file.filename, file.path, file.mimetype);
+            return { fileName: file.filename, originalname: file.originalname, uploadedBy, uploadedById: userData?._id, uploadedAt: new Date() };
+        }));
+        const updated = await Quotation.findByIdAndUpdate(quote._id, { $push: { dealDocuments: { $each: newFiles } } }, { new: true });
+        await logAudit(req, {
+            entityType: 'quotation', entityId: quote._id, entityLabel: (quote as any).dealData?.dealId || (quote as any).quoteId,
+            action: 'updated', summary: `${newFiles.length} deal document${newFiles.length > 1 ? 's' : ''} uploaded`,
+        });
+        return res.status(200).json({ success: true, data: updated?.dealDocuments || [] });
+    } catch (error) {
+        next(error);
+    }
+}
+
+/** Removes a deal sheet's own document. LPO files and convert-time attachments are not in this list, so they stay. */
+export const removeDealDocument = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId, fileName } = req.params;
+        const quote = await Quotation.findById(quoteId);
+        if (!quote || quote.isDeleted) {
+            return res.status(404).json({ success: false, message: 'Deal sheet not found' });
+        }
+        const current = (quote as any).dealDocuments || [];
+        const remaining = current.filter((f: any) => f.fileName !== fileName);
+        if (remaining.length === current.length) {
+            return res.status(404).json({ success: false, message: 'Document not found or cannot be deleted' });
+        }
+        await Quotation.updateOne({ _id: quote._id }, { $set: { dealDocuments: remaining } });
+        await deleteFileFromAws(fileName);
+        const removed = current.find((f: any) => f.fileName === fileName);
+        await logAudit(req, {
+            entityType: 'quotation', entityId: quote._id, entityLabel: (quote as any).dealData?.dealId || (quote as any).quoteId,
+            action: 'updated', summary: `Deal document "${removed?.originalname || fileName}" deleted`,
+        });
+        return res.status(200).json({ success: true, data: remaining });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export const removeLpo = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { quoteId, fileName } = req.params;

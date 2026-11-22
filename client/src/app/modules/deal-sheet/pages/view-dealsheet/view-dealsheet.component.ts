@@ -1,6 +1,9 @@
 import { ScrollTabsComponent } from 'src/app/shared/components/scroll-tabs/scroll-tabs.component';
 import { Component, OnInit, inject } from '@angular/core';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { ModalService } from 'src/app/shared/components/modal';
+import { DocumentUploadModalComponent, DocumentUploadModalResult } from 'src/app/shared/components/detail-panel/document-upload-modal/document-upload-modal.component';
+import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
 import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 import {
@@ -174,6 +177,7 @@ export class ViewDealsheetComponent implements OnInit {
   itemRows: Record<string, any>[] = [];
   documents: DetailDocument[] = [];
   private docFiles = new Map<string, any>();
+  private modal = inject(ModalService);
   private boldPipe = new ParseBoldTextPipe();
   private bracketsPipe = new ParseBracketsTextPipe(inject(DomSanitizer));
   // Same column set as the quotation view's item table, plus the deal-only supplier column.
@@ -879,19 +883,56 @@ export class ViewDealsheetComponent implements OnInit {
   private buildDocuments(): DetailDocument[] {
     const docs: DetailDocument[] = [];
     this.docFiles.clear();
-    const add = (file: any, source: string) => {
+    const add = (file: any, source: string, label: string, removable: boolean) => {
       const name = file.originalname || file.fileName || 'Document';
       const id = `${source}:${file.fileName}`;
       this.docFiles.set(id, file);
       docs.push({
         id,
         name,
-        uploadedBy: source,
+        uploadedBy: label,
+        date: file.uploadedAt,
+        removable,
         kind: (name.split('.').pop() || 'FILE').toUpperCase().slice(0, 4),
       });
     };
-    (this.data.quoteData.lpoFiles || []).forEach((file: any) => add(file, 'LPO'));
+    // Quote-side files (LPO, convert-time attachments) are locked; deal uploads can be removed at any status.
+    (this.data.quoteData.lpoFiles || []).forEach((file: any) => add(file, 'LPO', 'LPO', false));
+    ((this.data.quoteData.dealData as any)?.attachments || []).forEach((file: any) => add(file, 'QUOTE', 'From quotation', false));
+    ((this.data.quoteData as any).dealDocuments || []).forEach((file: any) => add(file, 'DEAL', file.uploadedBy || 'Deal sheet', true));
     return docs;
+  }
+
+  startDocumentUpload(): void {
+    const q = this.data.quoteData;
+    this.modal.open<DocumentUploadModalResult>(DocumentUploadModalComponent, {
+      width: '680px',
+      data: { context: q.dealData?.dealId || q.quoteId, acceptedFiles: ALLOWED_UPLOAD_TYPES, title: 'Upload deal documents' },
+    }).afterClosed().subscribe((result) => {
+      if (!result?.files?.length || !q._id) return;
+      this._quoteService.uploadDealDocuments(q._id, result.files).subscribe({
+        next: (res) => {
+          (q as any).dealDocuments = res.data || [];
+          this.documents = this.buildDocuments();
+          this.toast.success('Documents uploaded');
+        },
+        error: (err) => this.toast.error(err?.error?.message || 'Failed to upload documents'),
+      });
+    });
+  }
+
+  onDocumentRemove(doc: DetailDocument): void {
+    const [source, ...rest] = doc.id.split(':');
+    const q = this.data.quoteData;
+    if (source !== 'DEAL' || !q._id) return;
+    this._quoteService.removeDealDocument(q._id, rest.join(':')).subscribe({
+      next: (res) => {
+        (q as any).dealDocuments = res.data || [];
+        this.documents = this.buildDocuments();
+        this.toast.success('Document deleted');
+      },
+      error: (err) => this.toast.error(err?.error?.message || 'Failed to delete document'),
+    });
   }
 
   onDocumentOpen(doc: DetailDocument): void {

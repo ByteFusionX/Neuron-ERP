@@ -205,6 +205,16 @@ export class QuotationService {
     return this.http.post(`${this.api}/quotation/markAsQuotationSeened`, { quoteId, userId })
   }
 
+  uploadDealDocuments(quoteId: string, files: File[]): Observable<{ success: boolean; data: any[] }> {
+    const body = new FormData();
+    files.forEach((file) => body.append('files', file, file.name));
+    return this.http.post<{ success: boolean; data: any[] }>(`${this.api}/quotation/deal/${quoteId}/documents`, body);
+  }
+
+  removeDealDocument(quoteId: string, fileName: string): Observable<{ success: boolean; data: any[] }> {
+    return this.http.delete<{ success: boolean; data: any[] }>(`${this.api}/quotation/deal/${quoteId}/documents/${encodeURIComponent(fileName)}`);
+  }
+
   removeLpo(fileName: string, quoteId: string): Observable<any> {
     return this.http.delete(`${this.api}/quotation/lpo/${quoteId}/${fileName}`)
   }
