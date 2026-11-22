@@ -125,8 +125,8 @@ export const endSession = async (req: Request, res: Response) => {
 };
 
 /** End every session an employee has (sign out everywhere, block, delete). Their push subscriptions go with them. */
-export const revokeAllSessions = async (employeeId: any) => {
-  await PushSubscription.deleteMany({ employee: employeeId });
+export const revokeAllSessions = async (employeeId: any, opts: { keepPushSubscriptions?: boolean } = {}) => {
+  if (!opts.keepPushSubscriptions) await PushSubscription.deleteMany({ employee: employeeId });
   disconnectUserSockets(employeeId);
   return RefreshToken.updateMany({ employee: employeeId, revokedAt: { $exists: false } }, { $set: { revokedAt: new Date() } });
 };

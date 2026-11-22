@@ -1361,14 +1361,9 @@ export const blockEmployee = async (
         { new: true },
       );
       if (isBlocked) {
-        // Pull every birthday/anniversary post (past ones stay in the announcements inbox); older posts carry no employee link, so also match by name in the title
-        const fullName = `${employee.firstName} ${employee.lastName}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        await announcementModel.deleteMany({
-          celeb: true,
-          $or: [{ employee: employee._id }, { title: new RegExp(fullName, "i") }],
-        });
+        // Block deletes nothing: celebration posts are hidden at read time, push subscriptions are kept (unused while blocked).
         // Force logout now: revoke refresh sessions (renewal fails) and drop live sockets (open tabs react at once).
-        await revokeAllSessions(employee._id);
+        await revokeAllSessions(employee._id, { keepPushSubscriptions: true });
       }
       await logAudit(req, { entityType: 'employee', entityId: employee._id, entityLabel: employeeName(employee), action: isBlocked ? 'blocked' : 'unblocked', summary: `Employee ${isBlocked ? 'blocked' : 'unblocked'}` });
       return res.status(200).json({ isBlocked });

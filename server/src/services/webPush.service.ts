@@ -2,6 +2,7 @@ import webpush from 'web-push';
 import dotenv from 'dotenv';
 import PushSubscription from '../models/pushSubscription.model';
 import RefreshToken from '../models/refreshToken.model';
+import Employee from '../models/employee.model';
 
 dotenv.config();
 
@@ -40,7 +41,9 @@ export const sendWebPushToEmployees = async (employeeIds: string[], payload: Web
     }
 
     try {
-        const all = await PushSubscription.find({ employee: { $in: employeeIds } });
+        // Skip blocked employees entirely so their subscriptions are neither used nor cleaned up while blocked
+        const activeIds = await Employee.distinct('_id', { _id: { $in: employeeIds }, isBlocked: { $ne: true } });
+        const all = await PushSubscription.find({ employee: { $in: activeIds } });
         // A subscription is only valid while its login session is live; drop the rest.
         const families = [...new Set(all.map((s) => s.family).filter((f): f is string => !!f))];
         const live = new Set(await RefreshToken.distinct('family', { family: { $in: families }, revokedAt: { $exists: false }, expiresAt: { $gt: new Date() } }));
