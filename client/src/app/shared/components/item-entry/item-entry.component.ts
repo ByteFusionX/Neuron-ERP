@@ -2136,8 +2136,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   // --- suggestions -----------------------------------------------------------
 
   onItemNameInput(i: number, j: number): void {
-    const term = ((this.itemsAt(i).at(j) as FormGroup).get('itemName')?.value || '').toString().trim();
-    this.queueSearch(`${i}-${j}`, term, '');
+    // Item names are free text; product suggestions only come up on the description line.
+    this.closeSuggestions();
   }
 
   onDetailInput(i: number, j: number, k: number): void {
