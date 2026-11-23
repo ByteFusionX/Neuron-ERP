@@ -78,12 +78,15 @@ export class InvoiceService {
         const tableBody: any[] = [];
 
         items.forEach((item: any, index: number) => {
+            // Customer invoices store unitCost/totalCost; proformas store unitPrice/amount.
+            const lineTotal = Number(item.amount ?? item.totalCost) || 0;
+            const unit = Number(item.unitPrice ?? item.unitCost) || (item.quantity ? lineTotal / item.quantity : 0);
             tableBody.push([
                 { text: String(index + 1).padStart(2, '0'), style: 'tableText', alignment: 'center' },
                 { text: item.description || '-', style: 'tableText' },
                 { text: this.fmt(item.quantity || 0, 0, 3), style: 'tableText', alignment: 'center' },
-                { text: this.fmt((item.amount / item.quantity) || 0), style: 'tableText', alignment: 'right' },
-                { text: this.fmt(item.amount || 0), style: 'tableText', alignment: 'right' }
+                { text: this.fmt(unit), style: 'tableText', alignment: 'right' },
+                { text: this.fmt(lineTotal), style: 'tableText', alignment: 'right' }
             ]);
         });
 
