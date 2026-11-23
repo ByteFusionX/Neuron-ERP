@@ -2225,6 +2225,7 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         const { editReason } = req.body;
         delete quoteData.editReason;
         delete quoteData.editHistory;
+        delete quoteData.notes;
         delete quoteData.revision;
         delete quoteData.revisions;
         delete quoteData.exchangeRate;
@@ -2436,6 +2437,74 @@ export const updateQuoteFollowUp = async (req: Request, res: Response, next: Nex
             { new: true }
         );
         return res.status(200).json(updated);
+    } catch (error) {
+        next(error);
+    }
+};
+
+/** Adds a free-text note (title + body) to a quote; returns the full notes list, oldest first. */
+export const addQuoteNote = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId } = req.params;
+        if (!ObjectId.isValid(quoteId)) return res.status(400).json({ success: false, message: 'Invalid quotation id' });
+        const title = String(req.body?.title ?? '').trim();
+        const note = String(req.body?.note ?? '').trim();
+        if (!title || title.length > 150) return res.status(400).json({ success: false, message: 'Title is required (max 150 characters).' });
+        if (!note || note.length > 2000) return res.status(400).json({ success: false, message: 'Note is required (max 2000 characters).' });
+        const actor: any = await getEmployeeData(req.user);
+        const entry = {
+            title,
+            note,
+            createdBy: actor?._id,
+            createdByName: `${actor?.firstName ?? ''} ${actor?.lastName ?? ''}`.trim(),
+            createdAt: new Date(),
+        };
+        const updated = await Quotation.findOneAndUpdate(
+            { _id: quoteId, isDeleted: { $ne: true } },
+            { $push: { notes: entry } },
+            { new: true }
+        ).select('notes').lean();
+        if (!updated) return res.status(404).json({ success: false, message: 'Quote not found' });
+        return res.status(200).json({ success: true, notes: updated.notes ?? [] });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/** Edits (PATCH) or removes (DELETE) one note. Edit is blocked once the quote is Won; delete is allowed at any time. */
+export const updateQuoteNote = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId, noteId } = req.params;
+        if (!ObjectId.isValid(quoteId) || !ObjectId.isValid(noteId)) return res.status(400).json({ success: false, message: 'Invalid id' });
+        const title = String(req.body?.title ?? '').trim();
+        const note = String(req.body?.note ?? '').trim();
+        if (!title || title.length > 150) return res.status(400).json({ success: false, message: 'Title is required (max 150 characters).' });
+        if (!note || note.length > 2000) return res.status(400).json({ success: false, message: 'Note is required (max 2000 characters).' });
+        const quote: any = await Quotation.findOne({ _id: quoteId, isDeleted: { $ne: true } }).select('status notes');
+        if (!quote) return res.status(404).json({ success: false, message: 'Quote not found' });
+        if (quote.status === 'Won') return res.status(400).json({ success: false, message: 'Notes cannot be changed once the quote is won.' });
+        const target = quote.notes.id(noteId);
+        if (!target) return res.status(404).json({ success: false, message: 'Note not found' });
+        target.title = title;
+        target.note = note;
+        await quote.save();
+        return res.status(200).json({ success: true, notes: quote.notes });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const deleteQuoteNote = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId, noteId } = req.params;
+        if (!ObjectId.isValid(quoteId) || !ObjectId.isValid(noteId)) return res.status(400).json({ success: false, message: 'Invalid id' });
+        const quote: any = await Quotation.findOne({ _id: quoteId, isDeleted: { $ne: true } }).select('status notes');
+        if (!quote) return res.status(404).json({ success: false, message: 'Quote not found' });
+        const target = quote.notes.id(noteId);
+        if (!target) return res.status(404).json({ success: false, message: 'Note not found' });
+        target.deleteOne();
+        await quote.save();
+        return res.status(200).json({ success: true, notes: quote.notes });
     } catch (error) {
         next(error);
     }

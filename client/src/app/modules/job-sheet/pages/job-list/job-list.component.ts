@@ -17,6 +17,9 @@ import { JobHistoryService } from 'src/app/core/services/job/job-history.service
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { ModalService } from 'src/app/shared/components/modal';
+import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
+import { QuoteNoteModalComponent, QuoteNoteModalResult } from 'src/app/modules/quotations/pages/quote-notes/quote-note-modal.component';
+import { QuoteNotesPanelComponent } from 'src/app/modules/quotations/pages/quote-notes/quote-notes-panel.component';
 import { AllocateTypeModalComponent, AllocateTypeResult } from '../allocate-type-modal/allocate-type-modal.component';
 import { TransferProcurementPersonComponent, TransferProcurementPersonResult } from '../transfer-procurement-person/transfer-procurement-person.component';
 
@@ -88,7 +91,7 @@ const PAGE_SIZES = [5, 15, 30, 50];
   imports: [
     NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, DatePipe, DecimalPipe,
     DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, ActionButtonComponent, ViewToggleComponent,
-    DetailTimelineComponent, DetailTableComponent,
+    DetailTimelineComponent, DetailTableComponent, QuoteNotesPanelComponent,
   ],
 })
 export class JobListComponent {
@@ -161,6 +164,7 @@ export class JobListComponent {
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
+    { id: 'notes', label: 'Notes', icon: 'chat' },
     { id: 'comments', label: 'Comments', icon: 'chat' },
     { id: 'documents', label: 'Documents', icon: 'files' },
     { id: 'workflow', label: 'Workflow', icon: 'activity' },
@@ -204,6 +208,7 @@ export class JobListComponent {
   private confirm = inject(ConfirmDialogService);
   private auditLog = inject(AuditLogService);
   private modal = inject(ModalService);
+  private quoteService = inject(QuotationService);
   private matDialog = inject(MatDialog);
   private subscriptions = new Subscription();
 
@@ -531,6 +536,21 @@ export class JobListComponent {
   canHold(row: getJob): boolean {
     return this.canAllocateJobs && this.canChangeStatus(row) && !row.advancePaid && row.allocateStatus !== allocateStatus.OnHold &&
       row.allocateStatus !== allocateStatus.Completed && row.allocateStatus !== allocateStatus.Lost;
+  }
+
+  onAddNote(row: getJob): void {
+    const quote = row.quotation as any;
+    if (!quote?._id) return;
+    this.modal.open<QuoteNoteModalResult>(QuoteNoteModalComponent, {
+      width: '520px',
+      data: { context: quote.dealData?.dealId || quote.quoteId },
+    }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this.quoteService.addQuoteNote(quote._id, result).subscribe({
+        next: (response) => { quote.notes = response.notes; this.toast.success('Note added'); },
+        error: (err) => this.toast.error(err?.error?.message || 'Could not save the note'),
+      });
+    });
   }
 
   onUpdateStatus(row: getJob): void {

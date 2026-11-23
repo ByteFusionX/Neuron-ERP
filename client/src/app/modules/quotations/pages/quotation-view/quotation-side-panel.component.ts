@@ -1,4 +1,6 @@
 import { ScrollTabsComponent } from 'src/app/shared/components/scroll-tabs/scroll-tabs.component';
+import { QuoteNoteModalComponent, QuoteNoteModalResult } from '../quote-notes/quote-note-modal.component';
+import { QuoteNotesPanelComponent } from '../quote-notes/quote-notes-panel.component';
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, TemplateRef, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { HttpEventType } from '@angular/common/http';
@@ -25,7 +27,7 @@ import { DataGridDetailTab } from 'src/app/shared/components/data-grid/data-grid
 import { FollowUpViewModel, followUpViewer } from 'src/app/shared/utils/follow-up.util';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { Events } from 'src/app/shared/interfaces/evets.interface';
-import { Quotatation, QuoteStatus } from 'src/app/shared/interfaces/quotation.interface';
+import { Quotatation, QuoteNote, QuoteStatus } from 'src/app/shared/interfaces/quotation.interface';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
 
@@ -37,7 +39,7 @@ import { DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
 @Component({
   selector: 'app-quotation-side-panel',
   standalone: true,
-  imports: [CommonModule, ActionButtonComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailPanelIconComponent, FollowUpPanelComponent, ScrollTabsComponent],
+  imports: [CommonModule, ActionButtonComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailPanelIconComponent, FollowUpPanelComponent, ScrollTabsComponent, QuoteNotesPanelComponent],
   providers: [DatePipe, NumberFormatterPipe],
   template: `
     <app-scroll-tabs class="qsp-tabbar sticky top-0 z-10 h-11 shrink-0 border-b border-gray-300 bg-white px-2 dark:border-neutral-700 dark:bg-[#111111]">
@@ -76,6 +78,8 @@ import { DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
           (download)="onLpoDownloadDoc($event)"
           (remove)="onLpoRemoveDoc($event)"></app-detail-documents>
 
+        <app-quote-notes-panel *ngSwitchCase="'notes'" [notes]="quote.notes" [locked]="quote.status === 'Won'" (edit)="onEditNote($event)" (remove)="onDeleteNote($event)"></app-quote-notes-panel>
+
         <ng-container *ngSwitchCase="'terms'">
           <ng-container *ngTemplateOutlet="termsTemplate"></ng-container>
         </ng-container>
@@ -102,6 +106,7 @@ import { DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
         </ng-template>
       </ng-container>
       <app-action-button *ngIf="activeTab === 'events'" variant="outline" icon="plus" (click)="onAddEvent()">Add event</app-action-button>
+      <app-action-button *ngIf="activeTab === 'notes'" variant="outline" icon="plus" (click)="onAddNote()">Add note</app-action-button>
       <app-action-button *ngIf="activeTab === 'documents' && canUploadLpo" variant="outline" (click)="uploadLpo.emit()">Upload LPO</app-action-button>
     </div>
   `,
@@ -147,6 +152,7 @@ export class QuotationSidePanelComponent implements OnChanges {
     { id: 'followups', label: 'Follow-ups', icon: 'chat' },
     { id: 'events', label: 'Events', icon: 'calendar' },
     { id: 'documents', label: 'Documents', icon: 'files' },
+    { id: 'notes', label: 'Notes', icon: 'chat' },
     { id: 'terms', label: 'Terms', icon: 'info' },
   ];
   tabs: DataGridDetailTab[] = this.baseTabs;
@@ -333,6 +339,55 @@ export class QuotationSidePanelComponent implements OnChanges {
         ],
       },
     ];
+  }
+
+  // ---- notes ----
+
+  onAddNote(): void {
+    const row = this.quote;
+    this.modal.open<QuoteNoteModalResult>(QuoteNoteModalComponent, {
+      width: '520px',
+      data: { context: row.quoteId || row._id },
+    }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this._quoteService.addQuoteNote(row._id as string, result).subscribe({
+        next: (response) => {
+          row.notes = response.notes;
+          this.toaster.success('Note added');
+        },
+        error: (err) => this.toaster.error(err?.error?.message || 'Could not save the note'),
+      });
+    });
+  }
+
+  onEditNote(note: QuoteNote): void {
+    const row = this.quote;
+    this.modal.open<QuoteNoteModalResult>(QuoteNoteModalComponent, {
+      width: '520px',
+      data: { context: row.quoteId || row._id, note },
+    }).afterClosed().subscribe((result) => {
+      if (!result || !note._id) return;
+      this._quoteService.updateQuoteNote(row._id as string, note._id, result).subscribe({
+        next: (response) => { row.notes = response.notes; this.toaster.success('Note updated'); },
+        error: (err) => this.toaster.error(err?.error?.message || 'Could not update the note'),
+      });
+    });
+  }
+
+  async onDeleteNote(note: QuoteNote): Promise<void> {
+    const row = this.quote;
+    if (!note._id) return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Delete note?',
+      message: `"${note.title}" will be removed from this quotation.`,
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
+    this._quoteService.deleteQuoteNote(row._id as string, note._id).subscribe({
+      next: (response) => { row.notes = response.notes; this.toaster.success('Note deleted'); },
+      error: (err) => this.toaster.error(err?.error?.message || 'Could not delete the note'),
+    });
   }
 
   // ---- follow-ups ----

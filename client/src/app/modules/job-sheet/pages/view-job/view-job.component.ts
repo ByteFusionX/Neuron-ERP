@@ -16,6 +16,8 @@ import { ParseBracketsTextPipe } from 'src/app/shared/pipes/highlightParse.pipe'
 import { JobHistoryService, StageKey, StageLine } from 'src/app/core/services/job/job-history.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ModalService } from 'src/app/shared/components/modal';
+import { QuoteNoteModalComponent, QuoteNoteModalResult } from 'src/app/modules/quotations/pages/quote-notes/quote-note-modal.component';
+import { QuoteNotesPanelComponent } from 'src/app/modules/quotations/pages/quote-notes/quote-notes-panel.component';
 import { allocateStatus, getJob, JobStatus } from 'src/app/shared/interfaces/job.interface';
 import { TimelineEvent } from 'src/app/shared/interfaces/job-history.interface';
 import { QuoteItemDetail } from 'src/app/shared/interfaces/quotation.interface';
@@ -58,7 +60,7 @@ interface PricingLine {
   divider?: boolean;
 }
 
-type PanelTab = 'costs' | 'documents' | 'pi' | StageKey | 'workflow' | 'history';
+type PanelTab = 'costs' | 'documents' | 'notes' | 'pi' | StageKey | 'workflow' | 'history';
 
 const ALLOCATE_STATUS_LABELS: Record<string, string> = {
   [allocateStatus.Pending]: 'Pending',
@@ -87,7 +89,7 @@ const jobStatusLabel = (v: unknown): string => (v === JobStatus.WorkInProgress ?
   templateUrl: './view-job.component.html',
   styleUrls: ['./view-job.component.css'],
   standalone: true,
-  imports: [ScrollTabsComponent, 
+  imports: [ScrollTabsComponent, QuoteNotesPanelComponent,
     CommonModule,
     RouterLink,
     DetailViewShellComponent,
@@ -130,6 +132,7 @@ export class ViewJobComponent implements OnInit {
   private readonly allPanelTabs: { id: PanelTab; label: string }[] = [
     { id: 'costs', label: 'Pricing' },
     { id: 'documents', label: 'Documents' },
+    { id: 'notes', label: 'Notes' },
     { id: 'workflow', label: 'Workflow' },
     { id: 'pi', label: 'PI' },
     { id: 'pr', label: 'PR' },
@@ -372,6 +375,21 @@ export class ViewJobComponent implements OnInit {
   /** One privilege covers the PI, PR, PO, GRN, DN and Invoice tabs; unset means allowed. */
   private canViewPurchaseTabs = true;
   private canViewSalesTabs = true;
+  onAddNote(): void {
+    const q = this.quote;
+    if (!q?._id) return;
+    this.modal.open<QuoteNoteModalResult>(QuoteNoteModalComponent, {
+      width: '520px',
+      data: { context: q.dealData?.dealId || q.quoteId },
+    }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this.quoteService.addQuoteNote(q._id, result).subscribe({
+        next: (response) => { this.quote = { ...q, notes: response.notes }; this.toast.success('Note added'); },
+        error: (err) => this.toast.error(err?.error?.message || 'Could not save the note'),
+      });
+    });
+  }
+
   private canSeeTab(tab: PanelTab): boolean {
     if (tab === 'pr' || tab === 'po' || tab === 'grn') return this.canViewPurchaseTabs;
     if (tab === 'pi' || tab === 'dn' || tab === 'invoice') return this.canViewSalesTabs;

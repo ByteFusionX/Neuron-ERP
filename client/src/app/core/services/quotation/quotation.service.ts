@@ -1,7 +1,7 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
-import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails, ReportFilter, QuoteRevisionsResponse, QuoteFollowUp, DealReportRow } from 'src/app/shared/interfaces/quotation.interface';
+import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails, ReportFilter, QuoteRevisionsResponse, QuoteFollowUp, QuoteNote, DealReportRow } from 'src/app/shared/interfaces/quotation.interface';
 import { environment } from 'src/environments/environment';
 
 import pdfMake from 'pdfmake/build/pdfmake';
@@ -135,6 +135,18 @@ export class QuotationService {
 
   scheduleQuoteFollowUp(quoteId: string, data: { dueDate: string; note?: string }): Observable<{ success: boolean; followUp: QuoteFollowUp }> {
     return this.http.patch<{ success: boolean; followUp: QuoteFollowUp }>(`${this.api}/quotation/follow-up/${quoteId}/schedule`, data, { context: context() })
+  }
+
+  addQuoteNote(quoteId: string, data: { title: string; note: string }): Observable<{ success: boolean; notes: QuoteNote[] }> {
+    return this.http.post<{ success: boolean; notes: QuoteNote[] }>(`${this.api}/quotation/notes/${quoteId}`, data, { context: context() })
+  }
+
+  updateQuoteNote(quoteId: string, noteId: string, data: { title: string; note: string }): Observable<{ success: boolean; notes: QuoteNote[] }> {
+    return this.http.patch<{ success: boolean; notes: QuoteNote[] }>(`${this.api}/quotation/notes/${quoteId}/${noteId}`, data, { context: context() })
+  }
+
+  deleteQuoteNote(quoteId: string, noteId: string): Observable<{ success: boolean; notes: QuoteNote[] }> {
+    return this.http.delete<{ success: boolean; notes: QuoteNote[] }>(`${this.api}/quotation/notes/${quoteId}/${noteId}`, { context: context() })
   }
 
   completeQuoteFollowUp(quoteId: string, data: { date: string; outcome: string; note?: string; nextFollowUpDate?: string | null }): Observable<{ success: boolean; followUp: QuoteFollowUp }> {

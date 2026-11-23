@@ -78,6 +78,7 @@
                 </ng-template>
             </ng-container>
             <app-action-button *ngIf="tab === 'events'" variant="outline" icon="plus" (click)="onAddEvent(row)">Add event</app-action-button>
+            <app-action-button *ngIf="tab === 'notes'" variant="outline" icon="plus" (click)="onAddNote(row)">Add note</app-action-button>
             <app-action-button *ngIf="tab === 'documents' && canUploadLpo(row)" variant="outline" (click)="startLpoUpload(row)">Upload LPO</app-action-button>
         </ng-template>
 
@@ -126,6 +127,7 @@
                         (download)="onLpoDownloadDoc(row, $event)"
                         (remove)="onLpoRemoveDoc(row, $event)"></app-detail-documents>
                 </ng-container>
+                <app-quote-notes-panel *ngSwitchCase="'notes'" [notes]="row.notes" [locked]="row.status === 'Won'" (edit)="onEditNote(row, $event)" (remove)="onDeleteNote(row, $event)"></app-quote-notes-panel>
                 <ng-container *ngSwitchCase="'history'">
                     <app-detail-timeline *ngIf="canSeeHistory(row); else noHistoryAccess" [entries]="(historyFor(row) | async) ?? []" emptyMessage="No history recorded yet."></app-detail-timeline>
                     <ng-template #noHistoryAccess><p class="text-[13px] text-gray-500 dark:text-gray-400">History is only visible to super admins and the quotation's owner.</p></ng-template>

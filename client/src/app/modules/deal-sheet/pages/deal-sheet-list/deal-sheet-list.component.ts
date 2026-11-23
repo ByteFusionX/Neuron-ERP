@@ -38,6 +38,8 @@ import {
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { QuoteNoteModalComponent, QuoteNoteModalResult } from 'src/app/modules/quotations/pages/quote-notes/quote-note-modal.component';
+import { QuoteNotesPanelComponent } from 'src/app/modules/quotations/pages/quote-notes/quote-notes-panel.component';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { DetailCommentsComponent } from 'src/app/shared/components/detail-panel/detail-comments.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
@@ -96,6 +98,7 @@ const DEFAULT_PAGE_SIZE = 15;
     DetailTableComponent,
     DetailDocumentsComponent,
     DetailTimelineComponent,
+    QuoteNotesPanelComponent,
     DetailCommentsComponent,
     ActionButtonComponent,
   ],
@@ -153,6 +156,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'costs', label: 'Costs', icon: 'card' },
     { id: 'documents', label: 'Documents', icon: 'eye' },
+    { id: 'notes', label: 'Notes', icon: 'chat' },
     { id: 'comments', label: 'Comments', icon: 'chat' },
     { id: 'history', label: 'History', icon: 'clock' },
   ];
@@ -835,6 +839,19 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   readonly acceptedFiles = ALLOWED_UPLOAD_TYPES;
   uploadingDealDocs = false;
 
+  onAddNote(row: Quotatation): void {
+    this.modal.open<QuoteNoteModalResult>(QuoteNoteModalComponent, {
+      width: '520px',
+      data: { context: row.dealData?.dealId || row.quoteId || row._id },
+    }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this._quoteService.addQuoteNote(row._id as string, result).subscribe({
+        next: (response) => { row.notes = response.notes; this.toaster.success('Note added'); },
+        error: (err) => this.toaster.error(err?.error?.message || 'Could not save the note'),
+      });
+    });
+  }
+
   startDealDocUpload(row: Quotatation): void {
     this.modal.open<DocumentUploadModalResult>(DocumentUploadModalComponent, {
       width: '680px',
@@ -1027,6 +1044,9 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
           { type: 'field', label: 'Contact', value: this.contactName(contact) },
           { type: 'field', label: 'Priority', value: enquiry?.priority || '—' },
           { type: 'field', label: 'Payment Terms', value: deal?.paymentTerms || '—' },
+          ...((row as any).job?.jobId
+            ? [{ type: 'field' as const, label: 'Job ID', value: (row as any).job.jobId, numeric: true }]
+            : []),
           ...(this.approverName(row)
             ? [{ type: 'field' as const, label: 'Approved by', value: this.approverName(row), noHover: true }]
             : []),

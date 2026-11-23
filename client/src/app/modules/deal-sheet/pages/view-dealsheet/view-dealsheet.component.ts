@@ -1,3 +1,5 @@
+import { QuoteNoteModalComponent, QuoteNoteModalResult } from 'src/app/modules/quotations/pages/quote-notes/quote-note-modal.component';
+import { QuoteNotesPanelComponent } from 'src/app/modules/quotations/pages/quote-notes/quote-notes-panel.component';
 import { ScrollTabsComponent } from 'src/app/shared/components/scroll-tabs/scroll-tabs.component';
 import { Component, OnInit, inject } from '@angular/core';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
@@ -109,7 +111,7 @@ interface ViewDealsheetNavState {
   templateUrl: './view-dealsheet.component.html',
   styleUrls: ['./view-dealsheet.component.css'],
   standalone: true,
-  imports: [ScrollTabsComponent, 
+  imports: [ScrollTabsComponent, QuoteNotesPanelComponent,
     DealFormComponent,
     CommonModule,
     DetailViewShellComponent,
@@ -137,10 +139,11 @@ export class ViewDealsheetComponent implements OnInit {
   /** returnUrl may carry a query string, which router link arrays would encode into the path. */
   get returnPath(): string { return this.returnUrl.split('?')[0]; }
   panelOpen = true;
-  panelTab: 'approval' | 'costs' | 'documents' | 'history' = 'costs';
-  private readonly baseTabs: { id: 'approval' | 'costs' | 'documents' | 'history'; label: string }[] = [
+  panelTab: 'approval' | 'costs' | 'documents' | 'notes' | 'history' = 'costs';
+  private readonly baseTabs: { id: 'approval' | 'costs' | 'documents' | 'notes' | 'history'; label: string }[] = [
     { id: 'costs', label: 'Pricing' },
     { id: 'documents', label: 'Documents' },
+    { id: 'notes', label: 'Notes' },
     { id: 'approval', label: 'Approval' },
   ];
   private readonly allTabs = [...this.baseTabs, { id: 'history' as const, label: 'History' }];
@@ -561,6 +564,7 @@ export class ViewDealsheetComponent implements OnInit {
       { label: 'Resubmitted after revoke', value: date(d.revokeResubmittedDate) },
       { label: 'Re-approved', value: date(d.reapprovedDate) },
       { label: 'Payment terms', value: d.paymentTerms || '' },
+      { label: 'Job ID', value: (q as any).job?.jobId || (this.data as any)?.job?.jobId || '' },
     ];
     return facts.filter((f) => !!f.value);
   }
@@ -901,6 +905,20 @@ export class ViewDealsheetComponent implements OnInit {
     ((this.data.quoteData.dealData as any)?.attachments || []).forEach((file: any) => add(file, 'QUOTE', 'From quotation', false));
     ((this.data.quoteData as any).dealDocuments || []).forEach((file: any) => add(file, 'DEAL', file.uploadedBy || 'Deal sheet', true));
     return docs;
+  }
+
+  onAddNote(): void {
+    const q = this.data.quoteData;
+    this.modal.open<QuoteNoteModalResult>(QuoteNoteModalComponent, {
+      width: '520px',
+      data: { context: q.dealData?.dealId || q.quoteId },
+    }).afterClosed().subscribe((result) => {
+      if (!result || !q._id) return;
+      this._quoteService.addQuoteNote(q._id, result).subscribe({
+        next: (response) => { q.notes = response.notes; this.toast.success('Note added'); },
+        error: (err) => this.toast.error(err?.error?.message || 'Could not save the note'),
+      });
+    });
   }
 
   startDocumentUpload(): void {

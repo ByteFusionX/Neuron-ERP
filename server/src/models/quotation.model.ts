@@ -207,6 +207,7 @@ interface Quotation extends Document {
     eventId: any;
     saveNote: string;
     editHistory: EditHistoryEntry[];
+    notes: { title: string; note: string; createdBy?: Types.ObjectId; createdByName?: string; createdAt: Date }[];
     revision: number;
     revisions: QuoteRevision[];
     customerAcceptance: CustomerAcceptance;
@@ -641,6 +642,16 @@ const quotationSchema = new Schema<Quotation>({
         rejectedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
         reason: { type: String },
         breaches: { type: [Schema.Types.Mixed], default: [] },
+    },
+    notes: {
+        type: [{
+            title: { type: String, required: true, trim: true },
+            note: { type: String, required: true, trim: true },
+            createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+            createdByName: { type: String },
+            createdAt: { type: Date, default: Date.now },
+        }],
+        default: [],
     },
     followUp: {
         nextFollowUpDate: { type: Date },

@@ -92,6 +92,13 @@
                     (open)="onDocumentOpen($event)"
                     (download)="onDocumentDownload($event)"></app-detail-documents>
 
+                <ng-container *ngSwitchCase="'notes'">
+                    <div class="mb-3 flex justify-end">
+                        <app-action-button variant="outline" icon="plus" (click)="onAddNote()">Add note</app-action-button>
+                    </div>
+                    <app-quote-notes-panel [notes]="quote?.notes" [readonly]="true"></app-quote-notes-panel>
+                </ng-container>
+
                 <ng-container *ngSwitchCase="'pi'">
                     <p *ngIf="piStatus === 'loading'" class="py-6 text-center text-[13px] text-gray-500 dark:text-gray-400">Loading PI details&hellip;</p>
                     <p *ngIf="piStatus === 'error'" class="py-6 text-center text-[13px] text-red-600 dark:text-red-400">Could not load PI details. Reopen this tab to retry.</p>

@@ -153,12 +153,22 @@ export interface Quotatation {
     saveNote?: string;
     job?: { _id?: string; allocateStatus?: string };
     editHistory?: EditHistoryEntry[];
+    /** Free-text notes added from the detail panel's Notes tab. */
+    notes?: QuoteNote[];
     /** Bumped when a sent quote's commercial content is edited. 0 on quotes that never were. */
     revision?: number;
     /** Presale-update request state (status In Presales / Estimated). */
     presaleRevision?: PresaleRevision;
     /** The date printed on the PDF. `date` is the created date and never changes. Older quotes fall back to `date`. */
     quotedDate?: string;
+}
+
+export interface QuoteNote {
+    _id?: string;
+    title: string;
+    note: string;
+    createdByName?: string;
+    createdAt: string;
 }
 
 export interface getQuotatation {

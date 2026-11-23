@@ -36,6 +36,9 @@ import {
     scheduleQuoteFollowUp,
     completeQuoteFollowUp,
     cancelQuoteFollowUp,
+    addQuoteNote,
+    updateQuoteNote,
+    deleteQuoteNote,
     uploadQuoteItemImage,
 } from "../controllers/quotation.controller";
 import { requireAnyPrivilege, requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
@@ -78,6 +81,9 @@ quoteRouter.patch('/follow-up/:quoteId', requireUnlessDenied("quotation", "edit"
 quoteRouter.patch('/follow-up/:quoteId/schedule', requireUnlessDenied("quotation", "edit"), scheduleQuoteFollowUp)
 quoteRouter.patch('/follow-up/:quoteId/complete', requireUnlessDenied("quotation", "edit"), completeQuoteFollowUp)
 quoteRouter.patch('/follow-up/:quoteId/cancel', requireUnlessDenied("quotation", "edit"), cancelQuoteFollowUp)
+quoteRouter.post('/notes/:quoteId', requireUnlessDenied("quotation", "edit"), addQuoteNote)
+quoteRouter.patch('/notes/:quoteId/:noteId', requireUnlessDenied("quotation", "edit"), updateQuoteNote)
+quoteRouter.delete('/notes/:quoteId/:noteId', requireUnlessDenied("quotation", "edit"), deleteQuoteNote)
 quoteRouter.patch('/customer-decision/:quoteId', requireUnlessDenied("quotation", "statusUpdate"), recordCustomerDecision)
 quoteRouter.patch('/optional-decisions/:quoteId', requireUnlessDenied("quotation", "edit"), updateOptionalItemDecisions)
 quoteRouter.get('/stock-hold/:quoteId', getQuoteStockHold)

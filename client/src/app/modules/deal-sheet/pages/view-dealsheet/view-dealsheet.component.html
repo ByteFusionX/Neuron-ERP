@@ -140,6 +140,13 @@
                     (open)="onDocumentOpen($event)"
                     (download)="onDocumentDownload($event)"></app-detail-documents>
 
+                <ng-container *ngSwitchCase="'notes'">
+                    <div class="mb-3 flex justify-end">
+                        <app-action-button variant="outline" icon="plus" (click)="onAddNote()">Add note</app-action-button>
+                    </div>
+                    <app-quote-notes-panel [notes]="data.quoteData.notes" [readonly]="true"></app-quote-notes-panel>
+                </ng-container>
+
                 <app-detail-timeline *ngSwitchCase="'history'"
                     [entries]="historyEntries"
                     emptyMessage="No history recorded yet."></app-detail-timeline>

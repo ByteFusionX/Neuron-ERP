@@ -67,6 +67,7 @@
 
         <!-- left: secondary actions (outline) -->
         <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
+            <app-action-button *ngIf="tab === 'notes'" variant="outline" icon="plus" (click)="onAddNote(row)">Add note</app-action-button>
             <app-action-button *ngIf="canChangeStatus(row)" variant="outline" icon="edit" (click)="onUpdateStatus(row)">Update status</app-action-button>
         </ng-template>
 
@@ -85,6 +86,8 @@
                 <ng-container *ngSwitchCase="'items'">
                     <app-detail-table layout="list" title="Deal items" [columns]="itemColumns" [rows]="itemRows(row)" [footRows]="itemFootRows(row)" [currency]="row.quotation?.dealData?.currency || row.quotation?.currency"></app-detail-table>
                 </ng-container>
+
+                <app-quote-notes-panel *ngSwitchCase="'notes'" [notes]="row.quotation?.notes" [readonly]="true"></app-quote-notes-panel>
 
                 <ng-container *ngSwitchCase="'comments'">
                     <app-detail-overview [grid]="grid" [row]="row" [sections]="commentSections(row)"></app-detail-overview>

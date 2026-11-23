@@ -1,4 +1,6 @@
 import { ALLOWED_UPLOAD_TYPES } from 'src/app/shared/constants/upload-types';
+import { QuoteNoteModalComponent, QuoteNoteModalResult } from '../quote-notes/quote-note-modal.component';
+import { QuoteNotesPanelComponent } from '../quote-notes/quote-notes-panel.component';
 import { AfterViewInit, Component, Injector, ViewChild, inject } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
@@ -10,7 +12,7 @@ import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { StatusChangeModalComponent, StatusChangeResult } from 'src/app/shared/components/status-change-modal/status-change-modal.component';
 import { canSelectQuoteStatus, quoteStatusModalData } from '../status-update-modal/quote-status-modal.config';
-import { getQuotation, Quotatation, QuoteStatus, quoteStatusLabel, isPresaleLocked, canRequestPresaleUpdate, canCancelPresaleRequest } from 'src/app/shared/interfaces/quotation.interface';
+import { getQuotation, Quotatation, QuoteNote, QuoteStatus, quoteStatusLabel, isPresaleLocked, canRequestPresaleUpdate, canCancelPresaleRequest } from 'src/app/shared/interfaces/quotation.interface';
 import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/follow-up-create-modal.component';
 import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/follow-up-panel/follow-up-panel.component';
 import { FollowUpViewModel, followUpCellClass, followUpViewer } from 'src/app/shared/utils/follow-up.util';
@@ -80,7 +82,7 @@ const PDF_STATUSES: QuoteStatus[] = [
     templateUrl: './quotation-list.component.html',
     styleUrls: ['./quotation-list.component.css'],
     providers: [NumberFormatterPipe, DatePipe],
-    imports: [ViewEstimationComponent, ViewToggleComponent,NgIf, NgClass, NgSwitch, NgSwitchCase, DatePipe, AsyncPipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent, FollowUpPanelComponent, DetailTimelineComponent]
+    imports: [ViewEstimationComponent, ViewToggleComponent,NgIf, NgClass, NgSwitch, NgSwitchCase, DatePipe, AsyncPipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent, FollowUpPanelComponent, DetailTimelineComponent, QuoteNotesPanelComponent]
 })
 export class QuotationListComponent implements AfterViewInit {
   @ViewChild('grid') grid!: DataGridComponent<Quotatation>;
@@ -139,6 +141,7 @@ export class QuotationListComponent implements AfterViewInit {
     { id: 'followups', label: 'Follow-ups', icon: 'chat' },
     { id: 'events', label: 'Events', icon: 'calendar' },
     { id: 'documents', label: 'Documents', icon: 'files' },
+    { id: 'notes', label: 'Notes', icon: 'chat' },
     { id: 'deal', label: 'Deal Sheet', icon: 'wallet' },
     { id: 'history', label: 'History', icon: 'clock' },
   ];
@@ -926,6 +929,50 @@ export class QuotationListComponent implements AfterViewInit {
   private updateEvents(row: Quotatation, fn: (events: Events[]) => Events[]): void {
     const subject = this.eventsCache.get(row._id as string);
     if (subject) { subject.next(fn(subject.value)); }
+  }
+
+  onAddNote(row: Quotatation): void {
+    this.modal.open<QuoteNoteModalResult>(QuoteNoteModalComponent, {
+      width: '520px',
+      data: { context: row.quoteId || row._id },
+    }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this._quoteService.addQuoteNote(row._id as string, result).subscribe({
+        next: (response) => {
+          row.notes = response.notes;
+          this.toaster.success('Note added');
+        },
+        error: (err) => this.toaster.error(err?.error?.message || 'Could not save the note'),
+      });
+    });
+  }
+
+  onEditNote(row: Quotatation, note: QuoteNote): void {
+    this.modal.open<QuoteNoteModalResult>(QuoteNoteModalComponent, {
+      width: '520px',
+      data: { context: row.quoteId || row._id, note },
+    }).afterClosed().subscribe((result) => {
+      if (!result || !note._id) return;
+      this._quoteService.updateQuoteNote(row._id as string, note._id, result).subscribe({
+        next: (response) => { row.notes = response.notes; this.toaster.success('Note updated'); },
+        error: (err) => this.toaster.error(err?.error?.message || 'Could not update the note'),
+      });
+    });
+  }
+
+  async onDeleteNote(row: Quotatation, note: QuoteNote): Promise<void> {
+    if (!note._id) return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Delete note?',
+      message: `"${note.title}" will be removed from this quotation.`,
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
+    this._quoteService.deleteQuoteNote(row._id as string, note._id).subscribe({
+      next: (response) => { row.notes = response.notes; this.toaster.success('Note deleted'); },
+      error: (err) => this.toaster.error(err?.error?.message || 'Could not delete the note'),
+    });
   }
 
   onAddEvent(row: Quotatation): void {
