@@ -2,7 +2,10 @@ import { Component, Input, OnInit, inject } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
+import { forkJoin, of, take, switchMap, catchError } from 'rxjs';
 import { NotificationChannel, NotificationService } from 'src/app/core/services/notification.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { Privileges } from 'src/app/shared/interfaces/employee.interface';
 
 const CHANNELS: { id: NotificationChannel; label: string; hint: string; icon: string }[] = [
   { id: 'inapp', label: 'In-app', hint: 'Bell inside the ERP', icon: 'M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0' },
@@ -120,6 +123,32 @@ const DESCRIPTIONS: Record<string, string> = {
   BugReportResolved: 'A bug report you submitted was resolved.',
 };
 
+const canView = (v?: string) => !!v && v !== 'none';
+
+/**
+ * Which module access a notification type needs before it is listed. Types not in this map
+ * (General, Bug report resolved, anything new from the server) are always listed.
+ */
+const ACCESS: Record<string, (p: Privileges) => boolean> = {};
+const need = (types: string[], fn: (p: Privileges) => boolean) => types.forEach((t) => (ACCESS[t] = fn));
+
+need(['AssignedJob', 'ReAssignedJob', 'PresaleRejected'], (p) => canView(p.assignedJob?.viewReport));
+need(['EnquiryEstimationReady', 'FeedbackRequest', 'FeedbackGiven', 'EnquiryFollowUpOverdue'], (p) => canView(p.enquiry?.viewReport));
+need(['QuotationFollowUpOverdue', 'DealSheetResponse'], (p) => canView(p.quotation?.viewReport));
+need(['DealSheet'], (p) => typeof p.dealSheet === 'boolean' ? p.dealSheet : canView(p.dealSheet?.viewReport));
+need(['TechnicalAssigned'], (p) => canView(p.technical?.viewReport) || !!p.technical?.canViewOpenToWorkAndAssign);
+need(['MrRequest', 'MrApproved', 'MrRejected'], (p) => canView(p.technical?.viewReport) || canView(p.jobSheet?.viewReport));
+need(['MrApprovalRequest'], (p) => !!p.technical?.canApproveMRRequests);
+need(['PurchaseApprovalRequest', 'PurchaseProcurementNotice', 'PurchaseApproved', 'PurchaseRejected', 'PurchaseRequestAllocated', 'ProcurementTransferred', 'PurchaseFollowUpOverdue'], (p) => canView(p.purchase?.viewReport));
+need(['LpoApprovalRequest', 'LpoApproved', 'LpoRejected', 'LpoPlaced', 'LpoDeliveryDue', 'LpoCancelled'], (p) => canView(p.purchaseOrder?.viewReport));
+need(['SupplierApprovalRequest', 'SupplierApproved', 'SupplierRejected'], (p) => canView(p.supplier?.viewReport));
+need(['GrnCreated', 'GrnItemsRejected', 'StockHoldInitiated'], (p) => canView(p.grn?.viewReport));
+need(['SupplierReturnInitiated'], (p) => canView(p.grn?.viewReport) || canView(p.purchaseOrder?.viewReport));
+need(['DnDispatched', 'DnDelivered', 'DnItemsRejected'], (p) => canView(p.dispatch?.viewReport));
+need(['LpoPlacedBilling', 'InvoiceOverdue', 'InvoiceRejected', 'PdcRejected', 'ProformaPaymentConfirmed'], (p) => canView(p.invoice?.viewReport));
+need(['ClaimApprovalRequest', 'ClaimApproved', 'ClaimRejected', 'ClaimPaid'], (p) => canView(p.claims?.viewReport));
+need(['BugReportAssigned'], (p) => !!p.portalManagement?.bugReports);
+
 const labelOf = (type: string) =>
   LABEL_OVERRIDES[type] ?? type.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
 
@@ -156,7 +185,7 @@ const labelOf = (type: string) =>
     .np-row {
       border-top: 1px solid var(--pf-border, #e5e7eb);
       @apply grid items-center gap-2 px-5 py-3;
-      grid-template-columns: minmax(0, 1fr) repeat(4, 4.5rem);
+      grid-template-columns: minmax(0, 1fr) repeat(2, 4.5rem);
     }
     .np-row:hover { background: var(--pf-surface-2, #f9fafb); }
     .np-colhead { @apply text-center text-[11px] font-medium; color: var(--pf-muted, #6b7280); }
@@ -199,7 +228,7 @@ const labelOf = (type: string) =>
     }
 
     @media (max-width: 640px) {
-      .np-row { grid-template-columns: minmax(0, 1fr) repeat(4, 2.75rem); @apply px-3; }
+      .np-row { grid-template-columns: minmax(0, 1fr) repeat(2, 2.75rem); @apply px-3; }
     }
   `],
   template: `
@@ -229,7 +258,7 @@ const labelOf = (type: string) =>
         </div>
 
         <!-- Channel overview -->
-        <div *ngIf="!loading && !error" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+        <div *ngIf="!loading && !error" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
           <div *ngFor="let c of channels" class="np-channel">
             <span class="meta-icon">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" [attr.d]="c.icon" /></svg>
@@ -260,10 +289,6 @@ const labelOf = (type: string) =>
       </div>
 
       <ng-container *ngIf="!loading && !error">
-        <div *ngIf="!emailAvailable" class="panel px-4 py-3 flex items-center gap-2 text-xs">
-          <span class="pill pill-warn"><span class="dot"></span>Email off</span>
-          <span class="muted">Email delivery is not configured on this system, so email options have no effect yet.</span>
-        </div>
 
         <!-- Groups -->
         <div *ngFor="let group of visibleGroups()" class="panel overflow-hidden">
@@ -279,7 +304,6 @@ const labelOf = (type: string) =>
             <div class="np-row" style="padding-top: .5rem; padding-bottom: .5rem;">
               <span class="eyebrow">Notification</span>
               <span *ngFor="let c of channels" class="np-colhead">{{ c.label }}</span>
-              <span class="np-colhead" title="Instead of one email per notification, get a single daily summary email. Off by default.">Daily summary</span>
             </div>
             <div *ngFor="let t of group.types" class="np-row">
               <div class="min-w-0">
@@ -287,16 +311,9 @@ const labelOf = (type: string) =>
                 <p class="faint text-[11px] leading-snug mt-0.5">{{ describe(t) }}</p>
               </div>
               <div *ngFor="let c of channels" class="flex justify-center">
-                <button type="button" role="switch" class="np-switch" [class.on]="!isMuted(c.id, t) && !(c.id === 'email' && !emailAvailable)"
-                  [disabled]="c.id === 'email' && !emailAvailable"
-                  [attr.aria-checked]="!isMuted(c.id, t) && !(c.id === 'email' && !emailAvailable)" [attr.aria-label]="label(t) + ' ' + c.label"
+                <button type="button" role="switch" class="np-switch" [class.on]="!isMuted(c.id, t)"
+                  [attr.aria-checked]="!isMuted(c.id, t)" [attr.aria-label]="label(t) + ' ' + c.label"
                   (click)="setChannel(c.id, t, isMuted(c.id, t))"></button>
-              </div>
-              <div class="flex justify-center">
-                <button type="button" role="switch" class="np-switch" [class.on]="emailAvailable && digest.has(t) && !isMuted('email', t)"
-                  [disabled]="!emailAvailable || isMuted('email', t)" [attr.aria-checked]="digest.has(t)"
-                  [attr.aria-label]="label(t) + ' email summary'"
-                  (click)="setDigest(t, !digest.has(t))"></button>
               </div>
             </div>
           </ng-container>
@@ -329,8 +346,10 @@ export class NotificationPreferencesComponent implements OnInit {
 
   private notifications = inject(NotificationService);
   private toast = inject(ToastrService);
+  private employees = inject(EmployeeService);
 
-  readonly channels = CHANNELS;
+  // Email is not offered for now; stored email settings are kept untouched on save.
+  readonly channels = CHANNELS.filter((c) => c.id !== 'email');
   groups: { label: string; types: string[] }[] = [];
   muted: Record<NotificationChannel, Set<string>> = { inapp: new Set(), push: new Set(), email: new Set() };
   digest = new Set<string>();
@@ -358,12 +377,20 @@ export class NotificationPreferencesComponent implements OnInit {
   load(): void {
     this.loading = true;
     this.error = '';
-    this.notifications.getPreferences().subscribe({
-      next: (res) => {
+    const employee$ = this.employees.employeeData$.pipe(
+      take(1),
+      switchMap((cached) => (cached ? of(cached) : this.employees.getEmployee())),
+      catchError(() => of(undefined)),
+    );
+    forkJoin([this.notifications.getPreferences(), employee$]).subscribe({
+      next: ([res, emp]) => {
         CHANNELS.forEach(({ id }) => (this.muted[id] = new Set(res.muted?.[id] ?? [])));
         this.digest = new Set(res.emailDigest ?? []);
         this.emailAvailable = res.emailAvailable;
-        this.groups = this.buildGroups(res.types ?? []);
+        const superAdmin = /^superadmin$/i.test(emp?.category?.role ?? '');
+        const privileges = emp?.category?.privileges;
+        const allowed = (t: string) => superAdmin || !ACCESS[t] || (!!privileges && ACCESS[t](privileges));
+        this.groups = this.buildGroups((res.types ?? []).filter(allowed));
         this.totalTypes = this.groups.reduce((n, g) => n + g.types.length, 0);
         if (!this.open.size) this.groups.forEach((g) => this.open.add(g.label));
         this.snapshot = this.serialize();
@@ -398,7 +425,7 @@ export class NotificationPreferencesComponent implements OnInit {
   }
 
   mutedInGroup(types: string[]): number {
-    return types.filter((t) => CHANNELS.some((c) => this.muted[c.id].has(t))).length;
+    return types.filter((t) => this.channels.some((c) => this.muted[c.id].has(t))).length;
   }
 
   setChannel(channel: NotificationChannel, type: string, on: boolean): void {
