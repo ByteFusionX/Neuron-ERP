@@ -72,11 +72,13 @@ import searchRouter from './routes/search.router';
 import contextRouter from './routes/context.router';
 
 const app = express();
-// Behind Nginx/Docker: use the real client IP (shown in the sessions list) from X-Forwarded-For.
-app.set('trust proxy', 1);
 app.set('etag', false); // API responses are dynamic per request; conditional 304s were silently breaking notification/celebration polling
 const server = http.createServer(app);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// Behind Nginx/Docker: use the real client IP (shown in the sessions list) from X-Forwarded-For.
+// TRUST_PROXY = number of proxy hops in front of the API (1 = host Nginx, 2 = Cloudflare + Nginx), or an Express trust list like "loopback,uniquelocal".
+const trustProxy = process.env.TRUST_PROXY?.trim();
+app.set('trust proxy', !trustProxy ? 1 : /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
 
 const allowedOrigins = (process.env.ORIGIN1 ?? 'http://localhost:4200')
   .split(',')

@@ -1,3 +1,4 @@
+import { logAudit } from "./audit.service";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { Request, Response } from "express";
@@ -46,6 +47,12 @@ const clearRefreshCookie = (res: Response) => {
   res.clearCookie(REFRESH_COOKIE, rest);
 };
 
+/** Real client IP: Cloudflare's header when present, else Express's req.ip (resolved from X-Forwarded-For per 'trust proxy'); strips the IPv4-mapped "::ffff:" prefix. */
+const clientIp = (req: Request) => {
+  const ip = req.get("cf-connecting-ip")?.trim() || req.ip || req.socket.remoteAddress || "";
+  return ip.replace(/^::ffff:/, "") || undefined;
+};
+
 const createRefreshToken = async (req: Request, employeeId: any, family: string, sessionStartedAt: Date = new Date()) => {
   const token = crypto.randomBytes(48).toString("base64url");
   await RefreshToken.create({
@@ -54,16 +61,36 @@ const createRefreshToken = async (req: Request, employeeId: any, family: string,
     family,
     expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
     userAgent: req.get("user-agent")?.slice(0, 300),
-    ip: req.ip,
+    ip: clientIp(req),
     sessionStartedAt,
   });
   return token;
+};
+
+/** Global audit log entry for every login: who, from which IP and browser. Never fails the login. */
+const logLogin = async (req: Request, employee: { _id: any; employeeId: string }) => {
+  const person: any = await Employee.findById(employee._id, { firstName: 1, lastName: 1 }).lean().catch(() => null);
+  const name = `${person?.firstName || ''} ${person?.lastName || ''}`.trim() || employee.employeeId;
+  const ip = clientIp(req);
+  const userAgent = req.get("user-agent")?.slice(0, 300);
+  await logAudit(req, {
+    entityType: "login",
+    entityId: employee._id,
+    entityLabel: employee.employeeId,
+    action: "logged-in",
+    summary: `${name} (${employee.employeeId}) logged in${ip ? ` from ${ip}` : ''}`,
+    changes: [
+      { label: "IP address", to: ip || "Unknown" },
+      { label: "Browser", to: userAgent || "Unknown" },
+    ],
+  }, { _id: employee._id, firstName: person?.firstName, lastName: person?.lastName });
 };
 
 /** Called after a successful login (Azure, or the dev password login): sets the refresh cookie, returns the access token. */
 export const startSession = async (req: Request, res: Response, employee: { _id: any; employeeId: string }) => {
   const refresh = await createRefreshToken(req, employee._id, crypto.randomUUID());
   setRefreshCookie(res, refresh);
+  await logLogin(req, employee);
   return signAccessToken(employee);
 };
 

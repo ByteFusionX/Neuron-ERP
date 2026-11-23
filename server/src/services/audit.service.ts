@@ -12,10 +12,11 @@ export interface AuditEntry {
 }
 
 /** Records one event for any module. Never throws: a failed audit write must not fail the request that caused it. */
-export const logAudit = async (req: any, entry: AuditEntry): Promise<void> => {
+/** `actorOverride` names who did it when req.user is not an employee yet (e.g. at login). */
+export const logAudit = async (req: any, entry: AuditEntry, actorOverride?: { _id: any; firstName?: string; lastName?: string }): Promise<void> => {
   try {
     if (!entry.entityId) return;
-    const actor: any = req?.user ? await getEmployeeData(req.user) : null;
+    const actor: any = actorOverride ?? (req?.user ? await getEmployeeData(req.user) : null);
     await auditLogModel.create({
       entityType: entry.entityType,
       entityId: entry.entityId,
