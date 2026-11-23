@@ -31,7 +31,8 @@ const SUPPLIER_SORT_FIELDS: Record<string, string> = {
 };
 
 /** Grid filter keys -> document path, and whether the path only exists after the category lookup. */
-const SUPPLIER_FILTER_FIELDS: Record<string, { path: string; type: 'text' | 'number'; post?: boolean }> = {
+const SUPPLIER_FILTER_FIELDS: Record<string, { path: string; type: 'text' | 'number' | 'id'; post?: boolean }> = {
+   createdBy: { path: 'createdBy', type: 'id' },
    supplierId: { path: 'supplierId', type: 'text' },
    supplierName: { path: 'supplierName', type: 'text' },
    supplierType: { path: 'supplierType', type: 'text' },
@@ -57,6 +58,12 @@ const buildSupplierColumnFilters = (columnFilters: any): { preMatch: Record<stri
             continue;
          }
          if (value === undefined || value === null || String(value).trim() === '') continue;
+         if (def.type === 'id') {
+            if (!Types.ObjectId.isValid(String(value))) continue;
+            const id = new Types.ObjectId(String(value));
+            target.push({ [def.path]: f.op === 'isNot' ? { $ne: id } : id });
+            continue;
+         }
          if (def.type === 'number') {
             const n = Number(value);
             if (isNaN(n)) continue;

@@ -142,6 +142,7 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     this.checkPermission();
     this.buildColumns();
     this.buildRowActions();
+    this.loadCreators();
 
     this._route.queryParams.subscribe((params) => {
       const page = parseInt(params['page'], 10);
@@ -154,6 +155,11 @@ export class SupplierListComponent implements OnInit, OnDestroy {
       this.toDate = params['toDate'] || null;
       this.selectedCategory = params['category'] || null;
       this.selectedSupplierType = params['supplierType'] || null;
+      this.selectedStatus = params['status'] || null;
+      this.sortKey = params['sort'] || null;
+      this.sortDir = params['sort'] ? (params['dir'] === 'desc' ? 'desc' : 'asc') : null;
+      this.columnFilters = this.columnFilters.filter((f) => f.key !== 'createdBy');
+      if (params['createdBy']) this.columnFilters.push({ key: 'createdBy', op: 'eq', value: params['createdBy'] });
 
       this.isFiltered = !!(this.searchQuery || this.fromDate || this.toDate || this.selectedCategory || this.selectedSupplierType);
       this.getSuppliers();
@@ -186,8 +192,25 @@ export class SupplierListComponent implements OnInit, OnDestroy {
         key: 'status', label: 'Status', visible: false, type: 'badge', badgeClasses: this.statusBadgeClasses, valueGetter: this.displayStatus,
         editorOptions: [SupplierStatus.APPROVED, 'Blocked'].map((s) => ({ label: s, value: s })),
       },
+      {
+        key: 'createdBy', label: 'Created By',
+        valueGetter: (r) => {
+          const o = r.createdBy as any;
+          return o ? `${o.firstName ?? ''} ${o.lastName ?? ''}`.trim() : '';
+        },
+      },
       { key: 'createdDate', label: 'Created Date', type: 'date', sortable: true },
     ];
+  }
+
+  /** "Created By" filter options: every employee who is not blocked or deleted (the API already excludes them). */
+  private loadCreators(): void {
+    this.subscriptions.add(
+      this._employeeService.getAllEmployees().subscribe((employees) => {
+        const editorOptions = (employees ?? []).map((e) => ({ label: `${e.firstName || ''} ${e.lastName || ''}`.trim(), value: e._id }));
+        this.columns = this.columns.map((c) => (c.key === 'createdBy' ? { ...c, editorOptions } : c));
+      })
+    );
   }
 
   private buildRowActions(): void {
@@ -344,6 +367,10 @@ export class SupplierListComponent implements OnInit, OnDestroy {
       page: this.page !== 1 ? this.page : null,
       row: this.row !== SupplierListComponent.DEFAULT_PAGE_SIZE ? this.row : null,
       search: this.searchQuery || null,
+      status: this.selectedStatus,
+      createdBy: this.columnFilters.find((f) => f.key === 'createdBy')?.value ?? null,
+      sort: this.sortKey && this.sortDir ? this.sortKey : null,
+      dir: this.sortKey && this.sortDir === 'desc' ? 'desc' : null,
       category: this.selectedCategory,
       supplierType: this.selectedSupplierType,
       fromDate: this.fromDate,
