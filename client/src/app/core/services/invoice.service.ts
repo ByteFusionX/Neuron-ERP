@@ -92,21 +92,34 @@ export class InvoiceService {
 
         const currency = invoice.currency || DEFAULT_CURRENCY;
         
+        // Amount in words rides on the final total row ("Total (QAR) - words"); with a discount that is Net Total.
+        const netPayable = Math.max(0, Number(invoice.amount || 0) - (Number(invoice.discount) > 0 ? Number(invoice.discount) : 0));
+        const wordsText = this.amountInWords(netPayable, currency);
+        const wordsSuffix = !invoice.isProforma ? ` - ${wordsText}` : '';
+        const hasDiscount = !invoice.isProforma && Number(invoice.discount) > 0;
         tableBody.push([
-            { text: `Total (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '',
+            { text: `Total (${currency})${hasDiscount ? '' : wordsSuffix}`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '',
             { text: this.fmt(invoice.amount || 0), style: 'tableFooter', alignment: 'right' },
           ]);
-        if (!invoice.isProforma && Number(invoice.discount) > 0) {
+        if (hasDiscount) {
             tableBody.push(
                 [{ text: `Discount (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '', { text: this.fmt(invoice.discount), style: 'tableFooter', alignment: 'right' }],
-                [{ text: `Net Total (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '', { text: this.fmt(Math.max(0, Math.round((Number(invoice.amount || 0) - Number(invoice.discount)) * 100) / 100)), style: 'tableFooter', alignment: 'right' }],
+                [{ text: `Net Total (${currency})${wordsSuffix}`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '', { text: this.fmt(Math.max(0, Math.round((Number(invoice.amount || 0) - Number(invoice.discount)) * 100) / 100)), style: 'tableFooter', alignment: 'right' }],
             );
         }
-        
-        const netPayable = Math.max(0, Number(invoice.amount || 0) - (Number(invoice.discount) > 0 ? Number(invoice.discount) : 0));
-        const wordsText = `${currency ? `(${currency}) ` : ''}${this.amountInWords(netPayable, currency)}`;
-        if (!invoice.isProforma) {
-            tableBody.push([{ text: wordsText, style: 'tableFooter', colSpan: 5, alignment: 'left' }, '', '', '', '']);
+        // Invoice raised from a proforma: show the advance that came in against it, and what is still due.
+        // Footer order: Total -> Payment terms (value received / expected per the PI) -> Balance Due.
+        const net = Math.max(0, Math.round((Number(invoice.amount || 0) - (Number(invoice.discount) > 0 ? Number(invoice.discount) : 0)) * 100) / 100);
+        const termsValue = invoice.proformaInvoice && invoice.receivedAmount != null
+            ? Number(invoice.receivedAmount) || 0
+            : (invoice.claimAmount != null ? Number(invoice.claimAmount) || 0 : null);
+        if (!invoice.isProforma && termsValue != null && (invoice.proformaInvoice || termsValue < net)) {
+            const received = termsValue;
+            const terms = (invoice.paymentTerms || '').toString().trim();
+            tableBody.push(
+                [{ text: `${terms ? terms : 'Payment Received'}`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '', { text: this.fmt(received), style: 'tableFooter', alignment: 'right' }],
+                [{ text: `Balance Due (${currency})`, style: 'tableFooter', colSpan: 4, alignment: 'left' }, '', '', '', { text: this.fmt(Math.max(0, Math.round((net - received) * 100) / 100)), style: 'tableFooter', alignment: 'right' }],
+            );
         }
 
         const quoteCompany = (invoice.quoteCompany || '').toString().toLowerCase();
@@ -215,7 +228,7 @@ export class InvoiceService {
                     headerRows: 1,
                     widths: [35, '*', 30, 55, 60],
                     body: [
-                        ['SL.\nNo.', 'Description', 'Qty', `Unit Price\n(${currency})`, `Total Cost\n(${currency})`].map((t, i) => ({ text: t, bold: true, color: 'white', fillColor: '#1E3964', fontSize: PF_SIZE, alignment: 'center', margin: [0, 4, 0, 4] })),
+                        ['SL.\nNo.', 'Description', 'Qty', 'Unit Price', 'Total Cost'].map((t, i) => ({ text: t, bold: true, color: 'white', fillColor: '#1E3964', fontSize: PF_SIZE, alignment: 'center', margin: [0, 4, 0, 4] })),
                         ...items.map((item: any, index: number) => [
                             tcell(String(index + 1).padStart(2, '0'), { alignment: 'center' }),
                             tcell(item.description || '-'),
@@ -332,8 +345,8 @@ export class InvoiceService {
                                 { style: 'tableHead', text: invoice.paymentTerms || '-', alignment: 'left' }
                             ],
                             [
-                                { style: 'tableHead', text: 'DN No:', alignment: 'left' },
-                                { style: 'tableHead', text: invoice.dnNumbers || '-', alignment: 'left', colSpan: 3 }, {}, {},
+                                { style: 'tableHead', text: invoice.showAttention ? 'Attention:' : 'DN No:', alignment: 'left' },
+                                { style: 'tableHead', text: invoice.showAttention ? (invoice.attention || '-') : (invoice.dnNumbers || '-'), alignment: 'left', colSpan: 3 }, {}, {},
                                 { style: 'tableHead', text: 'LPO Ref:', alignment: 'left' },
                                 { style: 'tableHead', text: invoice.lpoRef || '-', alignment: 'left' }
                             ],
@@ -355,8 +368,8 @@ export class InvoiceService {
                                 { text: 'SL.\nNo.', style: 'tableHeader', alignment: 'center' },
                                 { text: 'DESCRIPTION', style: 'tableHeader' },
                                 { text: 'QTY', style: 'tableHeader', alignment: 'center' },
-                                { text: `UNIT PRICE (${currency})`, style: 'tableHeader', alignment: 'right' },
-                                { text: `TOTAL AMOUNT (${currency})`, style: 'tableHeader', alignment: 'right' }
+                                { text: 'UNIT PRICE', style: 'tableHeader', alignment: 'right' },
+                                { text: 'TOTAL AMOUNT', style: 'tableHeader', alignment: 'right' }
                             ],
                             ...tableBody
                         ]
