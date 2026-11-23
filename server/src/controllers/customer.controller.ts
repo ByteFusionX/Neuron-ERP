@@ -202,24 +202,36 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
         let isCreatedBy = createdBy == null ? true : false;
 
 
+        // Created-by and Shared-with together mean "created by OR shared with" (union), not both at once
+        const hasSharedFilter = !!sharedWith && ObjectId.isValid(sharedWith);
+        const hasCreatedFilter = !!createdBy && ObjectId.isValid(createdBy);
+        const unionCreatedShared = hasSharedFilter && hasCreatedFilter;
+
         let searchRegex = search.split('').join('\\s*');
         let matchFilters = {
             isDeleted: { $ne: true },
             ...(creditStatus ? { creditStatus } : {}),
             ...(status ? { status } : {}),
             // "Shared with" filter: customers shared to this one employee
-            ...(sharedWith && ObjectId.isValid(sharedWith) ? { sharedWith: new ObjectId(sharedWith) } : {}),
+            ...(hasSharedFilter && !unionCreatedShared ? { sharedWith: new ObjectId(sharedWith) } : {}),
             $or: [
                 { companyName: { $regex: search, $options: 'i' } },
                 { clientRef: { $regex: search, $options: 'i' } },]
         }
 
-        let createdByFilter = {
-            $or: [
-                { createdBy: new ObjectId(createdBy) },
-                { createdBy: { $exists: isCreatedBy } },
-            ]
-        }
+        let createdByFilter = unionCreatedShared
+            ? {
+                $or: [
+                    { createdBy: new ObjectId(createdBy) },
+                    { sharedWith: new ObjectId(sharedWith) },
+                ]
+            }
+            : {
+                $or: [
+                    { createdBy: new ObjectId(createdBy) },
+                    { createdBy: { $exists: isCreatedBy } },
+                ]
+            }
 
         let accessFilter = {};
 

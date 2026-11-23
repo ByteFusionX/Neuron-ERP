@@ -129,6 +129,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         this.row = params['row'] ? parseInt(params['row']) : 15;
         if (this.grid) this.grid.page = this.page;
         this.selectedEmployee = params['employee'] || null;
+        this.sharedWithFilter = params['sharedWith'] || null;
         this.searchQuery = params['search'] || '';
         this.getAllCustomers();
         // Other modules hand over here with ?create=1 to start a new customer; the flag is consumed once.
@@ -327,6 +328,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         page: this.page !== 1 ? this.page : null,
         row: this.row !== 15 ? this.row : null,
         employee: this.selectedEmployee,
+        sharedWith: this.sharedWithFilter,
         search: this.searchQuery ? this.searchQuery : null,
         create: null,
         returnTo: null,
