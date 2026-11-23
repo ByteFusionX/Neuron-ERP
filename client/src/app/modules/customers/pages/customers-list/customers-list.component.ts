@@ -64,6 +64,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
   selectedEmployee: string | null = null;
   creditStatusFilter: string | null = null;
   statusFilter: string | null = null;
+  sharedWithFilter: string | null = null;
 
   columns: DataGridColumn<getCustomer>[] = [];
   rowActions: DataGridRowAction<getCustomer>[] = [];
@@ -120,6 +121,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     this.buildColumns();
     this.buildRowActions();
     this.loadCreators();
+    this.loadShareEmployees();
 
     this.subscriptions.add(
       this._route.queryParams.subscribe((params) => {
@@ -225,6 +227,16 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     );
   }
 
+  /** "Shared with" filter options: every employee who is not blocked or deleted (the API already excludes them). */
+  private loadShareEmployees(): void {
+    this.subscriptions.add(
+      this._employeeService.getAllEmployees().subscribe((employees) => {
+        const editorOptions = (employees ?? []).map((e) => ({ label: `${e.firstName || ''} ${e.lastName || ''}`.trim(), value: e._id }));
+        this.columns = this.columns.map((c) => (c.key === 'shared' ? { ...c, label: 'Shared with', editorOptions } : c));
+      })
+    );
+  }
+
   /** Transferring ownership requires the transfer privilege; owning the customer alone is not enough. */
   private canTransfer(_r: getCustomer): boolean {
     return !!this.transferAccess;
@@ -253,6 +265,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       search: this.searchQuery,
       creditStatus: this.creditStatusFilter,
       status: this.statusFilter,
+      sharedWith: this.sharedWithFilter,
     };
   }
 
@@ -267,6 +280,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       search: this.searchQuery,
       creditStatus: this.creditStatusFilter,
       status: this.statusFilter,
+      sharedWith: this.sharedWithFilter,
     };
 
     this.subscriptions.add(
@@ -295,10 +309,12 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     this.selectedEmployee = null;
     this.creditStatusFilter = null;
     this.statusFilter = null;
+    this.sharedWithFilter = null;
     for (const f of query.filters) {
       if (f.key === 'createdBy') this.selectedEmployee = f.value;
       if (f.key === 'creditStatus') this.creditStatusFilter = f.value;
       if (f.key === 'status') this.statusFilter = f.value;
+      if (f.key === 'shared') this.sharedWithFilter = f.value;
     }
     this.getAllCustomers();
     this.updateUrlParams();

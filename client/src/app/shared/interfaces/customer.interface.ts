@@ -95,4 +95,5 @@ export interface FilterCustomer {
     createdBy: string | null;
     creditStatus?: string | null;
     status?: string | null;
+    sharedWith?: string | null;
 }

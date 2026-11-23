@@ -207,6 +207,8 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
             isDeleted: { $ne: true },
             ...(creditStatus ? { creditStatus } : {}),
             ...(status ? { status } : {}),
+            // "Shared with" filter: customers shared to this one employee
+            ...(sharedWith && ObjectId.isValid(sharedWith) ? { sharedWith: new ObjectId(sharedWith) } : {}),
             $or: [
                 { companyName: { $regex: search, $options: 'i' } },
                 { clientRef: { $regex: search, $options: 'i' } },]
