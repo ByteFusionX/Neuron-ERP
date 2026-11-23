@@ -63,6 +63,17 @@ export class InvoiceService {
         });
     }
 
+    /** Drops empty/whitespace-only lines so cells never render a blank line. */
+    private compactLines(v: any): string {
+        const nl = String.fromCharCode(10);
+        const out = (v == null ? '' : String(v))
+            .split(nl)
+            .map(l => l.replace(String.fromCharCode(13), '').trim())
+            .filter(Boolean)
+            .join(nl);
+        return out || '-';
+    }
+
     async generateInvoicePDF(invoice: any, includeStamp = false) {
         pdfMake.vfs = pdfFonts.vfs;
 
@@ -83,7 +94,7 @@ export class InvoiceService {
             const unit = Number(item.unitPrice ?? item.unitCost) || (item.quantity ? lineTotal / item.quantity : 0);
             tableBody.push([
                 { text: String(index + 1).padStart(2, '0'), style: 'tableText', alignment: 'center' },
-                { text: item.description || '-', style: 'tableText' },
+                { text: this.compactLines(item.description), style: 'tableText' },
                 { text: this.fmt(item.quantity || 0, 0, 3), style: 'tableText', alignment: 'center' },
                 { text: this.fmt(unit), style: 'tableText', alignment: 'right' },
                 { text: this.fmt(lineTotal), style: 'tableText', alignment: 'right' }
@@ -91,7 +102,20 @@ export class InvoiceService {
         });
 
         const currency = invoice.currency || DEFAULT_CURRENCY;
-        
+
+        // Strip blank lines / stray whitespace so values never render an empty line.
+        const clean = (v: any) => this.compactLines(v);
+        const infoRows: string[][] = [
+            ['Client:', clean(invoice.customer?.companyName), 'Invoice Date:', new Date(invoice.date).toLocaleDateString('en-GB')],
+            ['Invoice No:', clean(invoice.invoiceNo), 'Payment Terms:', clean(invoice.paymentTerms)],
+            [invoice.showAttention ? 'Attention:' : 'DN No:', clean(invoice.showAttention ? invoice.attention : invoice.dnNumbers), 'LPO Ref:', clean(invoice.lpoRef)],
+            ['Sub:', clean(invoice.subject), 'Job No:', clean(invoice.jobId?.jobId || invoice.jobNo)]
+        ];
+        // Label column = widest label (+ cell padding); the value fills the rest of its half.
+        const labelW = (i: number) => Math.max(...infoRows.map(r => r[i].length)) * 5.4 + 12;
+        const lw1 = labelW(0);
+        const lw2 = labelW(2);
+
         // Amount in words rides on the final total row ("Total (QAR) - words"); with a discount that is Net Total.
         const netPayable = Math.max(0, Number(invoice.amount || 0) - (Number(invoice.discount) > 0 ? Number(invoice.discount) : 0));
         const wordsText = this.amountInWords(netPayable, currency);
@@ -330,33 +354,13 @@ export class InvoiceService {
                     color: '#444',
                     margin: [0, 10, 0, 15],
                     table: {
-                        widths: [73.66, '*', 10, '*', 85.60, '*'],
-                        body: [
-                            [
-                                { style: 'tableHead', text: 'Client:', alignment: 'left' },
-                                { style: 'tableHead', text: invoice.customer?.companyName || '-', alignment: 'left', colSpan: 3 }, {}, {},
-                                { style: 'tableHead', text: 'Invoice Date:', alignment: 'left' },
-                                { style: 'tableHead', text: new Date(invoice.date).toLocaleDateString('en-GB'), alignment: 'left' }
-                            ],
-                            [
-                                { style: 'tableHead', text: 'Invoice No:', alignment: 'left' },
-                                { style: 'tableHead', text: invoice.invoiceNo || '-', alignment: 'left', colSpan: 3, bold: true }, {}, {},
-                                { style: 'tableHead', text: 'Payment Terms:', alignment: 'left' },
-                                { style: 'tableHead', text: invoice.paymentTerms || '-', alignment: 'left' }
-                            ],
-                            [
-                                { style: 'tableHead', text: invoice.showAttention ? 'Attention:' : 'DN No:', alignment: 'left' },
-                                { style: 'tableHead', text: invoice.showAttention ? (invoice.attention || '-') : (invoice.dnNumbers || '-'), alignment: 'left', colSpan: 3 }, {}, {},
-                                { style: 'tableHead', text: 'LPO Ref:', alignment: 'left' },
-                                { style: 'tableHead', text: invoice.lpoRef || '-', alignment: 'left' }
-                            ],
-                            [
-                                { style: 'tableHead', text: 'Sub:', alignment: 'left' },
-                                { style: 'tableHead', text: invoice.subject || '-', alignment: 'left', colSpan: 3 }, {}, {},
-                                { style: 'tableHead', text: 'Job No:', alignment: 'left' },
-                                { style: 'tableHead', text: invoice.jobId?.jobId || invoice.jobNo || '-', alignment: 'left' }
-                            ]
-                        ]
+                        widths: [lw1, '*', lw2, '*'],
+                        body: infoRows.map(r => [
+                            { style: 'tableHead', text: r[0], alignment: 'left' },
+                            { style: 'tableHead', text: r[1], alignment: 'left', bold: r[0] === 'Invoice No:' },
+                            { style: 'tableHead', text: r[2], alignment: 'left' },
+                            { style: 'tableHead', text: r[3], alignment: 'left' }
+                        ])
                     }
                 },
                 {
