@@ -224,7 +224,7 @@ export const getEmployeesForCustomerTransfer = async (
 
     switch (employeeAccess.category.privileges.employee.viewReport) {
       case "reported":
-        accessFilter = { reportingTo: new ObjectId(userId) };
+        accessFilter = { _id: { $in: await getAllReportedEmployees(userId) } };
         break;
       case "created":
         accessFilter = { createdBy: new ObjectId(userId) };
@@ -232,7 +232,7 @@ export const getEmployeesForCustomerTransfer = async (
       case "createdAndReported":
         accessFilter = {
           $or: [
-            { reportingTo: new ObjectId(userId) },
+            { _id: { $in: await getAllReportedEmployees(userId) } },
             { createdBy: new ObjectId(userId) },
           ],
         };
@@ -365,7 +365,7 @@ export const getEmployeeByEmployeeId = async (
 
     switch (access) {
       case "reported":
-        accessFilter = { reportingTo: new ObjectId(userId) };
+        accessFilter = { _id: { $in: await getAllReportedEmployees(userId) } };
         break;
       case "created":
         accessFilter = { createdBy: new ObjectId(userId) };
@@ -373,7 +373,7 @@ export const getEmployeeByEmployeeId = async (
       case "createdAndReported":
         accessFilter = {
           $or: [
-            { reportingTo: new ObjectId(userId) },
+            { _id: { $in: await getAllReportedEmployees(userId) } },
             { createdBy: new ObjectId(userId) },
           ],
         };
@@ -493,7 +493,7 @@ export const getFilteredEmployees = async (
     let accessFilter = {};
     switch (access) {
       case "reported":
-        accessFilter = { reportingTo: new ObjectId(userId) };
+        accessFilter = { _id: { $in: await getAllReportedEmployees(userId) } };
         break;
       case "created":
         accessFilter = { createdBy: new ObjectId(userId) };
@@ -501,7 +501,7 @@ export const getFilteredEmployees = async (
       case "createdAndReported":
         accessFilter = {
           $or: [
-            { reportingTo: new ObjectId(userId) },
+            { _id: { $in: await getAllReportedEmployees(userId) } },
             { createdBy: new ObjectId(userId) },
           ],
         };

@@ -3,7 +3,7 @@ import jobModel, { allocateStatus, allocateType, jobStatus } from "../models/job
 import Employee from '../models/employee.model';
 import { buildGridFilterMatch, buildGridSort, GridFieldMap } from "../common/utils/grid-query";
 import { newTrash } from '../controllers/trash.controller';
-import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, getUSDRated, getEmployeeData, escapeRegex } from "../common/utils/util";
+import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, resolveViewAccess, getUSDRated, getEmployeeData, escapeRegex } from "../common/utils/util";
 import technicalModel from '../models/technical.model';
 import PurchaseRequest, { PurchaseRequestStatus } from '../models/purchaseRequest.model';
 import quotationModel, { quoteStatus } from '../models/quotation.model';
@@ -186,6 +186,7 @@ export const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number, jobO
 export const jobList = async (req: Request, res: Response, next: NextFunction) => {
     try {
         let { page, search, row, status, salesPerson, selectedMonth, selectedYear, access, userId, allocateStatus: allocateStatusFilter, allocateStatuses, filters: gridFilters, sortKey, sortDir, customer, department, fromDate, toDate } = req.body;
+        access = await resolveViewAccess(access, userId);
 
         page = Math.max(1, parseInt(page) || 1);
         row = Math.min(10000, Math.max(1, parseInt(row) || 15));
@@ -376,7 +377,8 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
 
 export const totalJob = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { access, userId, allocateStatus } = req.query;
+        let { access, userId, allocateStatus } = req.query as any;
+        access = await resolveViewAccess(access, userId);
 
         let accessFilter = {};
 

@@ -3,7 +3,7 @@ import { Invoice } from '../models/invoice.model';
 import { InvoiceAudit } from '../models/invoiceAudit.model';
 import DeliveryNote from '../models/deliveryNote.model';
 import mongoose from 'mongoose';
-import { getEmployeeData } from '../common/utils/util';
+import { getEmployeeData, listScopeFilter } from '../common/utils/util';
 import { issueDocNo, peekDocNo } from '../services/docNumber.service';
 import { applyDnItemRejections, RejectDnItemInput } from './deliveryNote.controller';
 import { createCreditNote } from './creditNote.controller';
@@ -18,7 +18,7 @@ export const getInvoices = async (req: Request, res: Response) => {
         const limit = parseInt(req.query.limit as string) || 10;
         const skip = (page - 1) * limit;
 
-        const query: any = { isDeleted: false };
+        const query: any = { isDeleted: false, ...(await listScopeFilter(req, (p) => p.invoice?.viewReport)) };
 
         if (req.query.search) {
             query['$or'] = [

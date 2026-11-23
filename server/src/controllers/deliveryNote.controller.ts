@@ -15,7 +15,7 @@ import { CustomerInvoice } from '../models/customerInvoice.model';
 import { jobTotalsOf } from './customerInvoice.controller';
 import { checkAndUpdateJobCompletionStatus, jobBasePipeline } from './job.controller';
 import { createNotificationWithPrivileges } from './notification.controller';
-import { getEmployeeData, getUSDRated } from '../common/utils/util';
+import { getEmployeeData, getUSDRated, listScopeFilter } from '../common/utils/util';
 import { Server } from 'socket.io';
 import { uploadFileToAws } from '../common/aws-connect';
 import { logAudit } from '../services/audit.service';
@@ -301,8 +301,10 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
         const statusFilter = Array.isArray(status) ? { $in: status } : status;
         let isStatus = status == null ? true : false;
 
+        const scope = await listScopeFilter(req, (p) => p.dispatch?.viewReport);
         let matchFilters = {
             $and: [
+                scope,
                 ...(status ? [{ status: statusFilter }] : []),
                 // Delivered DNs split by whether every line on the DN reached its ordered qty.
                 ...(deliveryScope === 'full' ? [{ $expr: { $allElementsTrue: [{ $map: { input: '$items', as: 'i', in: { $gte: [{ $add: [{ $ifNull: ['$$i.deliveredQty', 0] }, { $ifNull: ['$$i.currentDeliveryQty', 0] }] }, { $ifNull: ['$$i.orderedQty', 0] }] } } }] } }] : []),

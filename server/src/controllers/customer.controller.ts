@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import Customer, { CUSTOMER_STATUSES } from '../models/customer.model';
 import Employee from '../models/employee.model';
 import { newTrash } from '../controllers/trash.controller'
-import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
+import { getAllReportedEmployees, getEmployeeData, resolveViewAccess } from "../common/utils/util";
 import employeeModel from "../models/employee.model";
 import { getNextSequence } from "../models/counter.model";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
@@ -78,7 +78,7 @@ export const getAllCustomers = async (req: Request, res: Response, next: NextFun
         let accessFilter = {};
         const reportedToUserIds = await getAllReportedEmployees(userId);
 
-        switch (employeeAccess.category.privileges.customer.viewReport) {
+        switch (await resolveViewAccess(employeeAccess.category.privileges.customer.viewReport, userId)) {
             case 'created':
                 accessFilter = {
                     $or: [
@@ -194,7 +194,8 @@ export const getAllCustomers = async (req: Request, res: Response, next: NextFun
 
 export const getFilteredCustomers = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, createdBy, access, userId, search, creditStatus, status } = req.body;
+        let { page, row, createdBy, access, userId, search, creditStatus, status, sharedWith } = req.body;
+        access = await resolveViewAccess(access, userId);
         page = Number(page) > 0 ? Number(page) : 1;
         row = Number(row) > 0 ? Number(row) : 15;
         let skipNum: number = (page - 1) * row;
@@ -281,7 +282,7 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
 
         switch (employeeAccess.category.privileges.employee.viewReport) {
             case 'reported':
-                empAccessFilter = { reportingTo: new ObjectId(userId) };
+                empAccessFilter = { _id: { $in: await getAllReportedEmployees(userId) } };
                 break;
             case 'created':
                 empAccessFilter = { createdBy: new ObjectId(userId) };
@@ -289,7 +290,7 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
             case 'createdAndReported':
                 empAccessFilter = {
                     $or: [
-                        { reportingTo: new ObjectId(userId) },
+                        { _id: { $in: await getAllReportedEmployees(userId) } },
                         { createdBy: new ObjectId(userId) },
                     ]
                 };
@@ -452,7 +453,8 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
 
 export const getCustomerByCustomerId = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { access, userId } = req.query;
+        let { access, userId } = req.query as any;
+        access = await resolveViewAccess(access, userId);
         let customerId = req.params.customerId;
         let accessFilter = {};
 

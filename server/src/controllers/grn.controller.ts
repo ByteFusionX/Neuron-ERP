@@ -6,7 +6,7 @@ import Job from "../models/job.model";
 import Product from "../models/products.model";
 import PurchaseRequest from "../models/purchaseRequest.model";
 import mongoose from "mongoose";
-import { getEmployeeData } from "../common/utils/util";
+import { getEmployeeData, listScopeFilter } from "../common/utils/util";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { uploadFileToAws } from "../common/aws-connect";
 import { issueDocNo, peekDocNo } from "../services/docNumber.service";
@@ -883,8 +883,9 @@ export const getAllGRNs = async (req: Request, res: Response) => {
     };
     const receiptStatus = statusAliases[String(status)] || String(status);
 
+    const scope = await listScopeFilter(req, (p) => p.grn?.viewReport);
     const pipeline: any[] = [
-      { $match: { isDeleted: { $ne: true } } },
+      { $match: { isDeleted: { $ne: true }, ...scope } },
       {
         $lookup: {
           from: "purchaseorders",

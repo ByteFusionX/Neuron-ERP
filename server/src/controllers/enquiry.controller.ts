@@ -10,7 +10,7 @@ import { Enquiry } from "../interface/enquiry.interface";
 import quotationModel, { quoteStatus } from "../models/quotation.model";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { newTrash } from '../controllers/trash.controller'
-import { getReportedEmployeesWithDepartments, widenAccessForDepartmentHead, getEmployeeData, getUSDRated } from "../common/utils/util";
+import { getReportedEmployeesWithDepartments, resolveViewAccess, getEmployeeData, getUSDRated } from "../common/utils/util";
 import { cancelInBlock, completeInBlock, followUpViewFilter, readCompleteBody, readScheduleBody, scheduleInBlock } from "../services/followUpTasks.service";
 import { notifyByPrivilege } from "../services/notify.service";
 import { getNextSequence } from "../models/counter.model";
@@ -828,7 +828,7 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
         let accessFilter = {};
         const actingUserId = ObjectId.isValid(userId) ? new ObjectId(userId) : null;
 
-        access = await widenAccessForDepartmentHead(access, userId);
+        access = await resolveViewAccess(access, userId);
         let reportedToUserIds = await getReportedEmployeesWithDepartments(userId);
 
         switch (access) {
@@ -1906,7 +1906,7 @@ export const monthlyEnquiries = async (req: Request, res: Response, next: NextFu
         let { access, userId } = req.query;
 
         let accessFilter = {};
-        access = await widenAccessForDepartmentHead(access, userId);
+        access = await resolveViewAccess(access, userId);
         let reportedToUserIds = await getReportedEmployeesWithDepartments(userId);
 
         switch (access) {
@@ -3567,7 +3567,7 @@ const tallyEnquiry = (map: Map<string, any>, id: string, name: string, stage: st
 export const getEnquiryReport = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { salesPerson, customer, fromDate, toDate, department, userId } = req.body;
-        const access = await widenAccessForDepartmentHead(req.body.access, userId);
+        const access = await resolveViewAccess(req.body.access, userId);
 
         const match: any = { isDeleted: { $ne: true }, $and: [] as any[] };
         const salesPersonMatch = reportMatch(reportIds(salesPerson), req.body.salesPersonNot);

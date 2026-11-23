@@ -11,7 +11,7 @@ import { resolveDeliveryProduct } from "./deliveryNote.controller";
 import { StockHold } from "../models/stockHold.model";
 import { CreditNote } from "../models/creditNote.model";
 import { getNextSequence } from "../models/counter.model";
-import { getEmployeeData } from "../common/utils/util";
+import { getEmployeeData, listScopeFilter } from "../common/utils/util";
 import { createNotificationWithPrivileges } from "./notification.controller";
 
 const hasStockHoldPrivilege = (employee: any, action: 'canInitiateHold' | 'canIssueCreditNote' | 'canCreateReplacementLPO'): boolean => {
@@ -458,7 +458,7 @@ export const createStockHold = async (req: Request, res: Response) => {
 export const getStockHolds = async (req: Request, res: Response) => {
   try {
     const { stockEntryId, grnId, supplierId, status, dnId, jobId, source } = req.query;
-    const filter: any = { isDeleted: { $ne: true } };
+    const filter: any = { isDeleted: { $ne: true }, ...(await listScopeFilter(req, (p) => p.stockHold?.viewReport, 'initiatedBy')) };
     if (dnId && mongoose.Types.ObjectId.isValid(dnId as string)) filter.dnId = dnId;
     if (jobId && mongoose.Types.ObjectId.isValid(jobId as string)) filter.jobId = jobId;
     if (source === 'GRN' || source === 'DN') filter.source = source;

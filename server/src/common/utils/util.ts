@@ -427,30 +427,50 @@ export const getAllReportedEmployees = async (userId: any): Promise<ObjectId[]> 
     // No user supplied (e.g. an unscoped list request): nobody reports to them.
     if (!userId) return [];
     try {
-        // Step 1: Fetch all employees and their reportingTo relationships in one go
-        const employees = await employeeModel.find({}, '_id reportingTo').lean();
+        // Step 1: Fetch all employees, their reportingTo links and departments in one go
+        const [employees, departments] = await Promise.all([
+            employeeModel.find({}, '_id reportingTo department').lean(),
+            departmentModel.find({ departmentHead: { $ne: null } }, '_id departmentHead').lean(),
+        ]);
 
         // Step 2: Build a lookup map for quick access
         const employeeMap = new Map<string, string[]>(); // key: managerId, value: list of employeeIds
-        for (const employee of employees) {
+        const membersByDept = new Map<string, string[]>();
+        for (const employee of employees as any[]) {
             const managerId = employee.reportingTo?.toString(); // Use `null` or empty string if no manager
             if (!employeeMap.has(managerId)) {
                 employeeMap.set(managerId, []);
             }
             employeeMap.get(managerId)!.push(employee._id.toString());
+            const deptId = employee.department?.toString();
+            if (deptId) {
+                if (!membersByDept.has(deptId)) membersByDept.set(deptId, []);
+                membersByDept.get(deptId)!.push(employee._id.toString());
+            }
+        }
+        // A department head oversees every member of their department, even staff with no "Reports To" set.
+        for (const dept of departments as any[]) {
+            const headId = dept.departmentHead.toString();
+            const members = (membersByDept.get(dept._id.toString()) || []).filter((id) => id !== headId);
+            if (!members.length) continue;
+            if (!employeeMap.has(headId)) employeeMap.set(headId, []);
+            const list = employeeMap.get(headId)!;
+            for (const m of members) if (!list.includes(m)) list.push(m);
         }
 
         // Step 3: Perform a breadth-first search (BFS) to collect all reported employees
         const visited = new Set<string>();
         const queue = [userId.toString()]; // Start with the provided userId
         const reportedIds: ObjectId[] = [];
+        const queued = new Set<string>([userId.toString()]); // avoids duplicates now that dept + chain overlap
 
         while (queue.length > 0) {
             const currentId = queue.shift()!;
             if (visited.has(currentId)) continue;
 
             visited.add(currentId);
-            const directReports = employeeMap.get(currentId) || [];
+            const directReports = (employeeMap.get(currentId) || []).filter((id) => !visited.has(id) && !queued.has(id));
+            directReports.forEach((id) => queued.add(id));
             reportedIds.push(...directReports.map(id => new ObjectId(id)));
             queue.push(...directReports); // Enqueue for further processing
         }
@@ -480,12 +500,15 @@ export const getReportedEmployeesWithDepartments = async (userId: any): Promise<
     return reported;
 };
 
-/** A department head always oversees their department, so a "created only" view is widened to include their team. */
-export const widenAccessForDepartmentHead = async (access: any, userId: any): Promise<any> => {
-    if (access !== 'created' || !ObjectId.isValid(userId)) return access;
+/**
+ * The view scope a list actually applies. Only a superadmin bypasses the role's viewReport and sees everything;
+ * everyone else, managers and department heads included, sees exactly what their viewReport allows.
+ */
+export const resolveViewAccess = async (access: any, userId: any): Promise<any> => {
+    if (!userId || !ObjectId.isValid(userId)) return access;
     try {
-        const headed = await departmentModel.exists({ departmentHead: new ObjectId(userId) });
-        return headed ? 'createdAndReported' : access;
+        const emp: any = await employeeModel.findById(userId).select('category').populate('category', 'role').lean();
+        return /^superadmin$/i.test(String(emp?.category?.role ?? '')) ? 'all' : access;
     } catch (error) {
         return access;
     }
@@ -622,17 +645,18 @@ export const buildPrivilegeAccessFilter = async (
     createdByField: string = 'createdBy'
 ): Promise<any> => {
     let accessFilter: any = {};
-    
+    viewReport = await resolveViewAccess(viewReport, userId);
+
     switch (viewReport) {
         case 'created':
             accessFilter[createdByField] = userId;
             break;
         case 'reported':
-            const reportedIds = await getAllReportedEmployees(userId);
+            const reportedIds = await getReportedEmployeesWithDepartments(userId);
             accessFilter[createdByField] = { $in: reportedIds };
             break;
         case 'createdAndReported':
-            const reportedIds2 = await getAllReportedEmployees(userId);
+            const reportedIds2 = await getReportedEmployeesWithDepartments(userId);
             reportedIds2.push(userId);
             accessFilter[createdByField] = { $in: reportedIds2 };
             break;
@@ -647,3 +671,17 @@ export const buildPrivilegeAccessFilter = async (
 
 /** Escapes user text so it can be used literally inside a Mongo `$regex`. */
 export const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Row filter for a list endpoint from the signed-in user's viewReport scope (created / reported / createdAndReported),
+ * using the full reporting chain. Superadmins and 'all' see everything; a missing or 'none' scope adds no filter, since the
+ * route's privilege gate already decides whether the list can be opened at all.
+ */
+export const listScopeFilter = async (req: any, pick: (privileges: any) => string | undefined, ownerField: string = 'createdBy'): Promise<any> => {
+    const employee: any = await getEmployeeData(req.user);
+    if (!employee) return { _id: { $in: [] } };
+    if (/^superadmin$/i.test(employee.category?.role || '')) return {};
+    const view = pick(employee.category?.privileges || {});
+    if (!view || view === 'none') return {};
+    return buildPrivilegeAccessFilter(employee._id, view, ownerField);
+};

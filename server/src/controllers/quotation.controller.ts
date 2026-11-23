@@ -19,7 +19,7 @@ import { logEnquiryAudit } from "../services/enquiryAudit.service";
 import { logAudit } from "../services/audit.service";
 import { cancelOpenFollowUp } from "../services/enquiryFollowUp.service";
 import { cancelInBlock, completeInBlock, followUpActor, followUpViewFilter, readCompleteBody, readScheduleBody, scheduleInBlock } from "../services/followUpTasks.service";
-import { calculateDiscountPrice, getAdminAuthoredEmployeeIds, getAllReportedEmployees, escapeRegex, getEmployeeData, getUSDRated } from "../common/utils/util";
+import { calculateDiscountPrice, getAdminAuthoredEmployeeIds, getAllReportedEmployees, resolveViewAccess, escapeRegex, getEmployeeData, getUSDRated } from "../common/utils/util";
 const { ObjectId } = require('mongodb');
 import { newTrash } from '../controllers/trash.controller'
 import { removeFile } from '../common/utils/util'
@@ -577,6 +577,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
         const expiredFilter = expiredQuoteFilter();
         const pastDateFilter = pastDateQuoteFilter();
         let { page, search, row, access, userId, sortKey, sortDir, followUpView, followUpFromDate, followUpToDate, presaleView } = req.body;
+        access = await resolveViewAccess(access, userId);
 
         page = Math.max(1, parseInt(page) || 1);
         row = Math.min(100, Math.max(1, parseInt(row) || 10));
@@ -640,8 +641,11 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             if (!actingUserId) return { _id: null };
             const me: any = await Employee.findById(actingUserId).select('category').populate('category', 'role').lean();
             if (/^superadmin$/i.test(String(me?.category?.role ?? ''))) return {};
-            const reportees = (await getAllReportedEmployees(userId)).filter(Boolean);
-            return { createdBy: { $in: [actingUserId, ...reportees] } };
+            // Reportees only when the role's view scope covers them; being in the chain alone is not enough.
+            const seesTeam = access === 'reported' || access === 'createdAndReported' || access === 'all';
+            const reportees = seesTeam ? (await getAllReportedEmployees(userId)).filter(Boolean) : [];
+            const ownAllowed = access !== 'reported';
+            return { createdBy: { $in: [...(ownAllowed ? [actingUserId] : []), ...reportees] } };
         })();
 
         const filters = { $and: [matchFilters, presaleView ? presaleAccessFilter : accessFilter] }
@@ -748,7 +752,8 @@ const withDealStageNames = async (quotations: any[]): Promise<void> => {
 export const getQuotationById = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        const { access, userId } = req.body ?? {};
+        let { access, userId } = req.body ?? {};
+        access = await resolveViewAccess(access, userId);
 
         if (!ObjectId.isValid(id)) {
             return res.status(400).json({ message: 'Invalid quotation id' });
@@ -845,7 +850,7 @@ export const getQuoteViewers = async (req: any, res: Response, next: NextFunctio
             const id = emp._id.toString();
             const role = String(emp.category?.role ?? '').toLowerCase();
             let scope: string;
-            if (role === 'superadmin' || role === 'admin') {
+            if (role === 'superadmin') {
                 scope = 'all';
             } else {
                 const expired = !!emp.extraPrivilegesExpiresAt && new Date(emp.extraPrivilegesExpiresAt).getTime() <= Date.now();
@@ -1074,6 +1079,7 @@ const dealViewCounts = async (accessFilter: Record<string, any>, searchFilter: R
 export const getDealSheet = async (req: Request, res: Response, next: NextFunction) => {
     try {
         let { page, row, access, userId, searchQuery, searchCriteria, view, filters: gridFilters, sortKey, sortDir } = req.body;
+        access = await resolveViewAccess(access, userId);
 
         page = Math.max(1, parseInt(page) || 1);
         row = Math.min(100, Math.max(1, parseInt(row) || 15));
@@ -1323,7 +1329,8 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
  */
 export const getDealReport = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { access, userId } = req.body;
+        let { access, userId } = req.body;
+        access = await resolveViewAccess(access, userId);
 
         let accessFilter = {};
         if (access === 'created') {
@@ -1389,6 +1396,7 @@ export const getDealReport = async (req: Request, res: Response, next: NextFunct
 export const getApprovedDealSheet = async (req: Request, res: Response, next: NextFunction) => {
     try {
         let { page, row, access, userId, role, searchQuery, searchCriteria, filters: gridFilters, sortKey, sortDir } = req.body;
+        access = await resolveViewAccess(access, userId);
         page = Math.max(1, parseInt(page) || 1);
         row = Math.min(100, Math.max(1, parseInt(row) || 15));
         let skipNum: number = (page - 1) * row;
@@ -3377,7 +3385,8 @@ export const uploadLpo = async (req: any, res: Response, next: NextFunction) => 
 
 export const totalQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { access, userId } = req.query;
+        let { access, userId } = req.query as any;
+        access = await resolveViewAccess(access, userId);
 
         let accessFilter = {};
 
@@ -3499,7 +3508,8 @@ const tally = (map: Map<string, any>, id: string, name: string, value: number, w
 
 export const getReportDetails = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { access, userId } = req.body;
+        let { access, userId } = req.body;
+        access = await resolveViewAccess(access, userId);
 
         // Same filters as the list grid, so the report covers exactly the quotes the list shows.
         const clauses = quotationFilterClauses(req.body);
