@@ -104,7 +104,10 @@ export class InvoicesComponent implements OnInit, OnDestroy {
   /** Proformas on the current page that already have an invoice. */
   private invoicedPis = new Map<string, string>();
   private readonly canInvoice = (row: any): boolean =>
-    this.canCreateInvoice && row.proforma?.status === 'Received' && !this.invoicedPis.has(String(row.proforma._id));
+    this.canCreateInvoice && !!row.proforma && !this.invoicedPis.has(String(row.proforma._id));
+  /** Editable from the moment it is raised until the PI is completed (the server checks the invoice's own status). */
+  private readonly canEditInvoice = (row: any): boolean =>
+    this.canCreateInvoice && this.hasInvoice(row) && row.proforma?.status !== 'Received' && row.proforma?.status !== 'Completed';
   private readonly canConfirmPayment = (row: any): boolean =>
     this.canApprove && this.hasInvoice(row) && (
       (row.proforma?.status === 'Received' && !row.proforma?.paymentConfirmedAt)
@@ -327,10 +330,11 @@ export class InvoicesComponent implements OnInit, OnDestroy {
       const notJob = (row: any) => row.kind !== 'Job';
       return [
         { id: 'create-proforma', label: 'Create proforma', icon: 'plus', quick: true, panel: false, hidden: (row: any) => notJob(row) || !!row.proforma },
-        { id: 'edit-proforma', label: 'Edit PI', icon: 'pencil', quick: true, panel: false, hidden: (row: any) => notJob(row) || !row.proforma || !this.canCreate || row.proforma.status === 'Received' || row.proforma.status === 'Completed' },
-        { id: 'update-status', label: 'Update status', icon: 'flag', quick: true, panel: false, hidden: (row: any) => notJob(row) || !row.proforma || !this.canApprove || this.hasInvoice(row) },
+        { id: 'edit-proforma', label: 'Edit PI', icon: 'pencil', quick: false, panel: false, hidden: (row: any) => notJob(row) || !row.proforma || !this.canCreate || row.proforma.status === 'Received' || row.proforma.status === 'Completed' },
+        { id: 'update-status', label: 'Update status', icon: 'flag', quick: true, panel: false, hidden: (row: any) => notJob(row) || !row.proforma || !this.canApprove || row.proforma.status === 'Received' || row.proforma.status === 'Completed' },
         { id: 'confirm-payment', label: 'Confirm payment', icon: 'check', quick: true, panel: false, hidden: (row: any) => notJob(row) || !this.canConfirmPayment(row) },
         { id: 'create-invoice', label: 'Create invoice', icon: 'plus', quick: true, panel: false, hidden: (row: any) => notJob(row) || !this.canInvoice(row) },
+        { id: 'edit-invoice', label: 'Edit invoice', icon: 'pencil', quick: false, panel: false, hidden: (row: any) => notJob(row) || !this.canEditInvoice(row) },
         { id: 'preview-proforma', label: 'Preview proforma', icon: 'customerBill', quick: true, panel: false, hidden: (row: any) => notJob(row) || !row.proforma },
         { id: 'download-proforma', label: 'Download proforma', icon: 'download', panel: false, hidden: (row: any) => notJob(row) || !row.proforma },
         { id: 'preview-invoice', label: 'Preview invoice', icon: 'documentText', quick: true, panel: false, hidden: (row: any) => notJob(row) || !this.hasInvoice(row) },
@@ -342,10 +346,11 @@ export class InvoicesComponent implements OnInit, OnDestroy {
     return [
       { id: 'create-proforma', label: 'Create proforma', icon: 'plus', quick: true, panel: false, hidden: (row: any) => !!row.proforma },
       ...([
-        { id: 'edit-proforma', label: 'Edit PI', icon: 'pencil', quick: true, panel: false, hidden: (row: any) => !row.proforma || !this.canCreate || row.proforma.status === 'Received' || row.proforma.status === 'Completed' },
-        { id: 'update-status', label: 'Update status', icon: 'flag', quick: true, panel: false, hidden: (row: any) => !row.proforma || !this.canApprove || this.hasInvoice(row) },
+        { id: 'edit-proforma', label: 'Edit PI', icon: 'pencil', quick: false, panel: false, hidden: (row: any) => !row.proforma || !this.canCreate || row.proforma.status === 'Received' || row.proforma.status === 'Completed' },
+        { id: 'update-status', label: 'Update status', icon: 'flag', quick: true, panel: false, hidden: (row: any) => !row.proforma || !this.canApprove || row.proforma.status === 'Received' || row.proforma.status === 'Completed' },
         { id: 'confirm-payment', label: 'Confirm payment', icon: 'check', quick: true, panel: false, hidden: (row: any) => !this.canConfirmPayment(row) },
         { id: 'create-invoice', label: 'Create invoice', icon: 'plus', quick: true, panel: false, hidden: (row: any) => !this.canInvoice(row) },
+        { id: 'edit-invoice', label: 'Edit invoice', icon: 'pencil', quick: false, panel: false, hidden: (row: any) => !this.canEditInvoice(row) },
         { id: 'preview-proforma', label: 'Preview proforma', icon: 'customerBill', quick: true, panel: false, hidden: (row: any) => !row.proforma },
         { id: 'download-proforma', label: 'Download proforma', icon: 'download', panel: false, hidden: (row: any) => !row.proforma },
       ]),
@@ -411,7 +416,23 @@ export class InvoicesComponent implements OnInit, OnDestroy {
     });
   }
 
+  invoiceDrawerInvoice: any = null;
+
+  private editInvoice(pi: ProformaInvoice): void {
+    const id = this.invoicedPis.get(String(pi._id));
+    if (!id) return;
+    this.customerInvoiceService.get(id).subscribe({
+      next: (res) => {
+        this.invoiceDrawerInvoice = res?.data ?? res;
+        this.invoiceDrawerPi = pi;
+        this.invoiceDrawerOpen = true;
+      },
+      error: (err) => this.notificationService.error(err?.error?.message || 'Failed to load the invoice'),
+    });
+  }
+
   private createInvoice(pi: ProformaInvoice): void {
+    this.invoiceDrawerInvoice = null;
     this.invoiceDrawerPi = pi;
     this.invoiceDrawerOpen = true;
   }
@@ -419,7 +440,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
   onInvoiceCreated(invoice: any): void {
     const pi = this.invoiceDrawerPi;
     this.invoiceDrawerOpen = false;
-    this.notificationService.success(`Invoice ${invoice?.invoiceNo || ''} created${pi ? ' for ' + pi.piNo : ''}`);
+    this.notificationService.success(`Invoice ${invoice?.invoiceNo || ''} ${this.invoiceDrawerInvoice ? 'updated' : 'created'}${pi ? ' for ' + pi.piNo : ''}`);
     this.load();
     this.loadCounts();
   }
@@ -488,6 +509,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
       case 'payment-document': this.downloadPaymentDocument(row.proforma); break;
       case 'confirm-payment': void this.confirmPayment(row.proforma); break;
       case 'create-invoice': this.createInvoice(row.proforma); break;
+      case 'edit-invoice': this.editInvoice(row.proforma); break;
       case 'preview-invoice': this.renderInvoice(row.proforma, false); break;
       case 'download-invoice': this.renderInvoice(row.proforma, true); break;
       case 'view-job': this.router.navigate(['/job-sheet/view', row.job?._id || row._id], { state: { returnUrl: this.router.url } }); break;
@@ -547,7 +569,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
         return this.piService.list({ page: 1, limit: 100, jobs: jobs.map((j: any) => j._id) }).pipe(
           switchMap((res) => {
             const pis = res?.data ?? [];
-            const received = pis.filter((p) => p.status === 'Received' || p.status === 'Completed').map((p) => p._id);
+            const received = pis.map((p) => p._id);
             if (!received.length) return of({ data, pis, invoiced: new Map<string, string>() });
             // Which received proformas already have their invoice, so "Create invoice" is offered once.
             return this.customerInvoiceService.list({ page: 1, limit: 100, search: '', proformaInvoices: received.join(',') }).pipe(
@@ -569,7 +591,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
       next: (res) => {
         const inv = res?.data ?? res;
         const customer = inv?.customer && typeof inv.customer === 'object' && inv.customer.companyName ? inv.customer : { ...(typeof inv?.customer === 'object' ? inv.customer : {}), companyName: pi.client?.name };
-        const invoice = { ...inv, customer, date: inv?.createdAt || inv?.date, shipTo: inv?.shipTo || pi.shipTo, paymentTerms: inv?.paymentTerms || pi.paymentTerms, jobId: inv?.jobId?.jobId ? inv.jobId : { jobId: pi.jobId }, currency: inv?.currency || pi.currency || DEFAULT_CURRENCY, lpoRef: inv?.lpoRef || pi.lpoNo, subject: inv?.subject || pi.subject };
+        const invoice = { ...inv, customer, date: inv?.createdAt || inv?.date, shipTo: inv?.shipTo || pi.shipTo, paymentTerms: inv?.paymentTerms || pi.paymentTerms, jobId: inv?.jobId?.jobId ? inv.jobId : { jobId: pi.jobId }, currency: inv?.currency || pi.currency || DEFAULT_CURRENCY, lpoRef: inv?.lpoRef || pi.lpoNo, subject: inv?.subject || pi.subject, attention: inv?.attention || pi.attention || '', showAttention: true };
         this.invoiceService.generateInvoicePDF(invoice, download)
           .then((pdf) => download
             ? pdf.download(`${String(invoice.invoiceNo || pi.piNo).replace(/\//g, '-')}.pdf`)

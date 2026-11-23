@@ -58,6 +58,7 @@
 <app-pi-invoice-drawer
   [open]="invoiceDrawerOpen"
   [pi]="invoiceDrawerPi"
+  [invoice]="invoiceDrawerInvoice"
   (saved)="onInvoiceCreated($event)"
   (closed)="invoiceDrawerOpen = false">
 </app-pi-invoice-drawer>

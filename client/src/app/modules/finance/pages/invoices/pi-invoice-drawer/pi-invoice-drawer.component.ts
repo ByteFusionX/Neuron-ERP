@@ -23,6 +23,8 @@ import { DEFAULT_CURRENCY } from '../../../../../shared/constants/currency';
 export class PiInvoiceDrawerComponent implements OnChanges {
   @Input() open = false;
   @Input() pi: ProformaInvoice | null = null;
+  /** When set, the drawer edits this existing invoice instead of creating one. */
+  @Input() invoice: any | null = null;
   @Output() saved = new EventEmitter<any>();
   @Output() closed = new EventEmitter<void>();
 
@@ -103,6 +105,16 @@ export class PiInvoiceDrawerComponent implements OnChanges {
       receivedDate: paid?.receivedAt ? String(paid.receivedAt).slice(0, 10) : today,
       paymentMethod: paid?.method && paid.method !== 'PDF' ? paid.method : '',
     });
+    const inv = this.invoice;
+    if (inv) {
+      this.form.patchValue({
+        attention: inv.attention || '', paymentTerms: inv.paymentTerms || '', lpoRef: inv.lpoRef || '', subject: inv.subject || '',
+        invoiceDate: inv.invoiceDate ? String(inv.invoiceDate).slice(0, 10) : today,
+        receivedAmount: inv.receivedAmount ?? pi.expectedAmount ?? this.net,
+        receivedDate: inv.receivedDate ? String(inv.receivedDate).slice(0, 10) : today,
+        paymentMethod: inv.paymentMethod || '',
+      });
+    }
     this.lines = (pi.items || []).map((i: any) => ({
       description: i.description, partNo: i.partNo, qty: Number(i.quantity) || 0, unitPrice: Number(i.unitPrice) || 0,
       amount: i.amount ?? (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
@@ -124,13 +136,14 @@ export class PiInvoiceDrawerComponent implements OnChanges {
     }
     const v = this.form.getRawValue();
     this.saving.set(true);
-    this.service.create({
+    const payload = {
       proformaInvoice: pi._id,
       client: { name: v.clientName, customerId: pi.client?.customerId },
       attention: v.attention, invoiceDate: v.invoiceDate, invoiceNo: '', dnNo: '',
       lpoRef: v.lpoRef, subject: v.subject, paymentTerms: v.paymentTerms, paymentMethod: v.paymentMethod,
       receivedAmount: Number(v.receivedAmount), receivedDate: v.receivedDate,
-    }).subscribe({
+    };
+    (this.invoice ? this.service.update(this.invoice._id, payload) : this.service.create(payload)).subscribe({
       next: (res) => {
         this.saving.set(false);
         this.form.markAsPristine();
@@ -138,7 +151,7 @@ export class PiInvoiceDrawerComponent implements OnChanges {
       },
       error: (err) => {
         this.saving.set(false);
-        this.notificationService.error(err?.error?.message || 'Failed to create the invoice');
+        this.notificationService.error(err?.error?.message || this.invoice ? 'Failed to update the invoice' : 'Failed to create the invoice');
       },
     });
   }

@@ -1,5 +1,5 @@
 <app-sf-drawer
-    [title]="'Create Invoice'"
+    [title]="invoice ? 'Edit Invoice' : 'Create Invoice'"
     [subtitle]="pi ? 'For ' + pi.piNo : ''"
     [width]="step === 2 ? 'min(1400px, 96vw)' : '720px'"
     [open]="open"
@@ -70,7 +70,7 @@
         <app-action-button *ngIf="step === 2" variant="secondary" (click)="step = 1" [disabled]="saving()">Back</app-action-button>
         <app-action-button *ngIf="step === 1" variant="primary" (click)="next()">Next</app-action-button>
         <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="pi-invoice-form" [disabled]="saving()">
-            {{ saving() ? 'Saving...' : 'Create Invoice' }}
+            {{ saving() ? 'Saving...' : (invoice ? 'Save Changes' : 'Create Invoice') }}
         </app-action-button>
     </ng-container>
 </app-sf-drawer>

@@ -159,7 +159,6 @@ export const createCustomerInvoice = async (req: Request, res: Response) => {
             if (!Types.ObjectId.isValid(req.body.proformaInvoice)) return res.status(400).json({ message: 'Select a proforma invoice' });
             const pi: any = await ProformaInvoice.findOne({ _id: req.body.proformaInvoice, isDeleted: false }).lean();
             if (!pi) return res.status(404).json({ message: 'Proforma invoice not found' });
-            if (pi.status !== 'Received') return res.status(400).json({ message: 'An invoice can only be created once the proforma payment is received' });
             if (await CustomerInvoice.exists({ proformaInvoice: pi._id })) return res.status(409).json({ message: 'An invoice has already been created for this proforma invoice' });
             const receivedAmount = Number(req.body.receivedAmount);
             const receivedDate = new Date(req.body.receivedDate);
@@ -230,9 +229,16 @@ export const updateCustomerInvoice = async (req: Request, res: Response) => {
         const paymentMethod = clean(req.body.paymentMethod);
         if (!req.body.invoiceDate || isNaN(invoiceDate.getTime())) return res.status(400).json({ message: 'A valid invoice date is required' });
         if (paymentMethod && !(CUSTOMER_PAYMENT_METHODS as readonly string[]).includes(paymentMethod)) return res.status(400).json({ message: 'Select a valid payment method' });
-        const invoice: any = await CustomerInvoice.findOne({ _id: req.params.id, ...access.filter });
+        // A DN invoice belongs to Dispatch: the router already checked dispatch.createInvoice, and those users
+        // usually have no invoice view scope, so the finance scope filter would hide their own invoice (404).
+        let invoice: any = await CustomerInvoice.findOne({ _id: req.params.id, ...access.filter });
+        if (!invoice) {
+            const dnInvoice: any = await CustomerInvoice.findOne({ _id: req.params.id, deliveryNote: { $exists: true, $ne: null } });
+            if (dnInvoice) invoice = dnInvoice;
+        }
         if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
-        if (invoice.status !== 'Pending') return res.status(409).json({ message: 'Only a pending invoice can be edited' });
+        // A PI invoice stays editable until it is completed; the rest only while pending.
+        if (invoice.proformaInvoice ? invoice.status === 'Completed' : invoice.status !== 'Pending') return res.status(409).json({ message: invoice.proformaInvoice ? 'A completed invoice can no longer be edited' : 'Only a pending invoice can be edited' });
         if (invoice.paymentMethod === 'PDC' && invoice.pdcStatus && invoice.pdcStatus !== 'Pending') return res.status(409).json({ message: 'The PDC on this invoice has already been actioned' });
 
         if (invoice.deliveryNote && Array.isArray(req.body.itemIndexes)) {
@@ -247,6 +253,14 @@ export const updateCustomerInvoice = async (req: Request, res: Response) => {
         }
         for (const key of ['attention', 'lpoRef', 'subject', 'paymentTerms']) invoice[key] = clean(req.body[key]);
         invoice.invoiceDate = invoiceDate;
+        if (invoice.proformaInvoice) {
+            const receivedAmount = Number(req.body.receivedAmount);
+            const receivedDate = new Date(req.body.receivedDate);
+            if (!Number.isFinite(receivedAmount) || receivedAmount < 0) return res.status(400).json({ message: 'Enter the received value' });
+            if (!req.body.receivedDate || isNaN(receivedDate.getTime())) return res.status(400).json({ message: 'Enter the received date' });
+            invoice.receivedAmount = receivedAmount;
+            invoice.receivedDate = receivedDate;
+        }
         if ((paymentMethod || undefined) !== (invoice.paymentMethod || undefined)) {
             if (paymentMethod === 'PDC') {
                 invoice.pdcStatus = 'Pending';
