@@ -197,13 +197,11 @@ export interface Privileges {
     masterData: boolean;
     documentation?: boolean;
     approvalRules: boolean;
-    notifications: boolean;
     audit: boolean;
     companyProfileEdit?: boolean;
     numberingEdit?: boolean;
     masterDataEdit?: boolean;
     approvalRulesEdit?: boolean;
-    notificationsEdit?: boolean;
     auditEdit?: boolean;
     recycle?: boolean;
     bugReports?: boolean;

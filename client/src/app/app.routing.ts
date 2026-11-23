@@ -225,11 +225,6 @@ export const routes: Routes = [
         loadComponent: () => import('./modules/settings/pages/numbering/numbering.component').then((c) => c.NumberingComponent),
       },
       {
-        path: 'notifications',
-        data: { section: 'notifications' },
-        loadComponent: () => import('./modules/settings/pages/notifications/notification-settings.component').then((c) => c.NotificationSettingsComponent),
-      },
-      {
         path: 'audit',
         data: { section: 'audit' },
         loadComponent: () => import('./modules/settings/pages/audit/audit-settings.component').then((c) => c.AuditSettingsComponent),

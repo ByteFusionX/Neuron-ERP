@@ -63,7 +63,7 @@ const MODULE_CATEGORY_OF: Record<string, string> = {
  * The host binds `open`, `mode` and (for edit) `category`, and reacts to `saved` / `closed`.
  */
 // Modules being reworked come first, in this order; the rest keep their existing order.
-const PRIORITY_MODULES = ['home', 'dashboard', 'salesDashboard', 'operationsDashboard', 'projectsDashboard', 'financeDashboard', 'administrationDashboard', 'companyProfile', 'numbering', 'masterData', 'roles', 'workflow', 'notifications', 'audit', 'recycle', 'bugReports', 'departments', 'employee', 'customer'];
+const PRIORITY_MODULES = ['home', 'dashboard', 'salesDashboard', 'operationsDashboard', 'projectsDashboard', 'financeDashboard', 'administrationDashboard', 'companyProfile', 'numbering', 'masterData', 'roles', 'workflow', 'audit', 'recycle', 'bugReports', 'departments', 'employee', 'customer'];
 const orderModules = (modules: PrivilegeModule[]): PrivilegeModule[] => {
   const rank = (m: PrivilegeModule) => {
     const i = PRIORITY_MODULES.indexOf(m.key);
@@ -363,14 +363,6 @@ export class RoleFormDrawerComponent implements OnChanges {
       ],
     },
     {
-      key: 'notifications', label: 'Notifications', abbr: 'NT', description: 'Which events alert people',
-      scopes: [],
-      flags: [
-        { path: 'portalManagement.notifications', label: 'Notifications (view)' },
-        { path: 'portalManagement.notificationsEdit', label: 'Notifications (edit)' },
-      ],
-    },
-    {
       key: 'audit', label: 'Audit & History', abbr: 'AU', description: 'Recorded changes and history retention',
       scopes: [],
       flags: [
@@ -571,13 +563,11 @@ export class RoleFormDrawerComponent implements OnChanges {
         masterData: [false],
         documentation: [false],
         approvalRules: [false],
-        notifications: [false],
         audit: [false],
         companyProfileEdit: [false],
         numberingEdit: [false],
         masterDataEdit: [false],
         approvalRulesEdit: [false],
-        notificationsEdit: [false],
         auditEdit: [false],
         recycle: [false],
         bugReports: [false]

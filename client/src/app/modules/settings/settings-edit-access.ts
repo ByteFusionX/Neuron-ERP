@@ -9,7 +9,6 @@ export type SettingsEditFlag =
   | 'numberingEdit'
   | 'masterDataEdit'
   | 'approvalRulesEdit'
-  | 'notificationsEdit'
   | 'auditEdit';
 
 /** True when the signed-in user may change this Settings area (superAdmin always may). Call in a field initializer. */

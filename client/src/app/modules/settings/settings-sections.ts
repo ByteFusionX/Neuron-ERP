@@ -6,7 +6,6 @@ export type SettingsSectionId =
   | 'documentation'
   | 'approval-rules'
   | 'numbering'
-  | 'notifications'
   | 'audit';
 
 export interface SettingsAccess {
@@ -79,15 +78,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: 'Workflow',
     keywords: ['approval', 'workflow', 'approver', 'escalation', 'steps', 'deal sheet', 'presale', 'purchase'],
     canView: ({ privileges }) => !!privileges?.portalManagement?.approvalRules,
-  },
-  {
-    id: 'notifications',
-    label: 'Notifications',
-    description: 'Which events alert people, such as pending approvals and overdue follow-ups.',
-    icon: 'heroBell',
-    group: 'System',
-    keywords: ['alert', 'email', 'reminder', 'overdue', 'pending'],
-    canView: ({ privileges }) => !!privileges?.portalManagement?.notifications,
   },
   {
     id: 'audit',
