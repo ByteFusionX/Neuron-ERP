@@ -68,8 +68,12 @@ export interface Privileges {
     allocateJobs: boolean;
     transferProcurementPerson: boolean;
     statusUpdate?: boolean;
-    // Gates the PI/PR/PO/GRN/DN/Invoice tabs of the job view. Undefined = allowed; explicit false denies.
+    // Legacy single switch for all job-view document tabs; only read as the fallback for the two below.
     viewOtherModules?: boolean;
+    // PR/PO/GRN tabs of the job view. Undefined = falls back to viewOtherModules, then allowed.
+    viewPurchaseTabs?: boolean;
+    // PI/DN/Invoice tabs of the job view. Undefined = falls back to viewOtherModules, then allowed.
+    viewSalesTabs?: boolean;
   };
   // Roles saved before the split hold a bare boolean (true = view + approve + reject + revoke).
   dealSheet: boolean | {

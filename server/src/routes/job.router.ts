@@ -26,6 +26,7 @@ jobRouter.get('/technical', getDropdownListForTechnical)
 jobRouter.post('/unassignedToTechnical', getUnassignedProjectAndAMCJobs)
 jobRouter.post('/transferProcurementPerson', requirePrivilege("jobSheet", "transferProcurementPerson"), transferProcurementPerson)
 jobRouter.get('/history/:jobId', getJobHistory)
-jobRouter.get('/procurement/:jobId', requireUnlessDenied("jobSheet", "viewOtherModules"), getJobProcurement)
+// Tab access (PR/PO/GRN vs DN/Invoice) is checked inside getJobProcurement.
+jobRouter.get('/procurement/:jobId', getJobProcurement)
 
 export default jobRouter

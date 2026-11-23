@@ -251,6 +251,10 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                 reportedToUserIds.push(new ObjectId(userId));
                 accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
                 break;
+            // Only jobs allocated to this user as procurement person.
+            case 'allocated':
+                if (userId) accessFilter = { 'procurementPerson._id': new ObjectId(userId) };
+                break;
             default:
                 break;
         }
@@ -395,6 +399,9 @@ export const totalJob = async (req: Request, res: Response, next: NextFunction) 
                 if (!userId) break;
                 reportedToUserIds.push(new ObjectId(userId));
                 accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
+                break;
+            case 'allocated':
+                if (userId) accessFilter = { 'procurementPerson._id': new ObjectId(userId as string) };
                 break;
 
             default:
@@ -2204,8 +2211,33 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
 };
 
 /** Per-stage line rows (PR, PO, GRN, DN) for the job sheet view's side panel. */
+/**
+ * Whether the caller may see one group of job-view document tabs.
+ * Same rules as requireUnlessDenied: superadmin always, admin needs an explicit true, others are allowed unless set to false.
+ * A flag left unset falls back to the older jobSheet.viewOtherModules switch.
+ */
+const canSeeJobTabs = (employee: any, flag: 'viewPurchaseTabs' | 'viewSalesTabs'): boolean => {
+    const role = employee?.category?.role;
+    if (/^superadmin$/i.test(role ?? '')) return true;
+    const pick = (js: any) => (js?.[flag] ?? js?.viewOtherModules);
+    const own = pick(employee?.category?.privileges?.jobSheet);
+    if (role === 'admin') {
+        const expiresAt = employee?.extraPrivilegesExpiresAt;
+        const extraExpired = !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
+        const extra = extraExpired ? undefined : pick(employee?.extraPrivileges?.jobSheet);
+        return own === true || extra === true;
+    }
+    return own !== false;
+};
+
 export const getJobProcurement = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        const employee = (req as any).employee;
+        const showPurchase = canSeeJobTabs(employee, 'viewPurchaseTabs');
+        const showSales = canSeeJobTabs(employee, 'viewSalesTabs');
+        if (!showPurchase && !showSales) {
+            return res.status(403).json({ message: "Forbidden" });
+        }
         const { jobId } = req.params;
         if (!jobId || !ObjectId.isValid(jobId)) {
             return res.status(400).json({ success: false, message: "Invalid job ID", status: 400 });
@@ -2318,7 +2350,12 @@ export const getJobProcurement = async (req: Request, res: Response, next: NextF
             }));
         });
 
-        res.status(200).json({ success: true, data: { pr, po, grn, dn, invoice } });
+        res.status(200).json({
+            success: true,
+            data: showPurchase
+                ? { pr, po, grn, dn: showSales ? dn : [], invoice: showSales ? invoice : [] }
+                : { pr: [], po: [], grn: [], dn, invoice },
+        });
     } catch (error) {
         next(error);
     }

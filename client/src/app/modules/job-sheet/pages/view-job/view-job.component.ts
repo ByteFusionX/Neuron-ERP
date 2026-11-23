@@ -125,7 +125,7 @@ export class ViewJobComponent implements OnInit {
   panelOpen = true;
   panelTab: PanelTab = 'costs';
   get panelTabs(): { id: PanelTab; label: string }[] {
-    return this.canViewOtherModules ? this.allPanelTabs : this.allPanelTabs.filter((t) => t.id !== 'pi' && !this.isStageTab(t.id));
+    return this.allPanelTabs.filter((t) => this.canSeeTab(t.id));
   }
   private readonly allPanelTabs: { id: PanelTab; label: string }[] = [
     { id: 'costs', label: 'Pricing' },
@@ -370,7 +370,13 @@ export class ViewJobComponent implements OnInit {
   private canAllocateJobs = false;
   private canUpdateJobStatus = false;
   /** One privilege covers the PI, PR, PO, GRN, DN and Invoice tabs; unset means allowed. */
-  private canViewOtherModules = true;
+  private canViewPurchaseTabs = true;
+  private canViewSalesTabs = true;
+  private canSeeTab(tab: PanelTab): boolean {
+    if (tab === 'pr' || tab === 'po' || tab === 'grn') return this.canViewPurchaseTabs;
+    if (tab === 'pi' || tab === 'dn' || tab === 'invoice') return this.canViewSalesTabs;
+    return true;
+  }
 
   ngOnInit(): void {
     const state = history.state as { returnUrl?: string };
@@ -381,8 +387,11 @@ export class ViewJobComponent implements OnInit {
       this.isSuperAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
       this.canAllocateJobs = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.allocateJobs || false;
       this.canUpdateJobStatus = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.statusUpdate !== false;
-      this.canViewOtherModules = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.viewOtherModules !== false;
-      if (!this.canViewOtherModules && (this.panelTab === 'pi' || this.isStageTab(this.panelTab))) this.panelTab = 'costs';
+      // Unset flags fall back to the older single viewOtherModules switch.
+      const js: any = data?.category?.privileges?.jobSheet;
+      this.canViewPurchaseTabs = this.isSuperAdmin || (js?.viewPurchaseTabs ?? js?.viewOtherModules) !== false;
+      this.canViewSalesTabs = this.isSuperAdmin || (js?.viewSalesTabs ?? js?.viewOtherModules) !== false;
+      if (!this.canSeeTab(this.panelTab)) this.panelTab = 'costs';
     });
 
     this.load();
