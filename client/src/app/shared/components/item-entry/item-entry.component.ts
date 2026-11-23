@@ -1321,6 +1321,15 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     return base;
   }
 
+  /** Purchase quote layout: a line added in the PR (not on the job or deal) has no deal price, so its selling price is typed; deal lines stay read-only. */
+  isPriceEditable(i: number, j: number, k: number): boolean {
+    if (!this.isPurchase || !this.quoteLayout || !this.lineDeal) return false;
+    const d = this.detailsAt(i, j)?.at(k);
+    if (!d || this.isLineLocked(i, j, k)) return false;
+    if (Number(d.get('dealUnitCost')?.value) > 0) return false;
+    return !this.dealOf(d);
+  }
+
   lineMargin(i: number, j: number, k: number): number | null {
     const d = this.detailsAt(i, j)?.at(k);
     const c = this.shownUnitCost(i, j, k);

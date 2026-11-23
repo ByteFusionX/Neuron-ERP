@@ -375,8 +375,8 @@
                     <ng-icon name="heroArrowPath" class="h-2.5 w-2.5 opacity-0 transition-opacity group-hover:opacity-100"></ng-icon>
                   </button>
                 </div>
-                <span *ngIf="isPurchase && quoteLayout" class="ie-cell ie-x justify-end tabular-nums">{{ detail.get('unitSellingPrice')?.value != null && detail.get('unitSellingPrice')?.value !== '' ? (detail.get('unitSellingPrice')?.value | number: '1.2-2') : '—' }}</span>
-                <app-sf-number *ngIf="!(isPurchase && quoteLayout)" class="ie-x" formControlName="unitSellingPrice" placeholder="Price" [stepper]="false" [min]="0"></app-sf-number>
+                <span *ngIf="isPurchase && quoteLayout && !isPriceEditable(i, j, k)" class="ie-cell ie-x justify-end tabular-nums">{{ detail.get('unitSellingPrice')?.value != null && detail.get('unitSellingPrice')?.value !== '' ? (detail.get('unitSellingPrice')?.value | number: '1.2-2') : '—' }}</span>
+                <app-sf-number *ngIf="!(isPurchase && quoteLayout) || isPriceEditable(i, j, k)" class="ie-x" formControlName="unitSellingPrice" placeholder="Price" [stepper]="false" [min]="0"></app-sf-number>
                 <div *ngIf="isPurchase && quoteLayout; else plainCost" class="ie-x relative h-full min-w-0">
                   <span class="ie-total h-full min-h-[2.25rem]">{{ lineCostShown(i, j, k) | number: '1.2-2' }}</span>
                   <p *ngIf="lineCostDiff(i, j, k) as cd" class="absolute right-0 top-full mt-0.5 whitespace-nowrap text-right text-[11px] tabular-nums" [ngClass]="cd < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'" [title]="((cd < 0 ? -cd : cd) | number: '1.2-2') + (cd < 0 ? ' saved against the deal cost' : ' over the deal cost')">{{ cd < 0 ? '▼' : '▲' }} {{ (cd < 0 ? -cd : cd) | number: ((cd < 0 ? -cd : cd) >= 1000 ? '1.0-0' : '1.2-2') }}</p>
