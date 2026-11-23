@@ -432,7 +432,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
 
   contactRows(row: getCustomer): Record<string, any>[] {
     return (this.detail(row).contactDetails ?? []).map((c) => ({
-      name: `${c.courtesyTitle ? c.courtesyTitle + '. ' : ''}${c.firstName} ${c.lastName}`.trim() + (c.isPrimary ? ' (Primary)' : ''),
+      name: `${c.courtesyTitle ? c.courtesyTitle + '. ' : ''}${c.firstName || ''} ${c.lastName || ''}`.trim() + (c.isPrimary ? ' (Primary)' : ''),
       designation: (c.designation || '—'),
       email: c.email,
       phoneNo: c.phoneNo,

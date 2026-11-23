@@ -303,7 +303,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
         const customer = customers.find((c) => c._id === clientId);
         if (!customer) return;
         this.contactOptions = (customer.contactDetails || []).map((c: ContactDetail) => ({
-          label: `${c.firstName} ${c.lastName}`,
+          label: `${c.firstName || ''} ${c.lastName || ''}`.trim(),
           value: c._id,
         }));
         if (this.seeding) return;

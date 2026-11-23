@@ -201,7 +201,7 @@ export class CustomerViewComponent implements OnInit {
       },
     ];
     this.contactRows = (c.contactDetails ?? []).map((x) => ({
-      name: `${x.courtesyTitle ? x.courtesyTitle + '. ' : ''}${x.firstName} ${x.lastName}`.trim() + (x.isPrimary ? ' (Primary)' : ''),
+      name: `${x.courtesyTitle ? x.courtesyTitle + '. ' : ''}${x.firstName || ''} ${x.lastName || ''}`.trim() + (x.isPrimary ? ' (Primary)' : ''),
       designation: x.designation || '—',
       email: x.email,
       phoneNo: x.phoneNo,

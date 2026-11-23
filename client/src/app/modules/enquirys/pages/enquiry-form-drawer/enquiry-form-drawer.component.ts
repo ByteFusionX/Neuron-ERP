@@ -142,7 +142,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     this.salesPersonName = `${e.salesPerson?.firstName ?? ''} ${e.salesPerson?.lastName ?? ''}`.trim();
     if (!this.customerOptions.length && e.client) this.customerOptions = [{ label: e.client.companyName, value: e.client._id }];
     if (!this.departmentOptions.length && e.department) this.departmentOptions = [{ label: e.department.departmentName, value: e.department._id }];
-    this.contactOptions = (e.client?.contactDetails || []).map((c: ContactDetail) => ({ label: `${c.firstName} ${c.lastName}`, value: c._id }));
+    this.contactOptions = (e.client?.contactDetails || []).map((c: ContactDetail) => ({ label: `${c.firstName || ''} ${c.lastName || ''}`.trim(), value: c._id }));
     this.enquiryForm.patchValue({
       client: id(e.client),
       contact: id(e.contact),
@@ -261,7 +261,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
       this.customers$.pipe(take(1)).subscribe((customers) => {
         const customer = customers.find((c) => c._id === clientId);
         this.contactOptions = (customer?.contactDetails || []).map((c: ContactDetail) => ({
-          label: `${c.firstName} ${c.lastName}`,
+          label: `${c.firstName || ''} ${c.lastName || ''}`.trim(),
           value: c._id,
         }));
         this.narrowDepartments(clientId, customer);
@@ -297,7 +297,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     this.enquiryForm.controls.client.setValue(customer._id);
     this.enquiryForm.controls.client.markAsDirty();
     this.contactOptions = (customer.contactDetails || []).map((contact: ContactDetail) => ({
-      label: `${contact.firstName} ${contact.lastName}`.trim(),
+      label: `${contact.firstName || ''} ${contact.lastName || ''}`.trim(),
       value: contact._id,
     }));
     const primaryContact = (customer.contactDetails || []).find((contact: any) => contact.isPrimary)
