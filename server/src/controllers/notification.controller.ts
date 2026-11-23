@@ -677,36 +677,10 @@ export const createNotificationWithPrivileges = async (
             return null;
         }
 
-        const recipients = eligibleEmployeeIds.map(employeeId => ({
-            objectId: new ObjectId(employeeId),
-            status: 'unread'
-        }));
-
-        const notification = await createNotification({
-            ...notificationData,
-            recipients,
-            date: new Date()
-        });
-
-        if (notification && socket) {
-            notification.recipients.forEach((recipient: any) => {
-                const recipientId = recipient.objectId._id?.toString() || recipient.objectId.toString();
-                // Always emit to the room: connectedSockets tracks one socket per user, so it is wrong
-                // once a user has several tabs (closing one deletes the entry while others still listen).
-                socket.to(recipientId).emit("recieveNotifications", notification);
-            });
-        }
-
-        if (notification) {
-            const routeInfo = getRoutePath(notification.type, notification.referenceId, notification.additionalData);
-            void sendWebPushToEmployees(eligibleEmployeeIds, {
-                title: notification.title,
-                body: notification.message,
-                data: { routePath: routeInfo.routePath, routeData: routeInfo.routeData },
-            });
-        }
-
-        return notification;
+        // Delivered through notify() so each recipient's muted types (profile > Notifications) are honoured.
+        // Lazy require: notify.service imports this file.
+        const { notify } = require("../services/notify.service") as typeof import("../services/notify.service");
+        return await notify({ ...notificationData, recipients: eligibleEmployeeIds });
     } catch (error) {
         console.error("Error creating notification with privileges:", error);
         throw error;

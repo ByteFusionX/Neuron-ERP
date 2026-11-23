@@ -3,7 +3,7 @@ import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import Event from '../models/events.model';
 import Enquiry from '../models/enquiry.model';
 import Quotation from '../models/quotation.model'
-import { createNotification } from "./notification.controller";
+import { notify } from "../services/notify.service";
 import { Server } from "socket.io";
 import Notification from "../models/notification.model";
 import { getEmployeeData } from "../common/utils/util";
@@ -124,24 +124,16 @@ export const newEvent = async (req: any, res: Response, next: NextFunction) => {
         const newEvent = new Event(eventData)
         await newEvent.save();
         if(newEvent.employee){
-            const saveNewNotification = await createNotification({
-                type:'Event',
+            // notify() applies the recipient's muted notification types
+            await notify({
+                type: 'Event',
                 referenceModel: 'Event',
-                title:`A ${newEvent.event} Assigned to You`,
-                message:`${newEvent.summary}`,
-                date:new Date(),
-                sentBy:newEvent.createdBy,
-                recipients:[{objectId:newEvent.employee,status:'unread'}],
-                referenceId:newEvent._id,
-                additionalData:{}
-            })
-
-            if (saveNewNotification) {
-                const socket = req.app.get('io') as Server;
-                saveNewNotification.recipients.forEach((recipient)=>{        
-                    socket.to(recipient.objectId._id.toString()).emit("recieveNotifications", saveNewNotification)
-                })
-            }
+                title: `A ${newEvent.event} Assigned to You`,
+                message: `${newEvent.summary}`,
+                sentBy: newEvent.createdBy,
+                recipients: [newEvent.employee],
+                referenceId: newEvent._id,
+            });
         }
         switch (eventData.from) {
             case 'Enquiry':
