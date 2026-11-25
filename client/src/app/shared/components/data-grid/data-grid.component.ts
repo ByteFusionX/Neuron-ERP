@@ -393,7 +393,16 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   private applyColumnState(state: { key: string; visible: boolean }[]): void {
     const order = new Map(state.map((c, i) => [c.key, i] as [string, number]));
     const visible = new Map(state.map((c) => [c.key, c.visible] as [string, boolean]));
-    this.columns = [...this.columns].sort((a, b) => (order.get(a.key) ?? 1e6) - (order.get(b.key) ?? 1e6));
+    // Saved columns follow the saved order; a column added since the layout was saved goes right after
+    // the column it follows in the definition, instead of falling to the end.
+    const defined = this.columns;
+    const sorted = defined.filter((c) => order.has(c.key)).sort((a, b) => order.get(a.key)! - order.get(b.key)!);
+    defined.forEach((c, i) => {
+      if (order.has(c.key)) return;
+      const prev = defined.slice(0, i).reverse().find((p) => sorted.includes(p));
+      sorted.splice(prev ? sorted.indexOf(prev) + 1 : 0, 0, c);
+    });
+    this.columns = sorted;
     this.columns.forEach((c) => { if (!c.locked && visible.has(c.key)) c.visible = visible.get(c.key); });
     if (!this.visibleColumns.length && this.columns[0]) this.columns[0].visible = true;
   }

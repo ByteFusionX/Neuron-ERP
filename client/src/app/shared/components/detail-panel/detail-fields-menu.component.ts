@@ -91,10 +91,16 @@ export class DetailFieldsMenuComponent implements OnChanges {
     });
   }
 
-  /** Items sorted by the saved order; ones it doesn't know yet keep their given order, after the known ones. */
+  /** Items sorted by the saved order; ones it doesn't know yet go right after the item defined before them. */
   private applyOrder(): void {
-    const pos = (k: string) => { const i = this.order.indexOf(k); return i < 0 ? this.order.length : i; };
-    this.ordered = [...this.items].sort((a, b) => pos(a.key) - pos(b.key));
+    const known = this.items.filter((i) => this.order.includes(i.key))
+      .sort((a, b) => this.order.indexOf(a.key) - this.order.indexOf(b.key));
+    this.items.forEach((item, idx) => {
+      if (this.order.includes(item.key)) return;
+      const prev = this.items.slice(0, idx).reverse().find((p) => known.includes(p));
+      known.splice(prev ? known.indexOf(prev) + 1 : 0, 0, item);
+    });
+    this.ordered = known;
   }
 
   drop(targetKey: string): void {
