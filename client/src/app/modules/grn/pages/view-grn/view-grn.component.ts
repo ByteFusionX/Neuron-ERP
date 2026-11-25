@@ -351,8 +351,7 @@ export class ViewGrnComponent implements OnInit {
       this.docFiles.set(id, f);
       this.docList.push({ id, name: f.originalname || f.fileName || f.name || 'File', uploadedBy: source });
     });
-    addDocs(g?.supplierInvoices, 'Supplier invoice');
-    addDocs(g?.supplierDeliveryNotes, 'Delivery note');
+    addDocs([...(g?.supplierInvoices || []), ...(g?.supplierDeliveryNotes || [])], 'Supplier document');
   }
 
   openDocument(doc: DetailDocument): void {

@@ -504,14 +504,21 @@ export class GrnListComponent implements OnInit {
 
   /** Files uploaded against the PO; a GRN row carries its LPO, an Arriving row is the LPO. */
   poDocuments(row: any): DetailDocument[] {
-    const files = this.isArrivingView ? row?.documents : row?.purchaseOrderId?.documents;
-    return (files ?? []).map((file: any) => ({
+    const toDoc = (file: any, uploadedBy?: string): DetailDocument => ({
       id: file.fileName,
       name: file.originalname || file.fileName,
       kind: file.mimetype?.split('/').pop(),
       size: file.size ? `${Math.max(1, Math.round(file.size / 1024))} KB` : undefined,
       date: file.uploadedAt,
-    }));
+      uploadedBy,
+    });
+    if (this.isArrivingView) return (row?.documents ?? []).map((f: any) => toDoc(f));
+    // GRN row: supplier paperwork uploaded on the GRN itself, then the LPO's own files.
+    const grnFiles = [...(row?.supplierInvoices ?? []), ...(row?.supplierDeliveryNotes ?? [])];
+    return [
+      ...grnFiles.filter((f: any) => f?.fileName).map((f: any) => toDoc(f, 'Supplier document')),
+      ...(row?.purchaseOrderId?.documents ?? []).map((f: any) => toDoc(f, 'LPO document')),
+    ];
   }
 
   private static readonly PREVIEW_MIME: Record<string, string> = {
