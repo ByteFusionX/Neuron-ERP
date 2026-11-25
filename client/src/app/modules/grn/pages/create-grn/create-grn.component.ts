@@ -11,7 +11,8 @@ import {
 } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { forkJoin, of } from 'rxjs';
+import { Observable, forkJoin, of } from 'rxjs';
+import { FileService } from 'src/app/core/services/file.service';
 import { catchError } from 'rxjs/operators';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { GrnService } from 'src/app/core/services/grn/grn.service';
@@ -24,6 +25,8 @@ import { ModalService } from 'src/app/shared/components/modal';
 import { QuickAddDialogComponent, QuickAddDialogData } from 'src/app/modules/products/modals/quick-add-dialog/quick-add-dialog.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { GrnItemEntryComponent } from '../../components/grn-item-entry/grn-item-entry.component';
+import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DetailDocument } from 'src/app/shared/components/detail-panel/detail-panel.model';
 
 @Component({
   selector: 'app-create-grn',
@@ -37,6 +40,7 @@ import { GrnItemEntryComponent } from '../../components/grn-item-entry/grn-item-
     SmartFormModule,
     ActionButtonComponent,
     GrnItemEntryComponent,
+    DetailDocumentsComponent,
   ],
   templateUrl: './create-grn.component.html',
   styleUrl: './create-grn.component.css',
@@ -61,6 +65,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
   private grnService = inject(GrnService);
   private warehouseService = inject(WarehouseService);
   private employeeService = inject(EmployeeService);
+  private fileOpener = inject(FileService);
   private modal = inject(ModalService);
 
   lpoId!: string;
@@ -395,6 +400,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
           : this.receivedByName;
         this.existingDeliveryNotes = grn.supplierDeliveryNotes || [];
         this.existingInvoices = grn.supplierInvoices || [];
+        this.buildExistingDocs();
 
         this.grnForm.patchValue({
           grnNo: grn.grnNo,
@@ -796,34 +802,56 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
     );
   }
 
-  uploadDeliveryNoteFiles(grnId: string): void {
-    if (this.deliveryNoteFiles.length === 0) return;
+  /** Files already on the GRN, listed under the upload field while editing. */
+  existingDocs: DetailDocument[] = [];
+  private existingDocFiles = new Map<string, any>();
+
+  private buildExistingDocs(): void {
+    this.existingDocs = [];
+    this.existingDocFiles.clear();
+    [...this.existingInvoices, ...this.existingDeliveryNotes].filter((f: any) => f?.fileName).forEach((f: any, i: number) => {
+      const id = `existing-${i}`;
+      this.existingDocFiles.set(id, f);
+      this.existingDocs.push({ id, name: f.originalname || f.fileName, uploadedBy: 'Supplier document' });
+    });
+  }
+
+  openExistingDoc(doc: DetailDocument): void {
+    const f = this.existingDocFiles.get(doc.id);
+    if (f) this.fileOpener.openFile(f.fileName, f.originalname || doc.name);
+  }
+
+  /** Both uploads, finished, so the list re-reads the GRN with the new files on it. */
+  private uploadFiles(grnId: string): Observable<unknown> {
+    return forkJoin([this.uploadDeliveryNoteFiles(grnId), this.uploadInvoiceFiles(grnId)]);
+  }
+
+  uploadDeliveryNoteFiles(grnId: string): Observable<unknown> {
+    if (this.deliveryNoteFiles.length === 0) return of(null);
 
     const formData = new FormData();
     this.deliveryNoteFiles.forEach((file) => formData.append('files', file));
     if (this.existingDeliveryNotes.length) formData.append('existingFiles', JSON.stringify(this.existingDeliveryNotes));
 
-    this.grnService.updateSupplierDeliveryNotes(grnId, formData).subscribe({
-      error: (error) => {
-        console.error('Error uploading delivery note:', error);
-        this.toastr.error('GRN saved, but failed to upload delivery note');
-      },
-    });
+    return this.grnService.updateSupplierDeliveryNotes(grnId, formData).pipe(catchError((error) => {
+      console.error('Error uploading delivery note:', error);
+      this.toastr.error('GRN saved, but failed to upload delivery note');
+      return of(null);
+    }));
   }
 
-  uploadInvoiceFiles(grnId: string): void {
-    if (this.invoiceFiles.length === 0) return;
+  uploadInvoiceFiles(grnId: string): Observable<unknown> {
+    if (this.invoiceFiles.length === 0) return of(null);
 
     const formData = new FormData();
     this.invoiceFiles.forEach((file) => formData.append('files', file));
     if (this.existingInvoices.length) formData.append('existingFiles', JSON.stringify(this.existingInvoices));
 
-    this.grnService.updateSupplierInvoices(grnId, formData).subscribe({
-      error: (error) => {
-        console.error('Error uploading invoice:', error);
-        this.toastr.error('GRN saved, but failed to upload invoice');
-      },
-    });
+    return this.grnService.updateSupplierInvoices(grnId, formData).pipe(catchError((error) => {
+      console.error('Error uploading invoice:', error);
+      this.toastr.error('GRN saved, but failed to upload invoice');
+      return of(null);
+    }));
   }
 
   onSave(): void {
@@ -941,10 +969,10 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
             return;
           }
           this.toastr.success(`${formValue.grnNo} updated`);
-          this.uploadDeliveryNoteFiles(this.grnId!);
-          this.uploadInvoiceFiles(this.grnId!);
-          this.saved.emit();
-          this.closeDrawer();
+          this.uploadFiles(this.grnId!).subscribe(() => {
+            this.saved.emit();
+            this.closeDrawer();
+          });
         },
         error: (error) => {
           console.error('Error updating GRN:', error);
@@ -970,10 +998,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
             });
           }
           const createdGrnId = response.data?._id;
-          if (createdGrnId) {
-            this.uploadDeliveryNoteFiles(createdGrnId);
-            this.uploadInvoiceFiles(createdGrnId);
-          }
+          (createdGrnId ? this.uploadFiles(createdGrnId) : of(null)).subscribe(() => {
           if (this.drawer) {
             this.saved.emit();
             this.closeDrawer();
@@ -984,6 +1009,7 @@ export class CreateGrnComponent implements OnInit, AfterViewInit {
           } else {
             this.router.navigate(['/purchase/approves']);
           }
+          });
         } else {
           this.toastr.error('Failed to save GRN');
           this.isSubmitting.set(false);
