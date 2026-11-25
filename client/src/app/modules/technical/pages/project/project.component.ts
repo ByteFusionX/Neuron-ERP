@@ -59,8 +59,11 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
   Lost: 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900',
   Rejected: 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900',
   Pending: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900',
-  Approved: 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900',
+  Accepted: 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900',
 };
+
+/** Assignment status 'Approved' is shown as 'Accepted' (display only; stored value unchanged). */
+const statusLabel = (s?: string): string => (s === 'Approved' ? 'Accepted' : s || '-');
 
 const PRIORITY_BADGE_CLASSES: Record<string, string> = {
   High: 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900',
@@ -378,7 +381,7 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
           { key: 'assignedTo', label: 'Assigned Engineer', sortable: true, valueGetter: (r) => this.personName(r.assignedTo) },
           { key: 'assignedBy', label: 'Assigned By', sortable: true, valueGetter: (r) => this.personName(r.assignedBy) },
           { key: 'priority', label: 'Priority', type: 'badge', sortable: true, badgeClasses: PRIORITY_BADGE_CLASSES, filterOptions: this.priorityOptions, valueGetter: (r) => r.priority || '-' },
-          { key: 'status', label: 'Status', type: 'badge' as const, badgeClasses: STATUS_BADGE_CLASSES, valueGetter: (r: any) => r.status || '-' },
+          { key: 'status', label: 'Status', type: 'badge' as const, badgeClasses: STATUS_BADGE_CLASSES, valueGetter: (r: any) => statusLabel(r.status) },
           { key: 'assignedAt', label: 'Assigned On', type: 'date', sortable: true, width: '130px' },
           { key: 'startedAt', label: 'Started On', type: 'date', sortable: true, width: '130px' },
           { key: 'updatedAt', label: 'Updated', type: 'date', sortable: true, width: '130px' },
@@ -600,7 +603,7 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
     const status = row?.projectStatus || row?.status;
     const tone = status === 'Completed' ? 'good' : status === 'Rejected' || status === 'Lost' ? 'bad' : undefined;
     return [
-      { label: 'Status', value: status || '-', tone: tone as any },
+      { label: 'Status', value: statusLabel(status), tone: tone as any },
       { label: 'Engineer', value: this.personName(row?.assignedTo) || '-' },
       { label: 'Priority', value: row?.priority || '-' },
       { label: 'Est. Cost', value: row?.estimatedCostForProject },
@@ -632,7 +635,7 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
           fields: [
             { type: 'field', label: 'Job ID', value: this.jobNumber(row) || '-' },
             { type: 'field', label: 'Project Name', value: row.customer?.companyName || '-' },
-            { type: 'field', label: 'Project Status', value: row.status || '-' },
+            { type: 'field', label: 'Project Status', value: statusLabel(row.status) },
             { type: 'field', label: 'Priority', value: row.priority || '-' },
           ],
         },
@@ -659,7 +662,7 @@ export class TechnicalProjectComponent implements OnInit, OnDestroy {
           f('Type', (row.projectType || '').toString().toUpperCase()),
           f('Scope', row.allocateType),
           f('Priority', row.priority),
-          f('Status', row.status),
+          f('Status', statusLabel(row.status)),
           { type: 'field', label: 'Estimated Cost', value: row.estimatedCostForProject ?? 0, numeric: true },
         ],
       },

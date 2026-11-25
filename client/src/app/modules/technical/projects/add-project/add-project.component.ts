@@ -87,7 +87,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
 
   statusOptions = [
     { id: 'Pending', name: 'Pending' },
-    { id: 'Approved', name: 'Approved' },
+    { id: 'Approved', name: 'Accepted' },
     { id: 'Rejected', name: 'Rejected' }
   ];
 

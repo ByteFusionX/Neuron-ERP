@@ -39,7 +39,7 @@ export class CreateProjectComponent implements OnChanges, OnDestroy {
     { label: 'AMC', value: 'amc' },
   ];
   readonly priorityOptions: SfOption[] = ['High', 'Medium', 'Low'].map((label) => ({ label, value: label }));
-  readonly statusOptions: SfOption[] = ['Pending', 'Approved', 'Rejected'].map((label) => ({ label, value: label }));
+  readonly statusOptions: SfOption[] = ['Pending', 'Approved', 'Rejected'].map((value) => ({ label: value === 'Approved' ? 'Accepted' : value, value }));
 
   /** Read-only context shown at the top in edit mode. */
   editInfo: { jobId: string; customer: string; projectType: string; assignedTo: string; assignedBy: string } | null = null;
