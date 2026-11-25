@@ -1053,7 +1053,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       String(d.detail || '').trim() && !String(d.itemCode || '').trim()));
   }
 
-  onSubmit(): void {
+  async onSubmit(): Promise<void> {
     if (!this.syncEntryToList()) return;
     if (!this.canSubmitForApproval()) return;
     if (this.hasCatalogueGaps() || this.prFormCmp?.itemEntry?.hasSubmitProblems()) {
@@ -1068,6 +1068,17 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       this.goToStep(3);
       return;
     }
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Send for approval?',
+      message: 'The purchase request goes to the approver and can no longer be edited unless it is rejected or revoked.',
+      confirmLabel: 'Send for approval',
+      reason: 'optional',
+      reasonLabel: 'Note to approver',
+      reasonMaxLength: 500,
+    });
+    if (!confirmed) return;
+    this.submitNote = reason ?? '';
     this.statusBeforeSubmit = this.purchaseForm.get('status')?.value;
     this.purchaseForm.get('status')?.setValue('Pending')
     if (this.isEditing) {
@@ -1079,6 +1090,9 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   /** Status held before Submit set Pending, put back if the request fails so Save stays available. */
   private statusBeforeSubmit: string | undefined;
+
+  /** Optional note typed in the send-for-approval dialog; sent with the Pending save only. */
+  private submitNote = '';
 
   private submitFailed(error: any): void {
     console.error(error);
@@ -1160,6 +1174,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   createPurchase(): void {
     const formValue = this.getFormValueForSave();
     formValue.status = 'Pending';
+    formValue.submitNote = this.submitNote;
 
     this.subscriptions.add(
       this.purchaseService.createPurchase(formValue).subscribe({
@@ -1177,6 +1192,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   updatePurchase(): void {
     const formValue = this.getFormValueForSave();
     formValue.status = 'Pending';
+    formValue.submitNote = this.submitNote;
 
     this.subscriptions.add(
       this.purchaseService.updatePurchase(this.purchaseId!, formValue).subscribe({
@@ -2414,6 +2430,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     
     const formValue = this.getFormValueForSave();
     formValue.status = 'Pending';
+    formValue.submitNote = this.submitNote;
 
     this.subscriptions.add(
       this.purchaseService.updatePurchase(this.purchaseId, formValue).subscribe({

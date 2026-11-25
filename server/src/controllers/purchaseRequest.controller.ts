@@ -317,6 +317,22 @@ const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText:
 };
 
 // Create a new Purchase Request
+/** One entry for the PR Notes tab; null when nothing was typed. */
+const PR_NOTE_TITLE = { submitted: 'Sent for Approval', resubmitted: 'Resubmitted for Approval', approved: 'PR Approved', rejected: 'PR Rejected', revoked: 'PR Revoked' } as const;
+const prNoteEntry = (employee: any, action: 'submitted' | 'resubmitted' | 'approved' | 'rejected' | 'revoked', note: unknown) => {
+    const text = String(note ?? '').trim().slice(0, 2000);
+    if (!text) return null;
+    return {
+        action,
+        title: PR_NOTE_TITLE[action],
+        system: true,
+        note: text,
+        createdBy: employee?._id,
+        createdByName: `${employee?.firstName ?? ''} ${employee?.lastName ?? ''}`.trim(),
+        createdAt: new Date(),
+    };
+};
+
 export const createPurchaseRequest =async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tokenData = req.user;
@@ -466,6 +482,8 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
 
         // The number shown on the form is only a preview; it is taken now, so abandoned forms never use one up.
         requestData.purchaseNo = await issueDocNo('PR');
+        const createNote = !isDraft ? prNoteEntry(employee, 'submitted', requestData.submitNote) : null;
+        requestData.notes = createNote ? [createNote] : [];
         const newPurchaseRequest = new PurchaseRequest(requestData);
         const savedPurchaseRequest = await newPurchaseRequest.save();
 
@@ -2695,6 +2713,9 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
             });
         }
 
+        const decisionNote = prNoteEntry(employee, status === 'rejected' ? 'rejected' : 'approved', comment);
+        if (decisionNote) (purchaseRequest as any).notes = [...((purchaseRequest as any).notes ?? []), decisionNote];
+
         if (hasRejected) {
             purchaseRequest.status = PurchaseRequestStatus.Rejected;
         } else if (isAllApproved) {
@@ -3113,6 +3134,7 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
         delete updateData.createdAt;
         delete updateData.createdBy;
         delete updateData.isDeleted;
+        delete updateData.notes; // appended server-side only
 
         for (const key of Object.keys(updateData)) {
             if (updateData[key] === '' && PurchaseRequest.schema.path(key)?.instance === 'ObjectId') {
@@ -3265,9 +3287,13 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
         updateData.updatedBy = employee._id;
         updateData.updatedAt = new Date();
 
+        const submissionNote = (isStatusChangingFromDraft || isStatusChangingFromRejected)
+            ? prNoteEntry(employee, isStatusChangingFromRejected ? 'resubmitted' : 'submitted', updateData.submitNote)
+            : null;
+
         const updatedPurchaseRequest = await PurchaseRequest.findOneAndUpdate(
             { _id: id, isDeleted: false },
-            { $set: updateData },
+            submissionNote ? { $set: updateData, $push: { notes: submissionNote } } : { $set: updateData },
             { new: true, runValidators: true }
         );
 
@@ -3666,6 +3692,8 @@ export const revokePurchaseRequest = async (req: Request, res: Response, next: N
         // POs already raised stay as they are; their products and ordered quantities are fixed while the request is edited (see poLineEditError).
         purchaseRequest.status = PurchaseRequestStatus.Revoked;
         purchaseRequest.rejectedReason.push({ rejectedBy: employee._id, comment, rejectedAt: new Date() } as any);
+        const revokeNote = prNoteEntry(employee, 'revoked', comment);
+        if (revokeNote) (purchaseRequest as any).notes = [...((purchaseRequest as any).notes ?? []), revokeNote];
         purchaseRequest.updatedBy = employee._id;
         purchaseRequest.updatedAt = new Date();
         await purchaseRequest.save();
@@ -3777,5 +3805,62 @@ export const changePurchaseFollowUp = async (req: Request, res: Response, next: 
         purchase.followUp = block;
         await purchase.save({ validateModifiedOnly: true });
         return res.json({ success: true, followUp: purchase.followUp });
+    } catch (error) { next(error); }
+};
+
+
+/** Manual PR notes (title + note). Approval-flow notes (system) can be deleted but not edited. */
+const readPrNoteBody = (req: Request, res: Response) => {
+    const title = String(req.body?.title ?? '').trim();
+    const note = String(req.body?.note ?? '').trim();
+    if (!title || title.length > 150) { res.status(400).json({ success: false, message: 'Title is required (max 150 characters).' }); return null; }
+    if (!note || note.length > 2000) { res.status(400).json({ success: false, message: 'Note is required (max 2000 characters).' }); return null; }
+    return { title, note };
+};
+
+export const addPurchaseNote = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        if (!mongoose.isValidObjectId(id)) return res.status(400).json({ success: false, message: 'Invalid purchase request id' });
+        const body = readPrNoteBody(req, res); if (!body) return;
+        const actor: any = await getEmployeeData(req.user);
+        const updated = await PurchaseRequest.findOneAndUpdate(
+            { _id: id, isDeleted: false },
+            { $push: { notes: { ...body, system: false, createdBy: actor?._id, createdByName: `${actor?.firstName ?? ''} ${actor?.lastName ?? ''}`.trim(), createdAt: new Date() } } },
+            { new: true }
+        ).select('notes').lean();
+        if (!updated) return res.status(404).json({ success: false, message: 'Purchase request not found' });
+        return res.status(200).json({ success: true, notes: (updated as any).notes ?? [] });
+    } catch (error) { next(error); }
+};
+
+export const updatePurchaseNote = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id, noteId } = req.params;
+        if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(noteId)) return res.status(400).json({ success: false, message: 'Invalid id' });
+        const body = readPrNoteBody(req, res); if (!body) return;
+        const pr: any = await PurchaseRequest.findOne({ _id: id, isDeleted: false }).select('notes');
+        if (!pr) return res.status(404).json({ success: false, message: 'Purchase request not found' });
+        const target = pr.notes.id(noteId);
+        if (!target) return res.status(404).json({ success: false, message: 'Note not found' });
+        if (target.system || target.action) return res.status(400).json({ success: false, message: 'Approval notes cannot be edited.' });
+        target.title = body.title;
+        target.note = body.note;
+        await pr.save();
+        return res.status(200).json({ success: true, notes: pr.notes });
+    } catch (error) { next(error); }
+};
+
+export const deletePurchaseNote = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id, noteId } = req.params;
+        if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(noteId)) return res.status(400).json({ success: false, message: 'Invalid id' });
+        const pr: any = await PurchaseRequest.findOne({ _id: id, isDeleted: false }).select('notes');
+        if (!pr) return res.status(404).json({ success: false, message: 'Purchase request not found' });
+        const target = pr.notes.id(noteId);
+        if (!target) return res.status(404).json({ success: false, message: 'Note not found' });
+        target.deleteOne();
+        await pr.save();
+        return res.status(200).json({ success: true, notes: pr.notes });
     } catch (error) { next(error); }
 };

@@ -415,4 +415,16 @@ export class PurchaseService {
       maximumFractionDigits
     });
   }
+
+  addPurchaseNote(purchaseId: string, data: { title: string; note: string }): Observable<{ success: boolean; notes: any[] }> {
+    return this.http.post<{ success: boolean; notes: any[] }>(`${this.api}/purchase/purchase-request/notes/${purchaseId}`, data, { context: context() });
+  }
+
+  updatePurchaseNote(purchaseId: string, noteId: string, data: { title: string; note: string }): Observable<{ success: boolean; notes: any[] }> {
+    return this.http.patch<{ success: boolean; notes: any[] }>(`${this.api}/purchase/purchase-request/notes/${purchaseId}/${noteId}`, data, { context: context() });
+  }
+
+  deletePurchaseNote(purchaseId: string, noteId: string): Observable<{ success: boolean; notes: any[] }> {
+    return this.http.delete<{ success: boolean; notes: any[] }>(`${this.api}/purchase/purchase-request/notes/${purchaseId}/${noteId}`, { context: context() });
+  }
 }

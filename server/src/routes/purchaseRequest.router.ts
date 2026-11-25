@@ -20,6 +20,9 @@ import {
     resetPurchaseWorkflow,
     revokePurchaseRequest,
     awardPurchaseLines,
+    addPurchaseNote,
+    updatePurchaseNote,
+    deletePurchaseNote,
     getSupplierPrices
 } from '../controllers/purchaseRequest.controller'
 import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
@@ -38,6 +41,9 @@ purchaseRequestRouter.get('/purchase-request/generate-purchase-no', generatePurc
 purchaseRequestRouter.get('/purchase-request/convertible-jobs', getConvertibleJobs)
 purchaseRequestRouter.get('/supplier-prices', getSupplierPrices)
 purchaseRequestRouter.get('/purchase-request/:id',getPurchaseRequestById)
+purchaseRequestRouter.post('/purchase-request/notes/:id', requireUnlessDenied("purchase", "edit"), addPurchaseNote)
+purchaseRequestRouter.patch('/purchase-request/notes/:id/:noteId', requireUnlessDenied("purchase", "edit"), updatePurchaseNote)
+purchaseRequestRouter.delete('/purchase-request/notes/:id/:noteId', requireUnlessDenied("purchase", "edit"), deletePurchaseNote)
 purchaseRequestRouter.patch('/purchase-request/award/:id', requireUnlessDenied("purchase", "award"), awardPurchaseLines)
 purchaseRequestRouter.put('/purchase-update/:id', requireUnlessDenied("purchase", "edit"), updatePurchaseRequest)
 purchaseRequestRouter.patch('/purchase-request/status/:id', requirePrivilege("purchase", "canApprovePR"), updatePurchaseRequestStatus)

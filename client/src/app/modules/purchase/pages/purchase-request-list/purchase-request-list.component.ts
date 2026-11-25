@@ -1,3 +1,4 @@
+import { PrNotesPanelComponent } from '../pr-notes/pr-notes-panel.component';
 import { HttpEventType } from '@angular/common/http';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { EventsService } from 'src/app/core/services/events/events.service';
@@ -80,13 +81,14 @@ const PR_VIEW_IDS = ['followUp', 'new', 'remainingJobs','inProgress', 'rejected'
 
 @Component({
   selector: 'app-purchase-request-list',
-  imports: [FollowUpPanelComponent, DetailTaskListComponent, CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailTimelineComponent, ApprovalJourneyComponent, ActionButtonComponent, CreatePurchaseComponent],
+  imports: [FollowUpPanelComponent, DetailTaskListComponent, CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailTimelineComponent, ApprovalJourneyComponent, ActionButtonComponent, CreatePurchaseComponent, PrNotesPanelComponent],
   providers: [DatePipe],
   templateUrl: './purchase-request-list.component.html',
   styleUrl: './purchase-request-list.component.css',
 })
 export class PurchaseRequestListComponent {
   @ViewChild('grid') grid!: DataGridComponent<any>;
+  @ViewChild(PrNotesPanelComponent) notesPanel?: PrNotesPanelComponent;
 
   private readonly _eventsService = inject(EventsService);
   private readonly _enquiryService = inject(EnquiryService);
@@ -111,6 +113,7 @@ export class PurchaseRequestListComponent {
     { id: 'followups', label: 'Follow-ups', icon: 'chat' },
     { id: 'events', label: 'Events', icon: 'calendar' },
     { id: 'approval', label: 'Approval', icon: 'activity' },
+    { id: 'notes', label: 'Notes', icon: 'chat' },
     { id: 'history', label: 'History', icon: 'clock' },
   ];
 
@@ -631,16 +634,19 @@ export class PurchaseRequestListComponent {
       this.notificationService.error('Award every product in Compare & award before sending for approval');
       return;
     }
-    const { confirmed } = await this.confirmDialog.open({
+    const { confirmed, reason } = await this.confirmDialog.open({
       tone: 'approve',
-      title: 'Send for approval',
-      message: 'This purchase request will move to Pending for approval.',
+      title: 'Send for approval?',
+      message: 'The purchase request goes to the approver and can no longer be edited unless it is rejected or revoked.',
       details: [{ label: 'PR No', value: row.purchaseNo || '-' }],
-      confirmLabel: 'Send',
+      confirmLabel: 'Send for approval',
+      reason: 'optional',
+      reasonLabel: 'Note to approver',
+      reasonMaxLength: 500,
     });
     if (!confirmed) return;
     this.subscriptions.add(
-      this.purchaseService.updatePurchase(row._id, { status: 'Pending' } as any).subscribe({
+      this.purchaseService.updatePurchase(row._id, { status: 'Pending', submitNote: reason ?? '' } as any).subscribe({
         next: () => {
           this.notificationService.success('Sent for approval');
           // The open detail panel shows the new status at once instead of In Progress until the reload lands.

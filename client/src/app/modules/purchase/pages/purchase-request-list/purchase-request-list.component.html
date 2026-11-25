@@ -55,6 +55,7 @@
                     <app-action-button variant="outline" (click)="onLogFollowUp(row)">{{ followUpView(row).open ? 'Mark done' : 'Add follow-up' }}</app-action-button>
                 </ng-container>
                 <app-action-button *ngSwitchCase="'events'" variant="outline" icon="plus" (click)="onAddEvent(row)">Add Event</app-action-button>
+                <app-action-button *ngSwitchCase="'notes'" variant="outline" icon="plus" (click)="notesPanel?.add()">Add note</app-action-button>
             </ng-container>
         </ng-template>
 
@@ -92,6 +93,8 @@
                 <ng-container *ngSwitchCase="'approval'">
                     <app-approval-journey [stages]="approvalJourney(row)" orientation="vertical" [rejectionNote]="null"></app-approval-journey>
                 </ng-container>
+
+                <app-pr-notes-panel *ngSwitchCase="'notes'" [purchase]="row"></app-pr-notes-panel>
 
                 <app-detail-timeline *ngSwitchCase="'history'"
                     [entries]="(historyFor(row) | async) ?? []"

@@ -2,6 +2,20 @@ import { followUpTaskSchema } from './followUpTask.schema';
 import { Schema, Document, model, Types, } from "mongoose";
 import { Item, ItemDetail, itemSchema } from "./item.model";
 
+export interface PurchaseRequestNote {
+    _id?: Types.ObjectId;
+    /** Set on approval-flow notes; manual notes have none. */
+    action?: 'submitted' | 'resubmitted' | 'approved' | 'rejected' | 'revoked';
+    title?: string;
+    note: string;
+    /** Approval-flow note: delete-only, can't be edited. */
+    system?: boolean;
+    createdBy?: Types.ObjectId;
+    createdByName?: string;
+    createdAt: Date;
+}
+
+
 interface discounts {
     suppliers: [{
         supplierId: Types.ObjectId,
@@ -188,6 +202,9 @@ interface PurchaseRequest extends Document {
     additionalCosts?: { name: string; value: number }[];
     status: PurchaseRequestStatus;
     rejectedReason: rejectedReason[];
+    submitNote?: string;
+    /** Every note typed in a confirm modal (submit / resubmit / approve / reject / revoke), oldest first. */
+    notes?: PurchaseRequestNote[];
     approvalStatus: PurchaseRequestApprovalStatus[];
     // comparisonSummary : [];
     revokedHistory: revokedHistory[];
@@ -258,6 +275,19 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
         type: String,
         enum: Object.values(PurchaseRequestStatus),
         required: true,
+    },
+    submitNote: { type: String, trim: true, maxlength: 500, default: '' },
+    notes: {
+        type: [{
+            action: { type: String, enum: ['submitted', 'resubmitted', 'approved', 'rejected', 'revoked'] },
+            title: { type: String, trim: true, maxlength: 150 },
+            system: { type: Boolean, default: false },
+            note: { type: String, trim: true, maxlength: 2000, required: true },
+            createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+            createdByName: { type: String, trim: true },
+            createdAt: { type: Date, default: Date.now },
+        }],
+        default: [],
     },
     rejectedReason: {
         type: [rejectedReasonSchema],
@@ -343,3 +373,4 @@ purchaseRequestSchema.index({ 'approvalStatus.reminderDueAt': 1 }, { sparse: tru
 purchaseRequestSchema.index({ 'approvalStatus.escalationDueAt': 1 }, { sparse: true });
 
 export default model<PurchaseRequest>('Purchase', purchaseRequestSchema)
+

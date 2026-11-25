@@ -35,6 +35,9 @@
     <!-- overview facts, left of the metrics -->
     <app-detail-section beforeStats title="Details" class="lg:col-span-2 lg:border-r lg:border-gray-200 lg:pr-8 dark:lg:border-gray-800">
       <app-detail-fields-menu sectionActions [items]="detailItems" storageKey="purchase-details" (hiddenChange)="hiddenDetail = $event" (orderChange)="detailOrder = $event"></app-detail-fields-menu>
+      <p *ngIf="$any(purchase)?.submitNote && purchase?.status === 'Pending'" class="mb-4 rounded-md bg-gray-50 px-3 py-2 text-[13px] text-gray-700 dark:bg-gray-800/40 dark:text-gray-300">
+        <span class="font-medium">Note from requester:</span> {{ $any(purchase).submitNote }}
+      </p>
       <div class="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
         <app-detail-field *ngFor="let f of visibleDetail; trackBy: trackFact" [label]="f.label" stacked>
           <span *ngIf="f.state" class="inline-flex items-center gap-1.5">
@@ -105,7 +108,12 @@
         </ng-container>
 
         <app-detail-timeline *ngSwitchCase="'approval'" [entries]="historyEntries" emptyMessage="No approval history yet."></app-detail-timeline>
+        <app-pr-notes-panel *ngSwitchCase="'notes'" [purchase]="purchase"></app-pr-notes-panel>
         <app-detail-timeline *ngSwitchCase="'history'" [entries]="auditEntries" emptyMessage="No history recorded yet."></app-detail-timeline>
+      </div>
+      <div *ngIf="panelTab === 'notes'"
+        class="flex shrink-0 items-center justify-start gap-2 border-t border-gray-100 bg-white px-5 py-3 dark:border-neutral-800 dark:bg-[#111111]">
+        <app-action-button variant="outline" icon="plus" (click)="notesPanel?.add()">Add note</app-action-button>
       </div>
     </div>
 

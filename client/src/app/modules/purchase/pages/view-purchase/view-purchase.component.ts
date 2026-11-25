@@ -1,4 +1,5 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { PrNotesPanelComponent } from '../pr-notes/pr-notes-panel.component';
+import { Component, computed, inject, signal, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
@@ -62,7 +63,7 @@ interface PricingLine {
 
 @Component({
   selector: 'app-view-purchase',
-  imports: [CommonModule, RouterLink, DetailViewShellComponent, ActionButtonComponent, DetailTableComponent, DetailTimelineComponent, DetailSectionComponent, DetailFieldComponent, DetailFieldsMenuComponent, CreatePurchaseComponent],
+  imports: [CommonModule, RouterLink, DetailViewShellComponent, ActionButtonComponent, DetailTableComponent, DetailTimelineComponent, DetailSectionComponent, DetailFieldComponent, DetailFieldsMenuComponent, CreatePurchaseComponent, PrNotesPanelComponent],
   providers: [DatePipe],
   templateUrl: './view-purchase.component.html',
   styleUrls: ['./view-purchase.component.css']
@@ -103,22 +104,25 @@ export class ViewPurchaseComponent {
 
   // view model — rebuilt by buildView() whenever the purchase or supplier list changes
   panelOpen = true;
-  panelTab: 'pricing' | 'approval' | 'history' | 'pos' = 'pricing';
+  @ViewChild(PrNotesPanelComponent) notesPanel?: PrNotesPanelComponent;
+  panelTab: 'pricing' | 'approval' | 'notes' | 'history' | 'pos' = 'pricing';
   /** The POs tab only exists once the request is approved. */
-  get panelTabs(): { id: 'pricing' | 'approval' | 'history' | 'pos'; label: string }[] {
+  get panelTabs(): { id: 'pricing' | 'approval' | 'notes' | 'history' | 'pos'; label: string }[] {
     const showPos = !['New', 'In Progress', 'Pending', 'Rejected', 'Revoked'].includes(this.purchase?.status ?? '');
     return showPos ? this.tabsWithPos : this.tabsBase;
   }
   // stable arrays: a getter that builds a new one each change detection re-creates the buttons and swallows clicks
-  private readonly tabsBase: { id: 'pricing' | 'approval' | 'history' | 'pos'; label: string }[] = [
+  private readonly tabsBase: { id: 'pricing' | 'approval' | 'notes' | 'history' | 'pos'; label: string }[] = [
     { id: 'pricing', label: 'Pricing' },
     { id: 'approval', label: 'Approval' },
+    { id: 'notes', label: 'Notes' },
     { id: 'history', label: 'History' },
   ];
-  private readonly tabsWithPos: { id: 'pricing' | 'approval' | 'history' | 'pos'; label: string }[] = [
+  private readonly tabsWithPos: { id: 'pricing' | 'approval' | 'notes' | 'history' | 'pos'; label: string }[] = [
     { id: 'pricing', label: 'Pricing' },
     { id: 'pos', label: 'POs' },
     { id: 'approval', label: 'Approval' },
+    { id: 'notes', label: 'Notes' },
     { id: 'history', label: 'History' },
   ];
   /** Per line and supplier PO status, as the PO tab lists it. */
@@ -404,6 +408,8 @@ export class ViewPurchaseComponent {
       { label: 'Allocated By', value: this.fullName(p.allocatedBy) },
       { label: 'Allocated On', value: date(p.allocatedAt || p.jobId?.allocatedAt) || '-' },
       !manual && { label: 'Sales Manager', value: this.fullName(p.jobId?.quoteId?.createdBy) },
+      // deal sheet's terms win over the quote's
+      !manual && { label: 'Customer Payment Terms', value: p.jobId?.quoteId?.dealData?.paymentTerms || p.jobId?.quoteId?.paymentTerms || '-' },
       !!p.mr?.engineer && { label: 'MR Engineer', value: p.mr.engineer },
       // when
       { label: 'Created By', value: this.fullName(p.createdBy) },
