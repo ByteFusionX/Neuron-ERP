@@ -9,6 +9,8 @@ export interface QuoteNoteModalData {
   context?: string;
   /** Present when editing an existing note. */
   note?: { title: string; note: string };
+  /** Header text when there is no context chip. */
+  hint?: string;
 }
 
 export interface QuoteNoteModalResult {
@@ -25,7 +27,7 @@ export interface QuoteNoteModalResult {
     <app-form-modal-shell
       icon="chat" tone="emerald" [title]="data?.note ? 'Edit note' : 'Add note'"
       [context]="data?.context" [contextLabel]="data?.note ? 'Editing on' : 'Adding to'"
-      contextEmptyText="Write down anything worth remembering about this quotation."
+      [contextEmptyText]="data?.hint || 'Write down anything worth remembering about this quotation.'"
       formId="quote-note-form" [invalid]="form.invalid && submitted"
       submitLabel="Save note" savingLabel="Saving..." [saving]="false" submitShortcutVerb="save"
       (closed)="close()">

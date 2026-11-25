@@ -15,7 +15,7 @@ import { QuoteNote } from 'src/app/shared/interfaces/quotation.interface';
         <div class="flex items-start justify-between gap-2">
           <p class="text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ n.title }}</p>
           <span *ngIf="!readonly" class="flex shrink-0 gap-1">
-            <button *ngIf="!locked" type="button" title="Edit note" aria-label="Edit note"
+            <button *ngIf="!locked && !n.system" type="button" title="Edit note" aria-label="Edit note"
               class="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-blue-600 dark:text-gray-400 dark:hover:bg-neutral-800"
               (click)="edit.emit(n)"><app-dp-icon name="edit"></app-dp-icon></button>
             <button type="button" title="Delete note" aria-label="Delete note"

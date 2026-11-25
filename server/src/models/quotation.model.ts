@@ -207,7 +207,7 @@ interface Quotation extends Document {
     eventId: any;
     saveNote: string;
     editHistory: EditHistoryEntry[];
-    notes: { title: string; note: string; createdBy?: Types.ObjectId; createdByName?: string; createdAt: Date }[];
+    notes: { title: string; note: string; createdBy?: Types.ObjectId; createdByName?: string; createdAt: Date; system?: boolean }[];
     revision: number;
     revisions: QuoteRevision[];
     customerAcceptance: CustomerAcceptance;
@@ -650,6 +650,8 @@ const quotationSchema = new Schema<Quotation>({
             createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
             createdByName: { type: String },
             createdAt: { type: Date, default: Date.now },
+            // Written by the deal approval flow: can be deleted but not edited.
+            system: { type: Boolean, default: false },
         }],
         default: [],
     },

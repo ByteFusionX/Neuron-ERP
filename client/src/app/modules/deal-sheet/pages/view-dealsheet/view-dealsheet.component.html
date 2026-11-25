@@ -140,16 +140,15 @@
                     (open)="onDocumentOpen($event)"
                     (download)="onDocumentDownload($event)"></app-detail-documents>
 
-                <ng-container *ngSwitchCase="'notes'">
-                    <div class="mb-3 flex justify-end">
-                        <app-action-button variant="outline" icon="plus" (click)="onAddNote()">Add note</app-action-button>
-                    </div>
-                    <app-quote-notes-panel [notes]="data.quoteData.notes" [readonly]="true"></app-quote-notes-panel>
-                </ng-container>
+                <app-quote-notes-panel *ngSwitchCase="'notes'" [notes]="data.quoteData.notes" [readonly]="true"></app-quote-notes-panel>
 
                 <app-detail-timeline *ngSwitchCase="'history'"
                     [entries]="historyEntries"
                     emptyMessage="No history recorded yet."></app-detail-timeline>
+            </div>
+            <div *ngIf="panelTab === 'notes'"
+                class="flex shrink-0 items-center justify-start gap-2 border-t border-gray-100 bg-white px-5 py-3 dark:border-neutral-800 dark:bg-[#111111]">
+                <app-action-button variant="outline" icon="plus" (click)="onAddNote()">Add note</app-action-button>
             </div>
         </div>
 

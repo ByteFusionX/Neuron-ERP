@@ -2485,6 +2485,7 @@ export const updateQuoteNote = async (req: Request, res: Response, next: NextFun
         if (quote.status === 'Won') return res.status(400).json({ success: false, message: 'Notes cannot be changed once the quote is won.' });
         const target = quote.notes.id(noteId);
         if (!target) return res.status(404).json({ success: false, message: 'Note not found' });
+        if (target.system) return res.status(400).json({ success: false, message: 'Deal approval notes cannot be edited.' });
         target.title = title;
         target.note = note;
         await quote.save();
@@ -2854,7 +2855,13 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         }
 
         const socket = req.app.get('io') as Server;
-        const quoteUpdated = await Quotation.findByIdAndUpdate(quoteId, updateQuoteData, { new: true });
+        // The submission note lands in the quote's Notes tab (shown on quotation + deal sheet panels).
+        const submitNoteEntry = dealApprovalNote(userData, 'Deal Approval', submitNote);
+        const quoteUpdated = await Quotation.findByIdAndUpdate(
+            quoteId,
+            submitNoteEntry ? { $set: updateQuoteData, $push: { notes: submitNoteEntry } } : updateQuoteData,
+            { new: true }
+        );
 
         if (quoteUpdated && approvalStatus.length) {
             await notifyDealApprovers(quoteUpdated, approvalStatus, userData?._id, 'New Deal Sheet Pending Approval', `deal:${quoteUpdated._id}:${dealId}:${createdDate.getTime()}:submit`);
@@ -2950,6 +2957,20 @@ export const resetDealWorkflow = async (req: Request, res: Response, next: NextF
     }
 };
 
+/** A locked (delete-only) quote note written by the deal approval flow; null when there is no text. */
+const dealApprovalNote = (user: any, title: string, note: any) => {
+    const text = String(note ?? '').trim();
+    if (!text) return null;
+    return {
+        title,
+        note: text.slice(0, 2000),
+        createdBy: user?._id,
+        createdByName: `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim(),
+        createdAt: new Date(),
+        system: true,
+    };
+};
+
 export const approveDeal = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const quote = await Quotation.findById(req.body.quoteId);
@@ -2995,7 +3016,8 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
                 return res.status(403).json({ message: workflowMessage(error) });
             }
             if (workflowStatus.some((a: any) => a.status === 'pending')) {
-                await Quotation.updateOne({ _id: quote._id }, { $set: { 'dealData.approvalStatus': workflowStatus, 'dealData.seenByApprover': false } });
+                const stageNote = dealApprovalNote(approverData, 'Deal Approved (stage)', req.body.comment);
+                await Quotation.updateOne({ _id: quote._id }, { $set: { 'dealData.approvalStatus': workflowStatus, 'dealData.seenByApprover': false }, ...(stageNote ? { $push: { notes: stageNote } } : {}) });
                 await logAudit(req, {
                     entityType: 'quotation',
                     entityId: quote._id,
@@ -3073,7 +3095,10 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
                 { _id: jobData.quoteId },
                 {
                     $set: { 'dealData.status': 'approved', ...(quote.dealData?.approvedDate ? { 'dealData.reapprovedDate': new Date() } : { 'dealData.approvedDate': new Date() }), 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(String(approverData?._id ?? req.body.userId)), ...(workflowStatus ? { 'dealData.approvalStatus': workflowStatus } : {}) },
-                    $push: { editHistory: { editedBy: approverData?._id ?? req.body.userId, editedAt: new Date(), action: 'DealApproved', reason: String(req.body.comment ?? '').trim() || undefined } }
+                    $push: {
+                        editHistory: { editedBy: approverData?._id ?? req.body.userId, editedAt: new Date(), action: 'DealApproved', reason: String(req.body.comment ?? '').trim() || undefined },
+                        ...(dealApprovalNote(approverData, 'Deal Approved', req.body.comment) ? { notes: dealApprovalNote(approverData, 'Deal Approved', req.body.comment) } : {}),
+                    }
                 }
             )
             if (quoteUpdate) {
@@ -3184,6 +3209,7 @@ export const rejectDeal = async (req: Request, res: Response, next: NextFunction
         deal.dealData.status = 'rejected';
         deal.dealData.seenedBySalsePerson = false
         deal.dealData.comments.push(comment);
+        (deal as any).notes.push(dealApprovalNote(userData, 'Deal Rejected', comment));
         deal.editHistory.push({
             editedBy: userData?._id ?? (req.user as any)?.id,
             editedAt: new Date(),
@@ -3304,6 +3330,7 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
             }
         }
         const revokerData = await getEmployeeData(req.user);
+        (deal as any).notes.push(dealApprovalNote(revokerData, 'Deal Revoked', revokeReason));
         deal.editHistory.push({
             editedBy: revokerData?._id,
             editedAt: new Date(),

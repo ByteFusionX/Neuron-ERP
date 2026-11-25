@@ -672,7 +672,7 @@ export class DealFormComponent implements OnInit, OnChanges {
     const { confirmed, reason } = await this.confirmDialog.open({
       tone: 'approve',
       title: this.isResubmit ? 'Resubmit deal sheet for approval?' : 'Submit deal sheet for approval?',
-      message: 'The deal sheet will be sent to the approvers. Add a note for them if needed; it is shown in the deal sheet comments.',
+      message: 'The deal sheet will be sent to the approvers. Add a note for them if needed; it is shown in the Notes tab of the quotation and deal sheet.',
       details: [{ label: 'Quotation', value: String(this.q?.quoteId ?? '') }],
       confirmLabel: this.isResubmit ? 'Resubmit' : 'Submit',
       reason: 'optional',

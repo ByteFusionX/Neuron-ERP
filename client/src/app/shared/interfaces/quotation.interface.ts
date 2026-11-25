@@ -168,6 +168,8 @@ export interface QuoteNote {
     title: string;
     note: string;
     createdByName?: string;
+    /** Written by the deal approval flow: delete-only. */
+    system?: boolean;
     createdAt: string;
 }
 
