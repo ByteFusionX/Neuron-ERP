@@ -220,15 +220,21 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   row: number = 15;
   fromDate: string | null = null;
   toDate: string | null = null;
-  selectedStatus: string | null = null;
-  selectedSource: string | null = null;
-  selectedCategory: string | null = null;
-  selectedPriority: string | null = null;
+  // A filter holds one value, or a list when several were picked in the grid's multi-select.
+  selectedStatus: string | string[] | null = null;
+  selectedSource: string | string[] | null = null;
+  selectedCategory: string | string[] | null = null;
+  selectedPriority: string | string[] | null = null;
   followUpFromDate: string | null = null;
   followUpToDate: string | null = null;
-  selectedSalesPerson: string | null = null;
-  selectedCustomer: string | null = null;
-  selectedDepartment: string | null = null;
+  selectedSalesPerson: string | string[] | null = null;
+  selectedCustomer: string | string[] | null = null;
+  selectedDepartment: string | string[] | null = null;
+  /** Days picked with "on": an enquiry matches when it falls on any of them (two days read as a range). */
+  onDates: string[] = [];
+  followUpOnDates: string[] = [];
+  /** Filter keys set to "is not": the server excludes those values instead of matching them. */
+  notFilters: Record<string, boolean> = {};
   searchQuery: string = '';
   sortKey: string | null = null;
   sortDir: 'asc' | 'desc' | null = null;
@@ -375,10 +381,13 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Filters handed to the Report tab, so switching keeps the same slice of data. */
   get reportQueryParams(): Record<string, string | null> {
+    // The report takes one value per filter: a multi-pick or an "is not" is not carried over.
+    const one = (key: string, v: string | string[] | null) =>
+      this.notFilters[key] ? null : Array.isArray(v) ? (v.length === 1 ? v[0] : null) : v;
     return {
-      salesPerson: this.selectedSalesPerson,
-      customer: this.selectedCustomer,
-      department: this.selectedDepartment,
+      salesPerson: one('salesPerson', this.selectedSalesPerson),
+      customer: one('customer', this.selectedCustomer),
+      department: one('department', this.selectedDepartment),
       fromDate: this.fromDate,
       toDate: this.toDate,
     };
@@ -459,7 +468,12 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     // Saved (custom) views are built on a base view; the server only understands the base view ids.
     const activeView = this.grid?.allViews.find((view) => view.id === query.viewId);
     this.activeViewId = activeView?.custom ? (activeView.baseViewId ?? 'all') : query.viewId;
-    const value = (key: string) => query.filters.find((filter) => filter.key === key && filter.op === 'is')?.value ?? null;
+    this.notFilters = {};
+    const value = (key: string) => {
+      const f = query.filters.find((filter) => filter.key === key && (filter.op === 'is' || filter.op === 'isNot'));
+      if (f?.op === 'isNot') this.notFilters[key] = true;
+      return f?.value ?? null;
+    };
     this.selectedSalesPerson = value('salesPerson');
     this.selectedCustomer = value('customer');
     this.selectedDepartment = value('department');
@@ -468,11 +482,15 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selectedCategory = value('enquiryCategory');
     this.selectedPriority = value('priority');
     const dateFilters = query.filters.filter((filter) => filter.key === 'date');
-    this.fromDate = dateFilters.find((filter) => filter.op === 'after' || filter.op === 'on')?.value ?? null;
-    this.toDate = dateFilters.find((filter) => filter.op === 'before' || filter.op === 'on')?.value ?? null;
+    const onList = (filters: { op: string; value: any }[]) => filters.filter((f) => f.op === 'on')
+      .flatMap((f) => (Array.isArray(f.value) ? f.value : [f.value])).map(String).filter(Boolean);
+    this.fromDate = dateFilters.find((filter) => filter.op === 'after')?.value ?? null;
+    this.toDate = dateFilters.find((filter) => filter.op === 'before')?.value ?? null;
+    this.onDates = onList(dateFilters);
     const followUpDateFilters = query.filters.filter((filter) => filter.key === 'nextFollowUpDate');
-    this.followUpFromDate = followUpDateFilters.find((filter) => filter.op === 'after' || filter.op === 'on')?.value ?? null;
-    this.followUpToDate = followUpDateFilters.find((filter) => filter.op === 'before' || filter.op === 'on')?.value ?? null;
+    this.followUpFromDate = followUpDateFilters.find((filter) => filter.op === 'after')?.value ?? null;
+    this.followUpToDate = followUpDateFilters.find((filter) => filter.op === 'before')?.value ?? null;
+    this.followUpOnDates = onList(followUpDateFilters);
     this.getEnquiries();
     this.updateUrlParams();
   }
@@ -1287,7 +1305,16 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       toDate: this.toDate,
       followUpFromDate: this.followUpFromDate,
       followUpToDate: this.followUpToDate,
+      onDates: this.onDates,
+      followUpOnDates: this.followUpOnDates,
       department: this.selectedDepartment,
+      salesPersonNot: !!this.notFilters['salesPerson'],
+      customerNot: !!this.notFilters['customer'],
+      departmentNot: !!this.notFilters['department'],
+      statusNot: !!this.notFilters['status'],
+      sourceNot: !!this.notFilters['source'],
+      enquiryCategoryNot: !!this.notFilters['enquiryCategory'],
+      priorityNot: !!this.notFilters['priority'],
       access: access,
       userId: userId,
       createdBy: this.activeViewId === 'mine' ? userId : null,
@@ -1503,6 +1530,9 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selectedSource = null;
     this.selectedCategory = null;
     this.selectedPriority = null;
+    this.onDates = [];
+    this.followUpOnDates = [];
+    this.notFilters = {};
     this.followUpFromDate = null;
     this.followUpToDate = null;
     this.formData.reset();

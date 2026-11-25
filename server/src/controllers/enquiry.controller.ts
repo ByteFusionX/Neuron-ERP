@@ -751,6 +751,15 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             priority,
             followUpFromDate,
             followUpToDate,
+            onDates,
+            followUpOnDates,
+            salesPersonNot,
+            customerNot,
+            departmentNot,
+            statusNot,
+            sourceNot,
+            enquiryCategoryNot,
+            priorityNot,
         } = req.body;
         let skipNum: number = (page - 1) * row;
 
@@ -772,13 +781,6 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             const group = Object.values(LEGACY_STATUS_GROUPS).find(g => g.some(s => s.toLowerCase() === key));
             return group ?? [value];
         };
-        let isSalesPerson = salesPerson == null ? true : false;
-        let isCustomer = customer == null ? true : false;
-        let isStatus = status == null ? true : false;
-        let isDepartment = department == null ? true : false;
-        let isSource = source == null ? true : false;
-        let isEnquiryCategory = enquiryCategory == null ? true : false;
-        let isPriority = priority == null ? true : false;
 
         const dateFilter: Record<string, Date> = {};
         if (fromDate) dateFilter.$gte = new Date(fromDate);
@@ -800,29 +802,55 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
         const matchingCustomerIds = searchText
             ? (await customerModel.find({ companyName: { $regex: searchText, $options: 'i' } }, { _id: 1 }).lean()).map((c: any) => c._id)
             : [];
+        // Sales person by first, last or full name ("John Smith").
+        const matchingSalesPersonIds = searchText
+            ? (await Employee.find({ $or: [
+                { firstName: { $regex: searchText, $options: 'i' } },
+                { lastName: { $regex: searchText, $options: 'i' } },
+                { $expr: { $regexMatch: { input: { $concat: [{ $ifNull: ['$firstName', ''] }, ' ', { $ifNull: ['$lastName', ''] }] }, regex: searchText, options: 'i' } } },
+            ] }, { _id: 1 }).lean()).map((e: any) => e._id)
+            : [];
         const searchFilter = searchText
             ? { $or: [
                 { enquiryId: { $regex: searchText, $options: 'i' } },
                 { title: { $regex: searchText, $options: 'i' } },
-                { client: { $in: matchingCustomerIds } }
+                { client: { $in: matchingCustomerIds } },
+                { salesPerson: { $in: matchingSalesPersonIds } }
             ] }
             : {};
+
+        // Each list filter takes one value or several: "is" matches any, `<name>Not` excludes all (same as quotations).
+        const toList = (v: unknown): string[] => (Array.isArray(v) ? v : v == null || v === '' ? [] : String(v).split(',')).map(String).filter(Boolean);
+        const toIds = (v: unknown) => toList(v).filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+        const inClause = (field: string, values: any[], not: unknown) =>
+            values.length ? { [field]: not ? { $nin: values } : { $in: values } } : {};
+        // "on" picks: exactly two days read as a range (both inclusive), otherwise any of the picked days.
+        const onDaysClause = (field: string, v: unknown) => {
+            const days = toList(v).map((d) => new Date(d)).filter((d) => !Number.isNaN(d.getTime()));
+            const DAY = 86_400_000;
+            if (!days.length) return {};
+            if (days.length === 2) {
+                const times = days.map((d) => d.getTime());
+                return { [field]: { $gte: new Date(Math.min(...times)), $lt: new Date(Math.max(...times) + DAY) } };
+            }
+            return { $or: days.map((d) => ({ [field]: { $gte: d, $lt: new Date(d.getTime() + DAY) } })) };
+        };
 
         let matchFilters = {
             isDeleted: { $ne: true },
             $and: [
                 searchFilter,
-                { $or: [{ salesPerson: new ObjectId(salesPerson) }, { salesPerson: { $exists: isSalesPerson } }] },
-                { $or: [{ status: { $in: statusVariants(status) } }, { status: { $exists: isStatus } }] },
-                { $or: [{ client: new ObjectId(customer) }, { client: { $exists: isCustomer } }] },
+                inClause('salesPerson', toIds(salesPerson), salesPersonNot),
+                inClause('status', toList(status).flatMap(statusVariants), statusNot),
+                inClause('client', toIds(customer), customerNot),
                 Object.keys(dateFilter).length ? { date: dateFilter } : {},
+                onDaysClause('date', onDates),
                 Object.keys(followUpDateFilter).length ? { nextFollowUpDate: followUpDateFilter } : {},
-                { $or: [{ source: source }, { source: { $exists: isSource } }] },
-                { $or: [{ enquiryCategory: enquiryCategory }, { enquiryCategory: { $exists: isEnquiryCategory } }] },
-                { $or: [{ priority: priority }, { priority: { $exists: isPriority } }] },
-                {
-                    $or: [{ department: new ObjectId(department) }, { department: { $exists: isDepartment } }]
-                }
+                onDaysClause('nextFollowUpDate', followUpOnDates),
+                inClause('source', toList(source), sourceNot),
+                inClause('enquiryCategory', toList(enquiryCategory), enquiryCategoryNot),
+                inClause('priority', toList(priority), priorityNot),
+                inClause('department', toIds(department), departmentNot),
             ]
         }
 
