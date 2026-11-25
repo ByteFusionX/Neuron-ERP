@@ -83,6 +83,7 @@ type WorkflowState = { status: 'loading' | 'ready' | 'error'; timeline: JobWorkf
 const DEFAULT_PAGE_SIZE = 15;
 const PAGE_SIZES = [5, 15, 30, 50];
 
+import { FileService } from 'src/app/core/services/file.service';
 @Component({
   selector: 'app-job-list',
   templateUrl: './job-list.component.html',
@@ -95,6 +96,7 @@ const PAGE_SIZES = [5, 15, 30, 50];
   ],
 })
 export class JobListComponent {
+  private fileOpener = inject(FileService);
   readonly itemColumns: DetailTableColumn[] = [
     { key: 'item', label: 'Item', type: 'html', truncate: true },
     { key: 'qty', label: 'Qty', type: 'number' },
@@ -781,24 +783,7 @@ export class JobListComponent {
   onLpoPreviewDoc(row: getJob, doc: DetailDocument): void {
     const file = this.findLpoFile(row, doc);
     if (!file) return;
-    if (!file.fileName?.toLowerCase().endsWith('.pdf')) {
-      window.open(`${environment.api}/file/${encodeURIComponent(file.fileName)}`, '_blank');
-      return;
-    }
-    this._jobService.downloadFile(file.fileName).subscribe({
-      next: (event) => {
-        if (event.type === HttpEventType.Response) {
-          const blob = new Blob([event.body], { type: 'application/pdf' });
-          const url = URL.createObjectURL(blob);
-          window.open(url, '_blank');
-          setTimeout(() => URL.revokeObjectURL(url), 10000);
-        }
-      },
-      error: (error) => {
-        if (error.status === 404) this.toast.warning('Sorry, the requested file was not found on the server.');
-        else this.toast.error('An error occurred while trying to view the file.');
-      },
-    });
+    this.fileOpener.openFile(file.fileName, file.originalname || doc.name);
   }
 
   onLpoDownloadDoc(row: getJob, doc: DetailDocument): void {

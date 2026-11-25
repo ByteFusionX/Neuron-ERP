@@ -78,6 +78,7 @@ const DEFAULT_PAGE_SIZE = 15;
  * Approve/Reject reuse the generic StatusChangeModalComponent (status + note) instead of the bespoke
  * RejectDealComponent, and Revoke uses ConfirmDialogService instead of ConfirmationDialogComponent.
  */
+import { FileService } from 'src/app/core/services/file.service';
 @Component({
   selector: 'app-deal-sheet-list',
   templateUrl: './deal-sheet-list.component.html',
@@ -104,6 +105,7 @@ const DEFAULT_PAGE_SIZE = 15;
   ],
 })
 export class DealSheetListComponent implements OnInit, OnDestroy {
+  private fileOpener = inject(FileService);
   @ViewChild('grid') grid!: DataGridComponent<Quotatation>;
 
   private confirm = inject(ConfirmDialogService);
@@ -887,7 +889,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
 
   onDealDocPreview(row: Quotatation, doc: DetailDocument): void {
     const file = this.findDocumentFile(row, doc.id);
-    if (file) this.previewOrDownload(file, 'view');
+    if (file) this.fileOpener.openFile(file.fileName, file.originalname || doc.name);
   }
 
   onDealDocDownload(row: Quotatation, doc: DetailDocument): void {

@@ -125,6 +125,7 @@ export interface QvHistoryEntry {
   changes: QvHistoryChange[];
 }
 
+import { FileService } from 'src/app/core/services/file.service';
 @Component({
   selector: 'app-quotation-view',
   standalone: true,
@@ -153,6 +154,7 @@ export interface QvHistoryEntry {
   ],
 })
 export class QuotationViewComponent implements OnInit, OnDestroy {
+  private fileOpener = inject(FileService);
   quoteData: getQuotatation | null = null;
   loading = true;
   /** Right panel visibility, toggled by the shell's Hide / Show panel button. */
@@ -1151,9 +1153,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
 
   openDocument(doc: DetailDocument): void {
     const file = this.docFiles.get(doc.id);
-    if (file) {
-      this.openFiles(`${doc.uploadedBy} - ${doc.name}`, [file]);
-    }
+    if (file) this.fileOpener.openFile(file.fileName, file.originalname || doc.name);
   }
 
   deleteQuote(): void {

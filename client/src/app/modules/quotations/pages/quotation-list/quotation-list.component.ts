@@ -77,6 +77,7 @@ const PDF_STATUSES: QuoteStatus[] = [
   QuoteStatus.Expired,
 ];
 
+import { FileService } from 'src/app/core/services/file.service';
 @Component({
     selector: 'app-quotation-list',
     templateUrl: './quotation-list.component.html',
@@ -85,6 +86,7 @@ const PDF_STATUSES: QuoteStatus[] = [
     imports: [ViewEstimationComponent, ViewToggleComponent,NgIf, NgClass, NgSwitch, NgSwitchCase, DatePipe, AsyncPipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent, FollowUpPanelComponent, DetailTimelineComponent, QuoteNotesPanelComponent]
 })
 export class QuotationListComponent implements AfterViewInit {
+  private fileOpener = inject(FileService);
   @ViewChild('grid') grid!: DataGridComponent<Quotatation>;
 
   customers$!: Observable<getCustomer[]>;
@@ -1035,20 +1037,7 @@ export class QuotationListComponent implements AfterViewInit {
   }
 
   onLpoPreview(file: any): void {
-    this._enquiryService.getFile(file.fileName).subscribe({
-      next: (blob: Blob) => {
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
-      },
-      error: (error) => {
-        if (error.status === 404) {
-          this.toaster.warning('Sorry, the requested file was not found on the server.');
-        } else {
-          this.toaster.error('An error occurred while opening the file.');
-        }
-      }
-    });
+    this.fileOpener.openFile(file.fileName, file.originalname);
   }
 
   onLpoDownload(file: any): void {

@@ -84,6 +84,7 @@ const holdChoices = (allowAdvance: boolean) => ({
 const MANUAL_STATUSES: readonly string[] = [allocateStatus.Pending, allocateStatus.OnHold,allocateStatus.Completed, LOST_STATUS];
 const jobStatusLabel = (v: unknown): string => (v === JobStatus.WorkInProgress ? 'In Progress' : v ? String(v) : '—');
 
+import { FileService } from 'src/app/core/services/file.service';
 @Component({
   selector: 'app-view-job',
   templateUrl: './view-job.component.html',
@@ -103,6 +104,7 @@ const jobStatusLabel = (v: unknown): string => (v === JobStatus.WorkInProgress ?
   ],
 })
 export class ViewJobComponent implements OnInit {
+  private fileOpener = inject(FileService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private jobService = inject(JobService);
@@ -795,23 +797,7 @@ export class ViewJobComponent implements OnInit {
   onDocumentOpen(doc: DetailDocument): void {
     const file = this.docFiles.get(doc.id);
     if (!file) return;
-    if (!file.fileName?.toLowerCase().endsWith('.pdf')) {
-      window.open(`${environment.api}/file/${encodeURIComponent(file.fileName)}`, '_blank');
-      return;
-    }
-    this.jobService.downloadFile(file.fileName).subscribe({
-      next: (event) => {
-        if (event.type === HttpEventType.Response) {
-          const url = URL.createObjectURL(new Blob([event.body], { type: 'application/pdf' }));
-          window.open(url, '_blank');
-          setTimeout(() => URL.revokeObjectURL(url), 10000);
-        }
-      },
-      error: (error) => {
-        if (error.status === 404) this.toast.warning('Sorry, the requested file was not found on the server.');
-        else this.toast.error('An error occurred while trying to view the file.');
-      },
-    });
+    this.fileOpener.openFile(file.fileName, file.originalname || doc.name);
   }
 
   onDocumentDownload(doc: DetailDocument): void {

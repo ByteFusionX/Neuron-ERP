@@ -46,6 +46,7 @@ import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/share
 import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/follow-up-panel/follow-up-panel.component';
 import { FollowUpViewModel, followUpCellClass, followUpViewer } from 'src/app/shared/utils/follow-up.util';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
+import { FileService } from 'src/app/core/services/file.service';
 @Component({
   selector: 'app-presales-list',
   templateUrl: './presales-list.component.html',
@@ -53,6 +54,7 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
   imports: [ViewToggleComponent, NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTimelineComponent, ApprovalJourneyComponent, ViewEstimationComponent, EstimationFormDrawerComponent, ActionButtonComponent, FollowUpPanelComponent]
 })
 export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
+  private fileOpener = inject(FileService);
   @ViewChild('grid') grid!: DataGridComponent<any>;
 
   rows: any[] = [];
@@ -950,20 +952,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   previewFile(file: any): void {
-    this._enquiryService.getFile(file.fileName).subscribe({
-      next: (blob: Blob) => {
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
-      },
-      error: (error) => {
-        if (error.status === 404) {
-          this.toast.warning('Sorry, the requested file was not found on the server.');
-        } else {
-          this.toast.error('An error occurred while opening the file.');
-        }
-      }
-    });
+    this.fileOpener.openFile(file.fileName, file.originalname);
   }
 
   onDownloadClicks(file: any) {

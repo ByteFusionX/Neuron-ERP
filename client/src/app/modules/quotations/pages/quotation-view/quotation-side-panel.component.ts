@@ -36,6 +36,7 @@ import { DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
  * Deal Sheet), for the quotation view page's right panel. Same tabs, same bodies, same per-tab
  * actions; the 'dg' fields the list binds to grid columns are plain fields here, as there is no grid.
  */
+import { FileService } from 'src/app/core/services/file.service';
 @Component({
   selector: 'app-quotation-side-panel',
   standalone: true,
@@ -126,6 +127,7 @@ import { DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
   `],
 })
 export class QuotationSidePanelComponent implements OnChanges {
+  private fileOpener = inject(FileService);
 
   @Input({ required: true }) quote!: Quotatation;
   /** The page owns the LPO upload flow (modal, upload, reload); the panel only asks for it. */
@@ -530,18 +532,7 @@ export class QuotationSidePanelComponent implements OnChanges {
 
   onLpoPreviewDoc(doc: DetailDocument): void {
     const file = this.findLpoFile(doc);
-    if (!file) return;
-    this._enquiryService.getFile(file.fileName).subscribe({
-      next: (blob: Blob) => {
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
-      },
-      error: (error) => {
-        if (error.status === 404) this.toaster.warning('Sorry, the requested file was not found on the server.');
-        else this.toaster.error('An error occurred while opening the file.');
-      },
-    });
+    if (file) this.fileOpener.openFile(file.fileName, file.originalname || doc.name);
   }
 
   onLpoDownloadDoc(doc: DetailDocument): void {

@@ -106,6 +106,7 @@ interface ViewDealsheetNavState {
   returnUrl?: string;
 }
 
+import { FileService } from 'src/app/core/services/file.service';
 @Component({
   selector: 'app-view-dealsheet',
   templateUrl: './view-dealsheet.component.html',
@@ -127,6 +128,7 @@ interface ViewDealsheetNavState {
   ],
 })
 export class ViewDealsheetComponent implements OnInit {
+  private fileOpener = inject(FileService);
   isApproving: boolean = false;
   isRejecting: boolean = false;
   suppliers: Supplier[] = [];
@@ -955,7 +957,7 @@ export class ViewDealsheetComponent implements OnInit {
 
   onDocumentOpen(doc: DetailDocument): void {
     const file = this.docFiles.get(doc.id);
-    if (file) this.onViewPDF(file);
+    if (file) this.fileOpener.openFile(file.fileName, file.originalname || doc.name);
   }
 
   onDocumentDownload(doc: DetailDocument): void {

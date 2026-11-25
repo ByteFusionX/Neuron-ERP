@@ -46,6 +46,7 @@ interface GrnFact {
 
 type PanelTab = 'poitems' | 'pricing' | 'inspection' | 'documents' | 'history';
 
+import { FileService } from 'src/app/core/services/file.service';
 @Component({
   selector: 'app-view-grn',
   standalone: true,
@@ -65,6 +66,7 @@ type PanelTab = 'poitems' | 'pricing' | 'inspection' | 'documents' | 'history';
   styleUrl: './view-grn.component.css'
 })
 export class ViewGrnComponent implements OnInit {
+  private fileOpener = inject(FileService);
   private grnService = inject(GrnService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -356,14 +358,7 @@ export class ViewGrnComponent implements OnInit {
 
   openDocument(doc: DetailDocument): void {
     const file = this.docFiles.get(doc.id);
-    if (!file) return;
-    const modalData: FileUploadModalData = {
-      title: `${doc.uploadedBy} - ${doc.name}`,
-      existingFiles: [file],
-      allowMultiple: true,
-      showActions: { upload: false, download: true, view: true, delete: false },
-    };
-    this.dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
+    if (file) this.fileOpener.openFile(file.fileName || file.name, file.originalname || doc.name);
   }
 
   private navigateAway(): void {
