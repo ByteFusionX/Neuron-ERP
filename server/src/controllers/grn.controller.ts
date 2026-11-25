@@ -7,6 +7,7 @@ import Product from "../models/products.model";
 import PurchaseRequest from "../models/purchaseRequest.model";
 import mongoose from "mongoose";
 import { getEmployeeData, listScopeFilter } from "../common/utils/util";
+import { buildGridFilterMatch, GridFieldMap } from "../common/utils/grid-query";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { deleteFileFromAws, uploadFileToAws } from "../common/aws-connect";
 import { issueDocNo, peekDocNo } from "../services/docNumber.service";
@@ -871,9 +872,33 @@ export const getArrivingPurchaseOrders = async (req: Request, res: Response) => 
   }
 };
 
+/** GRN grid column key -> field after the list pipeline's lookups. */
+const GRN_GRID_FIELDS: GridFieldMap = {
+  grnDate: { path: 'grnDate', type: 'date' },
+  grnNo: { path: 'grnNo' },
+  jobId: { path: 'jobId.jobId' },
+  customer: { path: 'customer.companyName' },
+  poNo: { path: 'purchaseOrderId.poNo' },
+  supplier: { path: 'purchaseOrderId.supplierId.supplierName' },
+  warehouse: { path: 'warehouse.wareHouseName' },
+  outcomeStatus: { path: '_displayStatus' },
+  createdBy: { path: '_createdByName' },
+};
+
 export const getAllGRNs = async (req: Request, res: Response) => {
   try {
-    const { page = 1, row = 10, search = "", status = "" } = req.query;
+    const { page = 1, row = 10, search = "", status = "", sortKey, sortDir, filters } = req.query;
+    // Column filters from the grid, sent as JSON ("is" / "is not" picks, date "on" days or ranges).
+    let gridFilterList: unknown = null;
+    try { gridFilterList = filters ? JSON.parse(String(filters)) : null; } catch { gridFilterList = null; }
+    const gridMatch = buildGridFilterMatch(gridFilterList, GRN_GRID_FIELDS);
+    const sortFields: Record<string, string> = {
+      grnDate: "grnDate", grnNo: "grnNo", jobId: "jobId.jobId", customer: "customer.companyName",
+      poNo: "purchaseOrderId.poNo", supplier: "purchaseOrderId.supplierId.supplierName",
+      warehouse: "warehouse.wareHouseName", outcomeStatus: "outcomeStatus", files: "fileCount",
+    };
+    const sortField = sortFields[String(sortKey ?? "")];
+    const sortStage = sortField ? { [sortField]: sortDir === "desc" ? -1 : 1, _id: -1 } : { createdAt: -1 };
     const pageNumber = Number(page);
     const pageSize = Number(row);
     const skip = (pageNumber - 1) * pageSize;
@@ -1043,7 +1068,36 @@ export const getAllGRNs = async (req: Request, res: Response) => {
         : []),
       ...(receiptStatus === "resolved" ? [{ $match: { outcomeStatus: "Resolved" } }] : []),
       { $unset: 'receiptTotals' },
-      { $sort: { createdAt: -1 } },
+      ...(gridMatch ? [
+        {
+          $addFields: {
+            _createdByName: { $trim: { input: { $concat: [{ $ifNull: ['$createdBy.firstName', ''] }, ' ', { $ifNull: ['$createdBy.lastName', ''] }] } } },
+            // Same label the Status column shows.
+            _displayStatus: {
+              $ifNull: ['$outcomeStatus', {
+                $cond: [{ $gt: [{ $sum: { $map: { input: { $ifNull: ['$items', []] }, as: 'i', in: { $ifNull: ['$$i.rejectedQty', 0] } } } }, 0] }, 'Return Required', 'Completed']
+              }]
+            },
+          }
+        },
+        { $match: gridMatch },
+        { $project: { _createdByName: 0, _displayStatus: 0 } },
+      ] : []),
+      ...(sortField === "fileCount"
+        ? [{
+            $addFields: {
+              // Same files the row's Documents panel lists: GRN invoices + delivery notes + LPO documents.
+              fileCount: {
+                $add: [
+                  { $size: { $filter: { input: { $ifNull: ["$supplierInvoices", []] }, as: "f", cond: { $gt: ["$$f.fileName", null] } } } },
+                  { $size: { $filter: { input: { $ifNull: ["$supplierDeliveryNotes", []] }, as: "f", cond: { $gt: ["$$f.fileName", null] } } } },
+                  { $size: { $ifNull: ["$purchaseOrderId.documents", []] } }
+                ]
+              }
+            }
+          }]
+        : []),
+      { $sort: sortStage },
       {
         $facet: {
           data: [

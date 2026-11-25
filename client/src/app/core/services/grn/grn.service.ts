@@ -47,8 +47,13 @@ export class GrnService {
     row?: number;
     search?: string;
     status?: 'pending' | 'partial' | 'arrived' | 'returns';
+    /** The grid's column filters, applied on the server. */
+    filters?: unknown[];
   }): Observable<any> {
-    return this.http.get<any>(this.baseUrl, { params: params as any, context: context() });
+    const { filters, ...rest } = params ?? {};
+    const httpParams: any = { ...rest };
+    if (filters?.length) httpParams.filters = JSON.stringify(filters);
+    return this.http.get<any>(this.baseUrl, { params: httpParams, context: context() });
   }
 
   /** Placed LPOs still waiting on goods, soonest expected delivery first. */

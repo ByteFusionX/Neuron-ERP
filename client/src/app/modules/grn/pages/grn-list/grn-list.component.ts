@@ -7,7 +7,7 @@ import { ToastrService } from 'ngx-toastr';
 import { GrnService } from 'src/app/core/services/grn/grn.service';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
-import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
+import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridSortState, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailDocument, DetailFootRow, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
@@ -187,13 +187,13 @@ export class GrnListComponent implements OnInit {
     this.grnColumns = [
       { key: 'grnDate', label: 'GRN Date', type: 'date', sortable: true, width: '130px' },
       { key: 'grnNo', label: 'GRN No', sortable: true },
-      { key: 'jobId', label: 'Job No', valueGetter: (r) => r?.jobId?.jobId || r?.purchaseOrderId?.purchaseId?.jobId?.jobId || 'N/A' },
-      { key: 'customer', label: 'Customer', valueGetter: (r) => r?.customer?.companyName || 'N/A' },
-      { key: 'poNo', label: 'LPO No', valueGetter: (r) => r?.purchaseOrderId?.poNo || 'N/A' },
-      { key: 'supplier', label: 'Supplier', valueGetter: (r) => r?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
-      { key: 'warehouse', label: 'Warehouse', valueGetter: (r) => r?.warehouse?.wareHouseName || 'N/A' },
+      { key: 'jobId', sortable: true, label: 'Job No', valueGetter: (r) => r?.jobId?.jobId || r?.purchaseOrderId?.purchaseId?.jobId?.jobId || 'N/A' },
+      { key: 'customer', sortable: true, label: 'Customer', valueGetter: (r) => r?.customer?.companyName || 'N/A' },
+      { key: 'poNo', sortable: true, label: 'LPO No', valueGetter: (r) => r?.purchaseOrderId?.poNo || 'N/A' },
+      { key: 'supplier', sortable: true, label: 'Supplier', valueGetter: (r) => r?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
+      { key: 'warehouse', sortable: true, label: 'Warehouse', valueGetter: (r) => r?.warehouse?.wareHouseName || 'N/A' },
       {
-        key: 'outcomeStatus', label: 'Status', type: 'badge',
+        key: 'outcomeStatus', label: 'Status', type: 'badge', sortable: true,
         valueGetter: (r) => r?.outcomeStatus || (this.totalRejectedQty(r) > 0 ? 'Return Required' : 'Completed'),
         badgeClasses: {
           'Completed': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
@@ -203,6 +203,11 @@ export class GrnListComponent implements OnInit {
         },
       },
       { key: 'createdBy', label: 'Created By', valueGetter: (r) => this.formatEmployeeName(r?.createdBy) },
+      {
+        key: 'files', label: 'Files', align: 'right', sortable: true,
+        valueGetter: (r) => [...(r?.supplierInvoices ?? []), ...(r?.supplierDeliveryNotes ?? [])].filter((f: any) => f?.fileName).length
+          + (r?.purchaseOrderId?.documents?.length ?? 0),
+      },
     ];
     this.columns = this.grnColumns;
   }
@@ -224,11 +229,23 @@ export class GrnListComponent implements OnInit {
   /** Export: every page of the current tab and search. */
   exportFetch = (page: number, row: number) => {
     const params: any = { page, row, search: this.searchQuery };
+    this.applySort(params);
     if (this.activeViewId !== 'all' && !this.isArrivingView) params.status = this.activeViewId;
     if (this.isArrivingView) params.stage = this.activeViewId === 'pending' ? 'missed' : this.activeViewId;
+    if (!this.isArrivingView && this.gridFilters.length) params.filters = this.gridFilters;
     const request = this.isArrivingView ? this.grnService.getArrivingPurchaseOrders(params) : this.grnService.getAllGRNs(params);
     return request.pipe(map((r: any) => ({ rows: r?.data ?? [], total: r?.pagination?.total ?? 0 })));
   };
+
+  private sort: DataGridSortState = { key: null, direction: null };
+
+  /** The grid sorts server-side, so pass the header sort on to the GRN list API. */
+  private applySort(params: any): void {
+    if (!this.isArrivingView && this.sort.key && this.sort.direction) {
+      params.sortKey = this.sort.key;
+      params.sortDir = this.sort.direction;
+    }
+  }
 
   getGRNs(query?: Partial<DataGridQuery>): void {
     this.isLoading = true;
@@ -238,8 +255,11 @@ export class GrnListComponent implements OnInit {
       row: query?.pageSize ?? this.row,
       search: query?.search ?? this.searchQuery,
     };
+    if (query?.sort) this.sort = query.sort;
+    this.applySort(params);
     if (this.activeViewId !== 'all' && !this.isArrivingView) params.status = this.activeViewId;
     if (this.isArrivingView) params.stage = this.activeViewId === 'pending' ? 'missed' : this.activeViewId;
+    if (!this.isArrivingView && this.gridFilters.length) params.filters = this.gridFilters;
 
     this.page = params.page;
     this.row = params.row;
@@ -265,9 +285,13 @@ export class GrnListComponent implements OnInit {
     });
   }
 
+  /** Column filters from the grid, sent with the GRN list and export (the Arriving tabs ignore them). */
+  private gridFilters: unknown[] = [];
+
   onQueryChange(query: DataGridQuery): void {
     clearTimeout(this.viewLoadTimer);
     this.activeViewId = query.viewId || 'all';
+    this.gridFilters = query.filters ?? [];
     this.getGRNs(query);
   }
 
