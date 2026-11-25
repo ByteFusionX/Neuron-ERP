@@ -64,6 +64,11 @@ export class GrnService {
     return this.http.patch<any>(`${this.baseUrl}/${grnId}/supplier-delivery-notes`, formData, { context: context() });
   }
 
+  /** Superadmin only: removes one supplier invoice / delivery note from the GRN and storage. */
+  deleteDocument(grnId: string, fileName: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/${grnId}/documents/${encodeURIComponent(fileName)}`, { context: context() });
+  }
+
   getGRNRejections(params?: { purchaseOrderId?: string; supplierId?: string }): Observable<any> {
     return this.http.get<any>(`${this.baseUrl}/rejections`, { params: params as any, context: context() });
   }

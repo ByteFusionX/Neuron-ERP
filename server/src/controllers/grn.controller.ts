@@ -8,7 +8,7 @@ import PurchaseRequest from "../models/purchaseRequest.model";
 import mongoose from "mongoose";
 import { getEmployeeData, listScopeFilter } from "../common/utils/util";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
-import { uploadFileToAws } from "../common/aws-connect";
+import { deleteFileFromAws, uploadFileToAws } from "../common/aws-connect";
 import { issueDocNo, peekDocNo } from "../services/docNumber.service";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { Server } from "socket.io";
@@ -1289,5 +1289,36 @@ export const updateGRNSupplierDeliveryNotes = async (req: any, res: Response) =>
       message: "Failed to update supplier delivery notes",
       error: error.message,
     });
+  }
+};
+
+
+/** Superadmin only: removes one supplier invoice / delivery note file from a GRN and from storage. */
+export const deleteGRNDocument = async (req: any, res: Response) => {
+  try {
+    if (!/^superadmin$/i.test(req.employee?.category?.role ?? "")) {
+      return res.status(403).json({ success: false, message: "Only super admins can delete documents" });
+    }
+    const { id, fileName } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid GRN ID" });
+    }
+    const grn: any = await GRN.findById(id);
+    if (!grn) return res.status(404).json({ success: false, message: "GRN not found" });
+
+    const file = [...(grn.supplierInvoices || []), ...(grn.supplierDeliveryNotes || [])].find((f: any) => f?.fileName === fileName);
+    if (!file) return res.status(404).json({ success: false, message: "Document not found on this GRN" });
+
+    grn.supplierInvoices = (grn.supplierInvoices || []).filter((f: any) => f?.fileName !== fileName);
+    grn.supplierDeliveryNotes = (grn.supplierDeliveryNotes || []).filter((f: any) => f?.fileName !== fileName);
+    await grn.save();
+
+    try { await deleteFileFromAws(fileName); } catch (e) { console.error("Error deleting GRN file from storage:", e); }
+    logGrnAudit(req, grn, "update", `Deleted document ${file.originalname || fileName}`);
+
+    return res.status(200).json({ success: true, data: grn });
+  } catch (error: any) {
+    console.error("Error deleting GRN document:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to delete document" });
   }
 };

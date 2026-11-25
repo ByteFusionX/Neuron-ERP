@@ -47,6 +47,7 @@ interface GrnFact {
 type PanelTab = 'poitems' | 'pricing' | 'inspection' | 'documents' | 'history';
 
 import { FileService } from 'src/app/core/services/file.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 @Component({
   selector: 'app-view-grn',
   standalone: true,
@@ -67,6 +68,8 @@ import { FileService } from 'src/app/core/services/file.service';
 })
 export class ViewGrnComponent implements OnInit {
   private fileOpener = inject(FileService);
+  private employeeService = inject(EmployeeService);
+  isSuperAdmin = false;
   private grnService = inject(GrnService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -180,6 +183,10 @@ export class ViewGrnComponent implements OnInit {
       return;
     }
     this.loadGRN();
+    this.employeeService.getEmployee().subscribe({
+      next: (e: any) => this.isSuperAdmin = /^superadmin$/i.test(String(e?.category?.role ?? '')),
+      error: () => this.isSuperAdmin = false,
+    });
   }
 
   loadGRN(): void {
@@ -359,6 +366,15 @@ export class ViewGrnComponent implements OnInit {
   openDocument(doc: DetailDocument): void {
     const file = this.docFiles.get(doc.id);
     if (file) this.fileOpener.openFile(file.fileName || file.name, file.originalname || doc.name);
+  }
+
+  removeDocument(doc: DetailDocument): void {
+    const file = this.docFiles.get(doc.id);
+    if (!file?.fileName) return;
+    this.grnService.deleteDocument(this.grnId, file.fileName).subscribe({
+      next: () => { this.toastr.success(`${doc.name} deleted`); this.loadGRN(); },
+      error: (err) => this.toastr.error(err?.error?.message || 'Failed to delete document'),
+    });
   }
 
   private navigateAway(): void {

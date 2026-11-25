@@ -95,6 +95,8 @@
         <app-detail-documents *ngSwitchCase="'documents'"
           [documents]="docList"
           [downloadable]="false"
+          [removable]="isSuperAdmin"
+          (remove)="removeDocument($event)"
           emptyMessage="No supplier invoices or delivery notes on this GRN."
           (open)="openDocument($event)"></app-detail-documents>
 

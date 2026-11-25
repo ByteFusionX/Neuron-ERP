@@ -10,7 +10,8 @@ import {
   getGRNRejections,
   updateGRNSupplierInvoices,
   updateGRNSupplierDeliveryNotes,
-  updateGRN
+  updateGRN,
+  deleteGRNDocument
 } from "../controllers/grn.controller";
 import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 const upload = require("../common/multer.storage");
@@ -25,6 +26,7 @@ router.get("/", getAllGRNs);
 router.get("/arriving", getArrivingPurchaseOrders);
 router.patch("/:id/supplier-invoices", requirePrivilege("grn", "canUploadInvoice"), upload.array('files'), updateGRNSupplierInvoices);
 router.patch("/:id/supplier-delivery-notes", requirePrivilege("grn", "canUploadInvoice"), upload.array('files'), updateGRNSupplierDeliveryNotes);
+router.delete("/:id/documents/:fileName", deleteGRNDocument);
 router.get("/rejections", getGRNRejections);
 router.get("/purchase-order/:lpoId/all", getAllGRNsByLpoId);
 router.get("/purchase-order/:lpoId", getGRNByLpoId);

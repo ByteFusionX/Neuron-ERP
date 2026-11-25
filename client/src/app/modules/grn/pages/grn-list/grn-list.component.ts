@@ -16,6 +16,7 @@ import { BehaviorSubject, Observable, forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import saveAs from 'file-saver';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { StockReturnDrawerComponent } from 'src/app/modules/stocks/pages/stock-return-drawer/stock-return-drawer.component';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
@@ -61,6 +62,8 @@ export class GrnListComponent implements OnInit {
   private purchaseService = inject(PurchaseService);
   private confirm = inject(ConfirmDialogService);
   private auditLog = inject(AuditLogService);
+  private employeeService = inject(EmployeeService);
+  isSuperAdmin = false;
   private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
 
   /** Arriving / Not arrived rows are LPOs, so they show the LPO's history; GRN rows show the GRN's. */
@@ -133,6 +136,10 @@ export class GrnListComponent implements OnInit {
     const view = this.route.snapshot.queryParamMap.get('view');
     if (view && this.views.some((v) => v.id === view)) this.activeViewId = view;
     this.getGRNs();
+    this.employeeService.getEmployee().subscribe({
+      next: (e: any) => this.isSuperAdmin = /^superadmin$/i.test(String(e?.category?.role ?? '')),
+      error: () => this.isSuperAdmin = false,
+    });
   }
 
   /** Arriving and Not arrived (missed their date) list placed LPOs rather than GRNs. */
@@ -517,7 +524,8 @@ export class GrnListComponent implements OnInit {
     const grnFiles = [...(row?.supplierInvoices ?? []), ...(row?.supplierDeliveryNotes ?? [])];
     return [
       ...grnFiles.filter((f: any) => f?.fileName).map((f: any) => toDoc(f, 'Supplier document')),
-      ...(row?.purchaseOrderId?.documents ?? []).map((f: any) => toDoc(f, 'LPO document')),
+      // LPO files belong to the PO, so they can't be deleted from the GRN.
+      ...(row?.purchaseOrderId?.documents ?? []).map((f: any) => ({ ...toDoc(f, 'LPO document'), removable: false })),
     ];
   }
 
@@ -542,6 +550,20 @@ export class GrnListComponent implements OnInit {
       const url = window.URL.createObjectURL(mime ? new Blob([blob], { type: mime }) : blob);
       window.open(url, '_blank');
       setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    });
+  }
+
+  onDocumentRemove(row: any, doc: DetailDocument): void {
+    this.grnService.deleteDocument(row._id, doc.id).subscribe({
+      next: (res: any) => {
+        this.notificationService.success(`${doc.name} deleted`);
+        if (res?.data) {
+          row.supplierInvoices = res.data.supplierInvoices;
+          row.supplierDeliveryNotes = res.data.supplierDeliveryNotes;
+        }
+        this.getGRNs();
+      },
+      error: (err) => this.notificationService.error(err?.error?.message || 'Failed to delete document'),
     });
   }
 

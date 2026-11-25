@@ -103,7 +103,8 @@
         <app-detail-documents *ngSwitchCase="'documents'"
           title="PO files"
           [documents]="poDocuments(row)"
-          [removable]="false"
+          [removable]="isSuperAdmin && !isArrivingView"
+          (remove)="onDocumentRemove(row, $event)"
           (open)="onDocumentOpen($event)"
           (download)="onDocumentDownload($event)"></app-detail-documents>
 
