@@ -562,6 +562,7 @@ export class ViewDealsheetComponent implements OnInit {
       { label: 'Saved date', value: date(d.savedDate) },
       { label: 'Approved', value: date(d.approvedDate) },
       { label: 'Approved by', value: this.approverName },
+      { label: 'Actioned By', value: (d as any).actionedBy || '-' },
       { label: 'Revoked', value: date(d.revokedDate) },
       { label: 'Resubmitted after revoke', value: date(d.revokeResubmittedDate) },
       { label: 'Re-approved', value: date(d.reapprovedDate) },

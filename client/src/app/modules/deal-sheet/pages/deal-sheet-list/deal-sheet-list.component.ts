@@ -316,6 +316,11 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
           r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '',
       },
       {
+        key: 'actionedBy',
+        label: 'Actioned By',
+        valueGetter: (r) => (r.dealData as any)?.actionedBy || '-',
+      },
+      {
         key: 'department',
         sortable: true,
         label: 'Department',
@@ -1049,9 +1054,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
           ...((row as any).job?.jobId
             ? [{ type: 'field' as const, label: 'Job ID', value: (row as any).job.jobId, numeric: true }]
             : []),
-          ...(this.approverName(row)
-            ? [{ type: 'field' as const, label: 'Approved by', value: this.approverName(row), noHover: true }]
-            : []),
+          { type: 'field' as const, label: 'Actioned By', value: (deal as any)?.actionedBy || '-', noHover: true },
         ],
       },
       {

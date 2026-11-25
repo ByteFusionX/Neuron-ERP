@@ -278,6 +278,7 @@ export class PurchaseRequestListComponent {
       },
       { key: 'awarded', label: 'Awarded', align: 'right', valueGetter: (r) => { const a = this.awardStats(r, true); return a.total ? `${a.awarded}/${a.total}` : '-'; } },
       { key: 'createdBy', label: 'Created By', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '-' },
+      { key: 'actionedBy', label: 'Actioned By', valueGetter: (r) => r.actionedBy || '-' },
       {
         key: 'procurementPerson', label: 'Assigned To',
         valueGetter: (r) => r.procurementPerson?.firstName ? `${r.procurementPerson.firstName} ${r.procurementPerson.lastName}` : '-',
@@ -880,6 +881,7 @@ export class PurchaseRequestListComponent {
             { type: 'field', label: 'Date', value: this.datePipe.transform(row.approvedDate || row.createdAt, 'dd MMM yyyy') },
             { type: 'field', label: 'Sales Person', value: row.salesPerson || '-' },
             { type: 'field', label: 'Allocated By', value: person(row.allocatedBy) },
+            { type: 'field', label: 'Actioned By', value: row.actionedBy || '-' },
             { type: 'field', label: 'Procurement Person', value: person(row.procurementPerson) },
           ],
         },

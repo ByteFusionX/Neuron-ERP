@@ -198,7 +198,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
         valueGetter: (row) => this.formatAmount(row),
       },
       { key: 'createdBy', label: 'Prepared By', valueGetter: (row) => this.personName(row.createdBy) },
-      { key: 'approvedBy', label: 'Approved By', valueGetter: (row) => this.approvedByNames(row) },
+      { key: 'actionedBy', label: 'Actioned By', valueGetter: (row) => this.actionedByNames(row) },
       { key: 'customer', label: 'Customer', sortable: true, valueGetter: (row) => row.purchaseId?.customerId?.companyName || '-' },
       ...(this.activeViewId === 'rejected'
         ? [{ key: 'rejectReason', label: 'Reject Reason', valueGetter: (row: any) => this.rejectReason(row) } as DataGridColumn<any>]
@@ -740,6 +740,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
           { type: 'field', label: 'Job No', value: row.jobId?.jobId || '-' },
           { type: 'field', label: 'Date', value: this.datePipe.transform(row.poDate, 'dd MMM yyyy') },
           { type: 'field', label: 'Prepared By', value: this.personName(row.createdBy) },
+          { type: 'field', label: 'Actioned By', value: this.actionedByNames(row) },
           { type: 'field', label: 'Amount', value: this.formatAmount(row), numeric: true, noHover: true },
           { type: 'dg', key: 'receiptStatus', label: 'Receipt Status' },
           { type: 'dg', key: 'billingStatus', label: 'Billing Status' },
@@ -770,7 +771,14 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     };
   }
 
-  private approvedByNames(row: any): string {
+  /** Who acted on the PO for its current status: approvers, the rejecter, or the revoker. */
+  private actionedByNames(row: any): string {
+    const last = (list: any[] | undefined, key: string) => {
+      const h = list?.length ? list[list.length - 1] : null;
+      return h ? this.personName(h[key]) : '-';
+    };
+    if (row?.poStatus === 'Rejected') return last(row.rejectedHistory, 'rejectedBy');
+    if (row?.poStatus === 'Cancelled') return last(row.cancelHistory, 'cancelledBy');
     const names = (row?.approvedHistory ?? [])
       .map((h: any) => this.personName(h?.approvedBy))
       .filter((n: string) => n !== '-');

@@ -215,6 +215,15 @@ export class ViewLpoComponent implements OnInit {
     return last || l?.approvedHistory?.[l.approvedHistory.length - 1]?.date || null;
   }
 
+  /** Rejecter for rejected POs, revoker for revoked (Cancelled) ones, otherwise the approvers. */
+  private actionedBy(l: any): string {
+    const last = (list: any[] | undefined, key: string) => this.fullName(list?.[list.length - 1]?.[key]);
+    if (l?.poStatus === 'Rejected') return last(l.rejectedHistory, 'rejectedBy');
+    if (l?.poStatus === 'Cancelled') return last(l.cancelHistory, 'cancelledBy');
+    const names = (l?.approvedHistory ?? []).map((h: any) => this.fullName(h?.approvedBy)).filter((n: string) => n !== '-');
+    return names.length ? Array.from(new Set<string>(names)).join(', ') : '-';
+  }
+
   private fullName(person: any): string {
     return person?.firstName ? `${person.firstName} ${person.lastName ?? ''}`.trim() : '-';
   }
@@ -258,6 +267,7 @@ export class ViewLpoComponent implements OnInit {
       !!l.expectedDeliveryDate && { label: 'Expected Delivery', value: date(l.expectedDeliveryDate) },
       !!l.placedAt && { label: 'Placed On', value: date(l.placedAt) },
       { label: 'Created By', value: this.fullName(l.createdBy) },
+      { label: 'Actioned By', value: this.actionedBy(l) },
       { label: 'Currency', value: this.currency() },
       { label: 'Status', value: l.poStatus === 'Pending for Approval' ? 'Pending' : (l.poStatus || '-'), state: { dot: tone.dot, text: tone.text } },
     ];

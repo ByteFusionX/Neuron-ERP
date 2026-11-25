@@ -696,6 +696,15 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
         }
       },
       {
+        $lookup: {
+          from: "employees",
+          localField: "cancelHistory.cancelledBy",
+          foreignField: "_id",
+          as: "cancelledEmployees",
+          pipeline: [{ $project: { firstName: 1, lastName: 1 } }]
+        }
+      },
+      {
         $addFields: {
           approvedHistory: {
             $map: {
@@ -737,6 +746,31 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
                             input: "$rejectedEmployees",
                             as: "emp",
                             cond: { $eq: ["$$emp._id", "$$history.rejectedBy"] }
+                          }
+                        },
+                        0
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          cancelHistory: {
+            $map: {
+              input: { $ifNull: ["$cancelHistory", []] },
+              as: "history",
+              in: {
+                $mergeObjects: [
+                  "$$history",
+                  {
+                    cancelledBy: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: "$cancelledEmployees",
+                            as: "emp",
+                            cond: { $eq: ["$$emp._id", "$$history.cancelledBy"] }
                           }
                         },
                         0
@@ -797,7 +831,7 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
           }
         }
       },
-      { $project: { approvalRoles: 0, approvalEmployees: 0, approvedEmployees: 0, rejectedEmployees: 0 } },
+      { $project: { approvalRoles: 0, approvalEmployees: 0, approvedEmployees: 0, rejectedEmployees: 0, cancelledEmployees: 0 } },
 
       // Enrich quoteId with related documents and resolve attention contact
       {

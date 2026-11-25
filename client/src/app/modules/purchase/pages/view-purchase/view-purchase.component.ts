@@ -413,6 +413,7 @@ export class ViewPurchaseComponent {
       !!p.mr?.engineer && { label: 'MR Engineer', value: p.mr.engineer },
       // when
       { label: 'Created By', value: this.fullName(p.createdBy) },
+      { label: 'Actioned By', value: (p as any).actionedBy || '-' },
       { label: 'Created On', value: date(p.createdAt) || '-' },
       !!p.approvedDate && { label: 'Approved On', value: date(p.approvedDate) },
       !!p.updatedAt && { label: 'Last Updated', value: date(p.updatedAt) },

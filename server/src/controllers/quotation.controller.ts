@@ -709,6 +709,34 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
 }
 
 /**
+ * Who last acted on each deal, as `dealData.actionedBy`: the rejecter or revoker when that was the last
+ * decision, otherwise everyone who approved it since then. Read from editHistory, the only place reject/revoke record the actor.
+ */
+const withDealActionedBy = async (quotations: any[]): Promise<void> => {
+    const decisions = ['DealApproved', 'DealRejected', 'DealRevoked'];
+    const idOf = (e: any) => String(e?.editedBy?._id ?? e?.editedBy ?? '');
+    const rounds = new Map<any, any[]>();
+    quotations.forEach((q) => {
+        if (!q?.dealData) return;
+        const list = (q.editHistory ?? []).filter((e: any) => decisions.includes(e?.action) && idOf(e));
+        const last = list[list.length - 1];
+        if (!last) return;
+        if (last.action !== 'DealApproved') return rounds.set(q, [last]);
+        let i = list.length - 1;
+        while (i > 0 && list[i - 1].action === 'DealApproved') i--;
+        rounds.set(q, list.slice(i));
+    });
+    if (!rounds.size) return;
+    const ids = [...new Set([...rounds.values()].flat().map(idOf))];
+    const people = await Employee.find({ _id: { $in: ids } }, 'firstName lastName').lean();
+    const name = new Map(people.map((p: any) => [String(p._id), `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim()]));
+    rounds.forEach((entries, q) => {
+        const names = [...new Set(entries.map((e) => name.get(idOf(e))).filter(Boolean))];
+        if (names.length) q.dealData.actionedBy = names.join(', ');
+    });
+};
+
+/**
  * Names for the Deal Sheet approval route, so a screen can show where the deal is waiting. Used by the single
  * quote fetch and both deal sheet grids, so a deal opened from a list row shows the same route as one opened by link.
  */
@@ -804,6 +832,7 @@ export const getQuotationById = async (req: Request, res: Response, next: NextFu
             quotation.dealData.approvedBy = await Employee.findById(quotation.dealData.approvedBy, 'firstName lastName').lean();
         }
         await withDealStageNames([quotation]);
+        await withDealActionedBy([quotation]);
         return res.status(200).json(quotation);
     } catch (error) {
         console.log(error)
@@ -1323,6 +1352,7 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
         const total: number = viewCounts[['all', 'rejected', 'revoked'].includes(view) ? view : 'pending'] ?? 0;
         if (!dealData || !total) return res.status(200).json({ total: 0, dealSheet: [], viewCounts })
         await withDealStageNames(dealData);
+        await withDealActionedBy(dealData);
         return res.status(200).json({ total: total, dealSheet: dealData, viewCounts })
 
     } catch (error) {
@@ -1681,6 +1711,7 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
         const total: number = viewCounts[hasRevenueFilter ? 'revenue' : 'approved'] ?? 0;
         if (!dealData || !total) return res.status(200).json({ total: 0, dealSheet: [], viewCounts })
         await withDealStageNames(dealData);
+        await withDealActionedBy(dealData);
         return res.status(200).json({ total: total, dealSheet: dealData, viewCounts })
 
     } catch (error) {

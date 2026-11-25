@@ -759,6 +759,28 @@ const poProgressStages = (poProgress?: string): any[] => [
     }] : []),
 ];
 
+/**
+ * Sets `actionedBy` on each PR: who rejected/revoked it (last rejectedReason) when Rejected/Revoked,
+ * otherwise the approvers who have signed off so far (approvalStatus entries marked approved).
+ */
+const withPrActionedBy = async (prs: any[]): Promise<void> => {
+    const idOf = (v: any) => (v?._id ?? v)?.toString();
+    const pick = (pr: any): string[] => {
+        if (pr.status === PurchaseRequestStatus.Rejected || pr.status === PurchaseRequestStatus.Revoked) {
+            const last = (pr.rejectedReason ?? []).at(-1);
+            return last?.rejectedBy ? [idOf(last.rejectedBy)] : [];
+        }
+        return (pr.approvalStatus ?? []).filter((a: any) => a.status === 'approved' && a.updatedBy).map((a: any) => idOf(a.updatedBy));
+    };
+    const ids = [...new Set(prs.filter(Boolean).flatMap(pick))].filter(Boolean);
+    const emps = ids.length ? await Employee.find({ _id: { $in: ids } }, { firstName: 1, lastName: 1 }).lean() : [];
+    const names = new Map(emps.map((e: any) => [e._id.toString(), `${e.firstName ?? ''} ${e.lastName ?? ''}`.trim()]));
+    for (const pr of prs) {
+        if (!pr) continue;
+        pr.actionedBy = [...new Set(pick(pr).map((id) => names.get(id)).filter(Boolean))].join(', ') || '';
+    }
+};
+
 /** PR grid column key -> field after the list pipeline's lookups (names are built only when a filter needs them). */
 const PR_GRID_FIELDS: GridFieldMap = {
     date: { path: 'createdAt', type: 'date' },
@@ -1234,6 +1256,7 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
             }
         ]);
 
+        await withPrActionedBy(purchases[0]?.data ?? []);
         return res.status(200).json({
             success: true,
             purchase: purchases[0],
@@ -2628,6 +2651,7 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
         populatedPurchaseRequest.poUsage = Object.fromEntries(await poLineUsage(populatedPurchaseRequest._id, populatedPurchaseRequest.items));
         populatedPurchaseRequest.poDiscounts = await poDiscountBySupplier(populatedPurchaseRequest._id);
 
+        await withPrActionedBy([populatedPurchaseRequest]);
         return res.status(200).json({
             success: true,
             message: "Purchase request fetched successfully",
