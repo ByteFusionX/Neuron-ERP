@@ -148,4 +148,9 @@ export class PurchaseOrderService {
   cancelPurchaseOrder(id: string, reason: string, lines?: { index: number; qty: number }[]): Observable<any> {
     return this.http.post<any>(`${this.baseUrl}/${id}/cancel`, { reason, ...(lines ? { lines } : {}) }, { context: context() });
   }
+
+  /** Moves a revoked (Cancelled) PO to Rejected, restoring its quantities so it can be edited and resent. */
+  rejectRevokedPurchaseOrder(id: string, reason: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/${id}/reject-revoked`, { reason }, { context: context() });
+  }
 }

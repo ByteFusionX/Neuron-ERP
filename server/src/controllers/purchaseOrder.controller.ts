@@ -1721,6 +1721,51 @@ export const cancelPurchaseOrder = async (req: Request, res: Response) => {
   }
 };
 
+
+/**
+ * Moves a revoked (Cancelled) PO to Rejected so it can be edited and resent like any rejected PO.
+ * The quantities taken off by the revoke go back on the lines; Rejected POs do not reserve request quantity,
+ * so nothing is double-counted until the PO is resent and re-validated.
+ */
+export const rejectRevokedPurchaseOrder = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const reason = String(req.body?.reason || '').trim();
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid Purchase Order ID" });
+    }
+    if (!reason) return res.status(400).json({ success: false, message: "Say why the PO is being rejected." });
+    const employee = await getEmployeeData(req.user);
+    if (!employee) return res.status(401).json({ success: false, message: "Employee not found" });
+
+    const current: any = await PurchaseOrder.findById(id).lean();
+    if (!current) return res.status(404).json({ success: false, message: "Purchase order not found" });
+    if (current.poStatus !== 'Cancelled') {
+      return res.status(409).json({ success: false, message: `Only a revoked PO can be moved to Rejected; this one is ${current.poStatus}.` });
+    }
+    const items = (current.items || []).map((item: any) => {
+      const quantity = Number(((Number(item.quantity) || 0) + (Number(item.cancelledQty) || 0)).toFixed(4));
+      return { ...item, quantity, cancelledQty: 0, totalCost: Number((quantity * (Number(item.unitCost) || 0)).toFixed(2)) };
+    });
+
+    // Conditional on the status so two clicks cannot both apply.
+    const po: any = await PurchaseOrder.findOneAndUpdate(
+      { _id: id, poStatus: 'Cancelled' },
+      {
+        $set: { poStatus: 'Rejected', items, updatedAt: new Date() },
+        $push: { rejectedHistory: { rejectedBy: employee._id, reason, date: new Date() } },
+      },
+      { new: true },
+    );
+    if (!po) return res.status(409).json({ success: false, message: "The PO changed meanwhile; reload and try again." });
+
+    await logPoAudit(req, po, 'rejected', `Revoked PO moved to Rejected — ${reason}`);
+    return res.status(200).json({ success: true, message: `${po.poNo} moved to Rejected`, data: po });
+  } catch (error: any) {
+    console.error("Reject revoked purchase order error:", error);
+    return res.status(500).json({ success: false, message: "Failed to reject the purchase order", error: error.message });
+  }
+};
 export const approvePurchaseOrder = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

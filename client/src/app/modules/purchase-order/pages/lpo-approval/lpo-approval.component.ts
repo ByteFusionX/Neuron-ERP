@@ -38,12 +38,13 @@ import { MatDialog } from '@angular/material/dialog';
 import { GrnListModalComponent, GrnListModalData } from 'src/app/shared/components/grn-list-modal/grn-list-modal.component';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 
-const ALL_STATUSES = ['Pending for Approval', 'Approved', 'Placed', 'Closed', 'Rejected'];
+const ALL_STATUSES = ['Pending for Approval', 'Approved', 'Placed', 'Closed', 'Rejected', 'Cancelled'];
 const PENDING_STATUSES = ['Pending for Approval'];
 const APPROVED_STATUSES = ['Approved'];
 /** Placed by an employee after approval; Closed POs stay here until a GRN view exists. */
 const PLACED_STATUSES = ['Placed', 'Closed'];
 const REJECTED_STATUSES = ['Rejected'];
+const REVOKED_STATUSES = ['Cancelled'];
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   'Pending for Approval': 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
@@ -51,6 +52,7 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
   Placed: 'bg-teal-50 text-teal-700 ring-teal-200 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:ring-teal-900 dark:border-teal-900',
   Closed: 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900 dark:border-sky-900',
   Rejected: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
+  Cancelled: 'bg-orange-50 text-orange-700 ring-orange-200 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-900 dark:border-orange-900',
 };
 
 const BILLING_BADGE_CLASSES: Record<string, string> = {
@@ -58,7 +60,7 @@ const BILLING_BADGE_CLASSES: Record<string, string> = {
   'Invoice Uploaded': 'bg-indigo-50 text-indigo-700 ring-indigo-200 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-900 dark:border-indigo-900',
 };
 
-const statusLabel = (status: string) => status === 'Pending for Approval' ? 'Pending' : status;
+const statusLabel = (status: string) => status === 'Pending for Approval' ? 'Pending' : status === 'Cancelled' ? 'Revoked' : status;
 
 import { InitiateLpoComponent } from '../initiate-lpo/initiate-lpo.component';
 
@@ -112,6 +114,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     { id: 'approved', label: 'Approved' },
     { id: 'placed', label: 'Placed' },
     { id: 'rejected', label: 'Rejected' },
+    { id: 'revoked', label: 'Revoked' },
   ];
   columns: DataGridColumn<any>[] = [];
   rowActions: DataGridRowAction<any>[] = [];
@@ -200,7 +203,15 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
       ...(this.activeViewId === 'rejected'
         ? [{ key: 'rejectReason', label: 'Reject Reason', valueGetter: (row: any) => this.rejectReason(row) } as DataGridColumn<any>]
         : []),
+      ...(this.activeViewId === 'revoked'
+        ? [{ key: 'revokeReason', label: 'Revoke Reason', valueGetter: (row: any) => this.revokeReason(row) } as DataGridColumn<any>]
+        : []),
     ];
+  }
+
+  private revokeReason(row: any): string {
+    const history = row?.cancelHistory ?? [];
+    return history.length ? (history[history.length - 1]?.reason || '-') : '-';
   }
 
   private rejectReason(row: any): string {
@@ -222,6 +233,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
       { id: 'place', label: 'Place order', icon: 'check', quick: true, hidden: (r) => r.poStatus !== 'Approved' || !this.canInitiateLPO },
       { id: 'uploadDocuments', label: 'Upload documents', icon: 'upload', quick: true, hidden: (r) => !['Approved', 'Placed'].includes(r.poStatus) || !(this.isSuperAdmin || this.canInitiateLPO) },
       { id: 'cancelOrder', label: 'Revoke PO', variant: 'danger', icon: 'close', quick: true, hidden: (r) => r.poStatus !== 'Placed' || !!r.grns?.length || !this.canCancelPo },
+      { id: 'rejectRevoked', label: 'Reject PO', variant: 'danger', icon: 'close', quick: true, hidden: (r) => r.poStatus !== 'Cancelled' || !this.canCancelPo },
     ];
   }
 
@@ -255,6 +267,8 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
         return PLACED_STATUSES;
       case 'rejected':
         return REJECTED_STATUSES;
+      case 'revoked':
+        return REVOKED_STATUSES;
       default:
         return ALL_STATUSES;
     }
@@ -268,9 +282,10 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     this.page = query.page;
     this.row = query.pageSize;
     const wasRejected = this.activeViewId === 'rejected';
+    const wasRevoked = this.activeViewId === 'revoked';
     this.gridFilters = query.filters ?? [];
     this.activeViewId = query.viewId || 'all';
-    if (wasRejected !== (this.activeViewId === 'rejected')) this.buildColumns();
+    if (wasRejected !== (this.activeViewId === 'rejected') || wasRevoked !== (this.activeViewId === 'revoked')) this.buildColumns();
     this.loadData();
   }
 
@@ -360,11 +375,29 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     }));
   }
 
+  async rejectRevoked(row: any): Promise<void> {
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'reject',
+      title: `Reject ${row.poNo}?`,
+      message: 'The revoked PO moves to Rejected with its quantities restored, so it can be edited and resent for approval.',
+      details: [{ label: 'PO no', value: row.poNo || '-' }, { label: 'Supplier', value: row.supplierId?.supplierName || '-' }],
+      confirmLabel: 'Reject PO',
+      reason: true,
+      reasonLabel: 'Reject reason',
+    });
+    if (!confirmed || !reason?.trim()) return;
+    this.subscriptions.add(this.purchaseOrderService.rejectRevokedPurchaseOrder(row._id, reason.trim()).subscribe({
+      next: () => { this.notificationService.success(`${row.poNo} moved to Rejected`); this.loadData(); },
+      error: (err) => this.notificationService.error(err?.error?.message || 'Could not reject the PO.'),
+    }));
+  }
+
   onRowAction(event: DataGridRowActionEvent<any>): void {
     if (event.action.id === 'openFullLpo') this.openFullLpo(event.row);
     if (event.action.id === 'resetWorkflow') this.resetWorkflow(event.row);
     if (event.action.id === 'place') this.placeOrder(event.row);
     if (event.action.id === 'cancelOrder') this.cancelOrder(event.row);
+    if (event.action.id === 'rejectRevoked') this.rejectRevoked(event.row);
     if (event.action.id === 'uploadDocuments') this.uploadDocuments(event.row);
     if (event.action.id === 'approve') this.approve(event.row);
     if (event.action.id === 'reject') this.reject(event.row);

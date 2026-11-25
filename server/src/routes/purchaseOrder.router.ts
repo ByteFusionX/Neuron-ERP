@@ -21,7 +21,8 @@ import {
   addPurchaseOrderDocuments,
   removePurchaseOrderDocument,
   getPurchaseOrderCancellable,
-  cancelPurchaseOrder
+  cancelPurchaseOrder,
+  rejectRevokedPurchaseOrder
 } from "../controllers/purchaseOrder.controller";
 import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 const upload = require("../common/multer.storage")
@@ -42,6 +43,7 @@ router.patch("/:id/documents", requirePrivilege("purchaseOrder", "canInitiateLPO
 router.delete("/:id/documents/:fileName", requirePrivilege("purchaseOrder", "canInitiateLPO"), removePurchaseOrderDocument);
 router.get("/:id/cancellable", getPurchaseOrderCancellable);
 router.post("/:id/cancel", requirePrivilege("purchaseOrder", "canCancel"), cancelPurchaseOrder);
+router.post("/:id/reject-revoked", requirePrivilege("purchaseOrder", "canCancel"), rejectRevokedPurchaseOrder);
 router.post("/:id/reset-workflow", requireUnlessDenied("purchaseOrder", "resetWorkflow"), resetPurchaseOrderWorkflow);
 router.patch("/:id/supplier-invoices",requireUnlessDenied("purchaseOrder", "uploadInvoice"), upload.array('files'), updateSupplierInvoices);
 router.get("/generate-po-no", generateLpoNo);
