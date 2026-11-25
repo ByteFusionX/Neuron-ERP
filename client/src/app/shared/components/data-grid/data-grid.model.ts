@@ -89,7 +89,9 @@ export interface DataGridSortState {
 }
 
 export type DataGridFilterOperator =
-  | 'contains' | 'notContains' | 'is' | 'isNot' | 'eq' | 'neq' | 'gt' | 'lt' | 'before' | 'after' | 'on' | 'notOn' | 'empty';
+  | 'contains' | 'notContains' | 'is' | 'isNot' | 'eq' | 'neq' | 'gt' | 'lt' | 'before' | 'after' | 'on' | 'notOn' | 'empty'
+  /** Sent to the server only: two days picked with "on", read as an inclusive range. */
+  | 'between';
 
 export interface DataGridFilter {
   id: number;

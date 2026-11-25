@@ -16,6 +16,7 @@ import { jobTotalsOf } from './customerInvoice.controller';
 import { checkAndUpdateJobCompletionStatus, jobBasePipeline } from './job.controller';
 import { createNotificationWithPrivileges } from './notification.controller';
 import { getEmployeeData, getUSDRated, listScopeFilter } from '../common/utils/util';
+import { buildGridFilterMatch, GridFieldMap } from '../common/utils/grid-query';
 import { Server } from 'socket.io';
 import { uploadFileToAws } from '../common/aws-connect';
 import { logAudit } from '../services/audit.service';
@@ -288,9 +289,27 @@ export const getDnsByJobId = async (req: Request, res: Response) => {
     }
 };
 
+/** DN register column key -> field (job.jobId comes from a jobs lookup added only when filtering). */
+const DN_GRID_FIELDS: GridFieldMap = {
+    dnDate: { path: 'dnDate', type: 'date' },
+    dnNo: { path: 'dnNo' },
+    'job.jobId': { path: '_gridJob.jobId' },
+    clientName: { path: 'clientName' },
+    customerLpoNumber: { path: 'customerLpoNumber' },
+    status: { path: 'status' },
+};
+
 export const getAllDeliveryNotes = async (req: Request, res: Response) => {
     try {
-        let { page, search, row, jobId, customer, fromDate, toDate, status, deliveryScope } = req.body;
+        let { page, search, row, jobId, customer, fromDate, toDate, status, deliveryScope, filters } = req.body;
+        // Column filters from the grid ("is" / "is not" picks, date "on" days or ranges).
+        const gridMatch = buildGridFilterMatch(filters, DN_GRID_FIELDS);
+        const gridStages: any[] = gridMatch ? [
+            { $lookup: { from: 'jobs', localField: 'jobId', foreignField: '_id', pipeline: [{ $project: { jobId: 1 } }], as: '_gridJob' } },
+            { $unwind: { path: '$_gridJob', preserveNullAndEmptyArrays: true } },
+            { $match: gridMatch },
+            { $unset: '_gridJob' },
+        ] : [];
         let skipNum: number = (page - 1) * row;
 
         let searchRegex = search ? search.split('').join('\\s*') : '';
@@ -324,6 +343,7 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
         let total: number = 0;
         await DeliveryNote.aggregate([
             { $match: matchFilters },
+            ...gridStages,
             { $count: "total" }
         ]).exec().then((result: any) => {
             if (result && result.length > 0) {
@@ -333,6 +353,7 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
 
         let dns = await DeliveryNote.aggregate([
             { $match: matchFilters },
+            ...gridStages,
             { $sort: { dnNo: -1 } },
             { $skip: skipNum },
             { $limit: row },

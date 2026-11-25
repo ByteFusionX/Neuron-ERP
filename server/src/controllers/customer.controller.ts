@@ -7,6 +7,7 @@ import employeeModel from "../models/employee.model";
 import { getNextSequence } from "../models/counter.model";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { logAudit } from "../services/audit.service";
+import { buildGridFilterMatch, GridFieldMap } from "../common/utils/grid-query";
 import { customerNameKeys, findCustomerDuplicates, PartyMatch } from "../common/utils/partyMatch";
 const { ObjectId } = require('mongodb')
 
@@ -192,9 +193,30 @@ export const getAllCustomers = async (req: Request, res: Response, next: NextFun
 };
 
 
+/** Customer grid column key -> field (type and department names come from lookups added only when filtering). */
+const CUSTOMER_GRID_FIELDS: GridFieldMap = {
+    clientRef: { path: 'clientRef' },
+    companyName: { path: 'companyName' },
+    customerType: { path: '_gridType.customerTypeName' },
+    createdBy: { path: 'createdBy', type: 'id' },
+    department: { path: '_gridDept.departmentName' },
+    createdDate: { path: 'createdDate', type: 'date' },
+    customerEmailId: { path: 'customerEmailId' },
+    status: { path: 'status' },
+    shared: { path: 'sharedWith', type: 'id' },
+};
+
 export const getFilteredCustomers = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, createdBy, access, userId, search, creditStatus, status, sharedWith } = req.body;
+        let { page, row, createdBy, access, userId, search, creditStatus, status, sharedWith, filters: gridFilters } = req.body;
+        // Column filters from the grid ("is" / "is not" picks, date "on" days or ranges).
+        const gridMatch = buildGridFilterMatch(gridFilters, CUSTOMER_GRID_FIELDS);
+        const gridStages: any[] = gridMatch ? [
+            { $lookup: { from: 'customertypes', localField: 'customerType', foreignField: '_id', pipeline: [{ $project: { customerTypeName: 1 } }], as: '_gridType' } },
+            { $lookup: { from: 'departments', localField: 'department', foreignField: '_id', pipeline: [{ $project: { departmentName: 1 } }], as: '_gridDept' } },
+            { $match: gridMatch },
+            { $unset: ['_gridType', '_gridDept'] },
+        ] : [];
         access = await resolveViewAccess(access, userId);
         page = Number(page) > 0 ? Number(page) : 1;
         row = Number(row) > 0 ? Number(row) : 15;
@@ -275,6 +297,7 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
             {
                 $match: filters
             },
+            ...gridStages,
             {
                 $group: { _id: null, total: { $sum: 1 } }
             },
@@ -326,6 +349,7 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
             {
                 $match: filters,
             },
+            ...gridStages,
             // Newest first, then page: sorting after skip/limit only reordered each page.
             { $sort: { createdDate: -1, _id: -1 } },
             {

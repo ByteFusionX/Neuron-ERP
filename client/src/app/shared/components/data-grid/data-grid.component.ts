@@ -569,6 +569,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   private splitMultiFilters(filters: DataGridFilter[]): DataGridFilter[] {
     return filters.flatMap((f) => {
       if (!Array.isArray(f.value)) return [f];
+      // Two days picked with "on" mean a range (both days included), same as the quotation list.
+      if (f.op === 'on' && f.value.length === 2) return [{ ...f, op: 'between', value: [...f.value].sort() }];
       return f.value.map((v: any, i: number) => ({
         ...f,
         value: v,

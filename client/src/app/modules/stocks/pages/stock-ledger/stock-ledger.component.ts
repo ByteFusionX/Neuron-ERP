@@ -149,6 +149,7 @@ export class StockLedgerComponent implements OnInit, OnDestroy {
       search: this.searchTerm || undefined,
       movementType: this.movementType || undefined,
       product: this.product || undefined,
+      filters: this.gridFilters,
     }).pipe(map((res) => ({ rows: res.data.movements, total: res.data.pagination.total })));
 
   load(): void {
@@ -159,6 +160,7 @@ export class StockLedgerComponent implements OnInit, OnDestroy {
       search: this.searchTerm || undefined,
       movementType: this.movementType || undefined,
       product: this.product || undefined,
+      filters: this.gridFilters,
     };
     this.stockService.getLedger(params).subscribe({
       next: (res) => {
@@ -175,8 +177,12 @@ export class StockLedgerComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Column filters from the grid, sent with the list and export (tab counts ignore them). */
+  private gridFilters: unknown[] = [];
+
   onQueryChange(query: DataGridQuery): void {
     this.searchTerm = query.search;
+    this.gridFilters = query.filters ?? [];
     this.page = query.page;
     this.row = query.pageSize;
     this.load();

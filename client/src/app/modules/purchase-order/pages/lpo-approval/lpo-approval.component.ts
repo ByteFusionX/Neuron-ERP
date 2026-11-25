@@ -260,11 +260,15 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Column filters from the grid, sent to the server with the list and export (tab counts ignore them). */
+  private gridFilters: unknown[] = [];
+
   onQueryChange(query: DataGridQuery): void {
     this.searchQuery = query.search;
     this.page = query.page;
     this.row = query.pageSize;
     const wasRejected = this.activeViewId === 'rejected';
+    this.gridFilters = query.filters ?? [];
     this.activeViewId = query.viewId || 'all';
     if (wasRejected !== (this.activeViewId === 'rejected')) this.buildColumns();
     this.loadData();
@@ -277,6 +281,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
       row,
       search: this.searchQuery || undefined,
       status: this.statusesForView(this.activeViewId),
+      filters: this.gridFilters,
     }).pipe(map((response: any) => ({ rows: response?.data ?? [], total: response?.pagination?.total ?? 0 })));
 
   private loadData(): void {
@@ -288,6 +293,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
         row: this.row,
         search: this.searchQuery || undefined,
         status: this.statusesForView(this.activeViewId),
+        filters: this.gridFilters,
       }).subscribe({
         next: (response) => {
           if (response.success) {

@@ -47,6 +47,9 @@ const JOB_GRID_FIELDS: Record<string, string> = {
     lpoValue: 'lpoValue',
     allocateStatus: 'allocateStatus',
     status: 'status',
+    // Latest proforma, only present when the request asks for a piState (the Invoices page).
+    piNo: '_piNo',
+    piStatus: '_piStatus',
 };
 
 const JOB_ALLOCATE_STATUSES = Object.values(allocateStatus) as string[];
@@ -85,9 +88,18 @@ const buildJobGridQuery = (search: unknown, filters: unknown, sortKey: unknown, 
         }
         if (raw === undefined || raw === null || raw === '') continue;
         if (key === 'updatedDate') {
+            const DAY = 24 * 60 * 60 * 1000;
+            // Two picked "on" days: everything from the first to the last, both days included.
+            if (op === 'between' && Array.isArray(raw)) {
+                const from = new Date(String(raw[0]));
+                const to = new Date(String(raw[raw.length - 1]));
+                if (!isNaN(from.getTime()) && !isNaN(to.getTime())) add({ [field]: { $gte: from, $lt: new Date(to.getTime() + DAY) } });
+                continue;
+            }
             const day = new Date(String(raw));
             if (isNaN(day.getTime())) continue;
-            const next = new Date(day.getTime() + 24 * 60 * 60 * 1000);
+            const next = new Date(day.getTime() + DAY);
+            if (op === 'notOn') add({ $or: [{ [field]: { $lt: day } }, { [field]: { $gte: next } }, { [field]: null }] });
             if (op === 'on') add({ [field]: { $gte: day, $lt: next } });
             else if (op === 'before') add({ [field]: { $lt: day } });
             else if (op === 'after') add({ [field]: { $gte: next } });
@@ -284,11 +296,12 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                     { $match: { $expr: { $eq: ['$job', '$$jobId'] }, isDeleted: { $ne: true } } },
                     { $sort: { createdAt: -1 } },
                     { $limit: 1 },
-                    { $project: { _id: 1, status: 1 } },
+                    { $project: { _id: 1, status: 1, piNo: 1 } },
                 ],
                 as: 'linkedPi',
             } },
             { $match: piStateMatch[piState] },
+            { $addFields: { _piNo: { $arrayElemAt: ['$linkedPi.piNo', 0] }, _piStatus: { $arrayElemAt: ['$linkedPi.status', 0] } } },
             { $project: { linkedPi: 0 } },
         ] : [];
         const ownMatch = (withAllocate: boolean) => ({
@@ -301,6 +314,7 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
             ...withoutPiStages,
             { $match: { ...accessFilter, ...matchFilters } },
             { $match: gridQuery.filter },
+            ...(piState ? [{ $project: { _piNo: 0, _piStatus: 0 } }] : []),
         ];
 
         // Tab badges: jobs per allocate status, scoped by access only.

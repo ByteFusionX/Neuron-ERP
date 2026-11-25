@@ -61,11 +61,12 @@ export class EnquiryService {
     return this.http.post<EnquiryTable>(`${this.api}/enquiry/get`, filterData)
   }
 
-  getPresale(page: number, row: number, filter: string, access?: string, userId?: string, search?: string, sort?: { key: string | null; direction: string | null }, followUp?: string | null): Observable<EnquiryTable> {
+  getPresale(page: number, row: number, filter: string, access?: string, userId?: string, search?: string, sort?: { key: string | null; direction: string | null }, followUp?: string | null, filters?: { key: string; op: string; value: any; or?: boolean }[]): Observable<EnquiryTable> {
     let url = `${this.api}/enquiry/presales?filter=${filter}&page=${page}&row=${row}&access=${access}&userId=${userId}`;
     if (followUp) url += `&followUp=${followUp}`;
     if (sort?.key && sort.direction) url += `&sortKey=${sort.key}&sortDir=${sort.direction}`;
     if (search?.trim()) url += `&search=${encodeURIComponent(search.trim())}`;
+    if (filters?.length) url += `&filters=${encodeURIComponent(JSON.stringify(filters))}`;
     return this.http.get<EnquiryTable>(url)
   }
 

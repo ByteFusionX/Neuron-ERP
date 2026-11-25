@@ -12,6 +12,7 @@ import StockReservation from "../models/stockReservation.model";
 import { StockHold } from "../models/stockHold.model";
 import { getEmployeeData } from "../common/utils/util";
 import { logAudit } from "../services/audit.service";
+import { buildGridFilterMatch, buildGridFilterPredicate, GridFieldMap } from "../common/utils/grid-query";
 import {
     StockError,
     getActiveReservationFilter,
@@ -151,9 +152,47 @@ const serialNosByProduct = async (productIds: string[]): Promise<Map<string, str
  * Stock by product: on hand, reserved, available and quarantined, with the warehouse split.
  * A product shows once it has any stock movement or an active reservation.
  */
+/** Stock overview column key -> row field (rows are built in code, so filters run in memory). */
+const STOCK_OVERVIEW_FIELDS: GridFieldMap = {
+    lastMovementDate: { path: 'lastMovementDate', type: 'date' },
+    itemCode: { path: 'itemCode' },
+    productDescription: { path: 'productDescription' },
+    productCategory: { path: 'productCategoryId', type: 'id' },
+    uom: { path: 'uom' },
+    arrivalDate: { path: 'arrivalDate', type: 'date' },
+    warehouseText: { path: 'warehouseText' },
+    onHandQuantity: { path: 'onHandQuantity', type: 'number' },
+    reservedQuantity: { path: 'reservedQuantity', type: 'number' },
+    availableQuantity: { path: 'availableQuantity', type: 'number' },
+    quarantinedQuantity: { path: 'quarantinedQuantity', type: 'number' },
+    unitCost: { path: 'unitCost', type: 'number' },
+    stockValue: { path: 'stockValue', type: 'number' },
+};
+
+/** Stock ledger column key -> field after the filter pipeline's lookups. */
+const STOCK_LEDGER_FIELDS: GridFieldMap = {
+    movementDate: { path: 'movementDate', type: 'date' },
+    itemCode: { path: 'product.itemCode' },
+    productDescription: { path: 'product.productDescription' },
+    warehouse: { path: 'warehouse.wareHouseName' },
+    movementType: { path: 'movementType' },
+    quantityIn: { path: 'quantityIn', type: 'number' },
+    quantityOut: { path: 'quantityOut', type: 'number' },
+    stockStatus: { path: '_stock' },
+    referenceNo: { path: '_document' },
+    reason: { path: '_reason' },
+    createdBy: { path: '_createdByName' },
+};
+
+const parseGridFilters = (raw: unknown): unknown => {
+    try { return raw ? JSON.parse(String(raw)) : null; } catch { return null; }
+};
+
 export const getStockOverview = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { page = '1', row = '15', search, productCategory, view = 'all', sortKey, sortDir } = req.query;
+        const { page = '1', row = '15', search, productCategory, view = 'all', sortKey, sortDir, filters } = req.query;
+        // Column filters from the grid ("is" / "is not" picks, date "on" days or ranges).
+        const gridPredicate = buildGridFilterPredicate(parseGridFilters(filters), STOCK_OVERVIEW_FIELDS);
 
         const grouped: any[] = await StockMovement.aggregate([
             { $match: notDeleted },
@@ -251,6 +290,7 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
                 productId: id,
                 ...productLabel(product),
                 productCategory: product.productCategory?.categoryName || '',
+                productCategoryId: product.productCategory?._id ? String(product.productCategory._id) : '',
                 reorderPoint: product.reorderPoint || 0,
                 onHandQuantity: totalQuantity,
                 reservedQuantity: entry.reserved,
@@ -281,6 +321,7 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
         if (view === 'available') rows = rows.filter((r) => r.availableQuantity > 0);
         if (view === 'reserved') rows = rows.filter((r) => r.reservedQuantity > 0);
         if (view === 'quarantine') rows = rows.filter((r) => r.quarantinedQuantity > 0);
+        if (gridPredicate) rows = rows.filter(gridPredicate);
 
         // Default order: most recent stock movement first.
         const hasSort = typeof sortKey === 'string' && !!sortKey;
@@ -315,7 +356,8 @@ export const getStockOverview = async (req: Request, res: Response, next: NextFu
 /** Read-only movement history, newest first. Filter by product, warehouse, type or document number. */
 export const getStockLedger = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { page = '1', row = '20', product, warehouse, movementType, search } = req.query;
+        const { page = '1', row = '20', product, warehouse, movementType, search, filters } = req.query;
+        const gridMatch = buildGridFilterMatch(parseGridFilters(filters), STOCK_LEDGER_FIELDS);
         const filter: any = { ...notDeleted };
         if (product && ObjectId.isValid(String(product))) filter.product = asObjectId(product);
         if (warehouse && ObjectId.isValid(String(warehouse))) filter.warehouse = asObjectId(warehouse);
@@ -332,8 +374,36 @@ export const getStockLedger = async (req: Request, res: Response, next: NextFunc
 
         const pageNum = Math.max(parseInt(page as string, 10) || 1, 1);
         const rowNum = Math.min(Math.max(parseInt(row as string, 10) || 20, 1), 200);
+        // With column filters, the joined names are matched in one pipeline; otherwise the plain query below.
+        const filtered = gridMatch ? StockMovement.aggregate([
+            { $match: filter },
+            { $lookup: { from: 'products', localField: 'product', foreignField: '_id', pipeline: [{ $project: { partNo: 1, itemCode: 1, productDescription: 1, unitOfMeasure: 1 } }], as: 'product' } },
+            { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+            { $lookup: { from: 'warehouses', localField: 'warehouse', foreignField: '_id', pipeline: [{ $project: { wareHouseName: 1 } }], as: 'warehouse' } },
+            { $unwind: { path: '$warehouse', preserveNullAndEmptyArrays: true } },
+            { $lookup: { from: 'employees', localField: 'createdBy', foreignField: '_id', pipeline: [{ $project: { firstName: 1, lastName: 1 } }], as: 'createdBy' } },
+            { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    // Same labels the Stock, Document, Reason and Created By columns show.
+                    _stock: { $cond: [{ $eq: ['$stockStatus', 'Quarantine'] }, 'Quarantine', 'Available'] },
+                    _document: { $trim: { input: { $concat: [{ $ifNull: ['$referenceType', ''] }, ' ', { $ifNull: ['$referenceNo', ''] }] } } },
+                    _reason: { $cond: [{ $gt: [{ $strLenCP: { $ifNull: ['$reason', ''] } }, 0] }, '$reason', { $ifNull: ['$remarks', ''] }] },
+                    _createdByName: { $trim: { input: { $concat: [{ $ifNull: ['$createdBy.firstName', ''] }, ' ', { $ifNull: ['$createdBy.lastName', ''] }] } } },
+                },
+            },
+            { $match: gridMatch },
+            { $project: { _stock: 0, _document: 0, _reason: 0, _createdByName: 0 } },
+            {
+                $facet: {
+                    rows: [{ $sort: { movementDate: -1, createdDate: -1, _id: -1 } }, { $skip: (pageNum - 1) * rowNum }, { $limit: rowNum }],
+                    total: [{ $count: 'n' }],
+                },
+            },
+        ]).then((r: any[]) => ({ rows: r[0]?.rows ?? [], total: (r[0]?.total?.[0]?.n ?? 0) as number })) : null;
+
         const [movements, total, typeCounts] = await Promise.all([
-            StockMovement.find(filter)
+            filtered ? filtered.then((f) => f.rows) : StockMovement.find(filter)
                 .populate('product', 'partNo itemCode productDescription unitOfMeasure')
                 .populate('warehouse', 'wareHouseName')
                 .populate('createdBy', 'firstName lastName')
@@ -341,7 +411,7 @@ export const getStockLedger = async (req: Request, res: Response, next: NextFunc
                 .skip((pageNum - 1) * rowNum)
                 .limit(rowNum)
                 .lean(),
-            StockMovement.countDocuments(filter),
+            filtered ? filtered.then((f) => f.total) : StockMovement.countDocuments(filter),
             StockMovement.aggregate([{ $match: baseFilter }, { $group: { _id: '$movementType', count: { $sum: 1 } } }]),
         ]);
         const counts: Record<string, number> = {};

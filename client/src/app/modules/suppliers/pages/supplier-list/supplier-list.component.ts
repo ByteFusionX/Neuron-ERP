@@ -159,7 +159,7 @@ export class SupplierListComponent implements OnInit, OnDestroy {
       this.sortKey = params['sort'] || null;
       this.sortDir = params['sort'] ? (params['dir'] === 'desc' ? 'desc' : 'asc') : null;
       this.columnFilters = this.columnFilters.filter((f) => f.key !== 'createdBy');
-      if (params['createdBy']) this.columnFilters.push({ key: 'createdBy', op: 'eq', value: params['createdBy'] });
+      if (params['createdBy']) this.columnFilters.push({ key: 'createdBy', op: 'is', value: params['createdBy'] });
 
       this.isFiltered = !!(this.searchQuery || this.fromDate || this.toDate || this.selectedCategory || this.selectedSupplierType);
       this.getSuppliers();
@@ -333,24 +333,12 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     this.sortDir = query.sort.direction;
 
     // selectedCategory / selectedSupplierType / dates come from the URL (report drill-down), not the grid, so they stay.
+    // The Blocked tab filters status with "eq"; every column filter goes to the server as-is.
     this.selectedStatus = null;
-    this.toDate = null;
     this.columnFilters = [];
-
-    let dateReset = false;
     for (const f of query.filters) {
-      switch (f.key) {
-        case 'status': this.selectedStatus = f.value; break;
-        case 'category': this.columnFilters.push({ key: 'categoryName', op: f.op, value: f.value }); break;
-        case 'supplierType': this.columnFilters.push({ key: 'supplierType', op: f.op, value: f.value }); break;
-        case 'createdDate':
-          if (!dateReset) { this.fromDate = null; this.toDate = null; dateReset = true; }
-          if (f.op === 'after' || f.op === 'on') this.fromDate = f.value;
-          if (f.op === 'before' || f.op === 'on') this.toDate = f.value;
-          break;
-        default:
-          this.columnFilters.push({ key: f.key, op: f.op, value: f.value });
-      }
+      if (f.key === 'status' && f.op === 'eq') this.selectedStatus = f.value;
+      else this.columnFilters.push(f);
     }
 
     this.isFiltered = !!(this.searchQuery || this.fromDate || this.toDate || this.selectedCategory || this.selectedSupplierType || this.columnFilters.length);

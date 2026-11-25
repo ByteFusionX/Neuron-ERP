@@ -55,6 +55,8 @@ export interface StockOverviewParams {
   view?: 'all' | 'exceptions' | 'quarantine';
   sortKey?: string;
   sortDir?: 'asc' | 'desc';
+  /** The grid's column filters, applied on the server. */
+  filters?: unknown[];
 }
 
 export interface StockOverviewResponse {
@@ -95,6 +97,8 @@ export interface StockLedgerParams {
   warehouse?: string;
   movementType?: string;
   search?: string;
+  /** The grid's column filters, applied on the server. */
+  filters?: unknown[];
 }
 
 export interface StockAvailability {
@@ -208,6 +212,11 @@ export class StockService {
   private toParams(params: object): HttpParams {
     let httpParams = new HttpParams();
     Object.entries(params).forEach(([key, value]) => {
+      // Column filters travel as one JSON value.
+      if (key === 'filters') {
+        if (Array.isArray(value) && value.length) httpParams = httpParams.set(key, JSON.stringify(value));
+        return;
+      }
       if (value !== undefined && value !== null && value !== '') httpParams = httpParams.set(key, String(value));
     });
     return httpParams;

@@ -7,6 +7,7 @@ import Product from '../models/products.model';
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import { PipelineStage } from 'mongoose';
 import { getEmployeeData, buildPrivilegeAccessFilter, escapeRegex } from '../common/utils/util';
+import { buildGridFilterMatch, GridFieldMap } from '../common/utils/grid-query';
 import { findSupplierDuplicates, supplierContactPoints, supplierKeys } from '../common/utils/partyMatch';
 import { Server } from 'socket.io';
 import { createNotificationWithPrivileges } from './notification.controller';
@@ -30,62 +31,18 @@ const SUPPLIER_SORT_FIELDS: Record<string, string> = {
    location: 'address.location',
 };
 
-/** Grid filter keys -> document path, and whether the path only exists after the category lookup. */
-const SUPPLIER_FILTER_FIELDS: Record<string, { path: string; type: 'text' | 'number' | 'id'; post?: boolean }> = {
-   createdBy: { path: 'createdBy', type: 'id' },
-   supplierId: { path: 'supplierId', type: 'text' },
-   supplierName: { path: 'supplierName', type: 'text' },
-   supplierType: { path: 'supplierType', type: 'text' },
-   status: { path: 'status', type: 'text' },
-   location: { path: 'address.location', type: 'text' },
-   categoryName: { path: 'categoryInfo.label', type: 'text', post: true },
+/** Supplier grid column key -> field after the category lookup. */
+const SUPPLIER_GRID_FIELDS: GridFieldMap = {
+   supplierId: { path: 'supplierId' },
+   supplierName: { path: 'supplierName' },
+   category: { path: 'categoryInfo.label' },
+   supplierType: { path: 'supplierType' },
+   location: { path: 'address.location' },
    creditDays: { path: 'creditDays', type: 'number' },
    creditValue: { path: 'creditValue', type: 'number' },
-};
-
-/** Turns the data-grid's filter chips into Mongo conditions. Unknown keys/operators are ignored. */
-const buildSupplierColumnFilters = (columnFilters: any): { preMatch: Record<string, any>; postMatch: Record<string, any> } => {
-   const pre: Record<string, any>[] = [];
-   const post: Record<string, any>[] = [];
-   if (Array.isArray(columnFilters)) {
-      for (const f of columnFilters) {
-         const def = SUPPLIER_FILTER_FIELDS[f?.key];
-         if (!def) continue;
-         const target = def.post ? post : pre;
-         const value = f.value;
-         if (f.op === 'empty') {
-            target.push({ $or: [{ [def.path]: null }, { [def.path]: '' }, { [def.path]: { $exists: false } }] });
-            continue;
-         }
-         if (value === undefined || value === null || String(value).trim() === '') continue;
-         if (def.type === 'id') {
-            if (!Types.ObjectId.isValid(String(value))) continue;
-            const id = new Types.ObjectId(String(value));
-            target.push({ [def.path]: f.op === 'isNot' ? { $ne: id } : id });
-            continue;
-         }
-         if (def.type === 'number') {
-            const n = Number(value);
-            if (isNaN(n)) continue;
-            if (f.op === 'gt') target.push({ [def.path]: { $gt: n } });
-            else if (f.op === 'lt') target.push({ [def.path]: { $lt: n } });
-            else if (f.op === 'isNot') target.push({ [def.path]: { $ne: n } });
-            else target.push({ [def.path]: n });
-            continue;
-         }
-         const text = escapeRegex(String(value).trim());
-         switch (f.op) {
-            case 'is': case 'eq': target.push({ [def.path]: { $regex: `^${text}$`, $options: 'i' } }); break;
-            case 'isNot': target.push({ [def.path]: { $not: { $regex: `^${text}$`, $options: 'i' } } }); break;
-            case 'notContains': target.push({ [def.path]: { $not: { $regex: text, $options: 'i' } } }); break;
-            default: target.push({ [def.path]: { $regex: text, $options: 'i' } });
-         }
-      }
-   }
-   return {
-      preMatch: pre.length ? { $and: pre } : {},
-      postMatch: post.length ? { $and: post } : {},
-   };
+   status: { path: '_displayStatus' },
+   createdBy: { path: 'createdBy', type: 'id' },
+   createdDate: { path: 'createdDate', type: 'date' },
 };
 
 export const getSuppliers = async (req: Request, res: Response) => {
@@ -180,9 +137,8 @@ export const getSuppliers = async (req: Request, res: Response) => {
          andClauses.push({ $or: [{ supplierName: pattern }, { supplierId: pattern }] });
       }
 
-      // Grid column filters (whitelisted keys only)
-      const { preMatch, postMatch } = buildSupplierColumnFilters(columnFilters);
-      if (Object.keys(preMatch).length) andClauses.push(preMatch);
+      // Grid column filters ("is" / "is not" picks, date "on" days or ranges), matched after the category lookup.
+      const gridMatch = buildGridFilterMatch(columnFilters, SUPPLIER_GRID_FIELDS);
       if (andClauses.length) filter.$and = andClauses;
 
       // Add location filter if provided
@@ -207,7 +163,12 @@ export const getSuppliers = async (req: Request, res: Response) => {
          },
          { $addFields: { categoryInfo: { $arrayElemAt: ["$categoryDetails", 0] } } },
       ];
-      const postMatchStages: PipelineStage[] = Object.keys(postMatch).length ? [{ $match: postMatch }] : [];
+      const postMatchStages: PipelineStage[] = gridMatch ? [
+         // Same label the Status column shows: blocked wins, pending/rejected read as Approved.
+         { $addFields: { _displayStatus: { $cond: [{ $eq: ['$isBlocked', true] }, 'Blocked', { $cond: [{ $in: ['$status', ['Pending', 'Rejected']] }, 'Approved', '$status'] }] } } },
+         { $match: gridMatch },
+         { $unset: '_displayStatus' },
+      ] : [];
 
       const sortField = SUPPLIER_SORT_FIELDS[String(sortKey)];
       const sortSpec: Record<string, 1 | -1> = {};

@@ -23,6 +23,7 @@ import employeeModel from "../models/employee.model";
 import mongoose from "mongoose";
 import { listPurchaseBuyers } from "../services/purchaseBuyer.service";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+import { buildGridFilterMatch, GridFieldMap } from "../common/utils/grid-query";
 const ObjectId = require("mongoose").Types.ObjectId;
 
 export const getEmployees = async (
@@ -460,13 +461,38 @@ export const getEmployeeByEmployeeId = async (
   }
 };
 
+/** Employee grid column key -> field (name and status are built only when a filter needs them). */
+const EMPLOYEE_GRID_FIELDS: GridFieldMap = {
+  employeeId: { path: 'employeeId' },
+  firstName: { path: '_fullName' },
+  designation: { path: 'designation' },
+  department: { path: 'department', type: 'id' },
+  email: { path: 'email' },
+  contactNo: { path: 'contactNo' },
+  dateOfJoining: { path: 'dateOfJoining', type: 'date' },
+  status: { path: '_status' },
+};
+
 export const getFilteredEmployees = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ) => {
   try {
-    let { page, row, search, access, userId, department, status, sortKey, sortDir } = req.body;
+    let { page, row, search, access, userId, department, status, sortKey, sortDir, filters: gridFilterList } = req.body;
+    // Column filters from the grid ("is" / "is not" picks, date "on" days or ranges).
+    const gridMatch = buildGridFilterMatch(gridFilterList, EMPLOYEE_GRID_FIELDS);
+    const gridStages: any[] = gridMatch ? [
+      {
+        $addFields: {
+          _fullName: { $trim: { input: { $concat: [{ $ifNull: ['$firstName', ''] }, ' ', { $ifNull: ['$lastName', ''] }] } } },
+          // The Status column's filter values.
+          _status: { $cond: [{ $eq: ['$isBlocked', true] }, 'blocked', 'active'] },
+        },
+      },
+      { $match: gridMatch },
+      { $project: { _fullName: 0, _status: 0 } },
+    ] : [];
     search = search ?? "";
     let skipNum: number = (page - 1) * row;
     let searchRegex = search.split("").join("\\s*");
@@ -529,6 +555,7 @@ export const getFilteredEmployees = async (
       {
         $match: filters,
       },
+      ...gridStages,
       {
         $group: { _id: null, total: { $sum: 1 } },
       },
@@ -549,6 +576,7 @@ export const getFilteredEmployees = async (
       {
         $match: filters,
       },
+      ...gridStages,
       { $sort: sortStage },
       {
         $skip: skipNum,

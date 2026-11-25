@@ -194,6 +194,8 @@ export interface FilterEmployee {
   status?: 'active' | 'blocked' | null;
   sortKey?: string | null;
   sortDir?: 'asc' | 'desc' | null;
+  /** The grid's column filters, applied on the server. */
+  filters?: unknown[];
 }
 
 export interface GetCategory {

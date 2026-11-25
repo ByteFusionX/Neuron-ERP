@@ -485,7 +485,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     this._employeeService.employeeData$.subscribe((employee) => {
       access = employee?.category.privileges.assignedJob.viewReport;
     }).unsubscribe();
-    return this._enquiryService.getPresale(page, row, this.serverFilter, access, this.userId, this.searchQuery, this.sort, this.tabs.find((t) => t.id === this.activeTab)?.followUp)
+    return this._enquiryService.getPresale(page, row, this.serverFilter, access, this.userId, this.searchQuery, this.sort, this.tabs.find((t) => t.id === this.activeTab)?.followUp, this.gridFilters)
       .pipe(map((data: any) => ({ rows: data?.enquiry ?? [], total: data?.total ?? 0 })));
   };
 
@@ -500,7 +500,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.userId) {
       this.isLoading = true;
       this.subscriptions.add(
-        this._enquiryService.getPresale(this.page, this.row, this.serverFilter, access, this.userId, this.searchQuery, this.sort, this.tabs.find((t) => t.id === this.activeTab)?.followUp).subscribe({
+        this._enquiryService.getPresale(this.page, this.row, this.serverFilter, access, this.userId, this.searchQuery, this.sort, this.tabs.find((t) => t.id === this.activeTab)?.followUp, this.gridFilters).subscribe({
           next: (data) => {
             this.rows = data.enquiry;
             this.total = data.total;
@@ -602,12 +602,15 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private sort: DataGridQuery['sort'] = { key: null, direction: null };
+  /** Column filters from the grid toolbar, sent to the server with every page request. */
+  private gridFilters: { key: string; op: string; value: any; or?: boolean }[] = [];
 
   onQueryChange(query: DataGridQuery): void {
     this.page = query.page;
     this.row = query.pageSize;
     this.searchQuery = query.search;
     this.sort = query.sort;
+    this.gridFilters = (query.filters ?? []).map((f) => ({ key: f.key, op: f.op, value: f.value, or: f.or }));
     this.getJobsData();
   }
 

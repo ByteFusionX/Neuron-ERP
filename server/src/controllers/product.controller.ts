@@ -5,6 +5,7 @@ import Department from "../models/department.model";
 import ProductCategory from "../models/productCategory.model";
 import Warehouse from "../models/warehouse.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
+import { buildGridFilterMatch, GridFieldMap } from "../common/utils/grid-query";
 import { ObjectId } from "mongodb";
 import Employee from "../models/employee.model";
 import Quotation from "../models/quotation.model";
@@ -306,6 +307,22 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
     }
 };
 
+/** Product grid column key -> stored field (category, department and warehouse filters carry ids). */
+const PRODUCT_GRID_FIELDS: GridFieldMap = {
+    itemCode: { path: 'itemCode' },
+    partNo: { path: 'partNo' },
+    productName: { path: 'productName' },
+    productDescription: { path: 'productDescription' },
+    type: { path: 'type' },
+    productCategory: { path: 'productCategory', type: 'id' },
+    productSegment: { path: 'productSegment', type: 'id' },
+    warehouse: { path: 'warehouse', type: 'id' },
+    brand: { path: 'brand' },
+    unitOfMeasure: { path: 'unitOfMeasure' },
+    isActive: { path: 'isActive', values: { Active: true, Inactive: false } },
+    createdBy: { path: 'createdBy', type: 'id' },
+};
+
 export const getProducts = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const {
@@ -330,8 +347,13 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             createdBy,
             sortBy,
             sortDir,
-            advFilters
+            advFilters,
+            filters: gridFilterParam
         } = req.query;
+        // Column filters from the grid, sent as JSON ("is" / "is not" picks).
+        let gridFilterList: unknown = null;
+        try { gridFilterList = gridFilterParam ? JSON.parse(String(gridFilterParam)) : null; } catch { gridFilterList = null; }
+        const gridMatch = buildGridFilterMatch(gridFilterList, PRODUCT_GRID_FIELDS);
 
         const tokenData = (req as any).user;
         const employee = await getEmployeeData(tokenData);
@@ -438,6 +460,7 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
         }
 
         const advanced = buildAdvancedFilters(advFilters);
+        if (gridMatch) advanced.push(gridMatch);
         if (advanced.length) filter.$and = advanced;
 
         if (createdBy && typeof createdBy === 'string') {

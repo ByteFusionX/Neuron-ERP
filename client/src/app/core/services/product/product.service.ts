@@ -147,6 +147,8 @@ export interface ProductQueryParams {
   sortDir?: 'asc' | 'desc';
   /** JSON list of {key, op, value} for operators the flat params can't express. */
   advFilters?: string;
+  /** JSON list of the grid's column filters ("is" / "is not" picks, OR groups). */
+  filters?: string;
 }
 
 export interface PartNumberOption {

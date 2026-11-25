@@ -182,9 +182,16 @@ export class VendorBillsComponent implements OnInit {
     this.refreshViewCounts();
   }
 
+  /** Column filters from the grid, sent with the list and export (tab counts ignore them). */
+  private gridFilters: unknown[] = [];
+
+  /** Column key -> server filter key where they differ (PO Status here is the raw status). */
+  private static readonly SERVER_KEYS: Record<string, string> = { job: 'jobId', poStatus: 'rawPoStatus' };
+
   onQueryChange(query: DataGridQuery): void {
     this.page = query.page;
     this.pageSize = query.pageSize;
+    this.gridFilters = (query.filters ?? []).map((f) => ({ ...f, key: VendorBillsComponent.SERVER_KEYS[f.key] ?? f.key }));
     const searchChanged = this.search !== query.search;
     this.search = query.search;
     this.activeViewId = query.viewId || 'all';
@@ -435,6 +442,7 @@ export class VendorBillsComponent implements OnInit {
       receiptStatus: this.receiptStatus(),
       status: this.activeViewId === 'upcoming' ? ['Placed'] : undefined,
       vendorBills: true,
+      filters: this.gridFilters,
     }).pipe(map((response: any) => ({ rows: response?.data ?? [], total: response?.pagination?.total ?? 0 })));
 
   private load(): void {
@@ -447,6 +455,7 @@ export class VendorBillsComponent implements OnInit {
       receiptStatus: this.receiptStatus(),
       status: this.activeViewId === 'upcoming' ? ['Placed'] : undefined,
       vendorBills: true,
+      filters: this.gridFilters,
     }).subscribe({
       next: (response) => {
         this.rows = response?.data || [];

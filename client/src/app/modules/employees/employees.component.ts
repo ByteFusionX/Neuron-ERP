@@ -156,18 +156,16 @@ export class EmployeesComponent implements OnInit, OnDestroy {
     return v ? (this.datePipe.transform(v, 'dd MMM yyyy') ?? '—') : '—';
   }
 
+  /** Column filters from the grid, sent to the server with the list and export. */
+  private gridFilters: unknown[] = [];
+
   onQueryChange(query: DataGridQuery): void {
     this.searchQuery = query.search;
     this.page = query.page;
     this.row = query.pageSize;
     this.sortKey = query.sort.key;
     this.sortDir = query.sort.direction;
-    this.department = null;
-    this.status = null;
-    for (const f of query.filters) {
-      if (f.key === 'department') this.department = f.value;
-      if (f.key === 'status') this.status = f.value;
-    }
+    this.gridFilters = query.filters ?? [];
     this.getEmployees();
   }
 
@@ -191,7 +189,7 @@ export class EmployeesComponent implements OnInit, OnDestroy {
     }).unsubscribe();
     return this._employeeService.getEmployees({
       page, row, search: this.searchQuery, access, userId,
-      department: this.department, status: this.status, sortKey: this.sortKey, sortDir: this.sortDir,
+      department: this.department, status: this.status, sortKey: this.sortKey, sortDir: this.sortDir, filters: this.gridFilters,
     }).pipe(map((data: { total: number, employees: getEmployee[] }) => ({ rows: data?.employees ?? [], total: data?.total ?? 0 })));
   };
 
@@ -207,7 +205,7 @@ export class EmployeesComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this._employeeService.getEmployees({
         page: this.page, row: this.row, search: this.searchQuery, access, userId,
-        department: this.department, status: this.status, sortKey: this.sortKey, sortDir: this.sortDir,
+        department: this.department, status: this.status, sortKey: this.sortKey, sortDir: this.sortDir, filters: this.gridFilters,
       }).subscribe({
         next: (data: { total: number, employees: getEmployee[] }) => {
           this.rows = data ? [...data.employees] : [];

@@ -483,10 +483,26 @@ export class InvoicesComponent implements OnInit, OnDestroy {
     this.privSub?.unsubscribe();
   }
 
+  /** Column filters from the grid, renamed to the job list's server keys (tab counts ignore them). */
+  private gridFilters: { key: string; op: string; value?: unknown; or?: boolean }[] = [];
+
+  /** Invoices column key -> the job list's server filter key. */
+  private static readonly SERVER_KEYS: Record<string, string> = {
+    date: 'updatedDate', jobRef: 'jobId', customer: 'customerName', salesPerson: 'salesPerson',
+    details: 'description', amount: 'lpoValue', status: 'allocateStatus', piNo: 'piNo', piStatus: 'piStatus',
+  };
+
   onQueryChange(query: DataGridQuery): void {
     this.page = query.page;
     this.pageSize = query.pageSize;
     this.search = query.search;
+    this.gridFilters = (query.filters ?? [])
+      .filter((f) => InvoicesComponent.SERVER_KEYS[f.key])
+      .map((f) => ({
+        key: InvoicesComponent.SERVER_KEYS[f.key], op: f.op, or: f.or,
+        // The Job Status column shows "In Progress" for Work In Progress.
+        value: f.key === 'status' && f.value === 'In Progress' ? allocateStatus.WorkInProgress : f.value,
+      }));
     const viewId = query.viewId || 'all';
     const viewChanged = viewId !== this.viewId || !this.columnsView;
     this.viewId = viewId;
@@ -559,6 +575,7 @@ export class InvoicesComponent implements OnInit, OnDestroy {
           search: this.search, page, row, status: null,
           access: employee?.category?.privileges?.jobSheet?.viewReport, userId: employee?._id,
           allocateStatuses: statuses, piState, onHoldType, skipStatusCounts: true,
+          filters: this.gridFilters.length ? this.gridFilters : undefined,
         });
       }),
       // Advances: attach each job's latest proforma so already-billed rows offer preview/download.

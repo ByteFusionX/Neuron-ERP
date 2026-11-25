@@ -217,9 +217,8 @@ export class StockOverviewComponent implements OnInit {
     this.row = query.pageSize;
     this.sortKey = query.sort.key;
     this.sortDir = query.sort.direction;
-    const filters: Record<string, any> = {};
-    for (const f of query.filters) filters[f.key] = f.value;
-    this.appliedFilters = filters;
+    // Column filters go to the server as-is ("is" / "is not" picks, date "on" days or ranges).
+    this.appliedFilters = query.filters.length ? { filters: query.filters } : {};
     this.loadStock({ page: this.page });
   }
 

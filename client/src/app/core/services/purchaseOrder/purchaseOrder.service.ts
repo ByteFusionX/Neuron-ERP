@@ -43,8 +43,11 @@ export class PurchaseOrderService {
     receiptStatus?: string;
     vendorBills?: boolean;
     readyToDeliver?: boolean;
+    /** The grid's column filters, applied on the server. */
+    filters?: unknown[];
   }): Observable<any> {
     let httpParams = new HttpParams();
+    if (params?.filters?.length) httpParams = httpParams.set('filters', JSON.stringify(params.filters));
     if (params?.page !== undefined) httpParams = httpParams.set('page', params.page);
     if (params?.row !== undefined) httpParams = httpParams.set('row', params.row);
     if (params?.search) httpParams = httpParams.set('search', params.search);

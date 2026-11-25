@@ -9,6 +9,7 @@ import jobModel from "../models/job.model";
 import mongoose from "mongoose";
 import Product from "../models/products.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
+import { buildGridFilterMatch, GridFieldMap } from "../common/utils/grid-query";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { getNextSequence } from "../models/counter.model";
 import { issueDocNo, peekDocNo } from "../services/docNumber.service";
@@ -1027,9 +1028,29 @@ export const getPurchaseOrderByPurchaseId = async (req: Request, res: Response) 
   }
 };
 
+/** LPO grid column key -> field after the list pipeline's lookups. */
+const PO_GRID_FIELDS: GridFieldMap = {
+  poDate: { path: 'poDate', type: 'date' },
+  poNo: { path: 'poNo' },
+  jobId: { path: 'jobId.jobId' },
+  poStatus: { path: '_displayStatus' },
+  supplier: { path: 'supplierId.supplierName' },
+  createdBy: { path: '_createdByName' },
+  customer: { path: 'purchaseId.customerId.companyName' },
+  // Supplier Bills columns.
+  rawPoStatus: { path: 'poStatus' },
+  expectedDeliveryDate: { path: 'expectedDeliveryDate', type: 'date' },
+  receiptStatus: { path: 'receiptStatus' },
+  paymentTerms: { path: 'paymentTerms' },
+};
+
 export const getAllPurchaseOrders = async (req: Request, res: Response) => {
   try {
-    const { page = 1, row = 10, search = "", status, purchaseId, jobId, receiptStatus, vendorBills, readyToDeliver } = req.query;
+    const { page = 1, row = 10, search = "", status, purchaseId, jobId, receiptStatus, vendorBills, readyToDeliver, filters } = req.query;
+    // Column filters from the grid, sent as JSON ("is" / "is not" picks, date "on" days or ranges).
+    let gridFilterList: unknown = null;
+    try { gridFilterList = filters ? JSON.parse(String(filters)) : null; } catch { gridFilterList = null; }
+    const gridMatch = buildGridFilterMatch(gridFilterList, PO_GRID_FIELDS);
     const pageNumber = Number(page);
     const pageSize = Number(row);
     const skip = (pageNumber - 1) * pageSize;
@@ -1283,6 +1304,20 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
       }] : []),
       // Apply final filters after lookup and population
       ...(Object.keys(finalMatchStage).length > 0 ? [{ $match: finalMatchStage }] : []),
+      ...(gridMatch ? [
+        {
+          $addFields: {
+            _createdByName: { $trim: { input: { $concat: [{ $ifNull: ['$createdBy.firstName', ''] }, ' ', { $ifNull: ['$createdBy.lastName', ''] }] } } },
+            // Same label the Status column shows.
+            _displayStatus: { $switch: { branches: [
+              { case: { $eq: ['$poStatus', 'Pending for Approval'] }, then: 'Pending' },
+              { case: { $eq: ['$poStatus', 'Cancelled'] }, then: 'Revoked' },
+            ], default: '$poStatus' } },
+          }
+        },
+        { $match: gridMatch },
+        { $project: { _createdByName: 0, _displayStatus: 0 } },
+      ] : []),
       { $sort: { createdAt: -1 } },
       {
         $facet: {

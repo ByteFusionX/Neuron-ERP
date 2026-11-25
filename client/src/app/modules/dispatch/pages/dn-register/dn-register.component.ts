@@ -366,21 +366,12 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
       this.setupRowActions();
     }
 
-    const filterParams: Partial<FilterParams> = {};
+    const filterParams: Partial<FilterParams> & { filters?: unknown[] } = {};
     if (query.search) filterParams.search = query.search;
-    const statusValues: string[] = [];
-    query.filters.forEach(filter => {
-      if (filter.key === 'dnNo') filterParams.search = filter.value;
-      else if (filter.key === 'job.jobId') filterParams.jobId = filter.value;
-      else if (filter.key === 'clientName') filterParams.customer = filter.value;
-      else if (filter.key === 'status') statusValues.push(filter.value);
-      else if (filter.key === 'dnDate') {
-        if (filter.op === 'on') {
-          filterParams.fromDate = filter.value;
-          filterParams.toDate = filter.value;
-        }
-      }
-    });
+    // Column filters go to the server as-is. A status tab sets the status itself, so its own status filters are dropped.
+    const tabSetsStatus = !!query.viewId && query.viewId !== 'all';
+    const columnFilters = query.filters.filter((f) => !(tabSetsStatus && f.key === 'status'));
+    if (columnFilters.length) filterParams.filters = columnFilters;
     if (query.viewId === 'ready-to-deliver') filterParams.status = DnStatus.READY_TO_DELIVER;
     if (query.viewId === 'out-for-delivery') filterParams.status = DnStatus.DISPATCHED;
     if (query.viewId === 'partially-delivered') {
@@ -393,8 +384,6 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     }
     if (query.viewId === 'rejected') filterParams.status = [DnStatus.REJECTED, DnStatus.PARTIALLY_REJECTED];
     if (query.viewId === 'cancelled') filterParams.status = DnStatus.CANCELLED;
-    if (!filterParams.status && statusValues.length === 1) filterParams.status = statusValues[0];
-    else if (!filterParams.status && statusValues.length > 1) filterParams.status = statusValues;
 
     this.loadData(filterParams);
     this.refreshViewCounts(query.search);

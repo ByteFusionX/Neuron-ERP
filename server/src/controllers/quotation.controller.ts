@@ -1006,9 +1006,18 @@ const buildDealGridQuery = (filters: unknown, sortKey: unknown, sortDir: unknown
         }
         if (raw === undefined || raw === null || raw === '') continue;
         if (key === 'date') {
+            const DAY = 24 * 60 * 60 * 1000;
+            // Two picked "on" days: everything from the first to the last, both days included.
+            if (op === 'between' && Array.isArray(raw)) {
+                const from = new Date(String(raw[0]));
+                const to = new Date(String(raw[raw.length - 1]));
+                if (!isNaN(from.getTime()) && !isNaN(to.getTime())) add({ [field]: { $gte: from, $lt: new Date(to.getTime() + DAY) } });
+                continue;
+            }
             const day = new Date(String(raw));
             if (isNaN(day.getTime())) continue;
-            const next = new Date(day.getTime() + 24 * 60 * 60 * 1000);
+            const next = new Date(day.getTime() + DAY);
+            if (op === 'notOn') add({ $or: [{ [field]: { $lt: day } }, { [field]: { $gte: next } }, { [field]: null }] });
             if (op === 'on') add({ [field]: { $gte: day, $lt: next } });
             else if (op === 'before') add({ [field]: { $lt: day } });
             else if (op === 'after') add({ [field]: { $gte: next } });

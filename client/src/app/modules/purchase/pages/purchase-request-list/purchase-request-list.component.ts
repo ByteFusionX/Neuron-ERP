@@ -442,6 +442,9 @@ export class PurchaseRequestListComponent {
     return viewId === 'new' ? undefined : 'job';
   }
 
+  /** Column filters from the grid, sent to the server with every list and export request. */
+  private gridFilters: unknown[] = [];
+
   onQueryChange(query: DataGridQuery): void {
     this.searchQuery = query.search;
     this.page = query.page;
@@ -449,6 +452,7 @@ export class PurchaseRequestListComponent {
     this.sortKey = query.sort.key;
     this.sortDir = query.sort.direction;
     this.activeViewId = query.viewId || 'all';
+    this.gridFilters = query.filters ?? [];
 
     this.getPurchases();
     this.updateUrlParams();
@@ -466,6 +470,7 @@ export class PurchaseRequestListComponent {
       poProgress: this.poProgressForView(this.activeViewId),
       allocation: this.allocationForView(this.activeViewId),
       followUpView: this.activeViewId === 'followUp' ? 'followUp' : undefined,
+      filters: this.gridFilters.length ? this.gridFilters : undefined,
     };
   }
 

@@ -42,6 +42,8 @@ export class PurchaseService {
     rfqStatus?: 'not-started' | 'quoted' | 'awarded';
     allocation?: 'new';
     followUpView?: string;
+    /** The grid's column filters, applied on the server. */
+    filters?: unknown[];
   }): Observable<any> {
     return this.http.post<any>(`${this.api}/purchase/purchase-requests`, params, { context: context() });
   }

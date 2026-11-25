@@ -150,7 +150,14 @@ export class GeneralPurchaseListComponent {
     return viewId === 'completed' ? 'completed' : undefined;
   }
 
+  /** Column filters from the grid, sent with the list and export (tab counts ignore them). */
+  private gridFilters: unknown[] = [];
+
+  /** Grid keys whose server field differs from the PR list's same-named key. */
+  private static readonly SERVER_KEYS: Record<string, string> = { date: 'gpDate', status: 'gpStatus' };
+
   onQueryChange(query: DataGridQuery): void {
+    this.gridFilters = (query.filters ?? []).map((f) => ({ ...f, key: GeneralPurchaseListComponent.SERVER_KEYS[f.key] ?? f.key }));
     this.searchQuery = query.search;
     this.page = query.page;
     this.row = query.pageSize;
@@ -167,6 +174,7 @@ export class GeneralPurchaseListComponent {
       search: this.searchQuery || undefined,
       sourceType: 'manual',
       poProgress: this.poProgressForView(this.activeViewId),
+      filters: this.gridFilters.length ? this.gridFilters : undefined,
     };
   }
 

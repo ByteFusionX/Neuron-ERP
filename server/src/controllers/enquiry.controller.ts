@@ -1,3 +1,4 @@
+import { buildGridFilterMatch, GridFieldMap } from "../common/utils/grid-query";
 import { reportIds, reportMatch } from '../common/utils/reportFilter';
 import Workflow from "../models/workflow.model";
 import type { PipelineStage } from 'mongoose';
@@ -1428,6 +1429,36 @@ export const cancelPresaleFollowUp = async (req: Request, res: Response, next: N
     }
 };
 
+/** Grid column key -> field, available after the presale joined lookups. */
+const PRESALE_GRID_FIELDS: GridFieldMap = {
+    enqId: { path: 'enquiryId' },
+    customerName: { path: 'client.companyName' },
+    description: { path: 'title' },
+    assignedBy: { path: '_salesPersonName' },
+    assignedTo: { path: '_assigneeName' },
+    department: { path: 'department.departmentName' },
+    sentToPresale: { path: 'preSale.createdDate', type: 'date' },
+    nextFollowUp: { path: 'preSale.followUp.nextFollowUpDate', type: 'date' },
+    status: { path: '_displayStatus' },
+};
+
+const PRESALE_DISPLAY_STATUSES = ['new', 'assigned', 'in review', 'pending approval', 'in revision', 'rejected', 'returned', 'approved', 'completed', 'cancelled'];
+const fullName = (v: string) => ({ $trim: { input: { $concat: [{ $ifNull: [`${v}.firstName`, ''] }, ' ', { $ifNull: [`${v}.lastName`, ''] }] } } });
+
+/** Names and status as the grid shows them, so filters match what the user picked. */
+const presaleGridNameStages: PipelineStage[] = [
+    { $lookup: { from: 'employees', localField: 'reAssigned', foreignField: '_id', as: '_reAssignedPerson' } },
+    { $lookup: { from: 'employees', localField: 'preSale.presalePerson', foreignField: '_id', as: '_presalePerson' } },
+    {
+        $addFields: {
+            _salesPersonName: { $let: { vars: { p: { $arrayElemAt: ['$salesPerson', 0] } }, in: fullName('$$p') } },
+            _assigneeName: { $let: { vars: { p: { $ifNull: [{ $arrayElemAt: ['$_reAssignedPerson', 0] }, { $arrayElemAt: ['$_presalePerson', 0] }] } }, in: fullName('$$p') } },
+            _displayStatus: { $cond: [{ $in: ['$preSale.status', PRESALE_DISPLAY_STATUSES] }, '$preSale.status', '$status'] },
+        },
+    },
+    { $project: { _reAssignedPerson: 0, _presalePerson: 0 } },
+];
+
 export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunction) => {
     try {
         let page = Number(req.query.page)
@@ -1471,7 +1502,11 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
 
         // Joined fields (customer/department/assigned-by names) need their lookups run before the
         // search $match can see them, so a text search covers more than just enquiryId/title.
-        const needsJoinedSearch = typeof search === 'string' && search.trim().length > 0;
+        // Grid column filters (multi-pick "is"/"is not", "on" days and ranges) run on the joined names too.
+        let gridFilterList: unknown = [];
+        try { gridFilterList = typeof req.query.filters === 'string' ? JSON.parse(req.query.filters) : []; } catch { gridFilterList = []; }
+        const gridMatch = buildGridFilterMatch(gridFilterList, PRESALE_GRID_FIELDS);
+        const needsJoinedSearch = (typeof search === 'string' && search.trim().length > 0) || !!gridMatch;
         let searchFilter: any = {};
         let joinedSearchFilter: any = {};
         if (typeof search === 'string' && search.trim()) {
@@ -1495,6 +1530,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
             { $lookup: { from: 'customers', localField: 'client', foreignField: '_id', as: 'client' } },
             { $lookup: { from: 'departments', localField: 'department', foreignField: '_id', as: 'department' } },
             { $lookup: { from: 'employees', localField: 'salesPerson', foreignField: '_id', as: 'salesPerson' } },
+            ...(gridMatch ? presaleGridNameStages : []),
         ];
 
         const sortFields: Record<string, string> = {
@@ -1524,7 +1560,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
             },
             ...(statusFilterMatch ? [{ $match: statusFilterMatch }] : []),
             ...(followUpMatch ? [{ $match: followUpMatch }] : []),
-            ...(needsJoinedSearch ? [...joinedLookups, { $match: joinedSearchFilter }] : []),
+            ...(needsJoinedSearch ? [...joinedLookups, { $match: joinedSearchFilter }, ...(gridMatch ? [{ $match: gridMatch }] : [])] : []),
             {
                 $group: { _id: null, total: { $sum: 1 } }
             },
@@ -1547,7 +1583,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
             },
             ...(statusFilterMatch ? [{ $match: statusFilterMatch }] : []),
             ...(followUpMatch ? [{ $match: followUpMatch }] : []),
-            ...(needsJoinedSearch ? [...joinedLookups, { $match: joinedSearchFilter }] : (sortNeedsLookups ? joinedLookups : [])),
+            ...(needsJoinedSearch ? [...joinedLookups, { $match: joinedSearchFilter }, ...(gridMatch ? [{ $match: gridMatch }] : [])] : (sortNeedsLookups ? joinedLookups : [])),
             sortStage,
             {
                 $skip: skipNum

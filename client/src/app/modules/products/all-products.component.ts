@@ -121,10 +121,9 @@ export class AllProductsComponent implements OnInit, AfterViewInit, OnDestroy {
     return subject.asObservable();
   }
 
-  private appliedFilters: Record<string, any> = {};
-  private advancedFilters: { key: string; op: string; value: any }[] = [];
+  /** Column filters from the grid, sent to the server as-is. */
+  private gridFilters: unknown[] = [];
   private sort: { sortBy?: string; sortDir?: 'asc' | 'desc' } = {};
-  private readonly serverFilterKeys = ['productCategory', 'productSegment', 'warehouse', 'itemCode', 'partNo', 'productName', 'productDescription', 'type', 'brand', 'unitOfMeasure'];
 
   private listRequest?: Subscription;
 
@@ -235,11 +234,10 @@ export class AllProductsComponent implements OnInit, AfterViewInit, OnDestroy {
   private queryParams(): ProductQueryParams {
     return {
       search: this.searchQuery || undefined,
-      ...this.appliedFilters,
       ...(this.activeViewId === 'inactive' ? { isActive: 'false' } : {}),
       ...(this.activeViewId === 'review' ? { approvalStatus: 'Pending' } : {}),
       ...this.sort,
-      advFilters: this.advancedFilters.length ? JSON.stringify(this.advancedFilters) : undefined,
+      filters: this.gridFilters.length ? JSON.stringify(this.gridFilters) : undefined,
     };
   }
 
@@ -274,22 +272,7 @@ export class AllProductsComponent implements OnInit, AfterViewInit, OnDestroy {
     this.row = query.pageSize;
 
     this.sort = query.sort?.key && query.sort.direction ? { sortBy: query.sort.key, sortDir: query.sort.direction } : {};
-    this.appliedFilters = {};
-    this.advancedFilters = [];
-    for (const f of query.filters) {
-      if (f.op === 'empty') {
-        this.advancedFilters.push({ key: f.key, op: 'empty', value: null });
-        continue;
-      }
-      if (f.value == null || f.value === '') continue;
-      if (['contains', 'is'].includes(f.op) && this.serverFilterKeys.includes(f.key)) {
-        this.appliedFilters[f.key] = f.value;
-      } else if (['contains', 'is'].includes(f.op) && f.key === 'isActive') {
-        this.appliedFilters['isActive'] = f.value === 'Active' ? 'true' : 'false';
-      } else if (['isNot', 'notContains', 'eq', 'gt', 'lt'].includes(f.op)) {
-        this.advancedFilters.push({ key: f.key, op: f.op, value: f.value });
-      }
-    }
+    this.gridFilters = query.filters ?? [];
 
     this.getProducts();
   }

@@ -96,4 +96,6 @@ export interface FilterCustomer {
     creditStatus?: string | null;
     status?: string | null;
     sharedWith?: string | null;
+    /** The grid's column filters, applied on the server. */
+    filters?: unknown[];
 }

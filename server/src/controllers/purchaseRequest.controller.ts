@@ -5,6 +5,7 @@ import PurchaseRequest from '../models/purchaseRequest.model'
 import jobModel, { allocateStatus } from "../models/job.model";
 import supplierModel from "../models/supplier.model";
 import Quotation from "../models/quotation.model";
+import { buildGridFilterMatch, GridFieldMap } from "../common/utils/grid-query";
 import { getEmployeeData, calculateDiscountPricePipe, calculateCostPricePipe, getUSDRated, buildPrivilegeAccessFilter, escapeRegex } from "../common/utils/util";
 import { getWorkflowSteps, updateApprovalStatus, rebuildPendingRoute } from "../services/workflow.service";
 import { Server } from "socket.io";
@@ -758,9 +759,31 @@ const poProgressStages = (poProgress?: string): any[] => [
     }] : []),
 ];
 
+/** PR grid column key -> field after the list pipeline's lookups (names are built only when a filter needs them). */
+const PR_GRID_FIELDS: GridFieldMap = {
+    date: { path: 'createdAt', type: 'date' },
+    customerName: { path: 'customerId.companyName' },
+    purchaseNo: { path: 'purchaseNo' },
+    nextFollowUpDate: { path: 'followUp.nextFollowUpDate', type: 'date' },
+    jobId: { path: 'jobId.jobId' },
+    deadline: { path: 'jobId.deadline', type: 'date' },
+    createdBy: { path: '_createdByName' },
+    procurementPerson: { path: '_assigneeName' },
+    allocatedBy: { path: '_allocatedByName' },
+    status: { path: '_displayStatus' },
+    // General Purchase list: its Date column shows approved-or-created, and its Status label differs from the PR list's.
+    supplier: { path: 'supplierId.supplierName' },
+    gpDate: { path: 'sortDate', type: 'date' },
+    gpStatus: { path: '_gpStatus' },
+};
+
+const fullNameOf = (path: string) => ({ $trim: { input: { $concat: [{ $ifNull: [`$${path}.firstName`, ''] }, ' ', { $ifNull: [`$${path}.lastName`, ''] }] } } });
+
 export const getPurchaseRequests = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName, sourceType, poProgress, rfqStatus, allocation, search, sortKey, sortDir, followUpView } = req.body;
+        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName, sourceType, poProgress, rfqStatus, allocation, search, sortKey, sortDir, followUpView, filters } = req.body;
+        // Column filters from the grid ("is" / "is not" picks, date "on" days or ranges).
+        const gridMatch = buildGridFilterMatch(filters, PR_GRID_FIELDS);
         const pageNumber = Math.max(1, Math.floor(Number(page)) || 1);
         const pageSize = Math.min(10000, Math.max(1, Math.floor(Number(row)) || 10));
         // The grid's search box sends `search`: it matches the PR number, supplier, customer or job id.
@@ -1158,6 +1181,24 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
             // Rows without an approved date (new / pending PRs) fall back to their created date so they sort with
             // the rest instead of sinking to the last page; the grid's Date column shows the same value.
             { $addFields: { sortDate: { $ifNull: ['$approvedDate', '$createdAt'] } } },
+            ...(gridMatch ? [
+                {
+                    $addFields: {
+                        _createdByName: fullNameOf('createdBy'),
+                        _assigneeName: fullNameOf('procurementPerson'),
+                        _allocatedByName: fullNameOf('allocatedBy'),
+                        // Same label the Status column shows.
+                        _displayStatus: {
+                            $cond: [{ $in: ['$status', ['New', 'In Progress', 'Rejected', 'Revoked']] }, '$status', { $ifNull: ['$overallStatus', '$status'] }]
+                        },
+                        _gpStatus: {
+                            $cond: [{ $eq: ['$status', 'New'] }, 'New', { $ifNull: ['$overallStatus', { $ifNull: ['$status', 'Pending'] }] }]
+                        },
+                    }
+                },
+                { $match: gridMatch },
+                { $project: { _createdByName: 0, _assigneeName: 0, _allocatedByName: 0, _displayStatus: 0, _gpStatus: 0 } },
+            ] : []),
             // Follow-up tab: today and upcoming first (nearest date on top), then overdue (most recent first).
             ...(followUpView === 'followUp' && !sortKey ? [
                 {

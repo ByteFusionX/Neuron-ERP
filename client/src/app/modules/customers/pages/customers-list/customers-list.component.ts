@@ -267,6 +267,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       creditStatus: this.creditStatusFilter,
       status: this.statusFilter,
       sharedWith: this.sharedWithFilter,
+      filters: this.gridFilters.length ? this.gridFilters : undefined,
     };
   }
 
@@ -282,6 +283,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       creditStatus: this.creditStatusFilter,
       status: this.statusFilter,
       sharedWith: this.sharedWithFilter,
+      filters: this.gridFilters.length ? this.gridFilters : undefined,
     };
 
     this.subscriptions.add(
@@ -303,6 +305,9 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     );
   }
 
+  /** Column filters from the grid, sent with the list and export. */
+  private gridFilters: unknown[] = [];
+
   onQueryChange(query: DataGridQuery): void {
     this.searchQuery = query.search;
     this.page = query.page;
@@ -311,11 +316,11 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     this.creditStatusFilter = null;
     this.statusFilter = null;
     this.sharedWithFilter = null;
+    // The "My Customers" tab filters on createdBy with "eq"; every column filter goes to the server as-is.
+    this.gridFilters = [];
     for (const f of query.filters) {
-      if (f.key === 'createdBy') this.selectedEmployee = f.value;
-      if (f.key === 'creditStatus') this.creditStatusFilter = f.value;
-      if (f.key === 'status') this.statusFilter = f.value;
-      if (f.key === 'shared') this.sharedWithFilter = f.value;
+      if (f.key === 'createdBy' && f.op === 'eq') this.selectedEmployee = f.value;
+      else this.gridFilters.push(f);
     }
     this.getAllCustomers();
     this.updateUrlParams();
