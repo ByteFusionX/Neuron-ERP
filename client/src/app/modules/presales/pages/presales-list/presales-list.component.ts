@@ -284,6 +284,8 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     // Follow the row's own stage, so a job opened from the All / follow-up tabs is editable too.
     if (this.isQuoteOrigin(r) && this.rowStage(r) === 'new' && (r?.preSale?.status ?? 'new') === 'new') return '';
     if (this.rowStage(r) === 'assigned' &&['assigned', 'in review', 'in revision'].includes(r?.preSale?.status ?? 'assigned')) return '';
+    // An estimate sent back for approval can be edited directly by whoever may assign it (logged in the audit trail).
+    if (this.isPendingApproval(r) && this.canAssign) return '';
     return this.nextStep(r) || 'This estimation can only be edited while the job is assigned to you.';
   }
 
@@ -350,6 +352,11 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   /** The engineer finished and sent it; it now waits for the assigner to send it on or reassign it. */
   isPendingApproval(r: any): boolean {
     return r?.preSale?.status === 'pending approval';
+  }
+
+  /** Estimators send their own jobs; an assigner can always send an estimate waiting for their approval. */
+  private canSendRow(r: any): boolean {
+    return this.canEstimate || (this.isPendingApproval(r) && this.canAssign);
   }
 
   /** Pending approval and the viewer cannot decide on it: the Send buttons stay hidden. */
@@ -451,11 +458,11 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       { id: 'reject', label: 'Reject Job', icon: 'close', variant: 'danger', quick: true, menu: false, hidden: (r) => this.rowStage(r) !== 'assigned' || this.isPendingApproval(r) || !this.canReject },
       {
         id: 'send', label: 'Send to Enquiry', icon: 'send', quick: true,
-        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r) || !this.canEstimate || this.isQuoteOrigin(r) || this.awaitingManager(r),
+        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r) || !this.canSendRow(r) || this.isQuoteOrigin(r) || this.awaitingManager(r),
       },
       {
         id: 'sendQuote', label: 'Send to Quote', icon: 'send', quick: true,
-        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r) || !this.canEstimate || !this.isQuoteOrigin(r) || this.awaitingManager(r),
+        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r) || !this.canSendRow(r) || !this.isQuoteOrigin(r) || this.awaitingManager(r),
       },
     ];
   }
@@ -995,7 +1002,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   /** The drawer offers Send when the row's own Send to Enquiry / Send to Quote action would apply. */
   get estimationFormCanSend(): boolean {
     const r = this.estimationFormRow;
-    return !!r && this.rowStage(r) === 'assigned' && this.canEstimate && !this.hasPendingFeedbackRequest(r) && !this.awaitingManager(r);
+    return !!r && this.rowStage(r) === 'assigned' && this.canSendRow(r) && !this.hasPendingFeedbackRequest(r) && !this.awaitingManager(r);
   }
 
   private rowById(enqId: string | null): any {

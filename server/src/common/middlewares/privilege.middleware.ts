@@ -106,6 +106,19 @@ export const requireAnyPrivilege = (...moduleKeys: string[]) => {
   };
 };
 
+// Passes when any one of the given privilege checks would pass; otherwise answers as the last check does.
+export const requireEither = (...checks: ((req: any, res: any, next: NextFunction) => any)[]) => {
+  return (req: any, res: Response, next: NextFunction) => {
+    for (let i = 0; i < checks.length - 1; i++) {
+      let allowed = false;
+      const probe: any = { status: () => probe, json: () => probe };
+      checks[i](req, probe, () => { allowed = true; });
+      if (allowed) return next();
+    }
+    return checks[checks.length - 1](req, res, next);
+  };
+};
+
 // For actions that `main` left open to anyone with view access: allowed unless an admin has
 // explicitly set the flag to false on the role.
 // With `strictAdmin`, an admin is not waved through: they must hold the flag (role or extra grant) explicitly.

@@ -47,7 +47,7 @@ import {
     completeFollowUp,
     cancelFollowUp
 } from "../controllers/enquiry.controller";
-import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
+import { requireEither, requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 import { requireEnquiryCreator } from "../common/middlewares/enquiry-creator.middleware";
 const equiRouter = Router()
 
@@ -61,13 +61,19 @@ const chain = (...handlers: any[]) => (req: any, res: any, next: any) => {
 // Admin is a read-only oversight tier here: only superAdmin skips the privilege flags on enquiry and presale actions.
 const STRICT = { strictAdmin: true };
 
+// Saving or sending an estimate: the estimator, or an assigner editing an estimate that came back for approval.
+const estimateOrAssign = requireEither(
+    requirePrivilege("assignedJob", "assign", undefined, STRICT),
+    requireUnlessDenied("assignedJob", "estimate", STRICT)
+);
+
 const editOwnEnquiry = [requireUnlessDenied("enquiry", "edit"), requireEnquiryCreator()];
 
 // /update serves both sides: presales sending an estimated job back, and the enquiry owner closing or moving it on.
 const updateStatusGate = (req: any, res: any, next: any) => {
     const status = String(req.body?.status || "").toLowerCase();
     return status === "work in progress" || status === "estimated"
-        ? requireUnlessDenied("assignedJob", "estimate", STRICT)(req, res, next)
+        ? estimateOrAssign(req, res, next)
         : chain(...editOwnEnquiry)(req, res, next);
 };
 
@@ -104,7 +110,7 @@ equiRouter.post('/quote-presale/:quoteId/accept', requireUnlessDenied("quotation
 equiRouter.post('/quote-presale/:quoteId/send-back', requireUnlessDenied("quotation", "edit"), sendBackQuotePresale);
 equiRouter.post('/quote-presale/:quoteId/cancel', requireUnlessDenied("quotation", "edit"), cancelQuotePresale);
 equiRouter.get('/feedback-request/:employeeId', getFeedbackRequestsById);
-equiRouter.post('/upload-estimation', requireUnlessDenied("assignedJob", "estimate", STRICT), upload.fields([{ name: 'presaleFiles' }]), uploadEstimations)
+equiRouter.post('/upload-estimation', estimateOrAssign, upload.fields([{ name: 'presaleFiles' }]), uploadEstimations)
 equiRouter.post('/markAsSeenEstimation', markAsSeenEstimation);
 equiRouter.post('/markAsSeenedJob', markAsSeenJob);
 equiRouter.post('/markAsSeenedReassingedJob', markAsSeenReAssingedJob);

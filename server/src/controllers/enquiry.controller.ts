@@ -2788,6 +2788,55 @@ export const cancelQuotePresale = async (req: any, res: Response, next: NextFunc
     }
 };
 
+/** Field-level differences between a saved estimate and the one being saved, for the audit log (capped). */
+const estimateAuditChanges = (before: any, after: any): { label: string; from?: string; to?: string }[] => {
+    const out: { label: string; from?: string; to?: string }[] = [];
+    const str = (v: any) => (v === undefined || v === null || v === '' ? '' : String(v));
+    const push = (label: string, a: any, b: any) => { if (str(a) !== str(b)) out.push({ label, from: str(a) || '-', to: str(b) || '-' }); };
+    push('Currency', before?.currency, after?.currency);
+    push('Presale note', before?.presaleNote, after?.presaleNote);
+    if (after?.totalDiscount !== undefined) push('Total discount', before?.totalDiscount, after?.totalDiscount);
+    const lineFields: [string, string][] = [['detail', 'Description'], ['quantity', 'Qty'], ['uom', 'UOM'], ['unitCost', 'Unit cost'], ['profit', 'Margin'], ['unitSellingPrice', 'Unit price']];
+    // Pair rows by a key (item name / line description) so an insert or delete doesn't shift every later row;
+    // rows whose key is blank or unmatched fall back to pairing by position among the leftovers.
+    const pairUp = (olds: any[], news: any[], key: (x: any) => string): [any, any, number][] => {
+        const usedNew = new Set<number>();
+        const pairs: [any, any, number][] = [];
+        const oldLeft: number[] = [];
+        olds.forEach((o, i) => {
+            const k = key(o).trim().toLowerCase();
+            const j = k ? news.findIndex((n, idx) => !usedNew.has(idx) && key(n).trim().toLowerCase() === k) : -1;
+            if (j >= 0) { usedNew.add(j); pairs.push([o, news[j], j]); } else oldLeft.push(i);
+        });
+        const newLeft = news.map((_, idx) => idx).filter((idx) => !usedNew.has(idx));
+        for (let x = 0; x < Math.max(oldLeft.length, newLeft.length); x++) {
+            const oi = oldLeft[x], ni = newLeft[x];
+            pairs.push([oi !== undefined ? olds[oi] : undefined, ni !== undefined ? news[ni] : undefined, ni !== undefined ? ni : (oi as number)]);
+        }
+        return pairs.sort((a, b) => a[2] - b[2]);
+    };
+    const oldOpts: any[] = before?.optionalItems || [];
+    const newOpts: any[] = Array.isArray(after?.optionalItems) ? after.optionalItems : [];
+    for (let o = 0; o < Math.max(oldOpts.length, newOpts.length); o++) {
+        const oo = oldOpts[o], no = newOpts[o];
+        const optTag = Math.max(oldOpts.length, newOpts.length) > 1 ? `Option ${o + 1} ` : '';
+        if (!oo || !no) { out.push({ label: `${optTag || 'Option '}${oo ? 'removed' : 'added'}`.trim() }); continue; }
+        const itemPairs = pairUp(oo.items || [], no.items || [], (x) => str(x?.itemName));
+        for (const [oi, ni, i] of itemPairs) {
+            const itemTag = `${optTag}Item ${i + 1}`;
+            if (!oi || !ni) { out.push({ label: `${itemTag} ${oi ? 'removed' : 'added'}`, from: oi ? str(oi.itemName) : undefined, to: ni ? str(ni.itemName) : undefined }); continue; }
+            push(`${itemTag} name`, oi.itemName, ni.itemName);
+            const linePairs = pairUp(oi.itemDetails || [], ni.itemDetails || [], (x) => str(x?.detail));
+            for (const [ol, nl, l] of linePairs) {
+                const lineTag = `${itemTag} line ${l + 1}`;
+                if (!ol || !nl) { out.push({ label: `${lineTag} ${ol ? 'removed' : 'added'}`, from: ol ? str(ol.detail) : undefined, to: nl ? str(nl.detail) : undefined }); continue; }
+                lineFields.forEach(([k, label]) => push(`${lineTag} ${label}`, ol[k], nl[k]));
+            }
+        }
+    }
+    return out.length > 60 ? [...out.slice(0, 59), { label: `…and ${out.length - 59} more changes` }] : out;
+};
+
 export const uploadEstimations =async (req: any, res: Response, next: NextFunction) => {
     try {
         let { optionalItems, enquiryId, currency, totalDiscount, preSaleNote, selectedOption } = req.body;
@@ -2798,7 +2847,12 @@ export const uploadEstimations =async (req: any, res: Response, next: NextFuncti
         // A job sent from a quote already carries its estimate, so it can be edited while still "new".
         const originCheck: any = await enquiryModel.findById(enquiryId).select('preSale.origin').lean();
         const quoteOrigin = originCheck?.preSale?.origin === 'quote';
-        const blocked = await presaleStepBlock(enquiryId, quoteOrigin ? ['new', 'assigned', 'in revision', 'in review'] : ['assigned', 'in revision', 'in review'])
+        // An estimate sent back for approval can be edited directly by whoever may assign (or a super admin).
+        const editor = req.employee || await getEmployeeData(req.user);
+        const canAssignEdit = /^superadmin$/i.test(String((editor?.category as any)?.role ?? '')) || hasAssignFlag(editor);
+        const editable = quoteOrigin ? ['new', 'assigned', 'in revision', 'in review'] : ['assigned', 'in revision', 'in review'];
+        if (canAssignEdit) editable.push('pending approval');
+        const blocked = await presaleStepBlock(enquiryId, editable)
             || await holderBlock(req, enquiryId);
         if (blocked) return res.status(blocked.code).json({ message: blocked.message });
         if (optionalItems !== undefined && !Array.isArray(optionalItems)) {
@@ -2846,7 +2900,9 @@ export const uploadEstimations =async (req: any, res: Response, next: NextFuncti
                 ...(fromQuote && totalDiscount !== undefined ? { 'preSale.estimations.totalDiscount': totalDiscount } : {}),
                 // The enquiry itself stays "in presales"; only the presale job moves to review.
                 // A quote job edited before anyone is assigned stays in New.
-                'preSale.status': current?.preSale?.status === 'new' ? 'new' : 'in review',
+                // An assigner's edit of an estimate waiting for approval keeps it waiting with them to send.
+                'preSale.status': current?.preSale?.status === 'new' ? 'new'
+                    : current?.preSale?.status === 'pending approval' ? 'pending approval' : 'in review',
             },
             $unset: {
                 'preSale.revisionComment': ''
@@ -2884,7 +2940,13 @@ export const uploadEstimations =async (req: any, res: Response, next: NextFuncti
         if (!enquiryData.modifiedCount) {
             return res.status(502).json();
         }
-        await logEnquiryAudit(req, enquiryId, 'estimation-uploaded', isNewVersion ? `Estimation revised (v${version})` : `Estimation uploaded (v${version})`);
+        const changes = hasExisting ? estimateAuditChanges(existing, { optionalItems, currency, presaleNote: preSaleNote, totalDiscount: fromQuote ? totalDiscount : undefined }) : [];
+        if (current?.preSale?.status === 'pending approval') {
+            await logEnquiryAudit(req, enquiryId, 'estimation-edited-on-approval',
+                `Estimation edited while waiting for approval (v${version}${changes.length ? `, ${changes.length} change${changes.length === 1 ? '' : 's'}` : ''})`, changes);
+        } else {
+            await logEnquiryAudit(req, enquiryId, 'estimation-uploaded', isNewVersion ? `Estimation revised (v${version})` : `Estimation uploaded (v${version})`, changes);
+        }
 
         return res.status(200).json({ success: true });
     } catch (error) {
