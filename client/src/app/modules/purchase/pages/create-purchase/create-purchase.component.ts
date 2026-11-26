@@ -86,6 +86,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   @Input() viewOnly = false;
   /** Opens just the POs of an approved request, as its own drawer apart from the create/edit steps. */
   @Input() posOnly = false;
+  /** Opened from the list's Send for approval with lines lacking a catalogue product: highlight them on Items. */
+  @Input() showCatalogueGaps = false;
   /** Drawer mode: a PR was created or saved as a draft, so the list should reload. */
   @Output() saved = new EventEmitter<void>();
   /** Drawer mode: the slide-out animation finished; the host can unmount. */
@@ -1688,6 +1690,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     if (this.posOnly) { if (status === 'Approved') this.openStep(5); return; }
     const step = this.initialStep ?? (status === 'Pending' ? 3 : null);
     if (step) this.goToStep(step === 1 ? 2 : step);
+    if (this.showCatalogueGaps) setTimeout(() => this.prFormCmp?.itemEntry?.showCatalogueGaps(), 60);
   }
 
   get isApproved(): boolean {

@@ -114,5 +114,5 @@
 
 <!-- Mounted only while open, so each opening starts from a fresh load of that PR. -->
 <app-create-purchase *ngIf="editDrawerOpen" [drawer]="true" [editPurchaseId]="editDrawerPurchaseId" [sourceLocked]="true"
-    [viewOnly]="editDrawerViewOnly" [initialStep]="editDrawerViewOnly ? 2 : null"
+    [viewOnly]="editDrawerViewOnly" [initialStep]="editDrawerViewOnly || editDrawerShowGaps ? 2 : null" [showCatalogueGaps]="editDrawerShowGaps"
     (saved)="onEditDrawerSaved()" (submitted)="onDrawerSubmitted($event)" (closed)="onEditDrawerClosed()"></app-create-purchase>

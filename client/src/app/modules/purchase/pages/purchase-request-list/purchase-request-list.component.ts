@@ -640,6 +640,13 @@ export class PurchaseRequestListComponent {
       this.notificationService.error('Award every product in Compare & award before sending for approval');
       return;
     }
+    if (this.hasCatalogueGaps(row)) {
+      // Same rule as the drawer's Send: every line needs a catalogue product. Open Items so they can be picked or created.
+      this.notificationService.warning('Some items are not in the product catalogue. Pick the product or use + Create product, then send for approval.');
+      this.editDrawerShowGaps = true;
+      this.onEditPr(row);
+      return;
+    }
     const { confirmed, reason } = await this.confirmDialog.open({
       tone: 'approve',
       title: 'Send for approval?',
@@ -1184,6 +1191,15 @@ export class PurchaseRequestListComponent {
   /** Opened from "View details" on a PR sent for approval: read-only, Close only. */
   editDrawerViewOnly = false;
 
+  /** Set by Send for approval when lines lack a catalogue product: the drawer opens on Items with them highlighted. */
+  editDrawerShowGaps = false;
+
+  /** True when a line with a description has no item code (no catalogue product), matching the drawer's check. */
+  private hasCatalogueGaps(r: any): boolean {
+    return (r.items ?? []).some((item: any) => (item.itemDetails ?? []).some((d: any) =>
+      String(d.detail || '').trim() && !String(d.itemCode || '').trim()));
+  }
+
   onEditPr(row: any, event?: Event, viewOnly = false): void {
     event?.stopPropagation();
     this.editDrawerPurchaseId = row._id;
@@ -1213,5 +1229,6 @@ export class PurchaseRequestListComponent {
     this.editDrawerOpen = false;
     this.editDrawerPurchaseId = null;
     this.editDrawerViewOnly = false;
+    this.editDrawerShowGaps = false;
   }
 }
