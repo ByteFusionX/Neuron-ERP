@@ -2805,23 +2805,10 @@ export const uploadEstimations =async (req: any, res: Response, next: NextFuncti
             return res.status(400).json({ message: 'optionalItems must be a list' });
         }
 
-        // A quote-origin job stages its estimate on the quote only when it is handed back; nothing is written to the quote here.
+        // Saving an estimate only updates the presale job. Nothing is written to the enquiry's quote here:
+        // the estimate reaches sales/the quote only through the send-for-approval -> complete flow.
         const originDoc: any = await enquiryModel.findById(enquiryId).select('preSale.origin preSale.quoteBaselineVersion').lean();
         const fromQuote = originDoc?.preSale?.origin === 'quote';
-        const quote = fromQuote ? null : await quotationModel.findOne({ enqId: enquiryId })
-        if (quote) {
-            let quoteData = await quotationModel.updateOne(
-                { _id: quote._id },
-                {
-                    $set: {
-                        'optionalItems': optionalItems,
-                        'currency': currency,
-                        'totalDiscount': totalDiscount,
-                        'status': quote.status === 'revised' ? quoteStatus.WorkInProgress : quote.status,
-                    }
-                }
-            );
-        }
 
         // Versioning: the first submission is v1. Edits while assigned or in review stay in the same version;
         // re-submitting after a revision request archives the previous version and becomes the next one.

@@ -190,6 +190,29 @@ const expiredQuoteFilter = () => ({ $or: [{ status: quoteStatus.Expired }, pastD
  * dates already in the past (an existing quote may keep an old date while it is edited).
  */
 const MAX_QUOTE_SUBJECT = 250;
+/**
+ * Presale estimates may reach the quote with blanks (they are copied without schema checks). The quote cannot be
+ * saved or moved forward until every line has an item name, description, quantity, unit cost and unit price.
+ */
+const incompleteQuoteItemsMessage = (optionalItems: any): string | null => {
+    const blank = (v: any) => v === undefined || v === null || String(v).trim() === '';
+    const options: any[] = Array.isArray(optionalItems) ? optionalItems : [];
+    for (const [o, option] of options.entries()) {
+        for (const [i, item] of (option?.items ?? []).entries()) {
+            const where = `${options.length > 1 ? `Option ${o + 1}, ` : ''}item ${i + 1}${item?.itemName ? ` (${item.itemName})` : ''}`;
+            if (blank(item?.itemName)) return `${where}: item name is required`;
+            const details: any[] = item?.itemDetails ?? [];
+            if (!details.length) return `${where}: add at least one line`;
+            for (const [d, line] of details.entries()) {
+                const missing = [['description', line?.detail], ['quantity', line?.quantity], ['unit cost', line?.unitCost], ['unit price', line?.unitSellingPrice]]
+                    .filter(([, v]) => blank(v)).map(([k]) => k);
+                if (missing.length) return `${where}, line ${d + 1}: ${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required. Complete the presale estimate values before continuing.`;
+            }
+        }
+    }
+    return null;
+};
+
 const quotePayloadProblem = (quoteData: any, isCreate: boolean): string | null => {
     const has = (key: string) => quoteData?.[key] !== undefined;
     const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
@@ -220,6 +243,10 @@ const quotePayloadProblem = (quoteData: any, isCreate: boolean): string | null =
     }
 
     if (has('optionalItems')) {
+        if (quoteData?.status !== quoteStatus.Draft) {
+            const incomplete = incompleteQuoteItemsMessage(quoteData.optionalItems);
+            if (incomplete) return incomplete;
+        }
         const options: any[] = Array.isArray(quoteData.optionalItems) ? quoteData.optionalItems : [];
         if (isCreate && quoteData?.status !== quoteStatus.Draft && !quoteLines({ optionalItems: options }).length) {
             return 'Add at least one item before creating the quotation';
@@ -1873,6 +1900,11 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
             return res.status(400).json({ message: "Quote is expired (past its closing date) and can no longer change status" });
         }
 
+        // Losing a quote is always allowed; every other move needs complete item values (presale estimates may have blanks).
+        if (status !== quoteStatus.Lost) {
+            const incomplete = incompleteQuoteItemsMessage(statusCheck.optionalItems);
+            if (incomplete) return res.status(400).json({ message: incomplete });
+        }
         if (status === statusCheck.status) {
             return res.status(400).json({ message: `Quote is already ${status}` });
         }
