@@ -154,9 +154,15 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     this._employeeService.employeeData$.subscribe((data) => {
       this.viewAssignedFor = data?.category.privileges.assignedJob.viewReport == 'all';
       const superAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
-      this.canAssign = superAdmin || data?.category.privileges.assignedJob?.assign === true;
-      this.canReject = superAdmin || data?.category.privileges.assignedJob?.reject !== false;
-      this.canEstimate = superAdmin || data?.category.privileges.assignedJob?.estimate !== false;
+      // Mirrors the server checks: temporary per-person grants count until they expire, and an admin needs the flag set.
+      const expiresAt = (data as any)?.extraPrivilegesExpiresAt;
+      const extra = expiresAt && new Date(expiresAt).getTime() <= Date.now() ? undefined : (data as any)?.extraPrivileges?.assignedJob;
+      const role: any = data?.category.privileges.assignedJob;
+      const isAdmin = data?.category?.role === 'admin';
+      const flag = (k: string) => isAdmin ? (role?.[k] === true || extra?.[k] === true) : role?.[k] !== false;
+      this.canAssign = superAdmin || role?.assign === true || extra?.assign === true;
+      this.canReject = superAdmin || flag('reject');
+      this.canEstimate = superAdmin || flag('estimate');
       this.access = data?.category.privileges.assignedJob.viewReport;
       this.userId = data?._id;
       this.isSuperAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
