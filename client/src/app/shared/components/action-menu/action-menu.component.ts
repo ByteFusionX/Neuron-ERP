@@ -22,14 +22,14 @@ export interface ActionMenuItem {
   template: `
     <div class="relative">
       <button type="button" class="am-trigger" [class.am-icon-only]="icon" aria-haspopup="menu" [attr.aria-expanded]="open"
-        [attr.aria-label]="icon ? label : null" [attr.title]="icon ? label : null" (click)="open = !open">
+        [attr.aria-label]="icon ? label : null" [attr.title]="icon ? label : null" (click)="toggle($event)">
         <ng-icon *ngIf="icon; else textTrigger" [name]="icon" class="text-base"></ng-icon>
         <ng-template #textTrigger>
           {{ label }}
           <svg class="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3" /></svg>
         </ng-template>
       </button>
-      <div *ngIf="open" role="menu" class="am-panel">
+      <div *ngIf="open" role="menu" class="am-panel" [ngStyle]="panelStyle">
         <ng-container *ngFor="let i of items; trackBy: trackById">
           <div *ngIf="i.separator" class="am-sep"></div>
           <button type="button" role="menuitem" class="am-item" [disabled]="i.disabled" [attr.title]="i.hint || null" (click)="pick(i)">
@@ -46,7 +46,7 @@ export interface ActionMenuItem {
       border-radius: 0.5rem; border: 1px solid #d1d5db; color: #374151; background: transparent; }
     .am-trigger:hover { background: #f9fafb; }
     .am-trigger.am-icon-only { width: 2rem; padding: 0; justify-content: center; border: 0; outline: none; box-shadow: none; }
-    .am-panel { position: absolute; right: 0; top: calc(100% + 4px); z-index: 40; width: max-content; min-width: 8rem; white-space: nowrap; padding: 0.25rem; border-radius: 0.5rem;
+    .am-panel { position: fixed; z-index: 1000; overflow-y: auto; width: max-content; min-width: 8rem; white-space: nowrap; padding: 0.25rem; border-radius: 0.5rem;
       border: 1px solid #e5e7eb; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
     .am-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.4rem 0.625rem; text-align: left; font-size: 0.75rem; color: #374151; border-radius: 0.375rem; }
     .am-item:hover:not(:disabled) { background: #f3f4f6; }
@@ -68,6 +68,30 @@ export class ActionMenuComponent {
   @Output() selected = new EventEmitter<string>();
   open = false;
   private host = inject(ElementRef<HTMLElement>);
+
+  /** Fixed to the viewport so a clipping (overflow) ancestor can't cut the list off; opens upward when there's more room above. */
+  panelStyle: Record<string, string> = {};
+
+  toggle(e: Event): void {
+    if (this.open) { this.open = false; return; }
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const gap = 4, margin = 8;
+    const below = window.innerHeight - r.bottom - gap - margin;
+    const above = r.top - gap - margin;
+    const up = below < 240 && above > below;
+    this.panelStyle = {
+      right: `${Math.max(margin, window.innerWidth - r.right)}px`,
+      maxHeight: `${Math.max(120, up ? above : below)}px`,
+      ...(up ? { bottom: `${window.innerHeight - r.top + gap}px` } : { top: `${r.bottom + gap}px` }),
+    };
+    this.open = true;
+  }
+
+  @HostListener('window:resize')
+  @HostListener('window:scroll')
+  onViewportChange(): void {
+    this.open = false;
+  }
 
   trackById = (_: number, i: ActionMenuItem) => i.id;
 
