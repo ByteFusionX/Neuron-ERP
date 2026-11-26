@@ -47,6 +47,7 @@ import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/f
 import { FollowUpViewModel, followUpCellClass, followUpViewer } from 'src/app/shared/utils/follow-up.util';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 import { FileService } from 'src/app/core/services/file.service';
+import { estimateHasSendGaps } from '../../estimate-send-check';
 @Component({
   selector: 'app-presales-list',
   templateUrl: './presales-list.component.html',
@@ -981,16 +982,33 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   estimationFormMode: 'create' | 'edit' = 'create';
   estimationFormEnqId: string | null = null;
   estimationFormSeed: Estimations | null = null;
+  /** Row behind the open drawer: its Send button sends this job. */
+  estimationFormRow: any = null;
+  estimationFormHighlight = false;
+
+  /** The drawer offers Send when the row's own Send to Enquiry / Send to Quote action would apply. */
+  get estimationFormCanSend(): boolean {
+    const r = this.estimationFormRow;
+    return !!r && this.rowStage(r) === 'assigned' && this.canEstimate && !this.hasPendingFeedbackRequest(r) && !this.awaitingManager(r);
+  }
+
+  private rowById(enqId: string | null): any {
+    return enqId ? this.rows?.find((r: any) => r._id === enqId) ?? null : null;
+  }
 
   onUploadClicks(enquiryId: string) {
+    this.estimationFormRow = this.rowById(enquiryId);
+    this.estimationFormHighlight = false;
     this.estimationFormMode = 'create';
     this.estimationFormEnqId = enquiryId;
     this.estimationFormSeed = null;
     this.estimationFormOpen = true;
   }
 
-  onEditEstimation(estimation: Estimations, enqId: string) {
+  onEditEstimation(estimation: Estimations, enqId: string, highlight = false) {
     this.estimationTarget = null;
+    this.estimationFormRow = this.rowById(enqId);
+    this.estimationFormHighlight = highlight;
     this.estimationFormMode = 'edit';
     this.estimationFormEnqId = enqId;
     this.estimationFormSeed = estimation;
@@ -1004,6 +1022,21 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onEstimationFormClosed() {
     this.estimationFormOpen = false;
+    this.estimationFormHighlight = false;
+  }
+
+  /** Drawer Send: it has checked the fields and saved, so go straight to the send confirmation. */
+  onEstimationFormSend() {
+    const row = this.estimationFormRow;
+    this.estimationFormOpen = false;
+    this.estimationFormHighlight = false;
+    if (row) void this.onSendClicked(row, true);
+  }
+
+  /** Opens the estimate on Items with the fields that block sending highlighted. */
+  private openEstimateGaps(row: any): void {
+    this.toast.warning('Fill the highlighted fields (item name, description, qty, UOM, unit cost, margin, unit price) before sending the estimation');
+    this.onEditEstimation(row.preSale?.estimations, row._id, true);
   }
 
   estimationTarget: { estimation: Estimations; enqId: string; history: EstimationHistoryEntry[]; blockedReason: string; revisionReason: string } | null = null;
@@ -1206,9 +1239,13 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     return (row.preSale?.feedback || []).some((fb: any) => !fb.feedback);
   }
 
-  async onSendClicked(row: any): Promise<void> {
-    if (!row.preSale?.estimations) {
+  async onSendClicked(row: any, checked = false): Promise<void> {
+    if (!row.preSale?.estimations && !checked) {
       this.toast.warning('Please complete the estimation Uploads');
+      return;
+    }
+    if (!checked && estimateHasSendGaps(row.preSale?.estimations?.optionalItems)) {
+      this.openEstimateGaps(row);
       return;
     }
     if (this.hasPendingFeedbackRequest(row)) {
@@ -1232,7 +1269,11 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     Object.seal(selectedEnquiry)
     this.subscriptions.add(
-      this._enquiryService.updateEnquiryStatus(selectedEnquiry).subscribe((data) => {
+      this._enquiryService.updateEnquiryStatus(selectedEnquiry).subscribe({ error: (err) => {
+        this.toast.warning(err?.error?.message || 'Could not send this job. Please try again.');
+        // The server found blanks the list didn't show (stale row): reload so Send re-checks the saved estimate.
+        if (err?.error?.incompleteEstimate) this.getJobsData();
+      }, next: (data) => {
         if (data) {
           this.getJobsData();
           if (data.pendingApproval) {
@@ -1245,7 +1286,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
             this.toast.success(`Job has successfully completed and send back to Enquiry \n(${data.update.enquiryId})`)
           }
         }
-      })
+      }})
     )
   }
 

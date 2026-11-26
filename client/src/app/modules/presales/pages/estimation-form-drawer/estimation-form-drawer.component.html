@@ -29,7 +29,7 @@
 
         <!-- Step 1 — items -->
         <div [hidden]="step !== 1">
-            <app-item-entry #itemEntry [paletteTargetLabel]="open ? 'Estimation' : null" [externalAddButtons]="true" [optionalItems]="optionalItems"
+            <app-item-entry #itemEntry [paletteTargetLabel]="open ? 'Estimation' : null" [externalAddButtons]="true" [allOptional]="true" [optionalItems]="optionalItems"
                 [seedOptionalItems]="seedOptionalItems" [suggestionScopeIds]="[]" [currency]="form.controls.currency.value || defaultCurrency" [currencyChoices]="currencyCodes"
                 (currencyChange)="form.controls.currency.setValue($event); form.controls.currency.markAsDirty()"
                 (totals)="onItemTotals($event)" (createProductRequested)="openCreateProduct($event)" [allowEditProduct]="true" (editProductRequested)="openEditProduct($event)"
@@ -48,7 +48,7 @@
             </app-sf-section>
 
             <app-sf-section title="Presale Note">
-                <app-sf-field full label="Presale Note" required [control]="form.controls.presaleNote">
+                <app-sf-field full label="Presale Note" [control]="form.controls.presaleNote">
                     <app-sf-textarea formControlName="presaleNote" [rows]="6" placeholder="Presale note"></app-sf-textarea>
                 </app-sf-field>
             </app-sf-section>
@@ -92,10 +92,15 @@
         <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
         <app-action-button *ngIf="step > 1" variant="secondary" (click)="previousStep()">Back</app-action-button>
 
-        <app-action-button *ngIf="step < 2" variant="primary" (click)="nextStep()">Next: {{ steps[step].label }}</app-action-button>
-        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="estimation-form" [disabled]="saving">
+        <app-action-button *ngIf="step === 1" variant="secondary" type="submit" form="estimation-form" [disabled]="saving">
             {{ saving ? 'Saving…' : 'Save' }}
         </app-action-button>
+        <app-action-button *ngIf="step === 1" variant="primary" (click)="nextStep()">Next: {{ steps[step].label }}</app-action-button>
+        <app-action-button *ngIf="step === 2" [variant]="canSend ? 'secondary' : 'primary'" type="submit" form="estimation-form" [disabled]="saving">
+            {{ saving ? 'Saving…' : 'Save' }}
+        </app-action-button>
+        <app-action-button *ngIf="canSend" variant="primary" icon="send" [disabled]="saving" (click)="send()"
+            title="Checks item name, description, qty, UOM, unit cost, margin and unit price, saves, then sends">Send</app-action-button>
     </ng-container>
 </app-sf-drawer>
 

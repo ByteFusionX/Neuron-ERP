@@ -1,6 +1,7 @@
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild, inject } from '@angular/core';
 import { DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
-import { FormArray, FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ESTIMATE_SEND_LINE_FIELDS } from '../../estimate-send-check';
 import { NgIcon } from '@ng-icons/core';
 import { ToastrService } from 'ngx-toastr';
 import { Estimations } from 'src/app/shared/interfaces/enquiry.interface';
@@ -29,7 +30,12 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() mode: 'create' | 'edit' = 'create';
   @Input() estimation: Estimations | null = null;
   @Input() enqId: string | null = null;
+  /** Shows a Send button: it checks the send-required fields, saves any changes, then emits `sendRequested`. */
+  @Input() canSend = false;
+  /** Opened from a Send that found blanks: highlight the missing fields once the items load. */
+  @Input() highlightOnOpen = false;
   @Output() saved = new EventEmitter<void>();
+  @Output() sendRequested = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
 
   @ViewChild(ItemEntryComponent) itemEntry?: ItemEntryComponent;
@@ -99,8 +105,8 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
   form = this.fb.group({
     currency: [DEFAULT_CURRENCY, Validators.required],
     optionalItems: this.fb.array([] as any[]),
-    totalDiscount: ['0', Validators.required],
-    presaleNote: ['', Validators.required],
+    totalDiscount: ['0', Validators.min(0)],
+    presaleNote: [''],
     documents: [[] as File[]],
   });
 
@@ -138,6 +144,7 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
     } else {
       this.resetWizard();
     }
+    if (this.highlightOnOpen) setTimeout(() => this.itemEntry?.highlightRequired(ESTIMATE_SEND_LINE_FIELDS), 150);
   }
 
   ngOnDestroy(): void {}
@@ -198,8 +205,21 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
     this.itemTotals = totals;
   }
 
-  submit(): void {
-    if (this.form.invalid || !this.enqId) {
+  /** Send: every item needs a name and every line the send-required values; otherwise jump to Items and highlight them. */
+  send(): void {
+    if (this.saving || !this.enqId) return;
+    const noItems = !this.optionalItems.controls.some((_, i) => (this.itemEntry?.itemsAt(i)?.length ?? 0) > 0);
+    if (noItems || this.itemEntry?.highlightRequired(ESTIMATE_SEND_LINE_FIELDS)) {
+      this.step = 1;
+      this.toast.warning(noItems ? 'Add at least one item before sending the estimation'
+        : 'Fill the highlighted fields (item name, description, qty, UOM, unit cost, margin, unit price) before sending the estimation');
+      return;
+    }
+    this.submit(true);
+  }
+
+  submit(thenSend = false): void {
+    if (this.hasBlockingErrors(this.form) || !this.enqId) {
       this.form.markAllAsTouched();
       const firstIncomplete = ([1, 2] as const).find((s) => !this.isStepValid(s));
       if (firstIncomplete) this.step = firstIncomplete;
@@ -209,6 +229,7 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
     if (this.form.pristine) {
       // Nothing was actually changed — close without a misleading "Updated" toast or a no-op server call.
       this.finish();
+      if (thenSend) this.sendRequested.emit();
       return;
     }
 
@@ -240,12 +261,21 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
         if (res.success) {
           this.toast.success('Estimation Updated!', 'Success');
           this.finish();
+          if (thenSend) this.sendRequested.emit();
         } else {
           this.toast.warning('Something went Wrong!', 'Warning');
         }
       },
       error: () => { this.saving = false; },
     });
+  }
+
+  /** Save accepts blanks: only errors other than "required" (e.g. a negative number) stop it. */
+  private hasBlockingErrors(control: AbstractControl): boolean {
+    const own = Object.keys(control.errors ?? {}).some((k) => k !== 'required');
+    if (own) return true;
+    const children = control instanceof FormGroup || control instanceof FormArray ? Object.values(control.controls) : [];
+    return children.some((c) => this.hasBlockingErrors(c));
   }
 
   private finish(): void {

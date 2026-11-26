@@ -140,6 +140,7 @@
         [editable]="!estimationTarget?.blockedReason" [editBlockedReason]="estimationTarget?.blockedReason ?? ''" [revisionReason]="estimationTarget?.revisionReason ?? ''" editMode="emit" (edit)="onEditEstimation($event, estimationTarget?.enqId ?? '')"
         (closed)="estimationTarget = null"></app-view-estimation>
     <app-estimation-form-drawer class="contents" [open]="estimationFormOpen" [mode]="estimationFormMode" [estimation]="estimationFormSeed" [enqId]="estimationFormEnqId"
-        (saved)="onEstimationFormSaved()" (closed)="onEstimationFormClosed()"></app-estimation-form-drawer>
+        [canSend]="estimationFormCanSend" [highlightOnOpen]="estimationFormHighlight"
+        (saved)="onEstimationFormSaved()" (closed)="onEstimationFormClosed()" (sendRequested)="onEstimationFormSend()"></app-estimation-form-drawer>
 
 </div>

@@ -260,6 +260,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
   @Input() dealAllowAdd = false;
   /** Plain list of lines: no item group header (name, category, collapse), the lines just stack. Bulk actions stay. */
   @Input() flat = false;
+  /** Every line field optional (no "required" rules); number limits such as min 0 still apply. */
+  @Input() allOptional = false;
 
   /** Shown as the "add from previous jobs" affordance; the host owns the fetch. */
   @Input() previousJobItemsCount = 0;
@@ -1520,6 +1522,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       uom: ['', deal || purchase ? [] : Validators.required],
       image: [null],
     });
+    if (this.allOptional) this.dropRequired(group);
     if (purchase) {
       (group as FormGroup).addControl('lineKey', this._fb.control(null as string | null));
       (group as FormGroup).addControl('dealUnitCost', this._fb.control(null as number | null));
@@ -1614,7 +1617,17 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
       itemDetails: this._fb.array([this.createDetail()]),
     });
     if (this.isDeal) group.addControl('dealAdded', this._fb.control(false));
+    if (this.allOptional) this.dropRequired(group);
     return group;
+  }
+
+  /** Removes the "required" rule from each direct control of the group. */
+  private dropRequired(group: FormGroup): void {
+    Object.values(group.controls).forEach((c) => {
+      if (c instanceof FormArray) return;
+      c.removeValidators(Validators.required);
+      c.updateValueAndValidity({ emitEvent: false });
+    });
   }
 
   /** Deal mode: true for an item or line added in the deal, whose text fields are editable. */
@@ -3003,6 +3016,37 @@ export class ItemEntryComponent implements OnInit, OnChanges, DoCheck, OnDestroy
     const items = this.itemsAt(i)?.controls || [];
     const j = items.findIndex((_, jj) => (this.detailsAt(i, jj)?.controls || []).some((l) => this.lineFlags(l)[key]));
     if (j >= 0) this.jumpTo(String(j));
+  }
+
+  /**
+   * Makes the given fields required on every item (`itemName`) and line (the rest), marks them touched and
+   * jumps to the first item still missing one. Used where saving allows blanks but sending does not.
+   * Returns true when something is missing.
+   */
+  highlightRequired(lineFields: string[], itemFields: string[] = ['itemName']): boolean {
+    const require = (c: AbstractControl | null) => {
+      if (!c || c.hasValidator(Validators.required)) return;
+      c.addValidators(Validators.required);
+      c.updateValueAndValidity({ emitEvent: false });
+    };
+    let first: { i: number; j: number } | null = null;
+    this.optionalItems.controls.forEach((_, i) => {
+      this.itemsAt(i)?.controls.forEach((item, j) => {
+        itemFields.forEach((f) => require(item.get(f)));
+        (this.detailsAt(i, j)?.controls || []).forEach((line) => lineFields.forEach((f) => require(line.get(f))));
+        item.markAllAsTouched();
+        const missing = itemFields.some((f) => item.get(f)?.hasError('required'))
+          || (this.detailsAt(i, j)?.controls || []).some((line) => lineFields.some((f) => line.get(f)?.hasError('required')));
+        if (missing && !first) first = { i, j };
+      });
+    });
+    if (!first) return false;
+    const { i, j } = first;
+    this.lineSearch = '';
+    this.lineFilter = null;
+    if (this.selectedOption !== i) this.selectOption(i);
+    setTimeout(() => this.jumpTo(String(j)), 0);
+    return true;
   }
 
   /** Set when Send for approval finds lines with no catalogue product: their item code is outlined until it is filled from the catalogue. */

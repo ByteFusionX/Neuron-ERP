@@ -1796,6 +1796,27 @@ const holdSendForApproval = async (req: any, enquiryId: any): Promise<{ error?: 
     return { enquiry: updated };
 };
 
+/** First missing value that blocks sending a presale estimate on: item name, then each line's description, qty, UOM, unit cost, margin and unit price. */
+const incompleteEstimateMessage = (optionalItems: any): string | null => {
+    const blank = (v: any) => v === undefined || v === null || String(v).trim() === '';
+    const options: any[] = Array.isArray(optionalItems) ? optionalItems : [];
+    if (!options.some((o) => (o?.items ?? []).length)) return 'Add at least one item to the estimation before sending it';
+    for (const [o, option] of options.entries()) {
+        for (const [i, item] of (option?.items ?? []).entries()) {
+            const where = `${options.length > 1 ? `Option ${o + 1}, ` : ''}item ${i + 1}${item?.itemName ? ` (${item.itemName})` : ''}`;
+            if (blank(item?.itemName)) return `${where}: item name is required before sending the estimation`;
+            const details: any[] = item?.itemDetails ?? [];
+            if (!details.length) return `${where}: add at least one line before sending the estimation`;
+            for (const [d, line] of details.entries()) {
+                const missing = [['description', line?.detail], ['quantity', line?.quantity], ['UOM', line?.uom], ['unit cost', line?.unitCost], ['margin', line?.profit], ['unit price', line?.unitSellingPrice]]
+                    .filter(([, v]) => blank(v)).map(([k]) => k);
+                if (missing.length) return `${where}, line ${d + 1}: ${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required before sending the estimation`;
+            }
+        }
+    }
+    return null;
+};
+
 export const updateEnquiryStatus =async (req: Request, res: Response, next: NextFunction) => {
     try {
         let data = req.body
@@ -1837,6 +1858,10 @@ export const updateEnquiryStatus =async (req: Request, res: Response, next: Next
         }
         // An engineer's send goes to whoever assigned the job first; that person decides whether it goes on to sales.
         if (data.status === 'Work In Progress') {
+            // Saving an estimate accepts blanks; sending it on needs every line complete.
+            const estDoc: any = await enquiryModel.findById(data.id).select('preSale.estimations.optionalItems').lean();
+            const estimateGap = incompleteEstimateMessage(estDoc?.preSale?.estimations?.optionalItems);
+            if (estimateGap) return res.status(400).json({ message: estimateGap, incompleteEstimate: true });
             const held = await holdSendForApproval(req, data.id);
             if (held?.error) return res.status(held.error.code).json({ message: held.error.message });
             if (held?.enquiry) return res.status(200).json({ update: held.enquiry, pendingApproval: true });
