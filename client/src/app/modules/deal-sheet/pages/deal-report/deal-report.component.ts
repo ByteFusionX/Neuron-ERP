@@ -163,6 +163,11 @@ export class DealReportComponent implements OnInit, OnDestroy {
     this._router.navigate([], { relativeTo: this._route, queryParams: values, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
+  /** Query params handed to the List tab (multi-picks and "is not" included), so it shows the same filters. */
+  get listQueryParams(): ReportFilterValues {
+    return this.filters;
+  }
+
   // ---- KPIs ------------------------------------------------------------------------------------
 
   get totalValue(): number { return this.sum(this.deals, 'value'); }

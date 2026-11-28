@@ -47,3 +47,53 @@ export function paramsToFilters(params: Params, spec: UrlFilterSpec[]): Filter[]
   }
   return out;
 }
+
+/** True when the URL params of `spec` can hold this filter (one list value set, or a from/to/on date). */
+function specCovers(f: Filter, spec: UrlFilterSpec[]): boolean {
+  const s = spec.find((x) => x.key === f.key);
+  if (!s) return false;
+  return 'date' in s ? f.op === 'after' || f.op === 'before' || f.op === 'on' : f.op === 'is' || f.op === 'isNot';
+}
+
+/**
+ * Grid filters for a list that shares params with its Report tab: filters the spec covers go to their
+ * own params (the report reads those), everything else goes to one `filters` JSON param.
+ */
+export function listFiltersToParams(filters: Filter[], spec: UrlFilterSpec[]): Params {
+  const covered: Filter[] = [];
+  const rest: Filter[] = [];
+  for (const f of filters) {
+    const isDate = spec.some((s) => 'date' in s && s.key === f.key);
+    // A param holds one filter per column (one per operator for the date column); extra chips go to the JSON.
+    const taken = covered.some((c) => c.key === f.key && (!isDate || c.op === f.op));
+    const clean: Filter = { key: f.key, op: f.op, value: f.value, ...(f.or ? { or: true } : {}) };
+    (specCovers(f, spec) && !taken ? covered : rest).push(clean);
+  }
+  return { ...filtersToParams(covered, spec), filters: rest.length ? JSON.stringify(rest) : null };
+}
+
+/** Reverse of `listFiltersToParams`. */
+export function listParamsToFilters(params: Params, spec: UrlFilterSpec[]): Filter[] {
+  let rest: Filter[] = [];
+  try {
+    const parsed = params['filters'] ? JSON.parse(String(params['filters'])) : [];
+    if (Array.isArray(parsed)) {
+      rest = parsed
+        .filter((f: any) => f && typeof f.key === 'string' && typeof f.op === 'string')
+        .map((f: any) => ({ key: f.key, op: f.op, value: f.value, ...(f.or === true ? { or: true } : {}) }));
+    }
+  } catch {
+    // A broken link just drops its extra filters.
+  }
+  return [...paramsToFilters(params, spec), ...rest];
+}
+
+/** One filter per picked value for the server: "is" values OR'd, "is not" AND'd, two "on" days a range (same as the grid). */
+export function splitMultiValues(filters: Filter[]): Filter[] {
+  return filters.flatMap((f) => {
+    if (!Array.isArray(f.value)) return [f];
+    if (f.op === 'on' && f.value.length === 2) return [{ ...f, op: 'between' as Filter['op'], value: [...f.value].sort() }];
+    const anyOf = f.op === 'is' || f.op === 'on' || f.op === 'eq';
+    return f.value.map((v: any, i: number) => ({ ...f, value: v, or: i === 0 ? f.or : anyOf }));
+  });
+}

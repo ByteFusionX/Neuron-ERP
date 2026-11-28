@@ -45,6 +45,15 @@ import { allocateStatus, filterJob, getJob, JobStatus, JobTable } from 'src/app/
 import { JobWorkflowTimeline, TimelineEvent } from 'src/app/shared/interfaces/job-history.interface';
 import { environment } from 'src/environments/environment';
 
+import { filtersToParams, listFiltersToParams, listParamsToFilters, splitMultiValues, UrlFilterSpec } from 'src/app/shared/components/filter-bar/url-filters';
+import { DataGridFilter } from 'src/app/shared/components/data-grid/data-grid.model';
+/** Job grid filters the Report tab shares through the URL (same param names the report reads). */
+const JOB_URL_FILTERS: UrlFilterSpec[] = [
+  { key: 'createdDate', date: true },
+  { key: 'salesPerson', param: 'salesPerson' },
+  { key: 'customerName', param: 'customer' },
+  { key: 'department', param: 'department' },
+];
 import { DEFAULT_CURRENCY } from '../../../../shared/constants/currency';
 const ALLOCATE_STATUS_LABELS: Record<string, string> = {
   [allocateStatus.Pending]: 'Pending',
@@ -244,14 +253,16 @@ export class JobListComponent {
         this.row = PAGE_SIZES.includes(row) ? row : DEFAULT_PAGE_SIZE;
         this.searchQuery = params['search'] || '';
         if (params['open']) this.pendingOpenJobId = params['open'];
-        this.selectedEmployee = params['salesPerson'] || params['employee'] || null;
-        this.scope = { customer: params['customer'] || null, department: params['department'] || null, fromDate: params['fromDate'] || null, toDate: params['toDate'] || null };
         this.activeViewId = this.views.some((v) => v.id === params['view']) ? params['view'] : 'all';
-        this.isFiltered = !!(this.searchQuery || this.selectedEmployee || this.hasScope);
+        // Report filters (and older ?employee= links) arrive as params and become ordinary grid filters.
+        this.uiFilters = listParamsToFilters({ ...params, salesPerson: params['salesPerson'] || params['employee'] || null }, JOB_URL_FILTERS);
+        this.gridFilters = [...this.viewFilters().map((f) => ({ key: f.key, op: f.op, value: f.value })), ...splitMultiValues(this.uiFilters)];
+        this.isFiltered = !!(this.searchQuery || this.uiFilters.length);
         if (this.grid) {
           this.grid.activeViewId = this.activeViewId;
           this.grid.page = this.page;
           this.grid.pageSize = this.row;
+          this.grid.setQueryState(this.searchQuery, [...this.viewFilters(), ...this.uiFilters]);
         }
         this.getJobs();
       })
@@ -264,6 +275,7 @@ export class JobListComponent {
       if (!this.grid) return;
       this.grid.pageSize = this.row;
       this.grid.page = this.page;
+      this.grid.setQueryState(this.searchQuery, [...this.viewFilters(), ...this.uiFilters]);
     });
   }
 
@@ -380,9 +392,14 @@ export class JobListComponent {
     this.page = query.page;
     this.row = query.pageSize;
     this.gridFilters = (query.filters ?? []).map((f) => ({ key: f.key, op: f.op, value: f.value, or: f.or }));
+    // Unsplit filters (multi-picks kept together) minus the tab's own, for the URL and the Report tab.
+    const viewFilters = this.viewFilters();
+    this.uiFilters = (this.grid?.filters ?? [])
+      .filter((f) => !viewFilters.some((v) => v.key === f.key && v.op === f.op && v.value === f.value))
+      .map((f) => ({ key: f.key, op: f.op, value: f.value, or: f.or }));
     this.sortKey = query.sort?.key ?? null;
     this.sortDir = query.sort?.direction ?? null;
-    this.isFiltered = !!(this.searchQuery || this.selectedEmployee);
+    this.isFiltered = !!(this.searchQuery || this.uiFilters.length);
     this.getJobs();
     this.updateUrlParams();
   }
@@ -395,6 +412,8 @@ export class JobListComponent {
         page: this.page !== 1 ? this.page : null,
         row: this.row !== DEFAULT_PAGE_SIZE ? this.row : null,
         search: this.searchQuery || null,
+        employee: null,
+        ...listFiltersToParams(this.uiFilters, JOB_URL_FILTERS),
       },
       queryParamsHandling: 'merge',
       replaceUrl: true,
@@ -406,6 +425,25 @@ export class JobListComponent {
     const filter = view?.filters?.find((f) => f.key === 'allocateStatus');
     return (filter?.value as allocateStatus) ?? null;
   }
+
+  /** Grid filters set by the user (not the tab's own), kept in the URL and handed to the Report tab. */
+  uiFilters: Omit<DataGridFilter, 'id'>[] = [];
+
+  private viewFilters(): DataGridFilter[] {
+    return this.views.find((v) => v.id === this.activeViewId)?.filters ?? [];
+  }
+
+  /** The report reads the same params, so it opens on exactly the list's filters. */
+  get reportQueryParams(): Record<string, any> {
+    const key = JSON.stringify(this.uiFilters);
+    if (key !== this.reportParamsKey) {
+      this.reportParamsKey = key;
+      this.reportParamsCache = filtersToParams(this.uiFilters, JOB_URL_FILTERS);
+    }
+    return this.reportParamsCache;
+  }
+  private reportParamsKey = '';
+  private reportParamsCache: Record<string, any> = {};
 
   get hasScope(): boolean {
     return !!(this.selectedEmployee || this.scope.customer || this.scope.department || this.scope.fromDate || this.scope.toDate);

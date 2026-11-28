@@ -32,7 +32,7 @@
         (rowOpen)="onRowOpen($event)"
         (rowAction)="onRowAction($event)">
 
-        <app-view-toggle dgToolbarExtra label="Deal Sheet" active="list" listLink="/deal-sheet/dealsheets" reportLink="/deal-sheet/report"></app-view-toggle>
+        <app-view-toggle dgToolbarExtra label="Deal Sheet" active="list" listLink="/deal-sheet/dealsheets" reportLink="/deal-sheet/report" [reportQueryParams]="reportQueryParams"></app-view-toggle>
 
         <ng-template #detailAsideTemplate let-row>
             <div class="flex flex-wrap items-center justify-end gap-2">

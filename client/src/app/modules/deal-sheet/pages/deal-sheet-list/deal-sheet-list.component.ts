@@ -71,6 +71,17 @@ import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { ApprovalStep, WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
 import { DealFormComponent, UpdateDealsheetData } from 'src/app/modules/quotations/pages/deal-form/deal-form.component';
 
+import { filtersToParams, listFiltersToParams, listParamsToFilters, splitMultiValues, UrlFilterSpec } from 'src/app/shared/components/filter-bar/url-filters';
+
+/** Deal grid filters the Report tab shares through the URL (same param names the report reads). */
+const DEAL_URL_FILTERS: UrlFilterSpec[] = [
+  { key: 'date', date: true },
+  { key: 'dealStatus', param: 'status' },
+  { key: 'salesPerson', param: 'salesPerson' },
+  { key: 'customerName', param: 'customer' },
+  { key: 'department', param: 'department' },
+];
+
 /** Matches the grid's default page size so the Rows selector is never blank. */
 const DEFAULT_PAGE_SIZE = 15;
 
@@ -247,15 +258,18 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       this.wonFrom = params['wonFrom'] || null;
       this.wonTo = params['wonTo'] || null;
       this.wonPerson = params['person'] || null;
-      this.wonCustomer = params['customer'] || null;
+      // `customer` is the dashboard's revenue customer only on a dashboard drill-down; otherwise it is the report's customer filter.
+      const fromDashboard = !!(this.wonFrom || this.wonTo || this.wonPerson);
+      this.wonCustomer = fromDashboard ? params['customer'] || null : null;
       this.ensureRevenueView();
-      this.gridFilters = this.parseGridFilters(params['filters']);
+      this.uiFilters = listParamsToFilters(fromDashboard ? { ...params, customer: null } : params, DEAL_URL_FILTERS);
+      this.gridFilters = splitMultiValues(this.uiFilters);
       this.sortKey = params['sortKey'] || null;
       this.sortDir = params['sortDir'] === 'asc' || params['sortDir'] === 'desc' ? params['sortDir'] : null;
       if (this.grid) {
         this.grid.page = this.page;
         this.grid.pageSize = this.row;
-        this.grid.setQueryState(this.searchQuery, this.gridFilters, {
+        this.grid.setQueryState(this.searchQuery, this.uiFilters, {
           key: this.sortKey,
           direction: this.sortDir,
         });
@@ -449,6 +463,8 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     this.page = query.page;
     this.row = query.pageSize;
     this.gridFilters = (query.filters ?? []).map((f) => ({ key: f.key, op: f.op, value: f.value, or: f.or }));
+    // Unsplit filters (multi-picks kept together), for the URL and the Report tab.
+    this.uiFilters = (this.grid?.filters ?? []).map((f) => ({ key: f.key, op: f.op, value: f.value, or: f.or }));
     this.sortKey = query.sort?.key ?? null;
     this.sortDir = query.sort?.direction ?? null;
     this.getDeals();
@@ -498,13 +514,13 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         search: this.searchQuery || null,
         searchCriteria:
           this.searchCriteria !== 'all' ? this.searchCriteria : null,
-        filters: this.gridFilters.length ? JSON.stringify(this.gridFilters) : null,
+        ...listFiltersToParams(this.uiFilters, DEAL_URL_FILTERS),
         sortKey: this.sortKey || null,
         sortDir: this.sortDir || null,
         wonFrom: this.wonFrom,
         wonTo: this.wonTo,
         person: this.wonPerson,
-        customer: this.wonCustomer,
+        ...(this.hasDashboardFilter ? { customer: this.wonCustomer } : {}),
       },
       replaceUrl: true,
     });
@@ -520,8 +536,23 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   wonCustomer: string | null = null;
 
   get hasDashboardFilter(): boolean {
-    return !!(this.wonFrom || this.wonTo || this.wonPerson || this.wonCustomer);
+    return !!(this.wonFrom || this.wonTo || this.wonPerson);
   }
+
+  /** Grid filters as the user set them, kept in the URL and handed to the Report tab. */
+  uiFilters: Omit<DataGridFilter, 'id'>[] = [];
+
+  /** The report reads the same params, so it opens on exactly the list's filters. */
+  get reportQueryParams(): Record<string, any> {
+    const key = JSON.stringify(this.uiFilters);
+    if (key !== this.reportParamsKey) {
+      this.reportParamsKey = key;
+      this.reportParamsCache = filtersToParams(this.uiFilters, DEAL_URL_FILTERS);
+    }
+    return this.reportParamsCache;
+  }
+  private reportParamsKey = '';
+  private reportParamsCache: Record<string, any> = {};
 
   /** Adds the closable "Revenue" tab for deals opened from the dashboard, and opens it when the Approved list was requested. */
   private ensureRevenueView(): void {

@@ -351,7 +351,8 @@ export class JobReportComponent implements OnInit, OnDestroy {
 
   /** Query params handed to the List tab, so switching back keeps the same slice of data. */
   get listQueryParams(): Record<string, string | null> {
-    return listParamsFrom(this.filters);
+    // Everything, multi-picks and "is not" included: the list turns these back into the same grid filters.
+    return this.filters;
   }
 
   // ---- KPIs ----------------------------------------------------------------------------------

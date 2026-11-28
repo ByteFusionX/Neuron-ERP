@@ -39,7 +39,7 @@
         (rowAction)="onRowAction($event)"
         >
 
-        <app-view-toggle dgToolbarExtra label="Job Sheet" active="list" listLink="/job-sheet" reportLink="/job-sheet/report"></app-view-toggle>
+        <app-view-toggle dgToolbarExtra label="Job Sheet" active="list" listLink="/job-sheet" reportLink="/job-sheet/report" [reportQueryParams]="reportQueryParams"></app-view-toggle>
 
         <ng-template #detailAsideTemplate let-row>
             <span *ngIf="row.allocateStatus; else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
