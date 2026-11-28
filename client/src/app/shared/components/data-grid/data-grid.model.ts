@@ -7,6 +7,8 @@ export interface DataGridColumn<T = any> {
   type?: DataGridCellType;
   sortable?: boolean;
   visible?: boolean;
+  /** Offered in the filter menu only: never drawn as a column or listed in the column menu. */
+  filterOnly?: boolean;
   /** Column cannot be hidden from the column menu */
   locked?: boolean;
   width?: string;

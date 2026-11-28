@@ -36,6 +36,7 @@ const { ObjectId } = require('mongodb')
 /** Grid column key -> field on the joined job document (after the lookups in `jobBasePipeline`). */
 const JOB_GRID_FIELDS: Record<string, string> = {
     updatedDate: 'updatedDate',
+    createdDate: 'createdDate',
     jobId: 'jobId',
     customerName: 'clientDetails.companyName',
     description: 'quotation.subject',
@@ -87,7 +88,7 @@ const buildJobGridQuery = (search: unknown, filters: unknown, sortKey: unknown, 
             continue;
         }
         if (raw === undefined || raw === null || raw === '') continue;
-        if (key === 'updatedDate') {
+        if (key === 'updatedDate' || key === 'createdDate') {
             const DAY = 24 * 60 * 60 * 1000;
             // Two picked "on" days: everything from the first to the last, both days included.
             if (op === 'between' && Array.isArray(raw)) {
@@ -111,6 +112,13 @@ const buildJobGridQuery = (search: unknown, filters: unknown, sortKey: unknown, 
             if (op === 'gt') add({ [field]: { $gt: n } });
             else if (op === 'lt') add({ [field]: { $lt: n } });
             else add({ [field]: n });
+            continue;
+        }
+        // The Sales Person picker sends an employee id; typed text (older links) still matches by name.
+        const idField = ({ salesPerson: 'salesPersonDetails._id', customerName: 'clientDetails._id', department: 'departmentDetails._id' } as Record<string, string>)[key];
+        if (idField && ObjectId.isValid(String(raw))) {
+            const id = new ObjectId(String(raw));
+            add({ [idField]: op === 'isNot' || op === 'neq' ? { $ne: id } : id });
             continue;
         }
         const value = escapeRegex(String(raw).trim());

@@ -1054,6 +1054,12 @@ const buildDealGridQuery = (filters: unknown, sortKey: unknown, sortDir: unknown
         const key = String(f?.key ?? '');
         const op = String(f?.op ?? 'contains');
         const raw = f?.value;
+        // Actioned By is worked out after the query; filter on deals that employee approved, rejected or revoked.
+        if (key === 'actionedBy' && ObjectId.isValid(String(raw))) {
+            const has = { editHistory: { $elemMatch: { action: { $in: ['DealApproved', 'DealRejected', 'DealRevoked'] }, editedBy: { $in: [new ObjectId(String(raw)), String(raw)] } } } };
+            add(op === 'isNot' || op === 'neq' ? { $nor: [has] } : has);
+            continue;
+        }
         const field = DEAL_SORT_FIELDS[key];
         if (!field) continue;
         if (op === 'empty') {
@@ -1088,6 +1094,13 @@ const buildDealGridQuery = (filters: unknown, sortKey: unknown, sortDir: unknown
             else if (op === 'lte') add({ [field]: { $lte: value } });
             else if (op === 'isNot') add({ [field]: { $ne: value } });
             else add({ [field]: value });
+            continue;
+        }
+        // The Sales Person picker sends an employee id; typed text (older links) still matches by name.
+        const idField = ({ salesPerson: 'createdBy._id', customerName: 'client._id', department: 'department._id' } as Record<string, string>)[key];
+        if (idField && ObjectId.isValid(String(raw))) {
+            const id = new ObjectId(String(raw));
+            add({ [idField]: op === 'isNot' || op === 'neq' ? { $ne: id } : id });
             continue;
         }
         const text = escapeRegex(String(raw).trim());

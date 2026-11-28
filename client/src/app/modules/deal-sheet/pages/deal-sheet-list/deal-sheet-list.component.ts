@@ -14,10 +14,12 @@ import { HttpEventType } from '@angular/common/http';
 import { inject } from '@angular/core';
 import saveAs from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
-import { BehaviorSubject, Observable, Subscription, map, take } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, map, take, catchError, of, filter, switchMap } from 'rxjs';
 
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { CustomerService } from 'src/app/core/services/customer/customer.service';
+import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { JobService } from 'src/app/core/services/job/job.service';
 import {
   getDealSheet,
@@ -112,6 +114,8 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   private _decision = inject(DealDecisionService);
   private modal = inject(ModalService);
   private _workflowService = inject(WorkflowService);
+  private _customerService = inject(CustomerService);
+  private _profileService = inject(ProfileService);
   /** Deal Sheet workflow stages a Super Admin can give another chance when resetting a deal. */
   private dealWorkflowSteps: ApprovalStep[] = [];
 
@@ -213,6 +217,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.buildColumns();
     this.buildRowActions();
+    this.loadSalesPersonOptions();
 
     this._route.data.subscribe((data) => {
       if (
@@ -359,6 +364,28 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         })),
       },
     ];
+  }
+
+  /** Pick lists for the people, customer and department filters (same sources as the quotation list); a failed load leaves a plain text filter. */
+  private loadSalesPersonOptions(): void {
+    const set = (keys: string[], editorOptions: { label: string; value: any }[]) =>
+      (this.columns = this.columns.map((c) => (keys.includes(c.key) ? { ...c, editorOptions } : c)));
+    this.subscriptions.add(
+      this._employeeService.getAllEmployees().pipe(catchError(() => of([]))).subscribe((people) =>
+        set(['salesPerson', 'actionedBy'], (people ?? []).map((p) => ({ label: `${p.firstName} ${p.lastName}`, value: p._id })))),
+    );
+    this.subscriptions.add(
+      this._employeeService.employeeData$.pipe(
+        filter((e) => !!e?._id),
+        take(1),
+        switchMap((e) => this._customerService.getAllCustomers(e!._id as string, true)),
+        catchError(() => of([])),
+      ).subscribe((customers) => set(['customerName'], (customers ?? []).map((c) => ({ label: c.companyName, value: c._id })))),
+    );
+    this.subscriptions.add(
+      this._profileService.getDepartments().pipe(catchError(() => of([]))).subscribe((departments) =>
+        set(['department'], (departments ?? []).map((d: any) => ({ label: d.departmentName, value: d._id })))),
+    );
   }
 
   private buildRowActions(): void {

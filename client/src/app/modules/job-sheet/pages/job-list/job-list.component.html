@@ -12,6 +12,7 @@
         rowKey="_id"
         [serverSide]="true"
         [fullFilters]="true"
+        [andOnly]="true"
         [totalCount]="total"
         [data]="rows"
         [columns]="columns"
@@ -58,6 +59,10 @@
             <div class="js-meta">
                 <p class="js-meta-label">LPO Value</p>
                 <p class="js-meta-value">{{ row.lpoValue || 0 | number: '1.2-2' }} QAR</p>
+            </div>
+            <div class="js-meta">
+                <p class="js-meta-label">Created Date</p>
+                <p class="js-meta-value">{{ $any(row).createdDate | date: 'dd MMM yyyy' }}</p>
             </div>
             <div class="js-meta">
                 <p class="js-meta-label">Last Updated</p>

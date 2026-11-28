@@ -3,10 +3,12 @@ import { AsyncPipe, DatePipe, DecimalPipe, NgClass, NgFor, NgIf, NgSwitch, NgSwi
 import { Component, ViewChild, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, Router } from '@angular/router';
-import { BehaviorSubject, Observable, Subscription, firstValueFrom, switchMap, take, map } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, firstValueFrom, switchMap, take, map, catchError, of, filter } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import * as FileSaver from 'file-saver';
 
+import { CustomerService } from 'src/app/core/services/customer/customer.service';
+import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { ProformaInvoice, ProformaInvoiceService } from 'src/app/core/services/proforma-invoice.service';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
@@ -212,6 +214,8 @@ export class JobListComponent {
   private modal = inject(ModalService);
   private quoteService = inject(QuotationService);
   private matDialog = inject(MatDialog);
+  private _customerService = inject(CustomerService);
+  private _profileService = inject(ProfileService);
   private subscriptions = new Subscription();
 
   constructor(
@@ -229,6 +233,7 @@ export class JobListComponent {
     this.checkPrivileges();
     this.buildColumns();
     this.buildRowActions();
+    this.loadSalesPersonOptions();
 
     // The URL is the single source of truth for tab, page, page size and search, so a refresh,
     // a bookmark or the browser Back button restores exactly what the user was looking at.
@@ -281,6 +286,7 @@ export class JobListComponent {
   private buildColumns(): void {
     this.columns = [
       { key: 'updatedDate', label: 'Last Updated', type: 'date', sortable: true, width: '120px' },
+      { key: 'createdDate', label: 'Created Date', type: 'date', sortable: true, filterOnly: true, valueGetter: (r) => (r as any).createdDate },
       { key: 'jobId', label: 'Job Id', sortable: true },
       // Status, owner and value come first so they stay in view without horizontal scrolling at ~1500 px.
       {
@@ -300,6 +306,28 @@ export class JobListComponent {
       { key: 'paymentTerms', label: 'Payment Terms', valueGetter: (r) => (r.quotation?.dealData as any)?.paymentTerms || '—' },
       { key: 'deadline', label: 'Deadline', type: 'date', valueGetter: (r) => r.deadline },
     ];
+  }
+
+  /** Pick lists for the people, customer and department filters (same sources as the quotation list); a failed load leaves a plain text filter. */
+  private loadSalesPersonOptions(): void {
+    const set = (keys: string[], editorOptions: { label: string; value: any }[]) =>
+      (this.columns = this.columns.map((c) => (keys.includes(c.key) ? { ...c, editorOptions } : c)));
+    this.subscriptions.add(
+      this._employeeService.getAllEmployees().pipe(catchError(() => of([]))).subscribe((people) =>
+        set(['salesPerson'], (people ?? []).map((p) => ({ label: `${p.firstName} ${p.lastName}`, value: p._id })))),
+    );
+    this.subscriptions.add(
+      this._employeeService.employeeData$.pipe(
+        filter((e) => !!e?._id),
+        take(1),
+        switchMap((e) => this._customerService.getAllCustomers(e!._id as string, true)),
+        catchError(() => of([])),
+      ).subscribe((customers) => set(['customerName'], (customers ?? []).map((c) => ({ label: c.companyName, value: c._id })))),
+    );
+    this.subscriptions.add(
+      this._profileService.getDepartments().pipe(catchError(() => of([]))).subscribe((departments) =>
+        set(['department'], (departments ?? []).map((d: any) => ({ label: d.departmentName, value: d._id })))),
+    );
   }
 
   private buildRowActions(): void {
@@ -725,6 +753,7 @@ export class JobListComponent {
           { type: 'field', label: 'Customer', value: row.clientDetails?.companyName },
           { type: 'field', label: 'Sales Person', value: this.fullName(row.salesPersonDetails?.[0]) },
           { type: 'field', label: 'Department', value: row.departmentDetails?.[0]?.departmentName ?? '' },
+          { type: 'field', label: 'Created Date', value: (row as any).createdDate ? (this.datePipe.transform((row as any).createdDate, 'dd MMM yyyy') ?? '—') : '—' },
           { type: 'field', label: 'Last Updated', value: row.updatedDate ? (this.datePipe.transform(row.updatedDate, 'dd MMM yyyy') ?? '—') : '—' },
           { type: 'field', label: 'Procurement Person', value: this.fullName(row.procurementPerson) || '—', visible: !!row.procurementPerson },
           { type: 'field', label: 'Allocated By', value: this.fullName(row.allocatedBy) || '—', visible: !!row.allocatedBy },

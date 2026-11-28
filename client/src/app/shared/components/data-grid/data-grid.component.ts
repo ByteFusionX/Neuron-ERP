@@ -182,9 +182,13 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     return this.formatDate(day);
   }
 
+  /** Every filter is AND'd with the ones before it; the "OR with last" connector is not offered. Values picked
+   *  together in one multi-select field still match any of them. */
+  @Input({ transform: booleanAttribute }) andOnly = false;
+
   /** AND/OR connector is only offered where the filters are evaluated with it. */
   get orSupported(): boolean {
-    return !this.serverSide || this.fullFilters;
+    return (!this.serverSide || this.fullFilters) && !this.andOnly;
   }
 
   /** Higher-contrast palette (darker text, stronger borders, tinted header). Opt-in per module. */
@@ -324,7 +328,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   // ---- columns ----
   get visibleColumns(): DataGridColumn<T>[] {
-    return this.columns.filter((c) => c.visible);
+    return this.columns.filter((c) => c.visible && !c.filterOnly);
   }
 
   toggleColumn(col: DataGridColumn<T>): void {
@@ -576,7 +580,9 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   /** Hosts with full filter support get one filter per picked value: "is" values are OR'd, "is not" values AND'd. */
   private splitMultiFilters(filters: DataGridFilter[]): DataGridFilter[] {
-    return filters.flatMap((f) => {
+    return filters.flatMap((raw) => {
+      // AND-only grids drop any connector a saved view or old link still carries.
+      const f = this.orSupported ? raw : { ...raw, or: undefined };
       if (!Array.isArray(f.value)) return [f];
       // Two days picked with "on" mean a range (both days included), same as the quotation list.
       if (f.op === 'on' && f.value.length === 2) return [{ ...f, op: 'between', value: [...f.value].sort() }];
@@ -830,7 +836,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     sort: DataGridSortState = { key: null, direction: null },
   ): void {
     this.searchTerm = search;
-    this.filters = filters.map((f) => ({ ...f, id: this.nextId++ }));
+    this.filters = filters.map((f) => ({ ...f, id: this.nextId++, ...(this.orSupported ? {} : { or: undefined }) }));
     this.sort = sort;
   }
 
@@ -868,6 +874,11 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     const out = build();
     this.optionCache.set(name, { sig, out });
     return out;
+  }
+
+  /** Columns listed in the column menu (filter-only ones are left out). */
+  get menuColumns(): DataGridColumn<T>[] {
+    return this.columns.filter((c) => !c.filterOnly);
   }
 
   get columnSelectOptions(): SfOption[] {
@@ -964,7 +975,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   /** Filters split into OR-groups, in order. Rows must match at least one filter of every group. */
   filterGroups(filters: DataGridFilter[] = this.filters): DataGridFilter[][] {
     const groups: DataGridFilter[][] = [];
-    filters.forEach((f, i) => (i && f.or ? groups[groups.length - 1].push(f) : groups.push([f])));
+    filters.forEach((f, i) => (i && f.or && this.orSupported ? groups[groups.length - 1].push(f) : groups.push([f])));
     return groups;
   }
 
