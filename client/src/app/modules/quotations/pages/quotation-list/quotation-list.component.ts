@@ -39,7 +39,7 @@ import { LpoUploadModalComponent, LpoUploadModalResult } from './lpo-upload-moda
 import { Events } from 'src/app/shared/interfaces/evets.interface';
 import { } from '@ng-icons/core';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
-import { DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridCellEditEvent, DataGridColumn, DataGridDetailTab, DataGridFilter, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
+import { DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridCellEditEvent, DataGridColumn, DataGridFooterTotal, DataGridDetailTab, DataGridFilter, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 import { } from 'src/app/shared/components/data-grid/data-grid-field.component';
 import { } from 'src/app/shared/components/detail-panel/detail-field.component';
 import { } from 'src/app/shared/components/detail-panel/detail-section.component';
@@ -116,6 +116,38 @@ export class QuotationListComponent implements AfterViewInit {
   dealStatuses = ['pending','approved','rejected'];
 
   rows: Quotatation[] = [];
+
+  /** LPO value summed over the quotations on the current page, one figure per currency. */
+  get pageTotals(): DataGridFooterTotal[] {
+    const byCur = new Map<string, number>();
+    const costByCur = new Map<string, number>();
+    const discByCur = new Map<string, number>();
+    for (const r of this.rows ?? []) {
+      const cur = r.currency || 'QAR';
+      byCur.set(cur, (byCur.get(cur) ?? 0) + (Number(this.calculateDiscoutPrice(r)) || 0));
+      costByCur.set(cur, (costByCur.get(cur) ?? 0) + this.quoteCost(r));
+      discByCur.set(cur, (discByCur.get(cur) ?? 0) + this.quoteDiscount(r));
+    }
+    const fmt = (m: Map<string, number>) =>
+      m.size ? [...m].map(([cur, v]) => `${this.numberFormat.transform(v)} ${cur}`).join(' · ') : '0';
+    return [
+      { label: 'Total Cost', value: fmt(costByCur) },
+      { label: 'Total LPO', value: fmt(byCur) },
+      { label: 'Total Discount', value: fmt(discByCur) },
+    ];
+  }
+
+  quoteDiscount(r: Quotatation): number {
+    return Number(r.optionalItems?.[0]?.totalDiscount) || 0;
+  }
+
+  /** Unit cost × quantity over the quoted lines (first option, same lines the LPO value adds up). */
+  quoteCost(r: Quotatation): number {
+    return (r.optionalItems?.[0]?.items ?? []).reduce(
+      (sum, item) => sum + (item.itemDetails ?? []).reduce((s, d: any) => s + (Number(d.unitCost) || 0) * (Number(d.quantity) || 0), 0),
+      0,
+    );
+  }
   columns: DataGridColumn<Quotatation>[] = [];
   rowActions: DataGridRowAction<Quotatation>[] = [];
   views: DataGridView<Quotatation>[] = [
@@ -400,7 +432,9 @@ export class QuotationListComponent implements AfterViewInit {
         badgeLabel: (v) => (v ? String(v).charAt(0).toUpperCase() + String(v).slice(1) : ''),
       },
       { key: 'nextFollowUpDate', label: 'Next Follow-up', type: 'date', sortable: true, width: '140px', valueGetter: (r) => r.followUp?.nextFollowUpDate ?? null, cellClass: (r) => followUpCellClass(r.followUp?.nextFollowUpDate, this.isFollowUpClosed(r)) },
+      { key: 'quoteCost', label: 'Total Cost', width: '150px', align: 'right', valueGetter: (r) => `${this.numberFormat.transform(this.quoteCost(r))} ${r.currency}` },
       { key: 'totalCost', label: 'LPO Value', width: '150px', align: 'right', valueGetter: (r) => `${this.numberFormat.transform(this.calculateDiscoutPrice(r))} ${r.currency}` },
+      { key: 'quoteDiscount', label: 'Discount', width: '130px', align: 'right', valueGetter: (r) => this.quoteDiscount(r) ? `${this.numberFormat.transform(this.quoteDiscount(r))} ${r.currency}` : '—' },
       { key: 'description', label: 'Description', width: '220px', valueGetter: (r) => r.subject },
       { key: 'salesPerson', label: 'Sales Person', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '' },
       { key: 'department', label: 'Department', width: '130px', valueGetter: (r) => this.departmentNames(r) },

@@ -30,6 +30,7 @@ import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import {
   DataGridColumn,
+  DataGridFooterTotal,
   DataGridDetailTab,
   DataGridFilter,
   DataGridQuery,
@@ -353,15 +354,15 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         valueGetter: (r) => r.dealData?.paymentTerms,
       },
       {
+        key: 'cost',
+        label: 'Total Cost',
+        valueGetter: (r) => r.dealData ? `${this.numberFormat.transform(this.costValue(r))} ${r.currency}` : '',
+      },
+      {
         key: 'amount',
         sortable: true,
         label: 'LPO Value',
         valueGetter: (r) => this.formatAmount(r),
-      },
-      {
-        key: 'discount',
-        label: 'Discount',
-        valueGetter: (r) => this.formatDiscount(r),
       },
       {
         key: 'dealStatus',
@@ -1061,19 +1062,33 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     return `/deal-sheet/${segment}${query ? `?${query}` : ''}`;
   }
 
+  /** Cost and LPO value summed over the rows on the current page, one figure per currency. */
+  get pageTotals(): DataGridFooterTotal[] {
+    const lpo = new Map<string, number>();
+    const cost = new Map<string, number>();
+    for (const row of this.rows ?? []) {
+      if (!row.dealData) continue;
+      const cur = row.currency || 'QAR';
+      cost.set(cur, (cost.get(cur) ?? 0) + this.costValue(row));
+      lpo.set(cur, (lpo.get(cur) ?? 0) + this.sellingPrice(row));
+    }
+    const fmt = (m: Map<string, number>) =>
+      m.size ? [...m].map(([cur, v]) => `${this.numberFormat.transform(v)} ${cur}`).join(' · ') : '0';
+    return [
+      { label: 'Total Cost', value: fmt(cost) },
+      { label: 'Total LPO', value: fmt(lpo) },
+    ];
+  }
+
+  /** Same total cost the deal's price breakdown shows. */
+  private costValue(row: Quotatation): number {
+    const d = row.dealData;
+    return Number(dealSheetPriceDetails(d?.updatedItems, d?.additionalCosts, d?.totalDiscount).totalCost) || 0;
+  }
+
   formatAmount(row: Quotatation): string {
     if (!row.dealData) return '';
     return `${this.numberFormat.transform(this.sellingPrice(row))} ${row.currency}`;
-  }
-
-  /** Total discount given to the customer (quotation discount + Customer Discount costs); Amount is already net of it. */
-  formatDiscount(row: Quotatation): string {
-    if (!row.dealData) return '';
-    const customerDiscount = (row.dealData.additionalCosts ?? [])
-      .filter((c) => c.type === 'Customer Discount')
-      .reduce((sum, c) => sum + (Number(c.value) || 0), 0);
-    const total = (Number(row.dealData.totalDiscount) || 0) + customerDiscount;
-    return total ? `${this.numberFormat.transform(total)} ${row.currency}` : '—';
   }
 
   approverName(row: Quotatation): string {

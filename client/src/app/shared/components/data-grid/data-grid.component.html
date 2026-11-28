@@ -442,6 +442,12 @@
         </div>
       </div>
       <div class="flex items-center gap-4 flex-wrap">
+        <ng-container *ngIf="footerTotals?.length && pagedData.length">
+          <span *ngFor="let t of footerTotals" class="tabular-nums text-xs">
+            <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mr-1">{{ t.label }}</span>
+            <span class="font-medium text-gray-800 dark:text-gray-200">{{ t.value }}</span>
+          </span>
+        </ng-container>
         <ng-container *ngIf="hasFooter && filteredData.length">
           <span *ngFor="let c of visibleColumns" class="tabular-nums text-xs">
             <ng-container *ngIf="c.aggregate">

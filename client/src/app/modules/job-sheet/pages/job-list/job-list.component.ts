@@ -1,4 +1,5 @@
 import { HttpEventType } from '@angular/common/http';
+import { dealSheetPriceDetails } from 'src/app/shared/utils/deal-pricing.util';
 import { AsyncPipe, DatePipe, DecimalPipe, NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { Component, ViewChild, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
@@ -27,7 +28,7 @@ import { TransferProcurementPersonComponent, TransferProcurementPersonResult } f
 
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import {
-  DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridColumn,
+  DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridColumn, DataGridFooterTotal,
   DataGridDetailTab, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
@@ -207,6 +208,27 @@ export class JobListComponent {
 
   total = 0;
   totalLpoValue = 0;
+
+  /** LPO value summed over the jobs on the current page. */
+  get pageTotals(): DataGridFooterTotal[] {
+    const total = (this.rows ?? []).reduce((t, r) => t + (Number(r.lpoValue) || 0), 0);
+    const cost = (this.rows ?? []).reduce((t, r) => t + this.costQar(r), 0);
+    return [
+      { label: 'Total Cost', value: `${this.numberFormat.transform(cost)} QAR` },
+      { label: 'Total LPO', value: `${this.numberFormat.transform(total)} QAR` },
+    ];
+  }
+
+  /** Deal cost in QAR, converted with the same rate the server used for this job's LPO value. */
+  costQar(r: getJob): number {
+    const d = (r.quotation?.dealData as any) ?? {};
+    const price = dealSheetPriceDetails(d.updatedItems, d.additionalCosts, d.totalDiscount);
+    const cur = d.currency ?? (r.quotation as any)?.currency;
+    if (cur !== 'USD') return price.totalCost;
+    const rate = Number(d.exchangeRate ?? (r.quotation as any)?.exchangeRate)
+      || (price.totalSellingPrice ? (Number(r.lpoValue) || 0) / price.totalSellingPrice : 0);
+    return price.totalCost * rate;
+  }
   activeViewId = 'all';
   page = 1;
   row = DEFAULT_PAGE_SIZE;
@@ -310,6 +332,7 @@ export class JobListComponent {
       { key: 'customerName', label: 'Customer', sortable: true, valueGetter: (r) => r.clientDetails?.companyName },
       { key: 'description', label: 'Subject', sortable: true, valueGetter: (r) => r.quotation?.subject },
       { key: 'procurementPerson', label: 'Allocated To', sortable: true, visible: false, valueGetter: (r) => this.fullName(r.procurementPerson) },
+      { key: 'cost', label: 'Total Cost (QAR)', type: 'currency', currencyCode: 'QAR', valueGetter: (r) => this.costQar(r) },
       { key: 'lpoValue', label: 'LPO Value (QAR)', type: 'currency', currencyCode: 'QAR', sortable: true, valueGetter: (r) => r.lpoValue ?? 0 },
       { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (r) => this.fullName(r.salesPersonDetails?.[0]) },
       { key: 'department', label: 'Department', sortable: true, valueGetter: (r) => r.departmentDetails?.[0]?.departmentName ?? '' },

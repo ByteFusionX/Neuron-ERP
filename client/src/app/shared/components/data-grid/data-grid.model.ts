@@ -153,3 +153,9 @@ export interface DataGridView<T = any> {
   /** Server-paged grids: last known row count of a custom view, so its tab shows a count before it is opened. */
   savedCount?: number;
 }
+
+/** A page total shown in the grid footer, left of the pagination buttons. */
+export interface DataGridFooterTotal {
+  label: string;
+  value: string;
+}

@@ -11,6 +11,7 @@ import {
   DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridCellEditEvent,
   DataGridColumn, DataGridDetailTab, DataGridFilter, DataGridFilterOperator, DataGridQuery, DataGridRowAction,
   DataGridRowActionEvent, DataGridSortState, DataGridToast, DataGridView,
+  DataGridFooterTotal,
 } from './data-grid.model';
 import { DataGridAutofocusDirective } from './data-grid-autofocus.directive';
 import { SfInputComponent } from '../smart-form/sf-input.component';
@@ -193,6 +194,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   /** Higher-contrast palette (darker text, stronger borders, tinted header). Opt-in per module. */
   @Input({ transform: booleanAttribute }) strong = false;
+  /** Host-computed totals for the rows on the current page, shown beside the pagination. */
+  @Input() footerTotals: DataGridFooterTotal[] | null = null;
 
   @HostBinding('class.dg-fill-height') get hostFillHeight(): boolean {
     return this.fillHeight;
